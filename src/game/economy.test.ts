@@ -29,10 +29,10 @@ describe('carry slots', () => {
     s.level = 10;
     expect(eco.buyBait(s, 'minnow')).toBe(true);
     expect(s.bait).toBe('minnow');
+    expect(eco.buyRod(s, 'graphite')).toBe(true);
     expect(eco.equipBait(s, 'worm')).toBe(true);
     expect(s.bait).toBe('worm');
     expect(eco.baitCount(s, 'minnow')).toBe(5);
-    expect(eco.buyRod(s, 'graphite')).toBe(true);
     expect(s.rod).toBe('graphite');
     expect(s.slots.filter((x) => x?.k === 'rod')).toHaveLength(1);
     expect(eco.equipRod(s, 'twig')).toBe(true);

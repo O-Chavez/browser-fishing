@@ -34,7 +34,8 @@ import {
   formatWeight,
   nextGoal,
   sellValue,
-  SHINY_DIFFICULTY,
+  difficultyLabel,
+  reelDifficulty,
   xpForNextLevel,
 } from './progression';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
@@ -979,7 +980,8 @@ export class Game {
     const w = this.world;
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
-    this.reel = new Reel(this.hooked!.stamina * (this.hookedShiny ? SHINY_DIFFICULTY : 1), this.rod.control);
+    const hard = reelDifficulty(this.hooked!, this.rod, this.hookedShiny);
+    this.reel = new Reel(hard, this.rod.control);
     this.lastSurges = 0;
     this.leapT = -1;
     this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier);
@@ -990,7 +992,7 @@ export class Game {
     w.addShake(0.8);
     w.fx.splash(w.bobber.position, 36, 1.4);
     audio.splash(1);
-    this.toast('Hooked! Reel when calm, ease off when it surges.');
+    this.toast(`Hooked! ${difficultyLabel(hard)} fight - reel when calm, ease off when it surges.`);
   }
 
   private startLanding(): void {
@@ -1685,20 +1687,22 @@ export class Game {
     return h.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
-  private tile(icon: string, name: string, price: string, tier: number, tip: string, act: string, id: string, off: boolean): string {
-    return `<button class="tile${off ? ' off' : ''}" style="--c:${this.tierColor(tier)}" data-tip="${this.esc(tip)}" data-act="${act}" data-id="${id}"><span class="ic">${icon}</span><span class="nm">${name}</span><span class="pr">${price}</span></button>`;
+  private tile(icon: string, name: string, price: string, tier: number, tip: string, act: string, id: string, off: boolean, own = false, raw = ''): string {
+    const attrs = raw || `data-act="${act}" data-id="${id}"`;
+    return `<button class="tile${off ? ' off' : ''}${own ? ' own' : ''}" style="--c:${this.tierColor(tier)}" data-tip="${this.esc(tip)}" ${attrs}><span class="ic">${icon}</span><span class="nm">${name}</span><span class="pr">${price}</span></button>`;
   }
+
 
   private tierBadge(tier: number): string {
     return `<span class="tier" style="color:${RARITY_COLOR[TIERS[tier - 1]]};border-color:${RARITY_COLOR[TIERS[tier - 1]]}">T${tier} ${tierName(tier)}</span>`;
   }
 
   private rodStats(r: (typeof RODS)[number]): string {
-    return `Reach ${r.castDistance} m · luck ×${r.luck} · control ×${r.control} · catches tier ${r.tier}${r.tier < 5 ? '' : '+'}`;
+    return `Reach ${r.castDistance} m · luck ×${r.luck} · easier reeling ×${r.control} · easy fights up to tier ${r.tier}`;
   }
 
   private baitStats(b: (typeof BAITS)[number]): string {
-    return `Luck ×${b.luck} · faster bites · catches tier ${b.tier}${b.tier < 5 ? '' : '+'}`;
+    return `Luck ×${b.luck} · faster bites · hooks fish up to tier ${b.tier}`;
   }
 
   private inventoryHtml(): string {
@@ -1713,59 +1717,63 @@ export class Game {
     const rod = this.rod;
     const bait = this.bait;
     const have = eco.baitCount(s, s.bait);
-    const reach = Math.min(rod.tier, bait.tier);
+    const reach = bait.tier;
     const chips = TIERS.map((_, i) => {
       const t = i + 1;
       const on = t <= reach;
       const names = FISH.filter((f) => f.tier === t)
         .map((f) => (s.dex[f.id] ? f.name : '???'))
         .join(', ');
-      return `<div class="chip${on ? ' on' : ''}" style="--c:${RARITY_COLOR[TIERS[i]]}"><b>T${t} ${tierName(t)}</b><span>${on ? names : '🔒 need T' + t + ' rod + bait'}</span></div>`;
+      return `<div class="chip${on ? ' on' : ''}" style="--c:${RARITY_COLOR[TIERS[i]]}"><b>T${t} ${tierName(t)}</b><span>${on ? names : '🔒 need T' + t + ' bait'}</span></div>`;
     }).join('');
     let hint = '';
     if (have <= 0) hint = 'You have no bait equipped - buy or equip some below.';
-    else if (rod.tier < bait.tier) hint = `Your rod (T${rod.tier}) is holding you back - upgrade it to reach T${bait.tier} fish.`;
+    else if (rod.tier < bait.tier) hint = `Your rod (T${rod.tier}) is under-tier for ${bait.name} (T${bait.tier}) - you can hook those fish, but they will fight much harder. Upgrade your rod!`;
     else if (bait.tier < rod.tier) hint = `Your bait (T${bait.tier}) is holding you back - equip higher-tier bait.`;
-    else if (reach < 5) hint = `Upgrade both rod and bait to tier ${reach + 1} to reach ${tierName(reach + 1)} fish.`;
+    else if (reach < 5) hint = `Use tier ${reach + 1} bait to reach ${tierName(reach + 1)} fish - and a matching rod to land them easily.`;
     else hint = 'Maxed out - nothing can stop you now.';
 
     const hotRod = s.slots.findIndex((x) => x?.k === 'rod' && x.id === s.rod);
     const rods = RODS.map((r) => {
       const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
       const owned = eco.ownsRod(s, r.id);
-      let action: string;
-      if (equipped) action = `<span class="ok">Equipped ✓</span> <button data-act="stow" data-id="${hotRod}">Stow</button>`;
-      else if (owned) action = `<button data-act="equiprod" data-id="${r.id}">Equip</button>`;
-      else action = `<span class="muted">${s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Shop · ${r.price} 🪙`}</span>`;
-      return `<div class="row gear${owned ? '' : ' locked'}${equipped ? ' me' : ''}"><div>${this.tierBadge(r.tier)} <b>${r.name}</b><div class="muted">${this.rodStats(r)}</div></div><div>${action}</div></div>`;
+      const tip = `<b style="color:${this.tierColor(r.tier)}">${r.name}</b><br>${this.tierBadge(r.tier)}<br>${this.rodStats(r)}<br>${equipped ? 'Equipped - click to stow' : owned ? 'Click to equip' : s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Buy at the shop · ${r.price} 🪙`}`;
+      const label = equipped ? 'Equipped ✓' : owned ? 'Owned' : s.level < r.unlockLevel ? `🔒 Lv ${r.unlockLevel}` : 'In shop';
+      const act = equipped ? `data-act="stow" data-id="${hotRod}"` : owned ? `data-act="equiprod" data-id="${r.id}"` : '';
+      return this.tile('🎣', r.name, label, r.tier, tip, '', '', !owned, equipped, act);
     }).join('');
+    const baitIcon: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
     const baitRows = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
       const equipped = s.bait === b.id && s.slots.some((x) => x?.k === 'bait' && x.id === b.id);
       const slot = s.slots.findIndex((x) => x?.k === 'bait' && x.id === b.id);
-      let action: string;
-      if (equipped) action = `<span class="ok">Equipped ✓</span> <button data-act="stow" data-id="${slot}">Stow</button>`;
-      else if (n > 0 && s.level >= b.unlockLevel) action = `<button data-act="equipbait" data-id="${b.id}">Equip</button>`;
-      else action = `<span class="muted">${s.level < b.unlockLevel ? `Unlocks at level ${b.unlockLevel}` : `Shop · ${b.price * eco.BAIT_PACK} 🪙 / ${eco.BAIT_PACK}`}</span>`;
-      return `<div class="row gear${n > 0 ? '' : ' locked'}${equipped ? ' me' : ''}"><div>${this.tierBadge(b.tier)} <b>${b.name}</b> <span class="muted">×${n}</span><div class="muted">${this.baitStats(b)}</div></div><div>${action}</div></div>`;
+      const lvl = s.level < b.unlockLevel;
+      const usable = n > 0 && !lvl;
+      const note = equipped ? 'Equipped - click to stow' : !usable ? (lvl ? `Unlocks at level ${b.unlockLevel}` : `Buy at the shop · ${b.price * eco.BAIT_PACK} 🪙 / ${eco.BAIT_PACK}`) : 'Click to equip';
+      const tip = `<b style="color:${this.tierColor(b.tier)}">${b.name}</b><br>${this.tierBadge(b.tier)}<br>${this.baitStats(b)}<br>You have ${n}<br>${note}`;
+      const label = equipped ? `×${n} ✓` : lvl ? `🔒 Lv ${b.unlockLevel}` : n > 0 ? `×${n}` : 'In shop';
+      const act = equipped ? `data-act="stow" data-id="${slot}"` : usable ? `data-act="equipbait" data-id="${b.id}"` : '';
+      return this.tile(baitIcon[b.id] ?? '🪱', b.name, label, b.tier, tip, '', '', !usable, equipped, act);
     }).join('');
     return `<div class="setup"><div><b>${rod.name}</b> + <b>${bait.name}</b> → reach <b style="color:${RARITY_COLOR[TIERS[reach - 1]]}">tier ${reach} · ${tierName(reach)}</b></div><div class="muted">${hint}</div></div>
       <div class="chips">${chips}</div>
       <p class="muted">Your hotbar holds the rod and bait you use; the rest of your tackle waits in the locker.</p>
-      <h4>Rods</h4>${rods}<h4>Bait</h4>${baitRows}`;
+      <h4>Rods</h4><div class="tiles">${rods}</div><h4>Bait</h4><div class="tiles">${baitRows}</div>`;
   }
 
   private wardrobeHtml(): string {
     const sections = COS_SLOTS.map((slot) => {
       const owned = COSMETICS.filter((c) => c.slot === slot && this.s.owned.includes(c.id));
       const worn = this.s.look[slot];
+      const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
       const cards = owned
-        .map(
-          (c) =>
-            `<button class="item${worn === c.id ? ' on' : ''}" data-act="equip" data-slot="${slot}" data-id="${worn === c.id ? '' : c.id}" data-try="${slot}:${c.id}"><b class="t${c.tier}">${c.name}</b><span>${worn === c.id ? 'Wearing - click to remove' : 'Click to wear'}</span></button>`,
-        )
+        .map((c) => {
+          const on = worn === c.id;
+          const tip = `<b style="color:${this.tierColor(c.tier)}">${c.name}</b><br>${c.slot} · style tier ${c.tier}<br>${on ? 'Wearing - click to remove' : 'Click to wear'}`;
+          return `<button class="tile${on ? ' own' : ''}" style="--c:${this.tierColor(c.tier)}" data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}" data-tip="${this.esc(tip)}"><span class="ic">${icon[c.slot]}</span><span class="nm">${c.name}</span><span class="pr">${on ? 'Wearing ✓' : 'Owned'}</span></button>`;
+        })
         .join('');
-      return `<h4>${slot === 'jewelry' ? 'Jewelry' : slot[0].toUpperCase() + slot.slice(1) + 's'}</h4><div class="items">${cards || '<span class="muted">Nothing owned yet - visit the shop.</span>'}</div>`;
+      return `<h4>${slot === 'jewelry' ? 'Jewelry' : slot[0].toUpperCase() + slot.slice(1) + 's'}</h4><div class="tiles">${cards || '<span class="muted">Nothing owned yet - visit the shop.</span>'}</div>`;
     }).join('');
     return `<div class="split"><div><div id="pv-slot"></div><div class="swatches">${this.swatchHtml()}</div></div><div class="grow">${sections}</div></div>`;
   }
@@ -1806,7 +1814,7 @@ export class Game {
         const tip = `<b style="color:${this.tierColor(b.tier)}">${b.name} ×${eco.BAIT_PACK}</b><br>${this.tierBadge(b.tier)}<br>${this.baitStats(b)}<br>You have ${eco.baitCount(this.s, id)}<br>${lvl ? `Unlocks at level ${b.unlockLevel}` : `Click to buy · ${cost} 🪙`}`;
         return this.tile(baitIcon[id] ?? '🪱', `${b.name} ×${eco.BAIT_PACK}`, lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost} 🪙`, b.tier, tip, 'buybait', id, lvl || this.s.coins < cost);
       });
-      body = `<p class="muted">Hover for stats. Border color = tier. Gear goes to your tackle locker - equip it in Inventory (<b>Tab</b>). A fish needs a rod <i>and</i> bait of its tier or higher.</p><h4>Rods</h4><div class="tiles">${rods.join('')}</div><h4>Bait</h4><div class="tiles">${bait.join('')}</div>`;
+      body = `<p class="muted">Hover for stats. Border color = tier. Gear goes to your tackle locker - equip it in Inventory (<b>Tab</b>). Bait decides which fish bite; a rod of the fish's tier makes the fight easier.</p><h4>Rods</h4><div class="tiles">${rods.join('')}</div><h4>Bait</h4><div class="tiles">${bait.join('')}</div>`;
     }
     return this.shopFrame(tabs, body, here);
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BAITS, FISH, RODS, byId } from '../data/content';
-import { applyXp, canCatch, eligibleFish, pickFish, rollSize, sellValue, xpForNextLevel } from './progression';
+import { applyXp, canCatch, eligibleFish, pickFish, reelDifficulty, rollSize, sellValue, xpForNextLevel } from './progression';
 
 const twig = byId(RODS, 'twig');
 const graphite = byId(RODS, 'graphite');
@@ -14,10 +14,10 @@ describe('progression', () => {
     expect(r.leveledUp).toBe(true);
   });
 
-  it('gates fish by the lower of rod and bait tier', () => {
+  it('gates fish by bait tier, whatever the rod', () => {
     const koi = byId(FISH, 'koi');
     const minnow = byId(BAITS, 'minnow');
-    expect(canCatch(koi, 'pond', twig, minnow)).toBe(false);
+    expect(canCatch(koi, 'pond', twig, minnow)).toBe(true);
     expect(canCatch(koi, 'pond', graphite, worm)).toBe(false);
     expect(canCatch(koi, 'pond', graphite, minnow)).toBe(true);
     expect(canCatch(byId(FISH, 'aurorapike'), 'pond', graphite, minnow)).toBe(false);
@@ -64,5 +64,45 @@ describe('fish weight', () => {
     expect(fishWeight(carp, 40)).toBeLessThan(fishWeight(carp, 50));
     expect(formatWeight(0.45)).toBe('450 g');
     expect(formatWeight(12)).toBe('12.0 kg');
+  });
+});
+
+describe('tier progression', () => {
+  const avg = (f: (typeof FISH)[number]) => sellValue(f, (f.minSize + f.maxSize) / 2);
+  it('every tier is worth strictly more than the one below, even at extreme sizes', () => {
+    for (let t = 1; t < 5; t++) {
+      const lo = Math.min(...FISH.filter((f) => f.tier === t + 1).map((f) => sellValue(f, f.minSize)));
+      const hi = Math.max(...FISH.filter((f) => f.tier === t).map((f) => sellValue(f, f.maxSize)));
+      expect(lo).toBeGreaterThan(hi);
+    }
+    expect(avg(FISH[0])).toBeGreaterThan(0);
+  });
+  it('fish get harder with each tier', () => {
+    for (let t = 1; t < 5; t++) {
+      const lo = Math.min(...FISH.filter((f) => f.tier === t + 1).map((f) => f.stamina));
+      const hi = Math.max(...FISH.filter((f) => f.tier === t).map((f) => f.stamina));
+      expect(lo).toBeGreaterThan(hi);
+    }
+  });
+  it('better rods soften the fight but higher tiers stay harder with matched gear', () => {
+    const f = FISH.find((x) => x.tier === 5)!;
+    const d = RODS.map((r) => reelDifficulty(f, r));
+    for (let i = 1; i < d.length; i++) expect(d[i]).toBeLessThanOrEqual(d[i - 1]);
+    expect(d[4]).toBeLessThan(d[0]);
+    expect(d[4]).toBeLessThan(2);
+    const matched = [1, 2, 3, 4, 5].map((t) => {
+      const fish = FISH.filter((x) => x.tier === t);
+      const rod = RODS.find((r) => r.tier === t)!;
+      return fish.reduce((a, x) => a + reelDifficulty(x, rod), 0) / fish.length;
+    });
+    for (let i = 1; i < matched.length; i++) expect(matched[i]).toBeGreaterThan(matched[i - 1]);
+    expect(matched[4]).toBeLessThan(1.7);
+  });
+  it('bait sets what you can hook; an under-tier rod makes the fight much harder', () => {
+    expect(canCatch(FISH.find((f) => f.tier === 3)!, 'pond', RODS[0], BAITS[2])).toBe(true);
+    const f = FISH.find((x) => x.tier === 3)!;
+    const weak = reelDifficulty(f, RODS[0]);
+    const matched = reelDifficulty(f, RODS[2]);
+    expect(weak).toBeGreaterThan(matched * 1.5);
   });
 });

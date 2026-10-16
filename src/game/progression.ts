@@ -20,8 +20,22 @@ export function applyXp(level: number, xp: number, gained: number): { level: num
   return { level: lvl, xp: total, leveledUp };
 }
 
-/** The best tier of fish your setup can reach: limited by the weaker of rod and bait. */
-export const gearTier = (rod: Rod, bait: Bait): number => Math.min(rod.tier, bait.tier);
+/** The best tier of fish you can hook is set by the bait; the rod only decides how hard the fight is. */
+export const gearTier = (_rod: Rod, bait: Bait): number => bait.tier;
+
+/** Extra fight difficulty for every tier a fish is above your rod. */
+export const UNDERGEAR_PENALTY = 0.35;
+
+/** How hard a hooked fish fights: its stamina, softened by a better rod and made much worse by an under-tier one. */
+export function reelDifficulty(fish: Fish, rod: Rod, shiny = false): number {
+  const gap = Math.max(0, fish.tier - rod.tier);
+  const d = ((fish.stamina * (shiny ? SHINY_DIFFICULTY : 1)) / Math.pow(rod.control, 0.55)) * (1 + UNDERGEAR_PENALTY * gap);
+  return Math.round(Math.min(3.2, Math.max(0.4, d)) * 100) / 100;
+}
+
+export function difficultyLabel(d: number): string {
+  return d < 0.7 ? 'Easy' : d < 1.0 ? 'Gentle' : d < 1.25 ? 'Medium' : d < 1.5 ? 'Hard' : 'Brutal';
+}
 
 export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: Bait): boolean {
   return fish.locations.includes(locationId) && fish.tier <= gearTier(rod, bait);

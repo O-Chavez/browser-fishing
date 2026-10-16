@@ -282,3 +282,9 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
   - Default: JSON files in `DATA_DIR` (or the server folder). Lost on Render free redeploys unless a paid disk is mounted at `DATA_DIR`.
   - Set `DATABASE_URL` to use Postgres instead (Neon, Supabase or Render Postgres, no disk needed). A `game_state` table is created automatically.
 - **Reset:** Players tab (Tab/Esc) -> "Reset account" -> confirm. Wipes coins, level, gear, fish, dex and cosmetics; keeps name, login token and body color. Works offline too. Blocked mid wheel-spin.
+
+## 18. Tier rules (bait gates, rod eases)
+
+- **Bait tier decides which fish can bite.** Any rod can use any bait.
+- **Rod tier decides how hard the reel fight is.** Difficulty = fish stamina ÷ rod control^0.55, plus 35% for every tier the fish is above the rod (capped at 3.2). A tier 5 fish on a twig rod is near-impossible; on the Aurora Rod it is about medium-hard.
+- Each tier's fish sell for more and have higher stamina than the tier below. Inventory shows rods, bait and cosmetics as the same icon tiles as the shop.

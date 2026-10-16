@@ -31,7 +31,7 @@ export interface Rod {
   price: number;
   castDistance: number;
   luck: number; // multiplies rare chances
-  control: number; // widens tension safe zone
+  control: number; // eases the reel: tames fish pulls (see reelDifficulty)
   /** Accent colour of the rod model; high tiers also glow. */
   color: number;
 }
@@ -98,23 +98,23 @@ type FishDef = Omit<Fish, 'rarity'>;
 const FISH_DEFS: FishDef[] = [
   // Tier 1: common
   { id: 'minnow', name: 'Silver Minnow', tier: 1, locations: ['pond', 'lake'], minSize: 5, maxSize: 12, maxWeight: 0.03, baseValue: 4, stamina: 0.6, color: 0xcfd8dc },
-  { id: 'bluegill', name: 'Bluegill', tier: 1, locations: ['pond'], minSize: 12, maxSize: 25, maxWeight: 0.5, baseValue: 8, stamina: 0.8, color: 0x4f86c6 },
-  { id: 'carp', name: 'Common Carp', tier: 1, locations: ['pond', 'lake'], minSize: 30, maxSize: 60, maxWeight: 12, baseValue: 14, stamina: 1.1, color: 0xb08d57 },
+  { id: 'bluegill', name: 'Bluegill', tier: 1, locations: ['pond'], minSize: 12, maxSize: 25, maxWeight: 0.5, baseValue: 8, stamina: 0.75, color: 0x4f86c6 },
+  { id: 'carp', name: 'Common Carp', tier: 1, locations: ['pond', 'lake'], minSize: 30, maxSize: 60, maxWeight: 12, baseValue: 14, stamina: 0.9, color: 0xb08d57 },
   // Tier 2: uncommon
-  { id: 'perch', name: 'Yellow Perch', tier: 2, locations: ['pond', 'lake'], minSize: 15, maxSize: 35, maxWeight: 1.2, baseValue: 12, stamina: 1.0, color: 0xe3c04d },
-  { id: 'trout', name: 'Rainbow Trout', tier: 2, locations: ['pond', 'lake'], minSize: 25, maxSize: 55, maxWeight: 3.5, baseValue: 18, stamina: 1.2, color: 0xe58fb0 },
-  { id: 'bass', name: 'Largemouth Bass', tier: 2, locations: ['pond', 'lake'], minSize: 30, maxSize: 65, maxWeight: 5, baseValue: 22, stamina: 1.3, color: 0x6b8e23 },
+  { id: 'perch', name: 'Yellow Perch', tier: 2, locations: ['pond', 'lake'], minSize: 15, maxSize: 35, maxWeight: 1.2, baseValue: 18, stamina: 1.1, color: 0xe3c04d },
+  { id: 'trout', name: 'Rainbow Trout', tier: 2, locations: ['pond', 'lake'], minSize: 25, maxSize: 55, maxWeight: 3.5, baseValue: 20, stamina: 1.2, color: 0xe58fb0 },
+  { id: 'bass', name: 'Largemouth Bass', tier: 2, locations: ['pond', 'lake'], minSize: 30, maxSize: 65, maxWeight: 5, baseValue: 24, stamina: 1.3, color: 0x6b8e23 },
   // Tier 3: rare
-  { id: 'koi', name: 'Golden Koi', tier: 3, locations: ['pond'], minSize: 30, maxSize: 70, maxWeight: 8, baseValue: 20, stamina: 1.4, color: 0xff9f43 },
-  { id: 'pike', name: 'Northern Pike', tier: 3, locations: ['pond', 'lake'], minSize: 60, maxSize: 110, maxWeight: 12, baseValue: 30, stamina: 1.6, color: 0x3d6b4f },
-  { id: 'gar', name: 'Spotted Gar', tier: 3, locations: ['pond', 'lake'], minSize: 60, maxSize: 120, maxWeight: 14, baseValue: 28, stamina: 1.5, color: 0x8a9a5b },
+  { id: 'koi', name: 'Golden Koi', tier: 3, locations: ['pond'], minSize: 30, maxSize: 70, maxWeight: 8, baseValue: 32, stamina: 1.5, color: 0xff9f43 },
+  { id: 'pike', name: 'Northern Pike', tier: 3, locations: ['pond', 'lake'], minSize: 60, maxSize: 110, maxWeight: 12, baseValue: 32, stamina: 1.7, color: 0x3d6b4f },
+  { id: 'gar', name: 'Spotted Gar', tier: 3, locations: ['pond', 'lake'], minSize: 60, maxSize: 120, maxWeight: 14, baseValue: 32, stamina: 1.6, color: 0x8a9a5b },
   // Tier 4: epic
   { id: 'sturgeon', name: 'Lake Sturgeon', tier: 4, locations: ['pond', 'lake'], minSize: 90, maxSize: 160, maxWeight: 60, baseValue: 40, stamina: 1.9, color: 0x7a7a8c },
-  { id: 'arowana', name: 'Crimson Arowana', tier: 4, locations: ['pond'], minSize: 60, maxSize: 100, maxWeight: 7, baseValue: 46, stamina: 1.8, color: 0xd6303f },
-  { id: 'dorado', name: 'Sapphire Dorado', tier: 4, locations: ['pond', 'lake'], minSize: 70, maxSize: 120, maxWeight: 20, baseValue: 52, stamina: 2.0, color: 0x2f7be0 },
+  { id: 'arowana', name: 'Crimson Arowana', tier: 4, locations: ['pond'], minSize: 60, maxSize: 100, maxWeight: 7, baseValue: 46, stamina: 2.0, color: 0xd6303f },
+  { id: 'dorado', name: 'Sapphire Dorado', tier: 4, locations: ['pond', 'lake'], minSize: 70, maxSize: 120, maxWeight: 20, baseValue: 52, stamina: 2.1, color: 0x2f7be0 },
   // Tier 5: legendary
-  { id: 'ghostcarp', name: 'Ghost Carp', tier: 5, locations: ['pond', 'lake'], minSize: 70, maxSize: 120, maxWeight: 25, baseValue: 60, stamina: 2.2, color: 0xe8f4ff },
-  { id: 'sunfire', name: 'Sunfire Koi', tier: 5, locations: ['pond'], minSize: 60, maxSize: 110, maxWeight: 16, baseValue: 80, stamina: 2.3, color: 0xff7a1a },
+  { id: 'ghostcarp', name: 'Ghost Carp', tier: 5, locations: ['pond', 'lake'], minSize: 70, maxSize: 120, maxWeight: 25, baseValue: 60, stamina: 2.3, color: 0xe8f4ff },
+  { id: 'sunfire', name: 'Sunfire Koi', tier: 5, locations: ['pond'], minSize: 60, maxSize: 110, maxWeight: 16, baseValue: 80, stamina: 2.4, color: 0xff7a1a },
   { id: 'aurorapike', name: 'Aurora Pike', tier: 5, locations: ['pond', 'lake'], minSize: 90, maxSize: 150, maxWeight: 22, baseValue: 100, stamina: 2.5, color: 0x2fe0c0 },
 ];
 
