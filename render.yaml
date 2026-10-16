@@ -1,8 +1,8 @@
 services:
   - type: web
-    name: fishing-server
+    name: browser-fishing
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /health

@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { createReadStream, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { extname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MAPS } from '../src/data/maps';
 import { SERVER_PORT, type ClientMsg } from '../src/net/protocol';
@@ -40,9 +40,33 @@ function room(name: string): Room {
 
 const PORT = Number(process.env.PORT) || SERVER_PORT;
 // Plain HTTP answers host health checks; WebSocket upgrades share the same port.
-const http = createServer((_req, res) => {
-  res.writeHead(200, { 'content-type': 'text/plain' });
-  res.end('fishing server ok');
+const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
+const TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.map': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+};
+// Serves the built client (npm run build) from the same port as the game socket.
+const http = createServer((req, res) => {
+  const path = decodeURIComponent((req.url ?? '/').split('?')[0]);
+  const file = resolve(DIST, '.' + (path === '/' ? '/index.html' : path));
+  if (!file.startsWith(DIST) || !existsSync(file) || !statSync(file).isFile()) {
+    if (path === '/health' || !existsSync(join(DIST, 'index.html'))) {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      return res.end('fishing server ok');
+    }
+    res.writeHead(404);
+    return res.end('Not found');
+  }
+  res.writeHead(200, {
+    'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
+    'cache-control': file.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+  });
+  createReadStream(file).pipe(res);
 });
 const wss = new WebSocketServer({ server: http, maxPayload: 1024 });
 wss.on('connection', (ws, req) => {

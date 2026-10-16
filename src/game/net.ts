@@ -40,7 +40,9 @@ export class NetClient {
     // Deployed builds point at the hosted game server via VITE_SERVER_URL (e.g. wss://fishing.onrender.com).
     const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.replace(/\/$/, '');
     const host = location.hostname || 'localhost';
-    const base = configured || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${host}:${SERVER_PORT}`;
+    const secure = location.protocol === 'https:';
+    // In production the page is served by the game server itself, so the socket shares its origin.
+    const base = configured || (import.meta.env.PROD ? `${secure ? 'wss' : 'ws'}://${location.host}` : `${secure ? 'wss' : 'ws'}://${host}:${SERVER_PORT}`);
     const url = `${base}/?room=${encodeURIComponent(this.roomName)}`;
     let ws: WebSocket;
     try {
