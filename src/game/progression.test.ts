@@ -62,7 +62,7 @@ describe('progression', () => {
 
   it('every fish is catchable somewhere', () => {
     for (const f of FISH) {
-      const ok = RODS.some((r) => BAITS.some((b) => f.locations.some((l) => canCatch(f, l, r, b))));
+      const ok = RODS.some((r) => BAITS.some((b) => f.locations.some((l) => canCatch(f, l, r, b, true))));
       expect(ok, f.id).toBe(true);
     }
   });
@@ -129,5 +129,24 @@ describe('fishing spots', () => {
     expect(_spot(5.5, 20)).toBe('shore');
     expect(_SPOTS.shore.wait).toBeGreaterThan(_SPOTS.pier.wait);
     expect(_SPOTS.pier.luck).toBeLessThan(_SPOTS.prime.luck);
+  });
+});
+
+describe('night fishing', () => {
+  const carbon = byId(RODS, 'carbon');
+  const lure = byId(BAITS, 'lure');
+  it('night-only fish are in the pool only after dark', () => {
+    expect(eligibleFish('pond', carbon, lure).some((f) => f.night)).toBe(false);
+    expect(eligibleFish('pond', carbon, lure, true).some((f) => f.night)).toBe(true);
+    expect(canCatch(byId(FISH, 'constellation'), 'pond', byId(RODS, 'aurora'), byId(BAITS, 'pearl'))).toBe(false);
+  });
+  it('rare fish bite more at night', () => {
+    const pool = eligibleFish('pond', carbon, lure, true);
+    const avg = (night: boolean) => {
+      let t = 0;
+      for (let i = 0; i < 4000; i++) t += pickFish(pool, carbon, lure, Math.random, false, 'prime', night)!.tier;
+      return t / 4000;
+    };
+    expect(avg(true)).toBeGreaterThan(avg(false));
   });
 });

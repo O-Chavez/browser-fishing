@@ -21,6 +21,8 @@ export interface Fish {
   baseValue: number;
   stamina: number; // 1 = easy
   color: number;
+  /** Only bites after dark. */
+  night?: boolean;
 }
 
 export interface Rod {
@@ -104,18 +106,22 @@ const FISH_DEFS: FishDef[] = [
   { id: 'perch', name: 'Yellow Perch', tier: 2, locations: ['pond', 'lake'], minSize: 15, maxSize: 35, maxWeight: 1.2, baseValue: 18, stamina: 1.1, color: 0xe3c04d },
   { id: 'trout', name: 'Rainbow Trout', tier: 2, locations: ['pond', 'lake'], minSize: 25, maxSize: 55, maxWeight: 3.5, baseValue: 20, stamina: 1.2, color: 0xe58fb0 },
   { id: 'bass', name: 'Largemouth Bass', tier: 2, locations: ['pond', 'lake'], minSize: 30, maxSize: 65, maxWeight: 5, baseValue: 24, stamina: 1.3, color: 0x6b8e23 },
+  { id: 'midnightcat', name: 'Midnight Catfish', tier: 2, night: true, locations: ['pond', 'lake'], minSize: 30, maxSize: 60, maxWeight: 6, baseValue: 24, stamina: 1.25, color: 0x4a5a85 },
   // Tier 3: rare
   { id: 'koi', name: 'Golden Koi', tier: 3, locations: ['pond'], minSize: 30, maxSize: 70, maxWeight: 8, baseValue: 32, stamina: 1.5, color: 0xff9f43 },
   { id: 'pike', name: 'Northern Pike', tier: 3, locations: ['pond', 'lake'], minSize: 60, maxSize: 110, maxWeight: 12, baseValue: 32, stamina: 1.7, color: 0x3d6b4f },
   { id: 'gar', name: 'Spotted Gar', tier: 3, locations: ['pond', 'lake'], minSize: 60, maxSize: 120, maxWeight: 14, baseValue: 32, stamina: 1.6, color: 0x8a9a5b },
+  { id: 'lanterneel', name: 'Lantern Eel', tier: 3, night: true, locations: ['pond', 'lake'], minSize: 60, maxSize: 110, maxWeight: 4, baseValue: 32, stamina: 1.7, color: 0x3fd2a0 },
   // Tier 4: epic
   { id: 'sturgeon', name: 'Lake Sturgeon', tier: 4, locations: ['pond', 'lake'], minSize: 90, maxSize: 160, maxWeight: 60, baseValue: 40, stamina: 1.9, color: 0x7a7a8c },
   { id: 'arowana', name: 'Crimson Arowana', tier: 4, locations: ['pond'], minSize: 60, maxSize: 100, maxWeight: 7, baseValue: 46, stamina: 2.0, color: 0xd6303f },
   { id: 'dorado', name: 'Sapphire Dorado', tier: 4, locations: ['pond', 'lake'], minSize: 70, maxSize: 120, maxWeight: 20, baseValue: 52, stamina: 2.1, color: 0x2f7be0 },
+  { id: 'moonscale', name: 'Moonscale Salmon', tier: 4, night: true, locations: ['pond', 'lake'], minSize: 70, maxSize: 120, maxWeight: 15, baseValue: 62, stamina: 2.1, color: 0x9fb8ff },
   // Tier 5: legendary
   { id: 'ghostcarp', name: 'Ghost Carp', tier: 5, locations: ['pond', 'lake'], minSize: 70, maxSize: 120, maxWeight: 25, baseValue: 60, stamina: 2.3, color: 0xe8f4ff },
   { id: 'sunfire', name: 'Sunfire Koi', tier: 5, locations: ['pond'], minSize: 60, maxSize: 110, maxWeight: 16, baseValue: 80, stamina: 2.4, color: 0xff7a1a },
   { id: 'aurorapike', name: 'Aurora Pike', tier: 5, locations: ['pond', 'lake'], minSize: 90, maxSize: 150, maxWeight: 22, baseValue: 100, stamina: 2.5, color: 0x2fe0c0 },
+  { id: 'constellation', name: 'Constellation Koi', tier: 5, night: true, locations: ['pond', 'lake'], minSize: 70, maxSize: 130, maxWeight: 20, baseValue: 120, stamina: 2.5, color: 0x2a1b6e },
 ];
 
 export const FISH: Fish[] = FISH_DEFS.map((f) => ({ ...f, rarity: TIERS[f.tier - 1] }));

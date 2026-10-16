@@ -1,6 +1,6 @@
 import { COS_SLOTS, cosById, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
-import { applyXp, catchXp, eligibleFish, fishingSpot, pickFish, rollSize, sellValue, SHINY_CHANCE, SPOTS, type SpotId } from './progression';
+import { applyXp, catchXp, eligibleFish, fishingSpot, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import { BAIT_STACK, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
@@ -295,17 +295,17 @@ export interface Roll {
   spot?: string;
 }
 
-export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime'): Roll {
+export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Roll {
   const rod = byId(RODS, s.rod);
   const bait = byId(BAITS, s.bait);
-  const fish = pickFish(eligibleFish(locationId, rod, bait), rod, bait, rng, perfect, spot);
+  const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night);
   return {
     perfect,
     spot,
     fishId: fish?.id ?? null,
     size: fish ? rollSize(fish, rng) : 0,
     wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait,
-    shiny: !!fish && rng() < SHINY_CHANCE,
+    shiny: !!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE),
   };
 }
 

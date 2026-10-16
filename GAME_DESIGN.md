@@ -343,3 +343,11 @@ The land hub is a small cozy fishing town: a cobbled main street from the pier t
 - **Townsfolk**: Old Salty (pier tips), Pip, Granny Wren and Captain Reed. Press E to talk; lines cycle and some change at night.
 - **Messages in bottles**: 7 hidden around town, shore and pier. Each pays 40 coins once; finding all 7 pays a 300 coin bonus. Found bottles are saved per account (`SaveData.bottles`); the server verifies the player is within 4 m.
 - **Coziness**: lantern posts line the street (some cast real light at night), benches and planters ring the plaza, string lights span the street, a log-seat fire pit sits by the Smokehouse, picnic blankets overlook the water, and firewood is stacked by the cottages. Bottles rest on the ground; the rowboat sits upright on the shore.
+
+## 27. Night fishing
+
+Night is the shortest part of the day, so it is the best time to fish. When the night level is ≥ 0.7 (`NIGHT_BITE`):
+- Four night-only fish join the pool: Midnight Catfish (T2), Lantern Eel (T3), Moonscale Salmon (T4) and Constellation Koi (T5). They are marked 🌙 in the Fishdex and the shop chips.
+- All non-common weights are multiplied by 1.8 (`NIGHT_LUCK`), and night-only fish get a further 2× weight.
+- The shiny chance rises from 5% to 15%.
+- A HUD chip tells the player when the fish are biting. The server decides night from the wall clock when it rolls a cast, so every player sees the same cycle.

@@ -19,3 +19,7 @@ export function nightness(f: number): number {
 
 /** 0..1, peaks mid-way through dusk and dawn for warm horizon colours. */
 export const twilight = (night: number): number => 4 * night * (1 - night);
+
+/** Night-only fish and the bonus catch odds apply once it is properly dark. */
+export const NIGHT_BITE = 0.7;
+export const isNight = (seconds: number): boolean => nightness(dayFraction(seconds)) >= NIGHT_BITE;

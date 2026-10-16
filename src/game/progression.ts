@@ -66,12 +66,12 @@ export function difficultyLabel(d: number): string {
   return d < 0.7 ? 'Easy' : d < 1.0 ? 'Gentle' : d < 1.25 ? 'Medium' : d < 1.5 ? 'Hard' : 'Brutal';
 }
 
-export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: Bait): boolean {
-  return fish.locations.includes(locationId) && fish.tier <= gearTier(rod, bait);
+export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: Bait, night = false): boolean {
+  return fish.locations.includes(locationId) && fish.tier <= gearTier(rod, bait) && (!fish.night || night);
 }
 
-export function eligibleFish(locationId: string, rod: Rod, bait: Bait): Fish[] {
-  return FISH.filter((f) => canCatch(f, locationId, rod, bait));
+export function eligibleFish(locationId: string, rod: Rod, bait: Bait, night = false): Fish[] {
+  return FISH.filter((f) => canCatch(f, locationId, rod, bait, night));
 }
 
 /** Fish far below your gear tier turn up less often, so upgrading visibly shifts what you catch. */
@@ -84,8 +84,12 @@ export const PERFECT_LUCK = 2;
 export const PERFECT_MIN = 0.86;
 export const PERFECT_MAX = 0.96;
 
+/** After dark, rare fish bite far more often and night-only fish join the pool. */
+export const NIGHT_LUCK = 1.8;
+export const NIGHT_FISH_BOOST = 2;
+
 /** Non-common weights are boosted by rod and bait luck. */
-export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime'): Fish | null {
+export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Fish | null {
   const rule = SPOTS[spot];
   const g = Math.max(1, gearTier(rod, bait) - rule.cut);
   const capped = pool.filter((f) => f.tier <= g);
@@ -96,10 +100,11 @@ export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number =
     if (high.length > 0) pool = high;
   }
   if (pool.length === 0) return null;
-  const luck = rod.luck * bait.luck * rule.luck * (perfect ? PERFECT_LUCK : 1);
+  const luck = rod.luck * bait.luck * rule.luck * (perfect ? PERFECT_LUCK : 1) * (night ? NIGHT_LUCK : 1);
   const weights = pool.map(
     (f) =>
       (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) *
+      (night && f.night ? NIGHT_FISH_BOOST : 1) *
       (perfect ? 1 : Math.pow(OUTGROWN, Math.max(0, g - f.tier))),
   );
   let r = rng() * weights.reduce((a, b) => a + b, 0);
@@ -119,6 +124,7 @@ const sizeRatio = (fish: Fish, size: number) => (size - fish.minSize) / Math.max
 
 /** Chance that any hooked fish is a shiny, and how much more a shiny is worth. */
 export const SHINY_CHANCE = 0.05;
+export const SHINY_CHANCE_NIGHT = 0.15;
 export const SHINY_VALUE = 5;
 export const SHINY_DIFFICULTY = 1.4;
 

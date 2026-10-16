@@ -44,6 +44,7 @@ import {
   type SpotId,
   PERFECT_MAX,
 } from './progression';
+import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { SLOT_COUNT, load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_SLOTS, cosById, type CosSlot, type Look } from '../data/cosmetics';
@@ -92,6 +93,7 @@ export class Game {
   private perfect = false;
   private castSpot: SpotId = 'prime';
   private spotShown = '';
+  private nightShown = false;
   private timer = 0;
 
   private origin = new THREE.Vector3();
@@ -1006,7 +1008,7 @@ export class Game {
       w.fx.ripple(b, 6, 0.5);
     }
 
-    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId, Math.random, this.perfect, this.castSpot);
+    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId, Math.random, this.perfect, this.castSpot, w.night >= NIGHT_BITE);
     this.roll = null;
     this.hooked = roll.fishId ? byId(FISH, roll.fishId) : null;
     this.hookedSize = roll.size;
@@ -1290,6 +1292,14 @@ export class Game {
   }
 
   /** Shows how good the water is where the player stands (not while a line is out). */
+  private updateNight(): void {
+    const on = this.world.night >= NIGHT_BITE;
+    if (on === this.nightShown) return;
+    this.nightShown = on;
+    const el = $('nightchip');
+    el.textContent = on ? '🌙 Night - rare & night-only fish are biting!' : '';
+  }
+
   private updateSpot(): void {
     if (this.phase !== 'idle' && this.phase !== 'charging') return;
     const id = fishingSpot(this.player.x, this.player.z);
@@ -1303,6 +1313,7 @@ export class Game {
   private tick(dt: number): void {
     this.updateWalking(dt);
     this.updateSpot();
+    this.updateNight();
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
     this.avatars.update(dt, this.world.time, this.net.players);
     if (!this.net.connected && this.localDrops.expire()) this.dropsView.sync(this.localDrops.all(), this.map.id);
@@ -1831,7 +1842,7 @@ export class Game {
       const t = i + 1;
       const on = t <= reach;
       const names = FISH.filter((f) => f.tier === t)
-        .map((f) => (s.dex[f.id] ? f.name : '???'))
+        .map((f) => (s.dex[f.id] ? f.name : '???') + (f.night ? ' 🌙' : ''))
         .join(', ');
       return `<div class="chip${on ? ' on' : ''}" style="--c:${RARITY_COLOR[TIERS[i]]}"><b>T${t} ${tierName(t)}</b><span>${on ? names : '🔒 need T' + t + ' bait'}</span></div>`;
     }).join('');
@@ -1941,12 +1952,12 @@ export class Game {
     const cards = FISH.map((f) => {
       const e = this.s.dex[f.id];
       if (e) {
-        return `<div class="card"><b style="color:${RARITY_COLOR[f.rarity]}">${f.name}</b><div class="muted">Caught ${e.count} · best ${e.best} cm</div></div>`;
+        return `<div class="card"><b style="color:${RARITY_COLOR[f.rarity]}">${f.name}</b><div class="muted">${f.night ? '🌙 Night only · ' : ''}Caught ${e.count} · best ${e.best} cm</div></div>`;
       }
       const rodName = RODS.find((r) => r.tier === f.tier)!.name;
       const baitName = BAITS.find((b) => b.tier === f.tier)!.name;
       const where = f.locations.map((l) => byId(LOCATIONS, l).name).join(', ');
-      return `<div class="card unknown"><b>???</b><div class="muted">${this.tierBadge(f.tier)} · ${where}<br>Needs: ${rodName}+ and ${baitName}+</div></div>`;
+      return `<div class="card unknown"><b>???</b><div class="muted">${this.tierBadge(f.tier)} · ${where}${f.night ? ' · 🌙 Night only' : ''}<br>Needs: ${rodName}+ and ${baitName}+</div></div>`;
     }).join('');
     return `<p>${found} / ${FISH.length} discovered</p><div class="grid">${cards}</div>`;
   }

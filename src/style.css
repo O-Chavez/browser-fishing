@@ -152,3 +152,5 @@ body.shopping .controls { display: none; }
 #spot.pier { color: #ffd23a; }
 #spot.shore { color: #ff9b6b; }
 #spot:empty { display: none; }
+#nightchip { position: absolute; top: 120px; left: 16px; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(20,24,70,.65); color: #b9c8ff; }
+#nightchip:empty { display: none; }

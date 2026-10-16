@@ -2,6 +2,7 @@ import { FISH, byId } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
+import { isNight } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
 import { fundGoal, openKey } from '../src/game/fund';
 import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
@@ -230,7 +231,7 @@ export class Room {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });
       return false;
     }
-    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z));
+    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), isNight(this.now() / 1000));
     m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, readyAt: this.now() + roll.wait * 1000 + MIN_FIGHT_MS } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
