@@ -286,5 +286,11 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 ## 18. Tier rules (bait gates, rod eases)
 
 - **Bait tier decides which fish can bite.** Any rod can use any bait.
-- **Rod tier decides how hard the reel fight is.** Difficulty = fish stamina ÷ rod control^0.55, plus 35% for every tier the fish is above the rod (capped at 3.2). A tier 5 fish on a twig rod is near-impossible; on the Aurora Rod it is about medium-hard.
+- **Rod tier decides how hard the reel fight is.** Difficulty = fish stamina ÷ rod control^0.45, plus 35% for every tier the fish is above the rod (capped at 3.2). A tier 5 fish on a twig rod is near-impossible; on the Aurora Rod it is about medium-hard.
 - Each tier's fish sell for more and have higher stamina than the tier below. Inventory shows rods, bait and cosmetics as the same icon tiles as the shop.
+
+## 19. Top-tier banner, brutal fights, stretch cosmetics
+
+- **Banner:** when the hooked or caught fish is the same tier as your equipped bait (your best catchable tier), a large "<Tier> fish hooked!/caught!" banner shows in that tier's color.
+- **Harder reels:** high difficulty means shorter rests, stronger and longer surges, tighter tension coupling and a faster line snap. Tuning lives in `src/game/reel.ts`.
+- **Cosmetic prices:** entry items cost 100-400 coins; the top items (crown 75,000, cloak 60,000, diamond pendant 120,000) are stretch goals worth roughly 25-40 top-tier catches.

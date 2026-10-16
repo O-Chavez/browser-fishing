@@ -68,17 +68,18 @@ export class Reel {
       if (this.surgeT >= this.surgeDur) {
         this.surgeDir = 0;
         this.surgePower = 0;
-        this.nextSurge = 0.8 + this.rng() * 1.5;
+        // Harder fish rest less between surges.
+        this.nextSurge = (0.8 + this.rng() * 1.5) / (0.55 + 0.45 * Math.min(2.5, this.difficulty));
       }
     } else {
       this.nextSurge -= dt;
       if (this.nextSurge <= 0) {
         this.surgeDir = this.rng() < 0.5 ? -1 : 1;
-        this.surgeDur = 1.0 + this.rng() * 1.0;
+        this.surgeDur = 1.0 + this.rng() * 1.0 + 0.25 * Math.max(0, this.difficulty - 1.5);
         this.surgeT = 0;
         this.surgeCount++;
         this.surgePower =
-          ((0.55 + 0.5 * this.rng()) * Math.min(1.3, 0.7 + 0.3 * this.difficulty) * (0.5 + 0.5 * this.stamina)) /
+          ((0.55 + 0.5 * this.rng()) * Math.min(1.75, 0.55 + 0.4 * this.difficulty) * (0.5 + 0.5 * this.stamina)) /
           (0.8 + 0.2 * this.control);
       }
     }
@@ -90,7 +91,8 @@ export class Reel {
       this.pull = 0.1 * this.difficulty * (0.6 + 0.4 * Math.sin(this.t * 3.1));
     }
 
-    const target = (holding ? 0.55 : 0.04) + this.pull * 0.5;
+    const hard = Math.max(0, this.difficulty - 1);
+    const target = (holding ? 0.55 : 0.04) + this.pull * (0.5 + 0.2 * hard);
     this.tension = Math.min(1, Math.max(0, this.tension + (target - this.tension) * Math.min(1, 5 * dt)));
 
     this.stamina = Math.max(0.2, this.stamina - dt * 0.06 * (this.inGoodZone ? 1 : 0.25));
@@ -108,7 +110,7 @@ export class Reel {
     this.empty = this.progress <= 0 ? this.empty + dt : Math.max(0, this.empty - dt);
 
     if (this.progress >= 1) this.status = 'caught';
-    else if (this.danger >= SNAP_TIME) this.status = 'snapped';
+    else if (this.danger >= SNAP_TIME / (1 + 0.3 * Math.max(0, this.difficulty - 1.5))) this.status = 'snapped';
     else if (this.slack >= SLACK_TIME || this.empty >= EMPTY_TIME) this.status = 'escaped';
   }
 }

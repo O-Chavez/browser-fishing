@@ -34,14 +34,19 @@ const winRate = (d: number, c: number, p: Policy) => {
 };
 
 describe('tension reel fight', () => {
-  it('a skilled player lands easy, mid and legendary fish', () => {
+  it('a skilled player lands easy, mid and well-matched legendary fish', () => {
     expect(winRate(0.6, 1, skilled)).toBeGreaterThan(0.9);
     expect(winRate(1.3, 1.2, skilled)).toBeGreaterThan(0.9);
-    expect(winRate(2.2, 1.5, skilled)).toBeGreaterThan(0.9);
+    expect(winRate(1.8, 1.5, skilled)).toBeGreaterThan(0.9);
+  });
+
+  it('brutal fights punish even attentive players, and impossible ones are out of reach', () => {
+    expect(winRate(2.5, 1.5, laggy(0.7))).toBeLessThan(0.5);
+    expect(winRate(3.2, 1, skilled)).toBeLessThan(0.1);
   });
 
   it('holding down the button loses hard fish', () => {
-    expect(winRate(2.2, 1, mashing)).toBeLessThan(0.3);
+    expect(winRate(2.0, 1, mashing)).toBeLessThan(0.3);
   });
 
   it('a laggy but attentive player still wins mid fish', () => {

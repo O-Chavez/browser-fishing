@@ -29,7 +29,7 @@ export const UNDERGEAR_PENALTY = 0.35;
 /** How hard a hooked fish fights: its stamina, softened by a better rod and made much worse by an under-tier one. */
 export function reelDifficulty(fish: Fish, rod: Rod, shiny = false): number {
   const gap = Math.max(0, fish.tier - rod.tier);
-  const d = ((fish.stamina * (shiny ? SHINY_DIFFICULTY : 1)) / Math.pow(rod.control, 0.55)) * (1 + UNDERGEAR_PENALTY * gap);
+  const d = ((fish.stamina * (shiny ? SHINY_DIFFICULTY : 1)) / Math.pow(rod.control, 0.45)) * (1 + UNDERGEAR_PENALTY * gap);
   return Math.round(Math.min(3.2, Math.max(0.4, d)) * 100) / 100;
 }
 

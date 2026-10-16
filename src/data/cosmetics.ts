@@ -24,26 +24,26 @@ export interface Look {
 const c = (id: string, slot: CosSlot, name: string, price: number, tier: number, color: number, accent: number): Cosmetic => ({ id, slot, name, price, tier, color, accent });
 
 export const COSMETICS: Cosmetic[] = [
-  c('cap', 'hat', 'Fisher Cap', 40, 0, 0x3a6ea5, 0x234a75),
-  c('straw', 'hat', 'Straw Hat', 90, 1, 0xe3c46a, 0xc9a44a),
-  c('bucket', 'hat', 'Bucket Hat', 160, 1, 0x6b8f5a, 0x4d6e40),
-  c('captain', 'hat', "Captain's Hat", 450, 2, 0xf2f2ee, 0x1c2d52),
-  c('horned', 'hat', 'Horned Helm', 900, 3, 0x9aa3ad, 0xf0e6c8),
-  c('crown', 'hat', 'Golden Crown', 2500, 5, 0xffd24a, 0xff3b5c),
+  c('cap', 'hat', 'Fisher Cap', 150, 0, 0x3a6ea5, 0x234a75),
+  c('straw', 'hat', 'Straw Hat', 400, 1, 0xe3c46a, 0xc9a44a),
+  c('bucket', 'hat', 'Bucket Hat', 700, 1, 0x6b8f5a, 0x4d6e40),
+  c('captain', 'hat', "Captain's Hat", 2500, 2, 0xf2f2ee, 0x1c2d52),
+  c('horned', 'hat', 'Horned Helm', 9000, 3, 0x9aa3ad, 0xf0e6c8),
+  c('crown', 'hat', 'Golden Crown', 75000, 5, 0xffd24a, 0xff3b5c),
 
-  c('tee', 'shirt', 'Plain Tee', 25, 0, 0xe8e8e8, 0xe8e8e8),
-  c('striped', 'shirt', 'Striped Shirt', 70, 1, 0xf4f4f4, 0x2a5fa8),
-  c('vest', 'shirt', 'Angler Vest', 150, 1, 0x5b7a3a, 0x8a6a3a),
-  c('hawaiian', 'shirt', 'Hawaiian Shirt', 300, 2, 0x1fa6a0, 0xff7a59),
-  c('coat', 'shirt', "Sailor's Coat", 700, 3, 0x1c2d52, 0xd4af37),
-  c('cloak', 'shirt', 'Royal Cloak', 2000, 5, 0x7a1fa2, 0xffd24a),
+  c('tee', 'shirt', 'Plain Tee', 100, 0, 0xe8e8e8, 0xe8e8e8),
+  c('striped', 'shirt', 'Striped Shirt', 300, 1, 0xf4f4f4, 0x2a5fa8),
+  c('vest', 'shirt', 'Angler Vest', 600, 1, 0x5b7a3a, 0x8a6a3a),
+  c('hawaiian', 'shirt', 'Hawaiian Shirt', 1800, 2, 0x1fa6a0, 0xff7a59),
+  c('coat', 'shirt', "Sailor's Coat", 6500, 3, 0x1c2d52, 0xd4af37),
+  c('cloak', 'shirt', 'Royal Cloak', 60000, 5, 0x7a1fa2, 0xffd24a),
 
-  c('shell', 'jewelry', 'Shell Necklace', 50, 0, 0xf6dcc8, 0xf6dcc8),
-  c('chain', 'jewelry', 'Silver Chain', 120, 1, 0xc8d0d8, 0xc8d0d8),
-  c('pendant', 'jewelry', 'Fish Pendant', 300, 2, 0xd4af37, 0x4fc3f7),
-  c('pearl', 'jewelry', 'Pearl Necklace', 600, 3, 0xfff5ee, 0xfff5ee),
-  c('amulet', 'jewelry', 'Sapphire Amulet', 1200, 4, 0xd4af37, 0x2f6bff),
-  c('diamond', 'jewelry', 'Diamond Pendant', 3000, 5, 0xb9f2ff, 0xffffff),
+  c('shell', 'jewelry', 'Shell Necklace', 200, 0, 0xf6dcc8, 0xf6dcc8),
+  c('chain', 'jewelry', 'Silver Chain', 500, 1, 0xc8d0d8, 0xc8d0d8),
+  c('pendant', 'jewelry', 'Fish Pendant', 1500, 2, 0xd4af37, 0x4fc3f7),
+  c('pearl', 'jewelry', 'Pearl Necklace', 4500, 3, 0xfff5ee, 0xfff5ee),
+  c('amulet', 'jewelry', 'Sapphire Amulet', 18000, 4, 0xd4af37, 0x2f6bff),
+  c('diamond', 'jewelry', 'Diamond Pendant', 120000, 5, 0xb9f2ff, 0xffffff),
 ];
 
 export const cosById = (id: string | null | undefined): Cosmetic | undefined => COSMETICS.find((x) => x.id === id);

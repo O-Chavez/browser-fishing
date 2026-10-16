@@ -321,7 +321,7 @@ describe('cosmetics, selling by slot and the board', () => {
     room.handle(a.id, { t: 'buycos', id: 'cap' });
     room.handle(a.id, { t: 'buycos', id: 'crown' });
     expect(a.acct.save.owned).toEqual(['cap']);
-    expect(a.acct.save.coins).toBe(460);
+    expect(a.acct.save.coins).toBe(350);
     room.handle(a.id, { t: 'equip', slot: 'hat', id: 'crown' });
     room.handle(a.id, { t: 'equip', slot: 'shirt', id: 'cap' });
     expect(a.acct.save.look.hat).toBeNull();

@@ -138,3 +138,7 @@ body.shopping .controls { display: none; }
 
 .danger { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.1); font-size: 13px; opacity: .85; }
 .danger button.bad { background: #b3261e; color: #fff; }
+
+#banner { position: fixed; top: 16%; left: 50%; transform: translateX(-50%); font-size: 44px; font-weight: 900; letter-spacing: 1px; text-align: center; pointer-events: none; text-shadow: 0 2px 12px rgba(0,0,0,.8), 0 0 28px currentColor; animation: bannerIn 3.2s ease-out forwards; z-index: 30; white-space: nowrap; }
+#banner small { display: block; font-size: 18px; font-weight: 600; opacity: .9; letter-spacing: 0; }
+@keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }

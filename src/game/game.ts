@@ -141,6 +141,7 @@ export class Game {
   private joinColor = BODY_COLORS[4];
   private toastTimer = 0;
   private confirmReset = false;
+  private bannerTimer = 0;
   private spin = false;
   private last = performance.now();
   private gauge = $('gauge') as HTMLCanvasElement;
@@ -338,6 +339,7 @@ export class Game {
   /** Test hook: drive the game without pointer lock. */
   debug() {
     return {
+      banner: (tier: number, verb: string) => this.topTierBanner({ tier }, verb, false),
       activate: () => {
         this.forceActive = true;
         this.setMenu(false);
@@ -976,12 +978,28 @@ export class Game {
     this.toast(this.hookedShiny ? '✨ Bite! Something is glimmering...' : 'Bite!');
   }
 
+  /** Celebrates landing or hooking the best tier of fish the current bait can attract. */
+  private topTierBanner(fish: { tier: number }, verb: string, shiny: boolean): void {
+    if (fish.tier !== this.bait.tier) return;
+    const el = $('banner');
+    const name = tierName(fish.tier);
+    el.style.color = this.tierColor(fish.tier);
+    el.innerHTML = `${shiny ? '✨ Shiny ' : ''}${name} fish ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), 3200);
+  }
+
   private startReel(): void {
     const w = this.world;
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
     const hard = reelDifficulty(this.hooked!, this.rod, this.hookedShiny);
     this.reel = new Reel(hard, this.rod.control);
+    this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
     this.lastSurges = 0;
     this.leapT = -1;
     this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier);
@@ -1058,6 +1076,7 @@ export class Game {
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
     audio.jingle(shiny ? 'legendary' : fish.rarity);
+    this.topTierBanner(fish, 'caught', shiny);
 
     this.held = this.fish;
     this.fish = null;

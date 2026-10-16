@@ -96,7 +96,7 @@ describe('tier progression', () => {
       return fish.reduce((a, x) => a + reelDifficulty(x, rod), 0) / fish.length;
     });
     for (let i = 1; i < matched.length; i++) expect(matched[i]).toBeGreaterThan(matched[i - 1]);
-    expect(matched[4]).toBeLessThan(1.7);
+    expect(matched[4]).toBeLessThan(2.0);
   });
   it('bait sets what you can hook; an under-tier rod makes the fight much harder', () => {
     expect(canCatch(FISH.find((f) => f.tier === 3)!, 'pond', RODS[0], BAITS[2])).toBe(true);
