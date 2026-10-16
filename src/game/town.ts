@@ -58,6 +58,7 @@ export class Town {
   private heads: { head: THREE.Object3D; body: THREE.Object3D; pos: THREE.Vector3; yaw: number }[] = [];
   private cobble = cobbleTexture();
   private foundKey = '';
+  private night = 0;
 
   constructor(private map: MapDef) {
     const t = map.town;
@@ -70,6 +71,7 @@ export class Town {
     t.flowers.forEach((f) => this.buildFlowers(f));
     this.buildFences();
     this.buildBottles();
+    this.buildCozy();
   }
 
   private at(obj: THREE.Object3D, x: number, z: number, facing = 0, y?: number): void {
@@ -271,6 +273,8 @@ export class Town {
     }
   }
   private lamps: THREE.MeshLambertMaterial[] = [];
+  private lights: THREE.PointLight[] = [];
+  private fires: { light: THREE.PointLight; flames: THREE.Object3D[]; ph: number }[] = [];
 
   private buildNpc(def: NpcDef): void {
     const p = new THREE.Group();
@@ -343,18 +347,17 @@ export class Town {
     const g = new THREE.Group();
     const hull = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), mat(0x7a4a2b, { side: THREE.DoubleSide }));
     hull.scale.set(0.8, 0.55, 2.2);
-    hull.rotation.x = Math.PI;
-    hull.position.y = 0.55;
+    hull.position.y = 0.5;
     hull.castShadow = true;
     const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.05, 6, 24), mat(0xd9b88a));
     rim.rotation.x = Math.PI / 2;
     rim.scale.set(0.8, 2.2, 1);
-    rim.position.y = 0.55;
+    rim.position.y = 0.5;
     const oar = cyl(0.03, 0.03, 2, WOOD, 6);
     oar.rotation.set(0.1, 0, 1.3);
-    oar.position.set(0.5, 0.75, 0.2);
+    oar.position.set(0.5, 0.7, 0.2);
     g.add(hull, rim, oar);
-    this.at(g, s.x, s.z, s.facing);
+    this.at(g, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.25);
     for (const lz of [-1.3, 0, 1.3]) {
       this.solid(s.x + Math.sin(s.facing) * lz, s.z + Math.cos(s.facing) * lz, 0.8);
     }
@@ -405,6 +408,164 @@ export class Town {
     run(3.6, 47, 6.3, 47);
   }
 
+  private lampPost(x: number, z: number, light: boolean): void {
+    const g = new THREE.Group();
+    const pole = cyl(0.045, 0.065, 2.3, DARK, 8);
+    pole.position.y = 1.15;
+    const arm = rbox(0.5, 0.05, 0.05, DARK, 0.01);
+    arm.position.set(0.22, 2.3, 0);
+    const lantern = rbox(0.24, 0.3, 0.24, 0xffd27a, 0.05);
+    (lantern.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
+    this.lamps.push(lantern.material as THREE.MeshLambertMaterial);
+    lantern.position.set(0.45, 2.1, 0);
+    const cap = cyl(0.01, 0.16, 0.12, DARK, 6);
+    cap.position.set(0.45, 2.32, 0);
+    g.add(pole, arm, lantern, cap);
+    if (light) {
+      const l = new THREE.PointLight(0xffc266, 0, 12, 1.6);
+      l.position.set(0.45, 2.1, 0);
+      g.add(l);
+      this.lights.push(l);
+    }
+    this.at(g, x, z);
+    this.solid(x, z, 0.2);
+  }
+
+  private bench(x: number, z: number, facing: number): void {
+    const g = new THREE.Group();
+    const seat = rbox(1.5, 0.08, 0.45, WOOD, 0.02);
+    seat.position.y = 0.45;
+    const back = rbox(1.5, 0.4, 0.06, WOOD, 0.02);
+    back.position.set(0, 0.75, -0.2);
+    g.add(seat, back);
+    for (const sx of [-0.6, 0.6]) {
+      const leg = rbox(0.07, 0.45, 0.4, DARK, 0.01);
+      leg.position.set(sx, 0.22, 0);
+      g.add(leg);
+    }
+    this.at(g, x, z, facing);
+    this.solid(x, z, 0.7);
+  }
+
+  private pot(x: number, z: number): void {
+    const g = new THREE.Group();
+    const p = cyl(0.22, 0.16, 0.34, 0xb5653a, 8);
+    p.position.y = 0.17;
+    const bush = ball(0.26, 0x4f9a4b, 1, 0.9, 1);
+    bush.position.y = 0.5;
+    g.add(p, bush);
+    [0xff6f91, 0xffd23a, 0xffffff].forEach((c, i) => {
+      const b = ball(0.06, c);
+      b.position.set(Math.cos(i * 2.1) * 0.18, 0.62 + (i % 2) * 0.05, Math.sin(i * 2.1) * 0.18);
+      g.add(b);
+    });
+    this.at(g, x, z);
+  }
+
+  private firePit(x: number, z: number, seats: number): void {
+    const g = new THREE.Group();
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      const st = ball(0.14, 0x8a8478, 1, 0.7, 1);
+      st.position.set(Math.cos(a) * 0.62, 0.08, Math.sin(a) * 0.62);
+      g.add(st);
+    }
+    for (let i = 0; i < 3; i++) {
+      const log = cyl(0.06, 0.07, 0.8, 0x5b3a1e, 6);
+      log.rotation.z = Math.PI / 2;
+      log.rotation.y = (i * Math.PI) / 3;
+      log.position.y = 0.12;
+      g.add(log);
+    }
+    const flames: THREE.Object3D[] = [];
+    for (const [h, c] of [[0.7, 0xff6a1a], [0.5, 0xffa51f], [0.3, 0xffe14a]] as const) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.22 * (h / 0.7) + 0.06, h, 7), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.9 }));
+      f.position.y = 0.15 + h / 2;
+      g.add(f);
+      flames.push(f);
+    }
+    const light = new THREE.PointLight(0xff8a3c, 6, 11, 2);
+    light.position.y = 0.9;
+    g.add(light);
+    this.fires.push({ light, flames, ph: x * 3.1 + z });
+    for (let i = 0; i < seats; i++) {
+      const a = (i / seats) * Math.PI * 2 + 0.6;
+      const seat = cyl(0.17, 0.17, 0.9, 0x6b4a2b, 8);
+      seat.rotation.z = Math.PI / 2;
+      seat.rotation.y = -a;
+      seat.position.set(Math.cos(a) * 1.9, 0.2, Math.sin(a) * 1.9);
+      g.add(seat);
+    }
+    this.at(g, x, z);
+    this.solid(x, z, 0.8);
+  }
+
+  private blanket(x: number, z: number, facing: number): void {
+    const g = new THREE.Group();
+    const b = rbox(1.9, 0.04, 1.5, 0xc0504d, 0.01);
+    b.position.y = 0.03;
+    const stripe = rbox(1.9, 0.045, 0.3, 0xf3ead2, 0.01);
+    stripe.position.y = 0.032;
+    const basket = rbox(0.45, 0.28, 0.32, 0xb98a55, 0.04);
+    basket.position.set(0.5, 0.18, 0.1);
+    const cushion = rbox(0.5, 0.12, 0.5, 0x4f6fa0, 0.05);
+    cushion.position.set(-0.45, 0.1, -0.2);
+    g.add(b, stripe, basket, cushion);
+    this.at(g, x, z, facing);
+  }
+
+  private stringLights(x0: number, x1: number, z: number, h: number): void {
+    const n = 14;
+    for (const x of [x0, x1]) {
+      const post = cyl(0.05, 0.06, h, DARK, 6);
+      this.at(post, x, z, 0, groundHeight(x, z) + h / 2);
+      this.solid(x, z, 0.15);
+    }
+    const colors = [0xffd27a, 0xff9a6a, 0xfff0b0, 0xffb84a];
+    for (let i = 0; i <= n; i++) {
+      const k = i / n;
+      const x = x0 + (x1 - x0) * k;
+      const y = groundHeight(x, z) + h - Math.sin(k * Math.PI) * 0.45;
+      const b = ball(0.07, colors[i % 4]);
+      const m = b.material as THREE.MeshLambertMaterial;
+      m.emissive.set(colors[i % 4]);
+      this.lamps.push(m);
+      this.at(b, x, z, 0, y);
+    }
+  }
+
+  /** Lamp posts, benches, a fire pit, picnic spots and string lights that make the town feel lived in. */
+  private buildCozy(): void {
+    const posts = [[-2.6, 39, true], [2.6, 39, false], [-2.6, 45, false], [2.6, 45, true], [-2.6, 51, true], [2.6, 51, false], [12, 36, true], [-13, 39, false], [12, 47, false], [-3, 55, false]] as const;
+    for (const [x, z, lit] of posts) this.lampPost(x, z, lit);
+    this.bench(-3.6, 32, Math.PI / 2);
+    this.bench(3.6, 32, -Math.PI / 2);
+    this.bench(0, 27.4, 0);
+    this.pot(-3.6, 29.5);
+    this.pot(3.6, 29.5);
+    this.pot(-3.6, 34.5);
+    this.pot(3.6, 34.5);
+    this.firePit(11, 38.5, 5);
+    this.pot(8.2, 40.5);
+    this.blanket(9, 17, 0.4);
+    this.blanket(-9.5, 17.5, -0.3);
+    this.pot(7.5, 15.5);
+    this.stringLights(-3.4, 3.4, 49, 3.1);
+    this.stringLights(-4, 4, 34.5, 3.3);
+    for (const [x, z, f] of [[20.2, 46, 0], [-18.2, 46, 0], [-12.6, 33.2, 1.57]] as const) {
+      const g = new THREE.Group();
+      for (let r = 0; r < 3; r++) {
+        for (let i = 0; i < 4 - r; i++) {
+          const l = cyl(0.09, 0.09, 0.9, 0x7a5230, 6);
+          l.rotation.z = Math.PI / 2;
+          l.position.set((i - (3 - r) / 2) * 0.2, 0.1 + r * 0.17, 0);
+          g.add(l);
+        }
+      }
+      this.at(g, x, z, f);
+    }
+  }
+
   private buildBottles(): void {
     for (const b of this.map.town.bottles) {
       const g = new THREE.Group();
@@ -420,10 +581,10 @@ export class Town {
       const holder = new THREE.Group();
       holder.add(g);
       const glow = new THREE.PointLight(0x7fffe0, 0.8, 4, 2);
-      glow.position.y = 0.3;
+      glow.position.y = 0.4;
       holder.add(glow);
       const onDock = b.z < 0;
-      holder.position.set(b.x, onDock ? 0.95 : groundHeight(b.x, b.z) + 0.2, b.z);
+      holder.position.set(b.x, onDock ? 0.86 : groundHeight(b.x, b.z) + 0.1, b.z);
       this.group.add(holder);
       this.bottleMeshes.set(b.id, holder);
       this.bottles.push({ id: b.id, note: b.note, pos: new THREE.Vector3(b.x, 0, b.z) });
@@ -442,6 +603,8 @@ export class Town {
   setNight(n: number): void {
     this.windowMat.color.set(0x6d7f8c).lerp(new THREE.Color(0xffc266), n);
     for (const m of this.lamps) m.emissiveIntensity = 0.2 + 1.6 * n;
+    this.night = n;
+    for (const l of this.lights) l.intensity = 8 * n;
   }
 
   /** The line this townsperson says next. */
@@ -453,6 +616,10 @@ export class Town {
   }
 
   update(t: number, px: number, pz: number): void {
+    for (const f of this.fires) {
+      f.light.intensity = (4 + 8 * this.night) * (0.85 + 0.15 * Math.sin(t * 9 + f.ph) + 0.08 * Math.sin(t * 23 + f.ph));
+      f.flames.forEach((c, i) => c.scale.set(1, 0.85 + 0.25 * Math.sin(t * 8 + i * 2 + f.ph), 1));
+    }
     for (const s of this.smoke) {
       const k = (t * 0.18 + s.ph) % 1;
       s.m.position.set(s.base.x + k * 0.9 + Math.sin(t + s.ph * 6) * 0.1, s.base.y + k * 2.4, s.base.z);
@@ -471,8 +638,7 @@ export class Town {
     }
     for (const [, m] of this.bottleMeshes) {
       if (!m.visible) continue;
-      m.children[0].rotation.y = t * 0.8;
-      m.children[0].position.y = Math.sin(t * 2 + m.position.x) * 0.04;
+      (m.children[1] as THREE.PointLight).intensity = 0.7 + Math.sin(t * 2 + m.position.x) * 0.2;
     }
   }
 }
