@@ -54,7 +54,7 @@ export type ServerMsg =
   | { t: 'error'; msg: string }
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
-  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean }
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; win: boolean; ms: number }
   | { t: 'joined'; player: PlayerInfo }

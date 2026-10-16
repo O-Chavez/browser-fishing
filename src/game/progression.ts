@@ -3,7 +3,36 @@ import {
   type Fish, type Rod, type Bait,
 } from '../data/content';
 
+import { onDock } from './env';
+
 export const MAX_LEVEL = 50;
+
+export type SpotId = 'prime' | 'pier' | 'shore';
+
+export interface SpotRule {
+  label: string;
+  /** Multiplies rod/bait luck. */
+  luck: number;
+  /** Multiplies the wait for a bite. */
+  wait: number;
+  /** Top tiers (below your bait tier) that do not bite here. */
+  cut: number;
+}
+
+/** Where you stand matters: the pier head is prime water, the shore is a poor place to fish. */
+export const SPOTS: Record<SpotId, SpotRule> = {
+  prime: { label: 'Prime fishing spot', luck: 1, wait: 1, cut: 0 },
+  pier: { label: 'Inner pier - fish bite less here', luck: 0.7, wait: 1.25, cut: 0 },
+  shore: { label: 'Poor spot - go to the pier!', luck: 0.35, wait: 1.7, cut: 1 },
+};
+
+/** Z of the line that separates the outer pier (prime) from the inner pier. */
+export const PRIME_Z = 5.4;
+
+export function fishingSpot(x: number, z: number): SpotId {
+  if (!onDock(x, z)) return 'shore';
+  return z <= PRIME_Z ? 'prime' : 'pier';
+}
 
 export const xpForNextLevel = (level: number): number => Math.round(10 * Math.pow(level, 1.5));
 
@@ -56,15 +85,18 @@ export const PERFECT_MIN = 0.86;
 export const PERFECT_MAX = 0.96;
 
 /** Non-common weights are boosted by rod and bait luck. */
-export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false): Fish | null {
-  const g = gearTier(rod, bait);
+export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime'): Fish | null {
+  const rule = SPOTS[spot];
+  const g = Math.max(1, gearTier(rod, bait) - rule.cut);
+  const capped = pool.filter((f) => f.tier <= g);
+  if (capped.length > 0) pool = capped;
   if (perfect) {
     // A perfect cast reaches the better water: only the top two tiers of the pool remain.
     const high = pool.filter((f) => f.tier >= g - 1);
     if (high.length > 0) pool = high;
   }
   if (pool.length === 0) return null;
-  const luck = rod.luck * bait.luck * (perfect ? PERFECT_LUCK : 1);
+  const luck = rod.luck * bait.luck * rule.luck * (perfect ? PERFECT_LUCK : 1);
   const weights = pool.map(
     (f) =>
       (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) *

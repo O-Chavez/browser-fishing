@@ -146,3 +146,9 @@ body.shopping .controls { display: none; }
 #purse { font-size: 22px; font-weight: 800; color: #ffd23a; background: rgba(0,0,0,.45); border: 1px solid rgba(255,210,58,.5); border-radius: 999px; padding: 2px 14px; text-shadow: 0 1px 3px #000; }
 #purse.bump { animation: purseBump .5s ease-out; }
 @keyframes purseBump { 0% { transform: scale(1.25); background: rgba(255,210,58,.5); } 100% { transform: scale(1); } }
+
+#spot { position: absolute; top: 90px; left: 16px; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(0,0,0,.4); }
+#spot.prime { color: #8fe08f; }
+#spot.pier { color: #ffd23a; }
+#spot.shore { color: #ff9b6b; }
+#spot:empty { display: none; }

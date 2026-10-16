@@ -310,3 +310,15 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 
 - Background music is generated live with Web Audio, in a quiet Outer Wilds / Timber Hearth style: a lilting 6/8 banjo-like fingerpick (Karplus-Strong strings) over D-G-A-D-Bm-G-D-A, a soft whistled pentatonic motif, a slow warm drone and a faint campfire crackle. It is mixed low (`MUSIC_VOL` in `audio.ts`) so it sits under the lake ambience, so there are no audio files and no licensing. Press **M** to toggle; the choice is remembered in localStorage.
 - The top bar shows coins in a gold pill that pulses whenever the amount changes.
+
+## 23. Prime fishing spots
+
+Where you stand when you cast matters (server-checked from the player's position):
+
+| Spot | Where | Luck | Bite wait | Pool |
+|------|-------|------|-----------|------|
+| Prime | Outer pier and T-platform (z ≤ 5.4) | ×1 | ×1 | full |
+| Inner pier | Rest of the pier | ×0.7 | ×1.25 | full |
+| Poor | Anywhere off the pier (shore, hub) | ×0.35 | ×1.7 | top tier your bait could catch is removed |
+
+A HUD chip shows the current spot's quality; the cast toast names it. Perfect casts still apply on top.

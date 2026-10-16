@@ -280,6 +280,16 @@ describe('scaled goal & shinies', () => {
     expect(room.funds.pond).toBe(goalOf(2));
     expect(b.id).not.toBe(c.id);
   });
+  it('slows bites when casting from the shore instead of the pier', () => {
+    const { room, join } = setup() as ReturnType<typeof setup>;
+    const a = join('Ann');
+    room.handle(a.id, { t: 'pos', x: 0, z: 0, yaw: 0 });
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(last(a.c, 'castok').spot).toBe('prime');
+    room.handle(a.id, { t: 'pos', x: 6, z: 20, yaw: 0 });
+    room.handle(a.id, { t: 'cast', x: 0, z: 10 });
+    expect(last(a.c, 'castok').spot).toBe('shore');
+  });
   it('flags a perfect cast in the roll', () => {
     const { room, join } = setup() as ReturnType<typeof setup>;
     const a = join('Ann');

@@ -120,3 +120,14 @@ describe('tier progression', () => {
     expect(weak).toBeGreaterThan(matched * 1.5);
   });
 });
+
+import { fishingSpot as _spot, SPOTS as _SPOTS } from './progression';
+describe('fishing spots', () => {
+  it('rates the pier head above the inner pier above the shore', () => {
+    expect(_spot(0, -4)).toBe('prime');
+    expect(_spot(0, 9)).toBe('pier');
+    expect(_spot(5.5, 20)).toBe('shore');
+    expect(_SPOTS.shore.wait).toBeGreaterThan(_SPOTS.pier.wait);
+    expect(_SPOTS.pier.luck).toBeLessThan(_SPOTS.prime.luck);
+  });
+});

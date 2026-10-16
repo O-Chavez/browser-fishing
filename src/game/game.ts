@@ -39,6 +39,9 @@ import {
   reelDifficulty,
   xpForNextLevel,
   PERFECT_MIN,
+  fishingSpot,
+  SPOTS,
+  type SpotId,
   PERFECT_MAX,
 } from './progression';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
@@ -87,6 +90,8 @@ export class Game {
   private power = 0;
   private powerDir = 1;
   private perfect = false;
+  private castSpot: SpotId = 'prime';
+  private spotShown = '';
   private timer = 0;
 
   private origin = new THREE.Vector3();
@@ -922,6 +927,7 @@ export class Game {
     this.target.copy(t);
     eco.spendBait(this.s);
     this.roll = null;
+    this.castSpot = fishingSpot(this.player.x, this.player.z);
     this.perfect = this.power >= PERFECT_MIN && this.power <= PERFECT_MAX;
     this.net.send({ t: 'cast', x: t.x, z: t.z, perfect: this.perfect });
     this.baseDist = Math.hypot(t.x - w.eye.x, t.z - w.eye.z);
@@ -970,7 +976,7 @@ export class Game {
       w.fx.ripple(b, 6, 0.5);
     }
 
-    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId, Math.random, this.perfect);
+    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId, Math.random, this.perfect, this.castSpot);
     this.roll = null;
     this.hooked = roll.fishId ? byId(FISH, roll.fishId) : null;
     this.hookedSize = roll.size;
@@ -987,7 +993,7 @@ export class Game {
       w.scene.add(this.shadow.group);
     }
     this.phase = 'waiting';
-    this.toast(this.perfect ? '🎯 Perfect cast! Better fish are drawn to your bait...' : 'Waiting for a bite...');
+    this.toast(this.perfect ? '🎯 Perfect cast! Better fish are drawn to your bait...' : this.castSpot !== 'prime' ? `${SPOTS[this.castSpot].label} - waiting for a bite...` : 'Waiting for a bite...');
     w.rig.pose({ pitch: 0.4, bendP: 0.14, k: 40, c: 8 });
   }
 
@@ -1253,8 +1259,20 @@ export class Game {
     );
   }
 
+  /** Shows how good the water is where the player stands (not while a line is out). */
+  private updateSpot(): void {
+    if (this.phase !== 'idle' && this.phase !== 'charging') return;
+    const id = fishingSpot(this.player.x, this.player.z);
+    if (id === this.spotShown) return;
+    this.spotShown = id;
+    const el = $('spot');
+    el.textContent = id === 'prime' ? `🎣 ${SPOTS[id].label}` : `⚠ ${SPOTS[id].label}`;
+    el.className = id;
+  }
+
   private tick(dt: number): void {
     this.updateWalking(dt);
+    this.updateSpot();
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
     this.avatars.update(dt, this.world.time, this.net.players);
     if (!this.net.connected && this.localDrops.expire()) this.dropsView.sync(this.localDrops.all(), this.map.id);
