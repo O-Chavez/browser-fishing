@@ -461,6 +461,7 @@ export class Game {
       const i = Number(e.key) - 1;
       if (i >= 0 && i < SLOT_COUNT && this.phase === 'idle') this.takeSlot(i);
       else if (e.code === 'KeyG' && this.phase === 'idle') this.dropHeld();
+      else if (e.code === 'KeyM' && !e.repeat) this.toast(audio.toggleMusic() ? '🎵 Music on' : '🔇 Music off');
     });
   }
 
@@ -1632,7 +1633,15 @@ export class Game {
   private refreshHud(): void {
     const s = this.s;
     $('level').textContent = String(s.level);
-    $('coins').textContent = String(s.coins);
+    const coinsEl = $('coins');
+    const text = s.coins.toLocaleString();
+    if (coinsEl.textContent !== text) {
+      coinsEl.textContent = text;
+      const purse = $('purse');
+      purse.classList.remove('bump');
+      void purse.offsetWidth;
+      purse.classList.add('bump');
+    }
     $('xpbar').style.width =
       s.level >= MAX_LEVEL
         ? '100%'

@@ -305,3 +305,8 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 
 - The physical board ranks players in the room by their single most valuable catch (`save.best`, set in `applyCatch`, reset with the account). Each row shows rank, name, level, the fish's tier and name (tier-colored, ✨ if shiny) and its sell value. Players with no catch yet rank last, by coins.
 - The Players tab in the menu still ranks by coins.
+
+## 22. Music and coin HUD
+
+- Background music is generated live with Web Audio (slow pad chords plus sparse pentatonic plucks through a soft echo), so there are no audio files and no licensing. Press **M** to toggle; the choice is remembered in localStorage.
+- The top bar shows coins in a gold pill that pulses whenever the amount changes.

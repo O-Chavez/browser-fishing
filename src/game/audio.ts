@@ -25,7 +25,93 @@ class AudioFX {
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
 
     this.ambience();
+    this.startMusic();
     this.setupCreak();
+  }
+
+  private musicGain?: GainNode;
+  private musicOn = localStorage.getItem('fishing-music') !== 'off';
+
+  get music(): boolean {
+    return this.musicOn;
+  }
+
+  /** Toggles the background music and remembers the choice. */
+  toggleMusic(): boolean {
+    this.musicOn = !this.musicOn;
+    localStorage.setItem('fishing-music', this.musicOn ? 'on' : 'off');
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(this.musicOn ? 0.5 : 0, this.ctx.currentTime, 0.4);
+    return this.musicOn;
+  }
+
+  /** A slow, generated score: soft pad chords with sparse pentatonic plucks, all synthesised (no audio files, no licensing). */
+  private startMusic(): void {
+    const ctx = this.ctx!;
+    const out = ctx.createGain();
+    out.gain.value = this.musicOn ? 0.5 : 0;
+    const delay = ctx.createDelay(1.5);
+    delay.delayTime.value = 0.62;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.38;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.45;
+    delay.connect(fb).connect(delay);
+    delay.connect(wet).connect(out);
+    out.connect(this.master!);
+    this.musicGain = out;
+
+    const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+    // Cmaj7 - Am7 - Fmaj7 - G6, one chord per 8 s
+    const chords = [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 55, 64]];
+    const scale = [72, 74, 76, 79, 81, 84];
+    const BAR = 8;
+
+    const pad = (m: number, t: number, dur: number) => {
+      for (const det of [-6, 6]) {
+        const o = ctx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.value = hz(m);
+        o.detune.value = det;
+        const f = ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 900;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.028, t + 2.5);
+        g.gain.linearRampToValueAtTime(0.0001, t + dur + 1.5);
+        o.connect(f).connect(g).connect(out);
+        o.start(t);
+        o.stop(t + dur + 1.6);
+      }
+    };
+    const pluck = (m: number, t: number) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = hz(m);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.07, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+      o.connect(g);
+      g.connect(out);
+      g.connect(delay);
+      o.start(t);
+      o.stop(t + 2.3);
+    };
+
+    let next = ctx.currentTime + 0.3;
+    let bar = 0;
+    const schedule = () => {
+      while (next < ctx.currentTime + 6) {
+        for (const m of chords[bar % chords.length]) pad(m, next, BAR);
+        const notes = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < notes; i++) pluck(scale[Math.floor(Math.random() * scale.length)], next + 1 + Math.random() * (BAR - 2));
+        next += BAR;
+        bar++;
+      }
+    };
+    schedule();
+    setInterval(schedule, 2000);
   }
 
   private loopNoise(type: BiquadFilterType, freq: number, q: number, gain: number, lfoRate: number, lfoDepth: number): void {
