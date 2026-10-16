@@ -322,3 +322,12 @@ Where you stand when you cast matters (server-checked from the player's position
 | Poor | Anywhere off the pier (shore, hub) | ×0.35 | ×1.7 | top tier your bait could catch is removed |
 
 A HUD chip shows the current spot's quality; the cast toast names it. Perfect casts still apply on top.
+
+## 24. Day / night cycle
+
+A full day is 10 real minutes (`DAY_SECONDS` in `daynight.ts`), driven by the wall clock so every player sees the same time. Roughly: day 0–45%, dusk 45–60%, night 60–85%, dawn 85–100%.
+
+- Sky, fog, water, clouds, sun/moon light and hemisphere light blend between day, a warm dusk/dawn tint, and night; stars fade in.
+- Hub lamp posts and the pier lanterns glow brighter and cast warm point light at night.
+- Fireflies hover over the lake and blink at night, fading out by day.
+- Dev: `__game.day(0.72)` freezes the time of day (`null` resumes the clock).

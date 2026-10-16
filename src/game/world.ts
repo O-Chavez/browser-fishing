@@ -7,6 +7,7 @@ import {
   type DockRect,
   groundHeight,
   innerRadius,
+  isWater,
   mulberry,
   onDock,
   padWeight,
@@ -17,6 +18,8 @@ import { Hub } from './hub';
 import type { Circle } from './player';
 import { FX } from './fx';
 import { LineRenderer, Rig } from './rig';
+
+import { dayFraction, nightness, twilight } from './daynight';
 
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.38, -0.85).normalize();
 
@@ -111,6 +114,16 @@ export class World {
   private shake = 0;
   private decor = new THREE.Group();
   private clouds = new THREE.Group();
+  private cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.92 });
+  private stars!: THREE.Points;
+  private flies: THREE.Points | null = null;
+  private flyBase: { x: number; y: number; z: number; ph: number; sp: number }[] = [];
+  private dockLights: THREE.PointLight[] = [];
+  private dockGlow = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+  private base = { water: new THREE.Color(), deep: new THREE.Color(), sky: new THREE.Color(), top: new THREE.Color(), grass: new THREE.Color() };
+  /** Set (0..1 of the day) to freeze the time of day; null follows the shared clock. */
+  dayOverride: number | null = null;
+  night = 0;
   private sky!: THREE.Mesh;
   private hemi = new THREE.HemisphereLight(0xffffff, 0x446644, 1.1);
   private sun = new THREE.DirectionalLight(0xfff0d6, 3);
@@ -121,7 +134,7 @@ export class World {
     uSkyH: { value: new THREE.Color() },
     uSkyT: { value: new THREE.Color() },
     uSunCol: { value: new THREE.Color(0xfff2d8) },
-    uSunDir: { value: SUN_DIR },
+    uSunDir: { value: new THREE.Vector3().copy(SUN_DIR) },
     uFogColor: { value: new THREE.Color() },
     uFogNear: { value: 30 },
     uFogFar: { value: 280 },
@@ -129,8 +142,8 @@ export class World {
   private skyU = {
     uHorizon: this.waterU.uSkyH,
     uTop: this.waterU.uSkyT,
-    uSunDir: { value: SUN_DIR },
-    uSunCol: { value: new THREE.Color(0xfff2d8) },
+    uSunDir: this.waterU.uSunDir,
+    uSunCol: this.waterU.uSunCol,
   };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -226,12 +239,7 @@ export class World {
     this.scene.add(this.sky);
 
     const rnd = mulberry(11);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      fog: false,
-      transparent: true,
-      opacity: 0.92,
-    });
+    const mat = this.cloudMat;
     for (let i = 0; i < 14; i++) {
       const c = new THREE.Group();
       const n = 4 + Math.floor(rnd() * 4);
@@ -245,6 +253,106 @@ export class World {
       const d = 200 + rnd() * 400;
       c.position.set(Math.cos(a) * d, 110 + rnd() * 60, Math.sin(a) * d);
       this.clouds.add(c);
+    }
+
+    const sp = new Float32Array(700 * 3);
+    for (let i = 0; i < 700; i++) {
+      const u = rnd() * 2 - 1;
+      const a = rnd() * Math.PI * 2;
+      const y = Math.abs(u) * 0.95 + 0.05;
+      const r = Math.sqrt(1 - y * y);
+      sp.set([Math.cos(a) * r * 850, y * 850, Math.sin(a) * r * 850], i * 3);
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    this.stars = new THREE.Points(
+      sg,
+      new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0, depthWrite: false }),
+    );
+    this.stars.frustumCulled = false;
+    this.stars.renderOrder = -9;
+    this.scene.add(this.stars);
+  }
+
+  private buildFireflies(): void {
+    const N = 90;
+    const rnd = mulberry(5);
+    this.flyBase = [];
+    while (this.flyBase.length < N) {
+      const x = (rnd() - 0.5) * 80;
+      const z = -4 - rnd() * 55;
+      if (!isWater(x, z) && !onDock(x, z, 1.5)) continue;
+      this.flyBase.push({ x, y: 0.5 + rnd() * 2.2, z, ph: rnd() * 6.28, sp: 0.4 + rnd() * 0.6 });
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const cx = c.getContext('2d')!;
+    const gr = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = gr;
+    cx.fillRect(0, 0, 64, 64);
+    this.flies = new THREE.Points(
+      g,
+      new THREE.PointsMaterial({
+        map: new THREE.CanvasTexture(c), size: 0.7, vertexColors: true, transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      }),
+    );
+    this.flies.frustumCulled = false;
+    this.flies.visible = false;
+    this.decor.add(this.flies);
+  }
+
+  /** Blends sky, light, water, lamps and fireflies between day and night. */
+  private updateDaylight(t: number): void {
+    const f = this.dayOverride ?? dayFraction(Date.now() / 1000);
+    const n = nightness(f);
+    const tw = twilight(n);
+    this.night = n;
+    const b = this.base;
+    const u = this.waterU;
+    const nightH = new THREE.Color(0x0c1730);
+    const nightT = new THREE.Color(0x02040c);
+    u.uSkyH.value.copy(b.sky).lerp(nightH, n).lerp(new THREE.Color(0xff8a4a), tw * 0.7);
+    u.uSkyT.value.copy(b.top).lerp(nightT, n).lerp(new THREE.Color(0x5a4a8a), tw * 0.35);
+    u.uFogColor.value.copy(u.uSkyH.value);
+    (this.scene.fog as THREE.Fog | null)?.color.copy(u.uSkyH.value);
+    u.uShallow.value.copy(b.water).multiplyScalar(1 - 0.78 * n);
+    u.uDeep.value.copy(b.deep).multiplyScalar(1 - 0.7 * n);
+    u.uSunCol.value.set(0xfff2d8).lerp(new THREE.Color(0xff9a55), tw).multiplyScalar(1 - n);
+    const el = 0.38 * (1 - n) + 0.06 * n + 0.1 * tw;
+    u.uSunDir.value.set(SUN_DIR.x, el, SUN_DIR.z).normalize();
+    this.hemi.intensity = 1.1 * (1 - n) + 0.34 * n;
+    this.hemi.color.copy(b.top).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(0x6a80c0), n);
+    this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(new THREE.Color(0x141c30), n);
+    this.sun.intensity = 3 * (1 - n) + 0.45 * n;
+    this.sun.color.set(0xfff0d6).lerp(new THREE.Color(0xff9a55), tw * 0.8).lerp(new THREE.Color(0x7f9bff), n);
+    this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x1c2540), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
+    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, (n - 0.4) / 0.6);
+    this.dockGlow.color.set(0x6a5a3a).lerp(new THREE.Color(0xffd27a), 0.35 + 0.65 * n);
+    for (const l of this.dockLights) l.intensity = 8 * n;
+    this.hub?.setNight(n);
+
+    const fl = this.flies;
+    if (fl) {
+      const vis = n > 0.05;
+      fl.visible = vis;
+      if (vis) {
+        const p = fl.geometry.getAttribute('position') as THREE.BufferAttribute;
+        const c = fl.geometry.getAttribute('color') as THREE.BufferAttribute;
+        this.flyBase.forEach((fb, i) => {
+          const a = t * fb.sp + fb.ph;
+          p.setXYZ(i, fb.x + Math.sin(a) * 1.6 + Math.sin(a * 2.3) * 0.5, fb.y + Math.sin(a * 1.7) * 0.4, fb.z + Math.cos(a * 0.9) * 1.6);
+          const blink = (0.5 + 0.5 * Math.sin(t * (1.2 + fb.sp) + fb.ph * 3)) ** 2 * n;
+          c.setXYZ(i, 0.75 * blink, 1.0 * blink, 0.3 * blink);
+        });
+        p.needsUpdate = c.needsUpdate = true;
+      }
     }
   }
 
@@ -262,9 +370,12 @@ export class World {
     u.uSkyT.value.set(loc.skyTop);
     u.uFogColor.value.set(loc.sky);
     this.scene.fog = new THREE.Fog(loc.sky, 30, 280);
+    this.base.water.set(loc.water);
+    this.base.deep.set(loc.deep);
+    this.base.sky.set(loc.sky);
+    this.base.top.set(loc.skyTop);
+    this.base.grass.set(loc.grass);
     this.scene.background = null;
-    this.hemi.color.set(loc.skyTop).lerp(new THREE.Color(0xffffff), 0.5);
-    this.hemi.groundColor.set(loc.grass).multiplyScalar(0.5);
 
     const water = new THREE.Mesh(
       new THREE.PlaneGeometry(420, 420, 170, 170).rotateX(-Math.PI / 2),
@@ -290,6 +401,7 @@ export class World {
     this.buildTerrain(loc);
     this.buildForest(loc, map);
     this.buildDock();
+    this.buildFireflies();
     this.buildMountains(loc);
     this.hub = new Hub(map);
     this.hub.onWheelTick = () => audio.tick(0.07);
@@ -540,8 +652,13 @@ export class World {
     planks.castShadow = planks.receiveShadow = true;
     dock.add(planks);
 
-    const glow = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+    const glow = this.dockGlow;
+    this.dockLights = [];
     for (const [x, z] of World.lanterns) {
+      const light = new THREE.PointLight(0xffc266, 0, 14, 1.6);
+      light.position.set(x, 1.6, z);
+      dock.add(light);
+      this.dockLights.push(light);
       const lanternPost = new THREE.Mesh(
         new THREE.CylinderGeometry(0.05, 0.05, 0.6, 6),
         beamMat,
@@ -652,6 +769,8 @@ export class World {
     [1.1, -2.8],
     [-4.4, -5.9],
     [4.4, -5.9],
+    [-1.35, 4.5],
+    [1.35, 10],
   ];
 
   private static dockProps: Circle[] = [
@@ -682,6 +801,8 @@ export class World {
     this.time += dt;
     const t = this.time;
     this.waterU.uTime.value = t;
+    this.updateDaylight(t);
+    this.stars.position.copy(this.camera.position);
     this.sky.position.copy(this.camera.position);
     for (const c of this.clouds.children) {
       c.position.x += dt * 1.6;

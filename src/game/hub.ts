@@ -94,6 +94,8 @@ export class Hub {
   private leaderCtx!: CanvasRenderingContext2D;
   private leaderTex!: THREE.CanvasTexture;
   private flames: THREE.Mesh[] = [];
+  private lampMats: THREE.MeshLambertMaterial[] = [];
+  private lampLights: THREE.PointLight[] = [];
   private fireLight = new THREE.PointLight(0xff8a3c, 14, 11, 2);
   private disc = new THREE.Mesh();
   private spinAnim: { from: number; to: number; t0: number; ms: number } | null = null;
@@ -332,27 +334,25 @@ export class Hub {
   }
 
   private buildProps(): void {
-    // Lamp posts along the path from the dock
-    for (const [x, z] of [[-2.4, 14], [2.4, 14], [-2.4, 18], [2.4, 18]]) {
+    // Lamp posts along the path from the dock, and around the wider plaza
+    const lit = new Set(['2.4,18', '-2.4,18', '2.4,30', '-12,26']);
+    const posts = [[-2.4, 14], [2.4, 14], [-2.4, 18], [2.4, 18], [-9, 36], [9, 36], [-12, 26], [13, 26], [-2.4, 30], [2.4, 30]];
+    for (const [x, z] of posts) {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
       pole.position.y = 1.1;
       const bulb = ball(0.14, 0xffd27a);
-      (bulb.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
+      const bm = bulb.material as THREE.MeshLambertMaterial;
+      bm.emissive.set(0xffb84a);
+      this.lampMats.push(bm);
       bulb.position.y = 2.3;
       lamp.add(pole, bulb);
-      this.place(lamp, { x, z, facing: 0 });
-      this.fixed.push({ x, z, r: 0.2 });
-    }
-    // Lamps lighting the wider plaza
-    for (const [x, z] of [[-9, 36], [9, 36], [-12, 26], [13, 26], [-2.4, 30], [2.4, 30]]) {
-      const lamp = new THREE.Group();
-      const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
-      pole.position.y = 1.1;
-      const bulb = ball(0.14, 0xffd27a);
-      (bulb.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
-      bulb.position.y = 2.3;
-      lamp.add(pole, bulb);
+      if (lit.has(`${x},${z}`)) {
+        const l = new THREE.PointLight(0xffc266, 0, 13, 1.6);
+        l.position.y = 2.2;
+        lamp.add(l);
+        this.lampLights.push(l);
+      }
       this.place(lamp, { x, z, facing: 0 });
       this.fixed.push({ x, z, r: 0.2 });
     }
@@ -643,6 +643,12 @@ export class Hub {
       m.color.set(st.unlocked ? 0x6cff9a : 0xff5a3c);
       m.emissive.set(st.unlocked ? 0x2fd36a : 0xff3c1e);
     }
+  }
+
+  /** Lamps glow brighter as night falls (0 = day, 1 = night). */
+  setNight(n: number): void {
+    for (const m of this.lampMats) m.emissiveIntensity = 0.25 + 1.6 * n;
+    for (const l of this.lampLights) l.intensity = 9 * n;
   }
 
   update(t: number, px: number, pz: number): void {

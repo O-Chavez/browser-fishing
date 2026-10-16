@@ -359,6 +359,7 @@ export class Game {
         else this.keys.delete(code);
       },
       teleport: (x: number, z: number) => this.player.teleport(x, z),
+      day: (f: number | null) => { this.world.dayOverride = f; },
       interact: () => this.interact(),
       openMenu: (tab: string) => this.openMenu(tab),
       closeMenu: () => this.setMenu(false),
