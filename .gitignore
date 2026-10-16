@@ -1,0 +1,14 @@
+# dependencies and build output
+node_modules/
+dist/
+
+# runtime save data (accounts hold login-token hashes)
+server/rooms.json
+server/accounts.json
+
+# env files, logs, platform and OS files
+.env
+.env.*
+*.log
+.vercel/
+.DS_Store

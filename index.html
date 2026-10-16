@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lakeside — First-Person Fishing</title>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="crosshair"></div>
+  <canvas id="gauge" width="420" height="420"></canvas>
+  <div id="alert" class="hidden">!</div>
+
+  <div id="hud">
+    <div id="hud-top">
+      <div>Lv <b id="level">1</b></div>
+      <div class="bar"><div id="xpbar"></div></div>
+      <div>🪙 <b id="coins">0</b></div>
+      <div id="loc"></div>
+      <div id="baitinfo"></div>
+    </div>
+    <div id="goal"></div>
+    <div id="fundline"></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="toast"></div>
+    <div id="wheelres"></div>
+    <div id="hotbar"></div>
+    <div id="help"><b>WASD</b> walk · <b>Shift</b> run · <b>E</b> interact · hold <b>click</b> to charge · release to cast · click the <b>!</b> to hook · hold to reel, <b>release</b> when the fish surges · <b>1–5</b> hold item · <b>G</b> drop · <b>Esc</b> menu</div>
+  </div>
+
+  <div id="catch" class="hidden"></div>
+
+  <div id="menu">
+    <div class="panel">
+      <h1>Lakeside</h1>
+      <nav>
+        <button data-tab="play">Play</button>
+                <button data-tab="fund">Town Fund</button>
+        <button data-tab="dex">Fishdex</button>
+      </nav>
+      <div id="tab"></div>
+      <p class="muted controls"><b>WASD</b> walk · <b>Shift</b> run · <b>E</b> talk / interact · <b>Click</b> cast &amp; reel · <b>1–5</b> hold item · <b>G</b> drop · <b>Esc</b> menu / close</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

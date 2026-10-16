@@ -1,0 +1,28 @@
+{
+  "name": "fishing-game",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:lan": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "server": "tsx server/index.ts",
+    "start": "tsx server/index.ts",
+    "dev:all": "tsx server/index.ts & vite"
+  },
+  "dependencies": {
+    "three": "^0.186.1",
+    "ws": "^8.22.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/three": "^0.186.0",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  }
+}

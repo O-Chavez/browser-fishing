@@ -1,0 +1,177 @@
+import type { MapDef } from '../data/maps';
+import type { Activity, ClientMsg, PlayerInfo, ServerMsg } from '../net/protocol';
+import { SERVER_PORT } from '../net/protocol';
+import { fundGoal, openKey, type Fund, type FundState } from './fund';
+import type { Drop } from './drops';
+import type { SaveData } from './state';
+
+export interface NetEvents {
+  onState(save: SaveData): void;
+  onWheel(win: boolean, ms: number): void;
+  onDrops(list: Drop[]): void;
+  onFund(map: string, total: number, by?: string, coins?: number): void;
+  onPlayers(): void;
+  onAct(p: PlayerInfo, act: Activity | null): void;
+  onCast(roll: { fishId: string | null; size: number; wait: number }): void;
+  onCastFail(msg: string): void;
+  onError(msg: string): void;
+  onClose(): void;
+}
+
+/** Connection to the room server. The game stays fully playable offline if it can't connect. */
+export class NetClient {
+  connected = false;
+  id = 0;
+  room = '';
+  funds: Record<string, number> = {};
+  players = new Map<number, PlayerInfo>();
+  private ws: WebSocket | null = null;
+  private sendTimer = 0;
+  private lastSent = '';
+
+  constructor(
+    private name: string,
+    private token: string,
+    private roomName: string,
+    private events: NetEvents,
+  ) {}
+
+  connect(map: string): void {
+    // Deployed builds point at the hosted game server via VITE_SERVER_URL (e.g. wss://fishing.onrender.com).
+    const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.replace(/\/$/, '');
+    const host = location.hostname || 'localhost';
+    const base = configured || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${host}:${SERVER_PORT}`;
+    const url = `${base}/?room=${encodeURIComponent(this.roomName)}`;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      return;
+    }
+    this.ws = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, map }));
+    ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
+    ws.onclose = () => {
+      const was = this.connected;
+      this.connected = false;
+      this.players.clear();
+      this.events.onPlayers();
+      if (was) this.events.onClose();
+    };
+  }
+
+  send(msg: ClientMsg): void {
+    if (this.connected && this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+  }
+
+  /** Throttled position updates (10 Hz). */
+  sendPos(dt: number, x: number, z: number, yaw: number): void {
+    this.sendTimer += dt;
+    if (!this.connected || this.sendTimer < 0.1) return;
+    this.sendTimer = 0;
+    const key = `${x.toFixed(2)},${z.toFixed(2)},${yaw.toFixed(2)}`;
+    if (key === this.lastSent) return;
+    this.lastSent = key;
+    this.send({ t: 'pos', x, z, yaw });
+  }
+
+  private onMessage(m: ServerMsg): void {
+    switch (m.t) {
+      case 'welcome':
+        this.connected = true;
+        this.id = m.id;
+        this.room = m.room;
+        m.players.forEach((p) => this.players.set(p.id, p));
+        this.setSave(m.save);
+        this.events.onPlayers();
+        break;
+      case 'state':
+        this.setSave(m.save);
+        break;
+      case 'drops':
+        this.events.onDrops(m.list);
+        break;
+      case 'error':
+        this.events.onError(m.msg);
+        break;
+      case 'castok':
+        this.events.onCast(m);
+        break;
+      case 'wheel':
+        this.events.onWheel(m.win, m.ms);
+        break;
+      case 'castfail':
+        this.events.onCastFail(m.msg);
+        break;
+      case 'joined':
+        this.players.set(m.player.id, m.player);
+        this.events.onPlayers();
+        break;
+      case 'left':
+        this.players.delete(m.id);
+        this.events.onPlayers();
+        break;
+      case 'moved': {
+        const p = this.players.get(m.id);
+        if (p) p.map = m.map;
+        this.events.onPlayers();
+        break;
+      }
+      case 'act': {
+        const p = this.players.get(m.id);
+        if (!p) break;
+        if (m.act) p.act = m.act;
+        else delete p.act;
+        if (m.id !== this.id) this.events.onAct(p, m.act);
+        break;
+      }
+      case 'snap':
+        for (const [id, x, z, yaw] of m.p) {
+          const p = this.players.get(id);
+          if (p && id !== this.id) Object.assign(p, { x, z, yaw });
+        }
+        break;
+      case 'fund':
+        this.funds[m.map] = m.total;
+        if (m.open) this.funds[openKey(m.map)] = 1;
+        this.events.onFund(m.map, m.total, m.by, m.coins);
+        break;
+    }
+  }
+
+  private setSave(save: SaveData): void {
+    this.funds = { ...save.fund };
+    this.events.onState(save);
+  }
+}
+
+/** The room's pooled fund when connected, otherwise the local save. */
+export class NetFund implements Fund {
+  constructor(
+    private net: NetClient,
+    private local: Fund,
+    private data: SaveData,
+  ) {}
+
+  state(map: MapDef): FundState {
+    if (!this.net.connected) return this.local.state(map);
+    const goal = fundGoal(map, this.net.players.size + 1);
+    const open = !!this.net.funds[openKey(map.id)];
+    const total = open ? goal : Math.min(goal, this.net.funds[map.id] ?? 0);
+    return { total, goal, unlocked: open || total >= goal, mine: this.data.contributed[map.id] ?? 0 };
+  }
+
+  /** Optimistic; the server's state message is the final word. */
+  contribute(map: MapDef, coins: number): number {
+    if (!this.net.connected) return this.local.contribute(map, coins);
+    const st = this.state(map);
+    if (st.unlocked) return 0;
+    const accepted = Math.max(0, Math.min(Math.floor(coins), st.goal - st.total));
+    if (accepted > 0) {
+      this.net.funds[map.id] = st.total + accepted;
+      this.data.contributed[map.id] = st.mine + accepted;
+      this.net.send({ t: 'give', map: map.id, coins: accepted });
+    }
+    return accepted;
+  }
+}
