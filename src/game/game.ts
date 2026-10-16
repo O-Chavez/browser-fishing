@@ -467,6 +467,7 @@ export class Game {
       const i = Number(e.key) - 1;
       if (i >= 0 && i < SLOT_COUNT && this.phase === 'idle') this.takeSlot(i);
       else if (e.code === 'KeyG' && this.phase === 'idle') this.dropHeld();
+      else if (e.code === 'Space' && this.active && this.phase === 'idle') { e.preventDefault(); this.player.jump(); }
       else if (e.code === 'KeyM' && !e.repeat) this.toast(audio.toggleMusic() ? '🎵 Music on' : '🔇 Music off');
     });
   }
