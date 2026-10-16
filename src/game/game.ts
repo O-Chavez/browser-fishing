@@ -261,6 +261,15 @@ export class Game {
     $('join').classList.remove('hidden');
     paint();
     input.focus();
+    $('join-switch').addEventListener('click', () => {
+      localStorage.removeItem('fishing-auto');
+      location.reload();
+    });
+    // Returning players (this browser joined successfully before) reconnect with their saved token.
+    if (urlName && localStorage.getItem('fishing-auto')) {
+      $('join-switch').classList.remove('hidden');
+      this.joinStart(urlName);
+    }
   }
 
   private joinPreview(): void {
@@ -297,12 +306,16 @@ export class Game {
     if (!failed) return;
     this.joining = false;
     $('join-go').toggleAttribute('disabled', false);
+    localStorage.removeItem('fishing-auto');
+    $('join-switch').classList.add('hidden');
     $('join').classList.remove('hidden');
     this.joinPreview();
   }
 
   private finishJoin(): void {
     this.joining = false;
+    localStorage.setItem('fishing-auto', '1');
+    $('join-switch').classList.add('hidden');
     $('join').classList.add('hidden');
     this.preview?.stop();
     this.world.hub?.setLeaders(this.leaders());
