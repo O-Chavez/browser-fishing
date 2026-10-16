@@ -1,5 +1,8 @@
 import type { Rarity } from '../data/content';
 
+/** Background music level; kept low so it sits under the lake ambience. */
+const MUSIC_VOL = 0.17;
+
 /** All sounds are synthesised with Web Audio so the game ships no audio assets. */
 class AudioFX {
   private ctx?: AudioContext;
@@ -40,7 +43,7 @@ class AudioFX {
   toggleMusic(): boolean {
     this.musicOn = !this.musicOn;
     localStorage.setItem('fishing-music', this.musicOn ? 'on' : 'off');
-    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(this.musicOn ? 0.5 : 0, this.ctx.currentTime, 0.4);
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(this.musicOn ? MUSIC_VOL : 0, this.ctx.currentTime, 0.4);
     return this.musicOn;
   }
 
@@ -66,14 +69,14 @@ class AudioFX {
   private startMusic(): void {
     const ctx = this.ctx!;
     const out = ctx.createGain();
-    out.gain.value = this.musicOn ? 0.5 : 0;
+    out.gain.value = this.musicOn ? MUSIC_VOL : 0;
     const body = ctx.createBiquadFilter();
     body.type = 'peaking';
-    body.frequency.value = 220;
+    body.frequency.value = 300;
     body.gain.value = 5;
     const tone = ctx.createBiquadFilter();
     tone.type = 'lowpass';
-    tone.frequency.value = 3800;
+    tone.frequency.value = 4800;
     const room = ctx.createDelay(0.5);
     room.delayTime.value = 0.19;
     const fb = ctx.createGain();
@@ -92,7 +95,7 @@ class AudioFX {
       src.buffer = this.string(midi);
       const g = ctx.createGain();
       g.gain.setValueAtTime(vel, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 3);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
       src.connect(g).connect(body);
       src.start(t);
     };
@@ -107,7 +110,7 @@ class AudioFX {
       vib.connect(vg).connect(o.detune);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.05, t + 0.25);
+      g.gain.linearRampToValueAtTime(0.06, t + 0.12);
       g.gain.linearRampToValueAtTime(0.0001, t + dur);
       o.connect(g);
       g.connect(out);
@@ -118,17 +121,44 @@ class AudioFX {
       vib.stop(t + dur + 0.1);
     };
 
-    // G - Em - C - D, each chord: bass root, then notes low to high
+    // Timber Hearth-style: a lilting 6/8 roll over open, major-leaning chords
     const chords = [
-      { bass: 43, up: [50, 55, 59, 62] },
-      { bass: 40, up: [47, 55, 59, 64] },
-      { bass: 48, up: [52, 55, 60, 64] },
-      { bass: 50, up: [54, 57, 62, 66] },
+      { bass: 38, up: [57, 62, 66, 69] }, // D
+      { bass: 43, up: [55, 62, 67, 71] }, // G
+      { bass: 45, up: [57, 61, 64, 69] }, // A
+      { bass: 38, up: [57, 62, 66, 69] }, // D
+      { bass: 47, up: [54, 62, 66, 71] }, // Bm
+      { bass: 43, up: [55, 62, 67, 71] }, // G
+      { bass: 38, up: [57, 62, 66, 69] }, // D
+      { bass: 45, up: [57, 61, 64, 69] }, // A
     ];
-    const pattern = [-1, 0, 1, 2, 3, 2, 1, 0];
-    const melody = [67, 69, 71, 74, 76, 79];
-    const EIGHTH = 0.46;
-    const BAR = EIGHTH * 8;
+    const pattern = [-1, 1, 2, 0, 3, 2];
+    // D major pentatonic, kept in a gentle whistle range
+    const motifs = [
+      [81, 83, 85, 83],
+      [78, 81, 83, 81],
+      [85, 83, 81, 78],
+      [83, 81, 83, 85],
+    ];
+    const EIGHTH = 0.36;
+    const BAR = EIGHTH * 6;
+
+    // Warm, barely-there drone for a sense of wide open sky
+    for (const [m, v] of [[38, 0.02], [45, 0.014], [50, 0.01]] as const) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
+      const g = ctx.createGain();
+      g.gain.value = v;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.07 + m * 0.001;
+      const lg = ctx.createGain();
+      lg.gain.value = v * 0.6;
+      lfo.connect(lg).connect(g.gain);
+      o.connect(g).connect(out);
+      o.start();
+      lfo.start();
+    }
 
     let next = ctx.currentTime + 0.4;
     let bar = 0;
@@ -136,12 +166,12 @@ class AudioFX {
       while (next < ctx.currentTime + 6) {
         const c = chords[bar % chords.length];
         pattern.forEach((k, i) => {
-          const t = next + i * EIGHTH + (Math.random() - 0.5) * 0.012;
-          pick(k < 0 ? c.bass : c.up[k], t, k < 0 ? 0.32 : 0.15 + Math.random() * 0.06);
+          const t = next + i * EIGHTH + (Math.random() - 0.5) * 0.015;
+          pick(k < 0 ? c.bass : c.up[k], t, k < 0 ? 0.3 : 0.14 + Math.random() * 0.06);
         });
-        if (bar % 2 === 1 && Math.random() < 0.7) {
-          const m = melody[Math.floor(Math.random() * melody.length)];
-          whistle(m, next + EIGHTH * (1 + Math.floor(Math.random() * 3)), 2.2 + Math.random() * 1.2);
+        if (bar % 4 === 2 && Math.random() < 0.8) {
+          const motif = motifs[Math.floor(Math.random() * motifs.length)];
+          motif.forEach((m, i) => whistle(m - 12, next + i * EIGHTH * 2, EIGHTH * 3.2));
         }
         next += BAR;
         bar++;
