@@ -42,7 +42,7 @@ export type ClientMsg =
   /** Drop the item in hand. */
   | { t: 'drop' }
   | { t: 'pickup'; id: number }
-  | { t: 'cast'; x: number; z: number }
+  | { t: 'cast'; x: number; z: number; perfect?: boolean }
   | { t: 'catch' }
   | { t: 'lost' }
   | { t: 'gamble' };
@@ -52,7 +52,7 @@ export type ServerMsg =
   | { t: 'error'; msg: string }
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
-  | { t: 'castok'; fishId: string | null; size: number; wait: number }
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; win: boolean; ms: number }
   | { t: 'joined'; player: PlayerInfo }

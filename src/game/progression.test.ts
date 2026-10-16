@@ -30,6 +30,20 @@ describe('progression', () => {
     for (let i = 0; i < 200; i++) expect(pool).toContain(pickFish(pool, twig, worm));
   });
 
+  it('perfect casts skew toward higher tiers and cut the low ones', () => {
+  const carbon = byId(RODS, 'carbon');
+  const bait = byId(BAITS, 'minnow');
+  const pool = eligibleFish('pond', carbon, bait);
+  const g = Math.max(...pool.map((f) => f.tier));
+  const avg = (perfect: boolean) => {
+    let t = 0;
+    for (let i = 0; i < 4000; i++) t += pickFish(pool, carbon, bait, Math.random, perfect)!.tier;
+    return t / 4000;
+  };
+  expect(avg(true)).toBeGreaterThan(avg(false));
+  for (let i = 0; i < 300; i++) expect(pickFish(pool, carbon, bait, Math.random, true)!.tier).toBeGreaterThanOrEqual(g - 1);
+});
+
   it('returns null for empty pool and sizes within range', () => {
     expect(pickFish([], twig, worm)).toBeNull();
     const f = byId(FISH, 'carp');

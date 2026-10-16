@@ -291,13 +291,15 @@ export interface Roll {
   /** Seconds until the fish bites. */
   wait: number;
   shiny?: boolean;
+  perfect?: boolean;
 }
 
-export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random): Roll {
+export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false): Roll {
   const rod = byId(RODS, s.rod);
   const bait = byId(BAITS, s.bait);
-  const fish = pickFish(eligibleFish(locationId, rod, bait), rod, bait, rng);
+  const fish = pickFish(eligibleFish(locationId, rod, bait), rod, bait, rng, perfect);
   return {
+    perfect,
     fishId: fish?.id ?? null,
     size: fish ? rollSize(fish, rng) : 0,
     wait: (3.5 + rng() * 6) / bait.luck,

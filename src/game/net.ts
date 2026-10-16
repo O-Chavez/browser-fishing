@@ -13,7 +13,7 @@ export interface NetEvents {
   onPlayers(): void;
   onBoard(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
-  onCast(roll: { fishId: string | null; size: number; wait: number }): void;
+  onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean }): void;
   onCastFail(msg: string): void;
   onError(msg: string): void;
   onClose(): void;

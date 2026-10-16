@@ -48,13 +48,27 @@ export function eligibleFish(locationId: string, rod: Rod, bait: Bait): Fish[] {
 /** Fish far below your gear tier turn up less often, so upgrading visibly shifts what you catch. */
 export const OUTGROWN = 0.55;
 
+/** Luck multiplier for a perfect cast; it also drops the lowest tiers from the pool. */
+export const PERFECT_LUCK = 2;
+
+/** Power-meter window (0-1) that counts as a perfect cast. */
+export const PERFECT_MIN = 0.86;
+export const PERFECT_MAX = 0.96;
+
 /** Non-common weights are boosted by rod and bait luck. */
-export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random): Fish | null {
-  if (pool.length === 0) return null;
-  const luck = rod.luck * bait.luck;
+export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false): Fish | null {
   const g = gearTier(rod, bait);
+  if (perfect) {
+    // A perfect cast reaches the better water: only the top two tiers of the pool remain.
+    const high = pool.filter((f) => f.tier >= g - 1);
+    if (high.length > 0) pool = high;
+  }
+  if (pool.length === 0) return null;
+  const luck = rod.luck * bait.luck * (perfect ? PERFECT_LUCK : 1);
   const weights = pool.map(
-    (f) => (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) * Math.pow(OUTGROWN, Math.max(0, g - f.tier)),
+    (f) =>
+      (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) *
+      (perfect ? 1 : Math.pow(OUTGROWN, Math.max(0, g - f.tier))),
   );
   let r = rng() * weights.reduce((a, b) => a + b, 0);
   for (let i = 0; i < pool.length; i++) {

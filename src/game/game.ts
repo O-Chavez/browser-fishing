@@ -37,6 +37,8 @@ import {
   difficultyLabel,
   reelDifficulty,
   xpForNextLevel,
+  PERFECT_MIN,
+  PERFECT_MAX,
 } from './progression';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { SLOT_COUNT, load, newSave, save, type SaveData } from './state';
@@ -83,6 +85,7 @@ export class Game {
   private forceActive = false;
   private power = 0;
   private powerDir = 1;
+  private perfect = false;
   private timer = 0;
 
   private origin = new THREE.Vector3();
@@ -896,7 +899,8 @@ export class Game {
     this.target.copy(t);
     eco.spendBait(this.s);
     this.roll = null;
-    this.net.send({ t: 'cast', x: t.x, z: t.z });
+    this.perfect = this.power >= PERFECT_MIN && this.power <= PERFECT_MAX;
+    this.net.send({ t: 'cast', x: t.x, z: t.z, perfect: this.perfect });
     this.baseDist = Math.hypot(t.x - w.eye.x, t.z - w.eye.z);
     this.phase = 'swing';
     this.timer = 0;
@@ -938,8 +942,12 @@ export class Game {
     w.fx.ripple(b, 3.4, 0.18);
     w.fx.ripple(b, 4.6, 0.38);
     audio.splash(0.8);
+    if (this.perfect) {
+      w.fx.splash(b, 30, 1.4);
+      w.fx.ripple(b, 6, 0.5);
+    }
 
-    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId);
+    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId, Math.random, this.perfect);
     this.roll = null;
     this.hooked = roll.fishId ? byId(FISH, roll.fishId) : null;
     this.hookedSize = roll.size;
@@ -956,7 +964,7 @@ export class Game {
       w.scene.add(this.shadow.group);
     }
     this.phase = 'waiting';
-    this.toast('Waiting for a bite...');
+    this.toast(this.perfect ? '🎯 Perfect cast! Better fish are drawn to your bait...' : 'Waiting for a bite...');
     w.rig.pose({ pitch: 0.4, bendP: 0.14, k: 40, c: 8 });
   }
 
@@ -1515,6 +1523,8 @@ export class Game {
       arc(66, 0, 1, 'rgba(0,0,0,0.4)', 9);
       const hue = 120 - this.power * 120;
       arc(66, 0, Math.max(0.01, this.power), `hsl(${hue},85%,55%)`, 7);
+      const inZone = this.power >= PERFECT_MIN && this.power <= PERFECT_MAX;
+      arc(76, PERFECT_MIN, PERFECT_MAX, inZone ? '#ffffff' : '#ffd23f', inZone ? 8 : 5);
       return;
     }
     if (this.phase !== 'reeling' || !this.reel) {

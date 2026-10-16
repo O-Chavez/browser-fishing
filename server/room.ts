@@ -152,7 +152,7 @@ export class Room {
         this.gamble(m);
         return;
       case 'cast':
-        changed = this.cast(m, msg.x, msg.z);
+        changed = this.cast(m, msg.x, msg.z, msg.perfect === true);
         break;
       case 'catch':
         changed = this.land(m);
@@ -212,14 +212,14 @@ export class Room {
     return !!v && Math.hypot(m.info.x - v.x, m.info.z - v.z) <= VENDOR_RANGE;
   }
 
-  private cast(m: Member, x: number, z: number): boolean {
+  private cast(m: Member, x: number, z: number, perfect = false): boolean {
     const map = this.maps[m.info.map];
     const can = finite(x, z) ? eco.canCast(m.acct.save) : 'nobait';
     if (can !== 'ok' || !eco.spendBait(m.acct.save)) {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });
       return false;
     }
-    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng);
+    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect);
     m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, readyAt: this.now() + roll.wait * 1000 + MIN_FIGHT_MS } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });

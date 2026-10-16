@@ -294,3 +294,9 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 - **Banner:** when the hooked or caught fish is the same tier as your equipped bait (your best catchable tier), a large "<Tier> fish hooked!/caught!" banner shows in that tier's color.
 - **Harder reels:** high difficulty means shorter rests, stronger and longer surges, tighter tension coupling and a faster line snap. Tuning lives in `src/game/reel.ts`.
 - **Cosmetic prices:** entry items cost 100-400 coins; the top items (crown 75,000, cloak 60,000, diamond pendant 120,000) are stretch goals worth roughly 25-40 top-tier catches.
+
+## 20. Perfect cast (skill shot)
+
+- While charging, the power gauge shows a gold zone (power 0.86-0.96). Releasing inside it is a perfect cast.
+- A perfect cast drops fish more than one tier below your bait's tier from the pool, doubles the non-common luck weight and removes the "outgrown" penalty, so top-tier fish are much more likely. The bait gate itself is unchanged.
+- The client reports `perfect` with the cast; the server trusts it (like reel results), so it is a fun bonus rather than an anti-cheat feature.

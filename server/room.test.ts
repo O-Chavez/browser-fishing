@@ -280,6 +280,12 @@ describe('scaled goal & shinies', () => {
     expect(room.funds.pond).toBe(goalOf(2));
     expect(b.id).not.toBe(c.id);
   });
+  it('flags a perfect cast in the roll', () => {
+    const { room, join } = setup() as ReturnType<typeof setup>;
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cast', x: 0, z: 10, perfect: true });
+    expect(last(a.c, 'castok').perfect).toBe(true);
+  });
   it('carries a shiny through cast, catch and sale for 5x value', () => {
     const { room, join, atShop, advance, setRoll } = setup() as ReturnType<typeof setup>;
     const a = join('Ann');
