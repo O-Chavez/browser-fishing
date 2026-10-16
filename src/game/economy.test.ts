@@ -6,6 +6,20 @@ import { Drops } from './drops';
 
 const fishSlot = () => ({ k: 'fish' as const, fishId: FISH[0].id, size: 20 });
 
+describe('best catch', () => {
+  it('keeps only the most valuable fish caught', () => {
+    const s = newSave();
+    const cheap = FISH[0];
+    const dear = FISH[FISH.length - 1];
+    eco.applyCatch(s, dear, dear.maxSize);
+    const top = s.best!.value;
+    s.slots = [null, null, null, null, null];
+    eco.applyCatch(s, cheap, cheap.minSize);
+    expect(s.best).toMatchObject({ fishId: dear.id, value: top });
+    expect(newSave().best).toBeNull();
+  });
+});
+
 describe('carry slots', () => {
   it('starts with a rod, a worm stack and three free slots', () => {
     const s = newSave();

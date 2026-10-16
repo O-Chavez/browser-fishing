@@ -35,6 +35,15 @@ export interface SaveData {
   owned: string[];
   /** Tackle locker: rods and bait you own but are not carrying in the hotbar. */
   locker: { rods: string[]; bait: Record<string, number> };
+  /** Most valuable fish ever caught, for the leaderboard. */
+  best: BestCatch | null;
+}
+
+export interface BestCatch {
+  fishId: string;
+  size: number;
+  value: number;
+  shiny?: boolean;
 }
 
 const KEY = 'fishing-game-save';
@@ -55,6 +64,7 @@ export const newSave = (): SaveData => ({
   look: defaultLook(),
   owned: [],
   locker: { rods: [], bait: {} },
+  best: null,
 });
 
 /** Upgrades older save layouts (bait counts, bag, owned rods, 4 slots) to the 5-slot hotbar. */

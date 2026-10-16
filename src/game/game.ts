@@ -27,6 +27,7 @@ import {
   setFishOpacity,
   type FishModel,
 } from './fishmodel';
+import type { LeaderRow } from './hub';
 import { buildTin } from './itemmodels';
 import {
   MAX_LEVEL,
@@ -178,14 +179,14 @@ export class Game {
         if (by && by !== this.net.name) this.toast(`${by} gave ${coins} 🪙 to the Town Fund (${total} / ${this.fund.state(this.map).goal})`);
       },
       onBoard: () => {
-        this.world.hub?.setLeaders(this.leaders());
+        this.world.hub?.setLeaders(this.anglers());
         if (this.menuOpen && this.tab === 'players') this.renderMenu();
       },
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
       },
       onPlayers: () => {
-        this.world.hub?.setLeaders(this.leaders());
+        this.world.hub?.setLeaders(this.anglers());
         if (this.menuOpen && (this.tab === 'players' || this.tab === 'inventory')) this.renderMenu();
         this.avatars.sync(this.net.players, this.net.id, this.map.id);
         this.world.hub?.setFund(this.fund.state(this.map));
@@ -323,7 +324,7 @@ export class Game {
     $('join-switch').classList.add('hidden');
     $('join').classList.add('hidden');
     this.preview?.stop();
-    this.world.hub?.setLeaders(this.leaders());
+    this.world.hub?.setLeaders(this.anglers());
   }
 
   private get rod() {
@@ -708,6 +709,27 @@ export class Game {
     return rows.sort((a, b) => b.coins - a.coins);
   }
 
+  /** Online players ranked by their most valuable catch, for the physical board. */
+  private anglers(): LeaderRow[] {
+    const all = [{ name: this.net.name, level: this.s.level, best: this.s.best, coins: this.s.coins }];
+    for (const p of this.net.players.values())
+      if (p.map === this.map.id) all.push({ name: p.name, level: p.level ?? 1, best: p.best ?? null, coins: this.net.coins.get(p.id) ?? p.coins });
+    return all
+      .sort((a, b) => (b.best?.value ?? 0) - (a.best?.value ?? 0) || b.coins - a.coins)
+      .map((p) => {
+        const f = p.best ? FISH.find((x) => x.id === p.best!.fishId) : undefined;
+        return {
+          name: p.name,
+          level: p.level,
+          value: f ? p.best!.value : 0,
+          fish: f?.name ?? '',
+          tier: f?.tier ?? 0,
+          color: this.tierColor(f?.tier ?? 0),
+          shiny: p.best?.shiny,
+        };
+      });
+  }
+
   private closeMenu(): void {
     this.tab = 'players';
     if (this.forceActive) this.setMenu(false);
@@ -1068,6 +1090,7 @@ export class Game {
     const { stored, first, record, gained, leveledUp, level } = eco.applyCatch(this.s, fish, size, this.hookedShiny);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch' });
+    this.world.hub?.setLeaders(this.anglers());
     this.hangPoint(this.bob, 0, 0);
     this.bobVel.set(0.5, 0, -0.2);
 

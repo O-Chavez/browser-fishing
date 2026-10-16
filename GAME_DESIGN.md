@@ -300,3 +300,8 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 - While charging, the power gauge shows a gold zone (power 0.86-0.96). Releasing inside it is a perfect cast.
 - A perfect cast drops fish more than one tier below your bait's tier from the pool, doubles the non-common luck weight and removes the "outgrown" penalty, so top-tier fish are much more likely. The bait gate itself is unchanged.
 - The client reports `perfect` with the cast; the server trusts it (like reel results), so it is a fun bonus rather than an anti-cheat feature.
+
+## 21. Top Anglers board
+
+- The physical board ranks players in the room by their single most valuable catch (`save.best`, set in `applyCatch`, reset with the account). Each row shows rank, name, level, the fish's tier and name (tier-colored, ✨ if shiny) and its sell value. Players with no catch yet rank last, by coins.
+- The Players tab in the menu still ranks by coins.

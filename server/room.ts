@@ -59,7 +59,7 @@ export class Room {
   join(conn: Conn, acct: Account, map: string, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
     const id = this.nextId++;
-    const info: PlayerInfo = { id, name: acct.name, map: this.maps[map] ? map : Object.keys(this.maps)[0], x: 0, z: 0, yaw: 0, look: acct.save.look, coins: acct.save.coins };
+    const info: PlayerInfo = { id, name: acct.name, map: this.maps[map] ? map : Object.keys(this.maps)[0], x: 0, z: 0, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null };
     const m: Member = { info, conn, acct, pending: null, spin: null };
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
@@ -303,11 +303,12 @@ export class Room {
     if (this.drops.expire()) this.broadcast({ t: 'drops', list: this.drops.all() });
     for (const m of this.members.values()) this.settle(m);
     const coins = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, m.acct.save.coins]));
-    const key = JSON.stringify(coins);
+    const stats = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, { level: m.acct.save.level, best: m.acct.save.best ?? null }]));
+    const key = JSON.stringify([coins, stats]);
     if (key !== this.lastBoard) {
       this.lastBoard = key;
       for (const m of this.members.values()) m.info.coins = m.acct.save.coins;
-      this.broadcast({ t: 'board', coins });
+      this.broadcast({ t: 'board', coins, stats });
     }
     if (this.members.size < 2) return;
     const p = [...this.members.values()].map(

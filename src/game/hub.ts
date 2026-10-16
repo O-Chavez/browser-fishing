@@ -71,6 +71,16 @@ function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#fff3d6'
 const WHEEL_WEDGES = 8;
 
 /** The town hub: vendor stall with its keeper, the fund board and the gate to the next map. */
+export interface LeaderRow {
+  name: string;
+  level: number;
+  value: number;
+  fish: string;
+  tier: number;
+  color: string;
+  shiny?: boolean;
+}
+
 export class Hub {
   readonly group = new THREE.Group();
   /** World-space spots the player can interact with. */
@@ -391,8 +401,8 @@ export class Hub {
     this.world(spot, 0, 2.0, this.leaderSpot);
   }
 
-  /** Redraws the "Top Anglers" board from the room's coin totals. */
-  setLeaders(rows: { name: string; coins: number }[]): void {
+  /** Redraws the "Top Anglers" board, ranked by the most valuable fish each player has caught. */
+  setLeaders(rows: LeaderRow[]): void {
     const ctx = this.leaderCtx;
     const { width: w, height: h } = ctx.canvas;
     ctx.fillStyle = '#1f3d5a';
@@ -402,20 +412,41 @@ export class Hub {
     ctx.strokeRect(6, 6, w - 12, h - 12);
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffe9b8';
-    ctx.font = '800 46px system-ui, sans-serif';
-    ctx.fillText('TOP ANGLERS', w / 2, 74);
-    ctx.font = '700 36px system-ui, sans-serif';
+    ctx.font = '800 44px system-ui, sans-serif';
+    ctx.fillText('TOP ANGLERS', w / 2, 66);
+    ctx.font = '600 22px system-ui, sans-serif';
+    ctx.fillStyle = '#9fc2de';
+    ctx.fillText('most valuable catch', w / 2, 94);
     rows.slice(0, 5).forEach((r, i) => {
-      const y = 140 + i * 56;
-      ctx.fillStyle = i === 0 ? '#ffd23a' : '#ffffff';
+      const y = 148 + i * 72;
       ctx.textAlign = 'left';
-      ctx.fillText(`${i + 1}. ${r.name.slice(0, 11)}`, 36, y);
+      ctx.font = '700 32px system-ui, sans-serif';
+      ctx.fillStyle = i === 0 ? '#ffd23a' : '#ffffff';
+      ctx.fillText(`${i + 1}. ${r.name.slice(0, 9)}`, 34, y);
+      const nameW = ctx.measureText(`${i + 1}. ${r.name.slice(0, 9)}`).width;
+      ctx.font = '600 22px system-ui, sans-serif';
+      ctx.fillStyle = '#9fc2de';
+      ctx.fillText(`Lv ${r.level}`, 34 + nameW + 10, y);
       ctx.textAlign = 'right';
-      ctx.fillText(`${r.coins} 🪙`, w - 36, y);
+      ctx.font = '800 32px system-ui, sans-serif';
+      ctx.fillStyle = r.value ? '#ffd23a' : '#6f8aa3';
+      ctx.fillText(r.value ? `${r.value.toLocaleString()} 🪙` : '—', w - 34, y);
+      if (r.value) {
+        ctx.textAlign = 'left';
+        ctx.font = '600 24px system-ui, sans-serif';
+        ctx.fillStyle = r.color;
+        ctx.fillText(`${r.shiny ? '✨ ' : ''}T${r.tier} ${r.fish}`, 52, y + 28);
+      } else {
+        ctx.textAlign = 'left';
+        ctx.font = '600 22px system-ui, sans-serif';
+        ctx.fillStyle = '#6f8aa3';
+        ctx.fillText('no catch yet', 52, y + 28);
+      }
     });
     if (!rows.length) {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#9fc2de';
+      ctx.font = '700 32px system-ui, sans-serif';
       ctx.fillText('No anglers yet', w / 2, 200);
     }
     this.leaderTex.needsUpdate = true;

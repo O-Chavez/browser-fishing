@@ -152,6 +152,10 @@ export class NetClient {
           const p = this.players.get(id);
           if (p) p.coins = c;
         }
+        for (const [id, st] of Object.entries(m.stats ?? {})) {
+          const p = this.players.get(Number(id));
+          if (p) Object.assign(p, st);
+        }
         this.events.onBoard();
         break;
       case 'fund':

@@ -1,6 +1,6 @@
 import type { CosSlot, Look } from '../data/cosmetics';
 import type { Drop } from '../game/drops';
-import type { SaveData } from '../game/state';
+import type { BestCatch, SaveData } from '../game/state';
 
 export interface PlayerInfo {
   id: number;
@@ -11,6 +11,8 @@ export interface PlayerInfo {
   yaw: number;
   look: Look;
   coins: number;
+  level?: number;
+  best?: BestCatch | null;
   /** Current fishing activity, for other players' avatars. */
   act?: Activity;
 }
@@ -62,7 +64,7 @@ export type ServerMsg =
   | { t: 'act'; id: number; act: Activity | null }
   | { t: 'look'; id: number; look: Look }
   /** Coins per player id, for the leaderboard. */
-  | { t: 'board'; coins: Record<number, number> }
+  | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   | { t: 'fund'; map: string; total: number; by?: string; coins?: number; open?: boolean };
 
 export const SERVER_PORT = 8787;
