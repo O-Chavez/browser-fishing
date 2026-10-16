@@ -14,7 +14,10 @@ const data = await storage.load();
 const stored = data.rooms;
 const accounts = new AccountStore(data.accounts);
 const rooms = new Map<string, Room>();
-console.log(`saves: ${storage.kind}`);
+console.log(`saves: ${storage.kind} (${Object.keys(data.accounts).length} accounts loaded)`);
+if (process.env.RENDER && !process.env.DATABASE_URL) {
+  console.warn('WARNING: running on Render without DATABASE_URL - progress will be lost on every deploy. Set it in the web service Environment tab.');
+}
 
 let roomsDirty = false;
 const persist = () => {
