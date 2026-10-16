@@ -59,6 +59,7 @@ function room(name: string): Room {
   let r = rooms.get(name);
   if (!r) {
     r = new Room(name, stored[name] ?? {}, MAPS, persist);
+    r.hall = () => accounts.hall();
     rooms.set(name, r);
   }
   return r;

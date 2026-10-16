@@ -65,6 +65,10 @@ export type ServerMsg =
   | { t: 'look'; id: number; look: Look }
   /** Coins per player id, for the leaderboard. */
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
+  /** Hall of fame: best catches of every account, including players who are offline. */
+  | { t: 'hall'; rows: HallRow[] }
   | { t: 'fund'; map: string; total: number; by?: string; coins?: number; open?: boolean };
+
+export interface HallRow { name: string; level: number; best: BestCatch }
 
 export const SERVER_PORT = 8787;

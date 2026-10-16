@@ -331,3 +331,7 @@ A full day is 10 real minutes (`DAY_SECONDS` in `daynight.ts`), driven by the wa
 - Hub lamp posts and the pier lanterns glow brighter and cast warm point light at night.
 - Fireflies hover over the lake and blink at night, fading out by day.
 - Dev: `__game.day(0.72)` freezes the time of day (`null` resumes the clock).
+
+## 25. Persistent leaderboard
+
+The physical Top Anglers board is a hall of fame built from every account's best catch (`AccountStore.hall`, top 8), so players stay on it while offline. The server sends a `hall` message on join and whenever it changes. Offline play shows only the local player.

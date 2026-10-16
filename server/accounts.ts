@@ -1,3 +1,4 @@
+import type { HallRow } from '../src/net/protocol';
 import { createHash } from 'node:crypto';
 import { migrate, newSave, type SaveData } from '../src/game/state';
 
@@ -40,6 +41,15 @@ export class AccountStore {
     if (acct.online) return { ok: false, msg: `${acct.name} is already logged in.` };
     acct.online = true;
     return { ok: true, account: acct };
+  }
+
+  /** The most valuable catches across every account, online or not. */
+  hall(n = 8): HallRow[] {
+    return [...this.accounts.values()]
+      .filter((a) => a.save.best)
+      .map((a) => ({ name: a.name, level: a.save.level, best: a.save.best! }))
+      .sort((a, b) => b.best.value - a.best.value || a.name.localeCompare(b.name))
+      .slice(0, n);
   }
 
   touch(): void {

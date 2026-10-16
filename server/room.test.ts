@@ -32,7 +32,7 @@ const setup = () => {
     const v = MAPS[0].vendor.shop;
     room.handle(p.id, { t: 'pos', x: v.x - 2, z: v.z, yaw: 0 });
   };
-  return { room, join, atShop, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
+  return { room, join, store, atShop, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
 };
 
 describe('accounts', () => {
@@ -289,6 +289,19 @@ describe('scaled goal & shinies', () => {
     room.handle(a.id, { t: 'pos', x: 6, z: 20, yaw: 0 });
     room.handle(a.id, { t: 'cast', x: 0, z: 10 });
     expect(last(a.c, 'castok').spot).toBe('shore');
+  });
+  it('keeps offline players on the hall of fame', () => {
+    const { room, join, store } = setup();
+    const a = join('Ann');
+    a.acct.save.best = { fishId: FISH[0].id, size: 30, value: 500 };
+    const b = join('Bob');
+    b.acct.save.best = { fishId: FISH[0].id, size: 30, value: 900 };
+    room.hall = () => store.hall();
+    room.leave(a.id);
+    a.acct.online = false;
+    room.snapshot();
+    const rows = last(b.c, 'hall').rows;
+    expect(rows.map((r) => r.name)).toEqual(['Bob', 'Ann']);
   });
   it('flags a perfect cast in the roll', () => {
     const { room, join } = setup() as ReturnType<typeof setup>;

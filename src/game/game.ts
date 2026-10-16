@@ -718,9 +718,13 @@ export class Game {
 
   /** Online players ranked by their most valuable catch, for the physical board. */
   private anglers(): LeaderRow[] {
-    const all = [{ name: this.net.name, level: this.s.level, best: this.s.best, coins: this.s.coins }];
-    for (const p of this.net.players.values())
-      if (p.map === this.map.id) all.push({ name: p.name, level: p.level ?? 1, best: p.best ?? null, coins: this.net.coins.get(p.id) ?? p.coins });
+    type Row = { name: string; level: number; best: SaveData['best']; coins: number };
+    let all: Row[];
+    if (this.net.connected) {
+      all = this.net.hall.map((h) => ({ name: h.name, level: h.level, best: h.best, coins: 0 }));
+    } else {
+      all = [{ name: this.net.name, level: this.s.level, best: this.s.best, coins: this.s.coins }];
+    }
     return all
       .sort((a, b) => (b.best?.value ?? 0) - (a.best?.value ?? 0) || b.coins - a.coins)
       .map((p) => {

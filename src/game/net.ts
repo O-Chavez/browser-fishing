@@ -1,5 +1,5 @@
 import type { MapDef } from '../data/maps';
-import type { Activity, ClientMsg, PlayerInfo, ServerMsg } from '../net/protocol';
+import type { Activity, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { SERVER_PORT } from '../net/protocol';
 import { fundGoal, openKey, type Fund, type FundState } from './fund';
 import type { Drop } from './drops';
@@ -33,6 +33,7 @@ export class NetClient {
   private lastSent = '';
   /** Everyone's coins by player id (self included), for the leaderboard. */
   coins = new Map<number, number>();
+  hall: HallRow[] = [];
   color: number | undefined;
 
   constructor(
@@ -146,6 +147,10 @@ export class NetClient {
         this.events.onPlayers();
         break;
       }
+      case 'hall':
+        this.hall = m.rows;
+        this.events.onBoard();
+        break;
       case 'board':
         this.coins = new Map(Object.entries(m.coins).map(([k, v]) => [Number(k), v]));
         for (const [id, c] of this.coins) {

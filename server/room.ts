@@ -4,7 +4,7 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { fishingSpot } from '../src/game/progression';
 import { fundGoal, openKey } from '../src/game/fund';
-import type { ClientMsg, PlayerInfo, ServerMsg } from '../src/net/protocol';
+import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { newSave } from '../src/game/state';
 import type { Account } from './accounts';
 
@@ -40,6 +40,9 @@ export class Room {
   readonly drops: Drops;
   private maps: Record<string, MapDef>;
   private lastBoard = '';
+  private lastHall = '';
+  /** Supplies the all-accounts leaderboard (set by the server). */
+  hall: () => HallRow[] = () => [];
 
   constructor(
     readonly name: string,
@@ -72,6 +75,7 @@ export class Room {
       players: [...this.members.values()].map((o) => o.info),
     });
     conn.send({ t: 'drops', list: this.drops.all() });
+    conn.send({ t: 'hall', rows: this.hall() });
     this.broadcast({ t: 'joined', player: info });
     this.members.set(id, m);
     return id;
@@ -310,6 +314,12 @@ export class Room {
       this.lastBoard = key;
       for (const m of this.members.values()) m.info.coins = m.acct.save.coins;
       this.broadcast({ t: 'board', coins, stats });
+    }
+    const rows = this.hall();
+    const hk = JSON.stringify(rows);
+    if (hk !== this.lastHall) {
+      this.lastHall = hk;
+      this.broadcast({ t: 'hall', rows });
     }
     if (this.members.size < 2) return;
     const p = [...this.members.values()].map(
