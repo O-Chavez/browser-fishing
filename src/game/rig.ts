@@ -80,6 +80,21 @@ export class Rig {
     }
     this.tip.position.z = -SEG_LEN;
     parent.add(this.tip);
+    this.accent.position.z = -0.12;
+    this.pivot.add(this.accent);
+    this.glow.visible = false;
+    this.tip.add(this.glow);
+  }
+
+  private accent = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.06, 8).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  private glow = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+
+  /** Colors the rod's grip band by gear tier; high tiers also get a glowing tip. */
+  setLook(color: number, tier: number): void {
+    (this.accent.material as THREE.MeshBasicMaterial).color.setHex(color);
+    this.accent.visible = tier > 1;
+    (this.glow.material as THREE.MeshBasicMaterial).color.setHex(color);
+    this.glow.visible = tier >= 4;
   }
 
   pose(p: Pose): void {

@@ -93,7 +93,7 @@ class Avatar {
     if (act?.a === 'hold' || act?.a === 'carry') {
       const f = FISH.find((x) => x.id === act.fish);
       if (f) {
-        this.held = buildFish(f.color, false, act.shiny);
+        this.held = buildFish(f.color, false, act.shiny, f.tier);
         this.held.group.scale.setScalar(Math.max(0.3, act.size / 100));
         this.scene.add(this.held.group);
       }

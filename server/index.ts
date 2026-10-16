@@ -1,33 +1,56 @@
-import { createReadStream, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MAPS } from '../src/data/maps';
 import { SERVER_PORT, type ClientMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { Room } from './room';
+import { createStorage } from './storage';
 
-// DATA_DIR lets a host point saves at a persistent disk; otherwise they live next to the server code.
-const dataFile = (name: string) => (process.env.DATA_DIR ? pathToFileURL(join(process.env.DATA_DIR, name)) : new URL(`./${name}`, import.meta.url));
-const ROOMS_FILE = dataFile('rooms.json');
-const stored: Record<string, Record<string, number>> = existsSync(ROOMS_FILE)
-  ? JSON.parse(readFileSync(ROOMS_FILE, 'utf8'))
-  : {};
-const accounts = new AccountStore(dataFile('accounts.json'));
+const storage = createStorage(process.env, fileURLToPath(new URL('./', import.meta.url)));
+const data = await storage.load();
+const stored = data.rooms;
+const accounts = new AccountStore(data.accounts);
 const rooms = new Map<string, Room>();
+console.log(`saves: ${storage.kind}`);
 
 let roomsDirty = false;
 const persist = () => {
   roomsDirty = true;
   accounts.touch();
 };
-setInterval(() => {
-  accounts.flush();
-  if (!roomsDirty) return;
+let saving = false;
+async function flush(): Promise<void> {
+  if (saving) return;
+  const accts = accounts.takeDirty();
+  if (!accts && !roomsDirty) return;
+  saving = true;
   roomsDirty = false;
-  writeFileSync(ROOMS_FILE, JSON.stringify(Object.fromEntries([...rooms].map(([k, r]) => [k, r.funds]))));
-}, 2000);
+  try {
+    await storage.save({
+      accounts: accts ?? accounts.snapshot(),
+      rooms: { ...stored, ...Object.fromEntries([...rooms].map(([k, r]) => [k, r.funds])) },
+    });
+  } catch (e) {
+    console.error('save failed, will retry', e);
+    roomsDirty = true;
+    accounts.markDirty();
+  } finally {
+    saving = false;
+  }
+}
+setInterval(flush, 2000);
+// Hosts send SIGTERM on redeploy; save before exiting so recent progress survives.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, async () => {
+    saving = false;
+    accounts.markDirty();
+    await flush();
+    process.exit(0);
+  });
+}
 
 function room(name: string): Room {
   let r = rooms.get(name);

@@ -12,10 +12,21 @@ const ROD_LEVEL_OK = (s: SaveData, id: string) => {
 
 export const freeSlots = (s: SaveData): number => s.slots.filter((sl) => !sl).length;
 export const hasRod = (s: SaveData, id: string): boolean => s.slots.some((sl) => sl?.k === 'rod' && sl.id === id);
+/** Carried in the hotbar or kept in the locker. */
+export const ownsRod = (s: SaveData, id: string): boolean => hasRod(s, id) || s.locker.rods.includes(id);
 
-/** Bait of this type carried across all slots. */
+export const LOCKER_CAP = 200;
+
+/** Bait of this type in the hotbar and the locker. */
 export function baitCount(s: SaveData, id: string): number {
-  return s.slots.reduce((a, sl) => a + (sl?.k === 'bait' && sl.id === id ? sl.n : 0), 0);
+  return s.slots.reduce((a, sl) => a + (sl?.k === 'bait' && sl.id === id ? sl.n : 0), 0) + (s.locker.bait[id] ?? 0);
+}
+
+const lockerBait = (s: SaveData, id: string): number => s.locker.bait[id] ?? 0;
+function addLocker(s: SaveData, id: string, n: number): void {
+  const total = lockerBait(s, id) + n;
+  if (total > 0) s.locker.bait[id] = total;
+  else delete s.locker.bait[id];
 }
 
 /** The slot that bait is currently drawn from (the first stack of the selected type). */
@@ -63,15 +74,14 @@ export function selectSlot(s: SaveData, index: number): boolean {
 
 export const BAIT_PACK = 5;
 
-/** Stall prices: bait is sold in packs, rods one at a time. A purchase needs room in the hotbar. */
+/** Stall prices: bait is sold in packs, rods one at a time. Purchases go to the tackle locker. */
 export function buyRod(s: SaveData, id: string): boolean {
   const r = RODS.find((x) => x.id === id);
-  if (!r || !ROD_LEVEL_OK(s, id) || s.coins < r.price || hasRod(s, id)) return false;
-  const i = s.slots.indexOf(null);
-  if (i < 0) return false;
+  if (!r || !ROD_LEVEL_OK(s, id) || s.coins < r.price || ownsRod(s, id)) return false;
   s.coins -= r.price;
-  s.slots[i] = { k: 'rod', id };
-  selectSlot(s, i);
+  s.locker.rods.push(id);
+  const cur = RODS.find((x) => x.id === s.rod);
+  if (!hasRod(s, s.rod) || !cur || r.tier > cur.tier) equipRod(s, id);
   return true;
 }
 
@@ -79,9 +89,82 @@ export function buyBait(s: SaveData, id: string): boolean {
   const b = BAITS.find((x) => x.id === id);
   if (!b) return false;
   const cost = b.price * BAIT_PACK;
-  if (s.level < b.unlockLevel || s.coins < cost || baitRoom(s, b.id) < BAIT_PACK) return false;
+  if (s.level < b.unlockLevel || s.coins < cost || lockerBait(s, id) + BAIT_PACK > LOCKER_CAP) return false;
   s.coins -= cost;
-  addBait(s, b.id, BAIT_PACK);
+  addLocker(s, id, BAIT_PACK);
+  const cur = BAITS.find((x) => x.id === s.bait);
+  const carried = s.slots.some((sl) => sl?.k === 'bait' && sl.id === s.bait);
+  if (!carried || (cur && b.tier > cur.tier)) equipBait(s, id);
+  else refillBait(s);
+  return true;
+}
+
+/** Index of the rod slot in use (the active rod's slot, else any rod slot). */
+function rodSlot(s: SaveData): number {
+  const i = s.slots.findIndex((sl) => sl?.k === 'rod' && sl.id === s.rod);
+  return i >= 0 ? i : s.slots.findIndex((sl) => sl?.k === 'rod');
+}
+
+/** Puts an owned rod into the hotbar rod slot, sending the rod it replaces back to the locker. */
+export function equipRod(s: SaveData, id: string): boolean {
+  const r = RODS.find((x) => x.id === id);
+  if (!r || !ownsRod(s, id)) return false;
+  if (hasRod(s, id)) {
+    s.rod = id;
+    return true;
+  }
+  let i = rodSlot(s);
+  if (i < 0) i = s.slots.indexOf(null);
+  if (i < 0) return false;
+  const old = s.slots[i];
+  if (old?.k === 'rod') s.locker.rods.push(old.id);
+  s.locker.rods = s.locker.rods.filter((x) => x !== id);
+  s.slots[i] = { k: 'rod', id };
+  s.rod = id;
+  return true;
+}
+
+/** Equips a bait type: the current stack goes back to the locker and a fresh stack comes out. */
+export function equipBait(s: SaveData, id: string): boolean {
+  const b = BAITS.find((x) => x.id === id);
+  if (!b || s.level < b.unlockLevel || baitCount(s, id) <= 0) return false;
+  let i = activeSlot(s);
+  if (i < 0) i = s.slots.findIndex((sl) => sl?.k === 'bait');
+  const cur = i >= 0 ? s.slots[i] : null;
+  if (cur?.k === 'bait' && cur.id === id) {
+    s.bait = id;
+    refillBait(s);
+    return true;
+  }
+  if (i < 0) i = s.slots.indexOf(null);
+  if (i < 0) return false;
+  if (cur?.k === 'bait') addLocker(s, cur.id, cur.n);
+  const n = Math.min(BAIT_STACK, lockerBait(s, id));
+  addLocker(s, id, -n);
+  s.slots[i] = { k: 'bait', id: id as BaitType, n };
+  s.bait = id as BaitType;
+  return true;
+}
+
+/** Tops the active bait stack up from the locker. */
+export function refillBait(s: SaveData): void {
+  const sl = s.slots[activeSlot(s)];
+  if (sl?.k !== 'bait') return;
+  const add = Math.min(BAIT_STACK - sl.n, lockerBait(s, sl.id));
+  if (add <= 0) return;
+  sl.n += add;
+  addLocker(s, sl.id, -add);
+}
+
+/** Moves a rod or bait stack from the hotbar into the locker to free the slot. */
+export function stowSlot(s: SaveData, i: number): boolean {
+  const sl = s.slots[i];
+  if (!Number.isInteger(i) || !sl || sl.k === 'fish') return false;
+  if (sl.k === 'bait') {
+    if (lockerBait(s, sl.id) + sl.n > LOCKER_CAP) return false;
+    addLocker(s, sl.id, sl.n);
+  } else s.locker.rods.push(sl.id);
+  s.slots[i] = null;
   return true;
 }
 
@@ -172,7 +255,14 @@ export function spendBait(s: SaveData): boolean {
   const i = activeSlot(s);
   const sl = s.slots[i];
   if (sl?.k !== 'bait') return false;
-  if (--sl.n <= 0) s.slots[i] = null;
+  if (--sl.n <= 0) {
+    s.slots[i] = null;
+    const next = Math.min(BAIT_STACK, lockerBait(s, sl.id));
+    if (next > 0) {
+      s.slots[i] = { k: 'bait', id: sl.id, n: next };
+      addLocker(s, sl.id, -next);
+    }
+  }
   return true;
 }
 
@@ -185,12 +275,12 @@ export function canCast(s: SaveData): CastCheck {
   if (held?.k !== 'rod') return 'hands';
   const sl = s.slots[activeSlot(s)];
   if (sl?.k !== 'bait') return 'nobait';
-  return freeSlots(s) > 0 || sl.n === 1 ? 'ok' : 'full';
+  return freeSlots(s) > 0 || (sl.n === 1 && lockerBait(s, sl.id) === 0) ? 'ok' : 'full';
 }
 
 export const CAST_MESSAGES: Record<Exclude<CastCheck, 'ok'>, string> = {
-  norod: 'You need a rod! Buy one at the stall.',
-  nobait: 'Out of bait! Buy more from the stall.',
+  norod: 'No rod equipped - open your inventory (Tab) to equip one.',
+  nobait: 'Out of bait! Buy more at the shop, then equip it in your inventory (Tab).',
   hands: 'Hold your rod (1-5) to cast.',
   full: 'Your hotbar is full - sell or drop something first.',
 };

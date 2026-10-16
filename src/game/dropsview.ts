@@ -18,13 +18,13 @@ export class DropsView {
     const g = new THREE.Group();
     const it = d.item;
     if (it.k === 'fish') {
-      const f = buildFish(byId(FISH, it.fishId).color, false, it.shiny);
+      const f = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier);
       f.group.scale.setScalar(0.45 + Math.min(1, it.size / 100) * 0.5);
       g.add(f.group);
     } else if (it.k === 'bait') {
       g.add(buildTin(it.id));
     } else {
-      g.add(buildRodModel());
+      g.add(buildRodModel(it.id));
     }
     const glow = new THREE.Mesh(
       new THREE.RingGeometry(0.35, 0.5, 24).rotateX(-Math.PI / 2),

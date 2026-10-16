@@ -1,6 +1,6 @@
 import {
   FISH, RARITY_VALUE, RARITY_WEIGHT, RARITY_XP, RODS,
-  type BaitType, type Fish, type Rod, type Bait,
+  type Fish, type Rod, type Bait,
 } from '../data/content';
 
 export const MAX_LEVEL = 50;
@@ -20,19 +20,28 @@ export function applyXp(level: number, xp: number, gained: number): { level: num
   return { level: lvl, xp: total, leveledUp };
 }
 
-export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: BaitType): boolean {
-  return fish.locations.includes(locationId) && rod.tier >= fish.minRodTier && fish.baits.includes(bait);
+/** The best tier of fish your setup can reach: limited by the weaker of rod and bait. */
+export const gearTier = (rod: Rod, bait: Bait): number => Math.min(rod.tier, bait.tier);
+
+export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: Bait): boolean {
+  return fish.locations.includes(locationId) && fish.tier <= gearTier(rod, bait);
 }
 
 export function eligibleFish(locationId: string, rod: Rod, bait: Bait): Fish[] {
-  return FISH.filter((f) => canCatch(f, locationId, rod, bait.id));
+  return FISH.filter((f) => canCatch(f, locationId, rod, bait));
 }
+
+/** Fish far below your gear tier turn up less often, so upgrading visibly shifts what you catch. */
+export const OUTGROWN = 0.55;
 
 /** Non-common weights are boosted by rod and bait luck. */
 export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random): Fish | null {
   if (pool.length === 0) return null;
   const luck = rod.luck * bait.luck;
-  const weights = pool.map((f) => (f.rarity === 'common' ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck));
+  const g = gearTier(rod, bait);
+  const weights = pool.map(
+    (f) => (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) * Math.pow(OUTGROWN, Math.max(0, g - f.tier)),
+  );
   let r = rng() * weights.reduce((a, b) => a + b, 0);
   for (let i = 0; i < pool.length; i++) {
     r -= weights[i];
@@ -64,7 +73,7 @@ export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = f
 /** Next unlock, for the "next goal" HUD hint. */
 export function nextGoal(level: number): string {
   const rod = RODS.find((r) => r.unlockLevel > level);
-  return rod ? `Level ${rod.unlockLevel}: unlock the ${rod.name}` : 'Complete your Fishdex!';
+  return rod ? `Level ${rod.unlockLevel}: the ${rod.name} becomes available` : 'Complete your Fishdex!';
 }
 
 /** Weight in kg grows with the cube of length, topping out at the species' maxWeight. */

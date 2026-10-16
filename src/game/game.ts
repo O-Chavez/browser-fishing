@@ -5,7 +5,9 @@ import {
   LOCATIONS,
   RARITY_COLOR,
   RODS,
+  TIERS,
   byId,
+  tierName,
   type Fish,
 } from '../data/content';
 import { audio } from './audio';
@@ -36,7 +38,7 @@ import {
   xpForNextLevel,
 } from './progression';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
-import { SLOT_COUNT, load, save, type SaveData } from './state';
+import { SLOT_COUNT, load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_SLOTS, cosById, type CosSlot, type Look } from '../data/cosmetics';
 import { CharacterPreview } from './character';
 import { World } from './world';
@@ -131,10 +133,13 @@ export class Game {
 
   private tab = 'players';
   private shopTab: 'cosmetics' | 'gear' = 'cosmetics';
+  private rigLook = '';
+  private invTab: 'tackle' | 'wardrobe' = 'tackle';
   private preview: CharacterPreview | null = null;
   private joining = false;
   private joinColor = BODY_COLORS[4];
   private toastTimer = 0;
+  private confirmReset = false;
   private spin = false;
   private last = performance.now();
   private gauge = $('gauge') as HTMLCanvasElement;
@@ -176,7 +181,7 @@ export class Game {
       },
       onPlayers: () => {
         this.world.hub?.setLeaders(this.leaders());
-        if (this.menuOpen && (this.tab === 'players' || this.tab === 'wardrobe')) this.renderMenu();
+        if (this.menuOpen && (this.tab === 'players' || this.tab === 'inventory')) this.renderMenu();
         this.avatars.sync(this.net.players, this.net.id, this.map.id);
         this.world.hub?.setFund(this.fund.state(this.map));
         this.refreshHud();
@@ -380,8 +385,15 @@ export class Game {
       const i = Number((e.target as HTMLElement).closest<HTMLElement>('.slot.sellable')?.dataset.i);
       if (Number.isInteger(i)) this.sellSlot(i);
     });
-    $('menu').addEventListener('mouseover', (e) => this.tryOn(e.target as HTMLElement, true));
-    $('menu').addEventListener('mouseout', (e) => this.tryOn(e.target as HTMLElement, false));
+    $('menu').addEventListener('mouseover', (e) => {
+      this.tryOn(e.target as HTMLElement, true);
+      this.showTip(e.target as HTMLElement, e as MouseEvent);
+    });
+    $('menu').addEventListener('mousemove', (e) => this.moveTip(e as MouseEvent));
+    $('menu').addEventListener('mouseout', (e) => {
+      this.tryOn(e.target as HTMLElement, false);
+      if (!(e.relatedTarget as HTMLElement | null)?.closest?.('[data-tip]')) $('tip').classList.add('hidden');
+    });
     document.addEventListener('pointerlockchange', () => {
       this.setMenu(!this.locked);
       if (!this.locked) {
@@ -421,7 +433,7 @@ export class Game {
         e.preventDefault();
         if (e.repeat || !$('join').classList.contains('hidden')) return;
         if (this.menuOpen) this.closeMenu();
-        else if (this.active) this.openMenu('wardrobe');
+        else if (this.active) this.openMenu('inventory');
         return;
       }
       if (e.code === 'Escape' && this.menuOpen && !e.repeat) return this.closeMenu();
@@ -446,9 +458,16 @@ export class Game {
       this.tab = tab;
     } else if (act === 'give' && this.atVendor) this.give(id === 'all' ? this.s.coins : Number(id));
     else if (act === 'shoptab') this.shopTab = id as 'cosmetics' | 'gear';
+    else if (act === 'invtab') this.invTab = id as 'tackle' | 'wardrobe';
+    else if (act === 'equiprod') this.equipRod(id!);
+    else if (act === 'equipbait') this.equipBait(id!);
+    else if (act === 'stow') this.stow(Number(id));
     else if (act === 'buycos') this.buyCosmetic(id!);
     else if (act === 'equip') this.equip(btn.dataset.slot as CosSlot, id || null);
     else if (act === 'color') this.recolor(Number(id));
+    else if (act === 'reset') this.confirmReset = true;
+    else if (act === 'resetno') this.confirmReset = false;
+    else if (act === 'resetyes') this.resetAccount();
     else if (act === 'buyrod' || act === 'buybait') this.buy(act === 'buyrod' ? 'rod' : 'bait', id!);
     this.persist();
     this.refreshHud();
@@ -499,25 +518,41 @@ export class Game {
     const s = this.s;
     if (kind === 'rod') {
       const r = byId(RODS, id);
-      if (eco.hasRod(s, id)) return this.toast(`You already have the ${r.name}.`);
+      if (eco.ownsRod(s, id)) return this.toast(`You already have the ${r.name}.`);
       if (s.level < r.unlockLevel) return this.toast(`${r.name} unlocks at level ${r.unlockLevel}.`);
       if (s.coins < r.price) return this.toast(`Not enough coins (${r.price} 🪙).`);
-      if (!eco.freeSlots(s)) return this.toast('Your hotbar is full - drop something first (G).');
       eco.buyRod(s, id);
       this.net.send({ t: 'buyrod', id });
-      this.toast(`Bought the ${r.name}`);
+      this.toast(eco.hasRod(s, id) ? `Bought the ${r.name} - equipped!` : `Bought the ${r.name} - equip it in your Inventory (Tab)`);
     } else {
       const b = byId(BAITS, id);
       const cost = b.price * eco.BAIT_PACK;
       if (s.level < b.unlockLevel) return this.toast(`${b.name} unlocks at level ${b.unlockLevel}.`);
       if (s.coins < cost) return this.toast(`Not enough coins (${cost} 🪙).`);
-      if (eco.baitRoom(s, id) < eco.BAIT_PACK) return this.toast('No room for more bait - your hotbar is full.');
-      eco.buyBait(s, id);
+      if (!eco.buyBait(s, id)) return this.toast('Your locker is full of that bait.');
       this.net.send({ t: 'buybait', id });
-      this.toast(`Bought ${eco.BAIT_PACK} ${b.name}`);
+      this.toast(s.bait === id ? `Bought ${eco.BAIT_PACK} ${b.name} - equipped!` : `Bought ${eco.BAIT_PACK} ${b.name} - equip it in your Inventory (Tab)`);
     }
     this.persist();
     this.refreshHud();
+  }
+
+  private equipRod(id: string): void {
+    if (!eco.equipRod(this.s, id)) return this.toast('Free a hotbar slot first (stow or drop something).');
+    this.net.send({ t: 'equiprod', id });
+    this.toast(`Equipped the ${byId(RODS, id).name}`);
+  }
+
+  private equipBait(id: string): void {
+    if (!eco.equipBait(this.s, id)) return this.toast('Free a hotbar slot first (stow or drop something).');
+    this.net.send({ t: 'equipbait', id });
+    this.toast(`Equipped ${byId(BAITS, id).name}`);
+  }
+
+  private stow(i: number): void {
+    if (!eco.stowSlot(this.s, i)) return;
+    this.net.send({ t: 'stow', i });
+    this.toast('Stored in your tackle locker');
   }
 
   /** Wheel: online the server rolls; offline we roll locally. */
@@ -591,7 +626,7 @@ export class Game {
     if (this.s.coins < c.price) return this.toast(`Not enough coins (${c.price} 🪙).`);
     eco.buyCosmetic(this.s, id);
     this.net.send({ t: 'buycos', id });
-    this.toast(`Bought ${c.name} - wear it from the Wardrobe (Tab)`);
+    this.toast(`Bought ${c.name} - wear it from your Inventory (Tab)`);
     this.persist();
     this.refreshHud();
   }
@@ -602,11 +637,41 @@ export class Game {
     this.persist();
   }
 
+  private resetAccount(): void {
+    this.confirmReset = false;
+    const color = this.s.look.color;
+    this.roll = null;
+    if (this.net.connected) this.net.send({ t: 'reset' });
+    else {
+      Object.assign(this.s, newSave());
+      this.s.look.color = color;
+    }
+    this.toast('Account reset. Fresh start!');
+  }
+
   private recolor(color: number): void {
     if (!eco.setBodyColor(this.s, color)) return;
     this.net.send({ t: 'color', color });
     localStorage.setItem('fishing-color', String(color));
     this.persist();
+  }
+
+  private showTip(el: HTMLElement, e: MouseEvent): void {
+    const t = el.closest<HTMLElement>('[data-tip]');
+    const tip = $('tip');
+    if (!t) return tip.classList.add('hidden');
+    tip.innerHTML = t.dataset.tip!;
+    tip.classList.remove('hidden');
+    this.moveTip(e);
+  }
+
+  private moveTip(e: MouseEvent): void {
+    const tip = $('tip');
+    if (tip.classList.contains('hidden')) return;
+    const x = Math.min(e.clientX + 16, window.innerWidth - tip.offsetWidth - 8);
+    const y = Math.min(e.clientY + 16, window.innerHeight - tip.offsetHeight - 8);
+    tip.style.left = `${x}px`;
+    tip.style.top = `${y}px`;
   }
 
   /** Hovering an item in the shop or wardrobe previews it on the spinning character. */
@@ -712,30 +777,6 @@ export class Game {
       this.atVendor = dv < 3.2;
       const st = this.fund.state(this.map);
       if (this.atVendor) {
-        // Goods are chosen by looking at them.
-        const cy = Math.cos(w.pitch);
-        const fx = -Math.sin(w.yaw) * cy;
-        const fy = Math.sin(w.pitch);
-        const fz = -Math.cos(w.yaw) * cy;
-        let aimed: (typeof hub.stallItems)[number] | undefined;
-        let bestDot = 0.93;
-        for (const it of hub.stallItems) {
-          const dx = it.pos.x - w.eye.x;
-          const dy = it.pos.y - w.eye.y;
-          const dz = it.pos.z - w.eye.z;
-          const dot = (dx * fx + dy * fy + dz * fz) / Math.hypot(dx, dy, dz);
-          if (dot > bestDot) {
-            bestDot = dot;
-            aimed = it;
-          }
-        }
-        if (aimed) {
-          const a = aimed;
-          const price =
-            a.kind === 'rod' ? byId(RODS, a.id).price : byId(BAITS, a.id).price * eco.BAIT_PACK;
-          const name = a.kind === 'rod' ? byId(RODS, a.id).name : `${eco.BAIT_PACK} ${byId(BAITS, a.id).name}`;
-          spots.push({ d: -20, label: `Buy ${name} · ${price} 🪙`, act: () => this.buy(a.kind, a.id) });
-        }
         const held = this.s.slots[this.s.held];
         if (held?.k === 'fish') {
           const f = byId(FISH, held.fishId);
@@ -743,7 +784,7 @@ export class Game {
         }
         spots.push({
           d: dv,
-          label: `Talk to ${this.map.vendor.name} · shop & town fund`,
+          label: `Talk to ${this.map.vendor.name} · open shop`,
           act: () => this.openMenu('shop'),
         });
       }
@@ -759,7 +800,7 @@ export class Game {
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
         { d: near(hub.leaderSpot), label: 'Top Anglers · see who is richest', act: () => this.openMenu('players') },
-        { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
+        { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         {
           d: Math.hypot(hub.boardSpot.x - x, hub.boardSpot.z - z),
@@ -928,7 +969,7 @@ export class Game {
     this.reel = new Reel(this.hooked!.stamina * (this.hookedShiny ? SHINY_DIFFICULTY : 1), this.rod.control);
     this.lastSurges = 0;
     this.leapT = -1;
-    this.fish = buildFish(this.hooked!.color, false, this.hookedShiny);
+    this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier);
     this.fish.group.scale.setScalar(Math.max(0.3, this.hookedSize / 100));
     w.scene.add(this.fish.group);
     w.rig.kick('pitch', 7);
@@ -991,11 +1032,13 @@ export class Game {
 
     const el = $('catch');
     el.style.borderColor = RARITY_COLOR[fish.rarity];
+    el.style.boxShadow = fish.tier >= 3 ? `0 0 ${12 + fish.tier * 10}px ${RARITY_COLOR[fish.rarity]}` : '';
+    el.dataset.tier = String(fish.tier);
     const shiny = this.hookedShiny;
     el.innerHTML = `<div class="muted">${shiny ? '<b style="color:#ffd23a">✨ SHINY! ✨</b> ' : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <div class="weight">${formatWeight(fishWeight(fish, size))}</div>
-      <div>${fish.rarity.toUpperCase()} · ${size} cm · ${sellValue(fish, size, shiny)} 🪙</div>
+      <div>${this.tierBadge(fish.tier)} · ${size} cm · ${sellValue(fish, size, shiny)} 🪙</div>
       <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
@@ -1021,6 +1064,10 @@ export class Game {
     const key = it?.k === 'fish' ? `f:${it.fishId}:${it.size}:${it.shiny ? 1 : 0}` : it?.k === 'bait' ? `b:${it.id}` : '';
     const w = this.world;
     w.rig.root.visible = this.phase !== 'idle' || it?.k === 'rod';
+    if (this.rigLook !== this.s.rod) {
+      this.rigLook = this.s.rod;
+      w.rig.setLook(this.rod.color, this.rod.tier);
+    }
     if (this.carry && this.carry.key !== key) {
       w.camera.remove(this.carry.obj);
       this.carry = null;
@@ -1029,7 +1076,7 @@ export class Game {
     let model: FishModel | null = null;
     let obj: THREE.Object3D;
     if (it.k === 'fish') {
-      model = buildFish(byId(FISH, it.fishId).color, false, it.shiny);
+      model = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier);
       model.group.scale.setScalar(Math.max(0.14, Math.min(0.28, it.size / 220)));
       model.group.rotation.set(0.3, 1.1, 0.35);
       obj = new THREE.Group();
@@ -1545,8 +1592,8 @@ export class Game {
       case 'players':
         el.innerHTML = this.playersHtml();
         break;
-      case 'wardrobe':
-        el.innerHTML = this.wardrobeHtml();
+      case 'inventory':
+        el.innerHTML = this.inventoryHtml();
         break;
       case 'shop':
         el.innerHTML = this.shopHtml();
@@ -1605,13 +1652,94 @@ export class Game {
           `<div class="row${p.me ? ' me' : ''}"><div><span class="rank">${i + 1}</span><span class="dot" style="background:#${p.color.toString(16).padStart(6, '0')}"></span>${i === 0 ? '👑 ' : ''}${escapeHtml(p.name)}${p.me ? ' <span class="muted">(you)</span>' : ''}</div><div><b>${p.coins}</b> 🪙</div></div>`,
       )
       .join('');
-    return `<h3>Players ${this.net.connected ? `· ${this.net.room}` : '· offline'}</h3>${rows}`;
+    const reset = this.confirmReset
+      ? `<div class="danger">Erase all progress (coins, gear, fish, cosmetics)? This cannot be undone.<br><button data-act="resetyes" class="bad">Yes, reset</button> <button data-act="resetno">Cancel</button></div>`
+      : `<div class="danger"><button data-act="reset">Reset account</button></div>`;
+    return `<h3>Players ${this.net.connected ? `· ${this.net.room}` : '· offline'}</h3>${rows}${reset}`;
   }
 
   private swatchHtml(): string {
     return BODY_COLORS.map(
       (c) => `<button class="swatch${c === this.s.look.color ? ' on' : ''}" data-act="color" data-id="${c}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`,
     ).join('');
+  }
+
+  private tierColor(tier: number): string {
+    return ['#ffffff', '#8fe08f', '#6cc4ff', '#c58bff', '#ff9b3d', '#ffd23a'][Math.min(5, tier)];
+  }
+
+  private esc(h: string): string {
+    return h.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
+  private tile(icon: string, name: string, price: string, tier: number, tip: string, act: string, id: string, off: boolean): string {
+    return `<button class="tile${off ? ' off' : ''}" style="--c:${this.tierColor(tier)}" data-tip="${this.esc(tip)}" data-act="${act}" data-id="${id}"><span class="ic">${icon}</span><span class="nm">${name}</span><span class="pr">${price}</span></button>`;
+  }
+
+  private tierBadge(tier: number): string {
+    return `<span class="tier" style="color:${RARITY_COLOR[TIERS[tier - 1]]};border-color:${RARITY_COLOR[TIERS[tier - 1]]}">T${tier} ${tierName(tier)}</span>`;
+  }
+
+  private rodStats(r: (typeof RODS)[number]): string {
+    return `Reach ${r.castDistance} m · luck ×${r.luck} · control ×${r.control} · catches tier ${r.tier}${r.tier < 5 ? '' : '+'}`;
+  }
+
+  private baitStats(b: (typeof BAITS)[number]): string {
+    return `Luck ×${b.luck} · faster bites · catches tier ${b.tier}${b.tier < 5 ? '' : '+'}`;
+  }
+
+  private inventoryHtml(): string {
+    const tabs = (['tackle', 'wardrobe'] as const)
+      .map((k) => `<button data-act="invtab" data-id="${k}" class="${this.invTab === k ? 'active' : ''}">${k === 'tackle' ? 'Tackle' : 'Wardrobe'}</button>`)
+      .join('');
+    return `<h3>Inventory</h3><nav class="sub">${tabs}</nav>${this.invTab === 'tackle' ? this.tackleHtml() : this.wardrobeHtml()}`;
+  }
+
+  private tackleHtml(): string {
+    const s = this.s;
+    const rod = this.rod;
+    const bait = this.bait;
+    const have = eco.baitCount(s, s.bait);
+    const reach = Math.min(rod.tier, bait.tier);
+    const chips = TIERS.map((_, i) => {
+      const t = i + 1;
+      const on = t <= reach;
+      const names = FISH.filter((f) => f.tier === t)
+        .map((f) => (s.dex[f.id] ? f.name : '???'))
+        .join(', ');
+      return `<div class="chip${on ? ' on' : ''}" style="--c:${RARITY_COLOR[TIERS[i]]}"><b>T${t} ${tierName(t)}</b><span>${on ? names : '🔒 need T' + t + ' rod + bait'}</span></div>`;
+    }).join('');
+    let hint = '';
+    if (have <= 0) hint = 'You have no bait equipped - buy or equip some below.';
+    else if (rod.tier < bait.tier) hint = `Your rod (T${rod.tier}) is holding you back - upgrade it to reach T${bait.tier} fish.`;
+    else if (bait.tier < rod.tier) hint = `Your bait (T${bait.tier}) is holding you back - equip higher-tier bait.`;
+    else if (reach < 5) hint = `Upgrade both rod and bait to tier ${reach + 1} to reach ${tierName(reach + 1)} fish.`;
+    else hint = 'Maxed out - nothing can stop you now.';
+
+    const hotRod = s.slots.findIndex((x) => x?.k === 'rod' && x.id === s.rod);
+    const rods = RODS.map((r) => {
+      const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
+      const owned = eco.ownsRod(s, r.id);
+      let action: string;
+      if (equipped) action = `<span class="ok">Equipped ✓</span> <button data-act="stow" data-id="${hotRod}">Stow</button>`;
+      else if (owned) action = `<button data-act="equiprod" data-id="${r.id}">Equip</button>`;
+      else action = `<span class="muted">${s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Shop · ${r.price} 🪙`}</span>`;
+      return `<div class="row gear${owned ? '' : ' locked'}${equipped ? ' me' : ''}"><div>${this.tierBadge(r.tier)} <b>${r.name}</b><div class="muted">${this.rodStats(r)}</div></div><div>${action}</div></div>`;
+    }).join('');
+    const baitRows = BAITS.map((b) => {
+      const n = eco.baitCount(s, b.id);
+      const equipped = s.bait === b.id && s.slots.some((x) => x?.k === 'bait' && x.id === b.id);
+      const slot = s.slots.findIndex((x) => x?.k === 'bait' && x.id === b.id);
+      let action: string;
+      if (equipped) action = `<span class="ok">Equipped ✓</span> <button data-act="stow" data-id="${slot}">Stow</button>`;
+      else if (n > 0 && s.level >= b.unlockLevel) action = `<button data-act="equipbait" data-id="${b.id}">Equip</button>`;
+      else action = `<span class="muted">${s.level < b.unlockLevel ? `Unlocks at level ${b.unlockLevel}` : `Shop · ${b.price * eco.BAIT_PACK} 🪙 / ${eco.BAIT_PACK}`}</span>`;
+      return `<div class="row gear${n > 0 ? '' : ' locked'}${equipped ? ' me' : ''}"><div>${this.tierBadge(b.tier)} <b>${b.name}</b> <span class="muted">×${n}</span><div class="muted">${this.baitStats(b)}</div></div><div>${action}</div></div>`;
+    }).join('');
+    return `<div class="setup"><div><b>${rod.name}</b> + <b>${bait.name}</b> → reach <b style="color:${RARITY_COLOR[TIERS[reach - 1]]}">tier ${reach} · ${tierName(reach)}</b></div><div class="muted">${hint}</div></div>
+      <div class="chips">${chips}</div>
+      <p class="muted">Your hotbar holds the rod and bait you use; the rest of your tackle waits in the locker.</p>
+      <h4>Rods</h4>${rods}<h4>Bait</h4>${baitRows}`;
   }
 
   private wardrobeHtml(): string {
@@ -1626,7 +1754,7 @@ export class Game {
         .join('');
       return `<h4>${slot === 'jewelry' ? 'Jewelry' : slot[0].toUpperCase() + slot.slice(1) + 's'}</h4><div class="items">${cards || '<span class="muted">Nothing owned yet - visit the shop.</span>'}</div>`;
     }).join('');
-    return `<h3>Wardrobe</h3><div class="split"><div><div id="pv-slot"></div><div class="swatches">${this.swatchHtml()}</div></div><div class="grow">${sections}</div></div>`;
+    return `<div class="split"><div><div id="pv-slot"></div><div class="swatches">${this.swatchHtml()}</div></div><div class="grow">${sections}</div></div>`;
   }
 
   private shopHtml(): string {
@@ -1636,34 +1764,46 @@ export class Game {
       .join('');
     let body: string;
     if (this.shopTab === 'cosmetics') {
+      const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
       const cards = COSMETICS.slice()
         .sort((a, b) => a.price - b.price)
         .map((c) => {
           const has = this.s.owned.includes(c.id);
-          const afford = this.s.coins >= c.price;
-          return `<button class="item${has ? ' on' : ''}" data-try="${c.slot}:${c.id}" ${has ? 'data-act="equip" data-slot="' + c.slot + '" data-id="' + (this.s.look[c.slot] === c.id ? '' : c.id) + '"' : `data-act="buycos" data-id="${c.id}"`} ${!has && (!here || !afford) ? 'disabled' : ''}><b class="t${c.tier}">${c.name}</b><span class="muted">${c.slot}</span><span>${has ? (this.s.look[c.slot] === c.id ? 'Wearing ✓' : 'Owned · wear') : `${c.price} 🪙`}</span></button>`;
+          const wearing = this.s.look[c.slot] === c.id;
+          const tip = `<b style="color:${this.tierColor(c.tier)}">${c.name}</b><br>${c.slot} · style tier ${c.tier}<br>${has ? (wearing ? 'Wearing - click to remove' : 'Owned - click to wear') : `Click to buy · ${c.price} 🪙`}`;
+          const act = has ? `data-act="equip" data-slot="${c.slot}" data-id="${wearing ? '' : c.id}"` : `data-act="buycos" data-id="${c.id}"`;
+          return `<button class="tile${has ? ' own' : ''}${!has && this.s.coins < c.price ? ' off' : ''}" style="--c:${this.tierColor(c.tier)}" data-try="${c.slot}:${c.id}" data-tip="${this.esc(tip)}" ${act}><span class="ic">${icon[c.slot]}</span><span class="nm">${c.name}</span><span class="pr">${has ? (wearing ? 'Wearing ✓' : 'Owned') : `${c.price} 🪙`}</span></button>`;
         })
         .join('');
-      body = `<div class="split"><div><div id="pv-slot"></div><p class="muted">Hover an item to try it on.</p></div><div class="items grow">${cards}</div></div>`;
+      body = `<div class="split"><div><div id="pv-slot"></div><p class="muted">Hover an item to try it on.</p></div><div class="tiles grow">${cards}</div></div>`;
     } else {
       const rods = this.map.stock.rods.map((id) => {
         const r = byId(RODS, id);
-        const has = eco.hasRod(this.s, id);
-        const off = has || !here || this.s.coins < r.price || this.s.level < r.unlockLevel || !eco.freeSlots(this.s);
-        return `<div class="row"><div><b>${r.name}</b> <span class="muted">rod${r.unlockLevel > 1 ? ` · level ${r.unlockLevel}` : ''}</span></div><div><button data-act="buyrod" data-id="${id}" ${off ? 'disabled' : ''}>${has ? 'Owned' : `${r.price} 🪙`}</button></div></div>`;
+        const has = eco.ownsRod(this.s, id);
+        const lvl = this.s.level < r.unlockLevel;
+        const price = has ? 'Owned ✓' : lvl ? `🔒 Lv ${r.unlockLevel}` : r.price ? `${r.price} 🪙` : 'Free';
+        const tip = `<b style="color:${this.tierColor(r.tier)}">${r.name}</b><br>${this.tierBadge(r.tier)}<br>${this.rodStats(r)}<br>${has ? 'You own this - equip it in Inventory' : lvl ? `Unlocks at level ${r.unlockLevel}` : r.price ? `Click to buy · ${r.price} 🪙` : 'Free'}`;
+        return this.tile('🎣', r.name, price, r.tier, tip, `buyrod`, id, has || lvl || this.s.coins < r.price);
       });
+      const baitIcon: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
       const bait = this.map.stock.bait.map((id) => {
         const b = byId(BAITS, id);
         const cost = b.price * eco.BAIT_PACK;
-        const off = !here || this.s.coins < cost || this.s.level < b.unlockLevel || eco.baitRoom(this.s, id) < eco.BAIT_PACK;
-        return `<div class="row"><div><b>${b.name}</b> <span class="muted">×${eco.BAIT_PACK}${b.unlockLevel > 1 ? ` · level ${b.unlockLevel}` : ''}</span></div><div><button data-act="buybait" data-id="${id}" ${off ? 'disabled' : ''}>${cost} 🪙</button></div></div>`;
+        const lvl = this.s.level < b.unlockLevel;
+        const tip = `<b style="color:${this.tierColor(b.tier)}">${b.name} ×${eco.BAIT_PACK}</b><br>${this.tierBadge(b.tier)}<br>${this.baitStats(b)}<br>You have ${eco.baitCount(this.s, id)}<br>${lvl ? `Unlocks at level ${b.unlockLevel}` : `Click to buy · ${cost} 🪙`}`;
+        return this.tile(baitIcon[id] ?? '🪱', `${b.name} ×${eco.BAIT_PACK}`, lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost} 🪙`, b.tier, tip, 'buybait', id, lvl || this.s.coins < cost);
       });
-      body = rods.join('') + bait.join('');
+      body = `<p class="muted">Hover for stats. Border color = tier. Gear goes to your tackle locker - equip it in Inventory (<b>Tab</b>). A fish needs a rod <i>and</i> bait of its tier or higher.</p><h4>Rods</h4><div class="tiles">${rods.join('')}</div><h4>Bait</h4><div class="tiles">${bait.join('')}</div>`;
     }
+    return this.shopFrame(tabs, body, here);
+  }
+
+  private shopFrame(tabs: string, body: string, here: boolean): string {
     return `<h3>${this.map.vendor.name}'s Shop · you have <b>${this.s.coins}</b> 🪙</h3>
       <nav class="sub">${tabs}</nav>
-      ${here ? '<p class="muted">Click a fish in your hotbar (below) to sell it.</p>' : `<p class="muted">Walk up to ${this.map.vendor.name}'s stall to buy or sell.</p>`}
-      ${body}`;
+      <p class="muted">Click a fish in your hotbar (below) to sell it.</p>
+      ${body}
+      <p><button data-tab="play">Leave shop</button></p>`;
   }
 
   private dexHtml(): string {
@@ -1673,9 +1813,10 @@ export class Game {
       if (e) {
         return `<div class="card"><b style="color:${RARITY_COLOR[f.rarity]}">${f.name}</b><div class="muted">Caught ${e.count} · best ${e.best} cm</div></div>`;
       }
-      const rod = RODS.find((r) => r.tier === f.minRodTier)!.name;
+      const rodName = RODS.find((r) => r.tier === f.tier)!.name;
+      const baitName = BAITS.find((b) => b.tier === f.tier)!.name;
       const where = f.locations.map((l) => byId(LOCATIONS, l).name).join(', ');
-      return `<div class="card unknown"><b>???</b><div class="muted">${f.rarity} · ${where}<br>Needs: ${rod}+, ${f.baits.join('/')}</div></div>`;
+      return `<div class="card unknown"><b>???</b><div class="muted">${this.tierBadge(f.tier)} · ${where}<br>Needs: ${rodName}+ and ${baitName}+</div></div>`;
     }).join('');
     return `<p>${found} / ${FISH.length} discovered</p><div class="grid">${cards}</div>`;
   }

@@ -27,11 +27,16 @@ export type ClientMsg =
   | { t: 'give'; map: string; coins: number }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
+  /** Gear from the tackle locker into the hotbar, or a hotbar rod/bait stack back to the locker. */
+  | { t: 'equiprod'; id: string }
+  | { t: 'equipbait'; id: string }
+  | { t: 'stow'; i: number }
   /** Sell the fish in hand, or in hotbar slot i. */
   | { t: 'sell'; i?: number }
   | { t: 'buycos'; id: string }
   | { t: 'equip'; slot: CosSlot; id: string | null }
   | { t: 'color'; color: number }
+  | { t: 'reset' }
   /** Take the hotbar slot (0-based) in hand. */
   | { t: 'slot'; i: number }
   /** Drop the item in hand. */

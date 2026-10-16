@@ -274,4 +274,11 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 - **Cosmetics:** hats, shirts, jewelry (6 each, tiers 0–5; higher price = flashier, top tiers glow). Bought at Marlow's shop menu (Cosmetics/Gear tabs), equipped in the Wardrobe (Tab; also the plaza mirror). Visible to all players.
 - **Selling:** with the shop menu open, hover a hotbar fish to see its price and click to sell.
 - **Hub:** T-shaped dock with side piers, rowboat, barrel and rope; plaza gains a campfire with benches, leaderboard board, mirror and extra lamps.
-- **Persistence note:** cosmetics are stored in accounts.json; on Render use a persistent disk (`DATA_DIR`) to keep them across deploys.
+- **Persistence:** see section 17.
+
+## 17. Persistence & account reset
+
+- **Storage** (`server/storage.ts`): accounts and town funds are saved every 2 s when changed, and on SIGTERM/SIGINT (redeploys).
+  - Default: JSON files in `DATA_DIR` (or the server folder). Lost on Render free redeploys unless a paid disk is mounted at `DATA_DIR`.
+  - Set `DATABASE_URL` to use Postgres instead (Neon, Supabase or Render Postgres, no disk needed). A `game_state` table is created automatically.
+- **Reset:** Players tab (Tab/Esc) -> "Reset account" -> confirm. Wipes coins, level, gear, fish, dex and cosmetics; keeps name, login token and body color. Works offline too. Blocked mid wheel-spin.

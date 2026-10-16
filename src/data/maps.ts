@@ -27,7 +27,7 @@ export interface MapDef {
   /** Dressing mirror; E opens the wardrobe. */
   mirror: Spot;
   campfire: Spot;
-  /** What this map's stall sells (ids from `RODS` and `BAITS`). */
+  /** What this map's shop menu sells (ids from `RODS` and `BAITS`). */
   stock: { rods: string[]; bait: string[] };
   /** Pooled coins the whole room must hand in to open the gate. */
   goal: number;
@@ -58,7 +58,7 @@ export const MAPS: MapDef[] = [
     leaderboard: { x: 10.5, z: 30, facing: faceToward(10.5, 30, 2, 27) },
     mirror: { x: 11.5, z: 22, facing: -Math.PI / 2 },
     campfire: { x: -9.5, z: 31, facing: 0 },
-    stock: { rods: ['twig'], bait: ['worm'] },
+    stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     goal: 300,
     next: { id: 'lake', name: 'Forest Lake' },
     radius: 100,

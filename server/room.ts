@@ -4,6 +4,7 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { fundGoal, openKey } from '../src/game/fund';
 import type { ClientMsg, PlayerInfo, ServerMsg } from '../src/net/protocol';
+import { newSave } from '../src/game/state';
 import type { Account } from './accounts';
 
 export interface Conn {
@@ -120,6 +121,15 @@ export class Room {
       case 'buybait':
         changed = this.atVendor(m) && this.stocks(m).bait.includes(str(msg.id)) && eco.buyBait(s, str(msg.id));
         break;
+      case 'equiprod':
+        changed = eco.equipRod(s, str(msg.id));
+        break;
+      case 'equipbait':
+        changed = eco.equipBait(s, str(msg.id));
+        break;
+      case 'stow':
+        changed = eco.stowSlot(s, Math.floor(Number(msg.i)));
+        break;
       case 'sell':
         changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, Math.floor(Number(msg.i))));
         break;
@@ -131,6 +141,12 @@ export class Room {
         break;
       case 'color':
         changed = eco.setBodyColor(s, Math.floor(Number(msg.color)));
+        break;
+      case 'reset':
+        if (m.spin) return;
+        m.pending = null;
+        this.resetAccount(m);
+        changed = true;
         break;
       case 'gamble':
         this.gamble(m);
@@ -153,6 +169,18 @@ export class Room {
       this.onChange();
     }
     m.conn.send({ t: 'state', save: this.view(m.acct) });
+  }
+
+  /** Wipes progress but keeps the name, token and body color. Mutates in place: info.look aliases save.look. */
+  private resetAccount(m: Member): void {
+    const s = m.acct.save;
+    const look = s.look;
+    const color = look.color;
+    Object.assign(s, newSave());
+    Object.assign(look, newSave().look, { color });
+    s.look = look;
+    this.setAct(m, null);
+    this.broadcast({ t: 'look', id: m.info.id, look });
   }
 
   private stocks(m: Member): { rods: string[]; bait: string[] } {

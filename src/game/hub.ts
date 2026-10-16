@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { BAITS, FISH, RODS, byId } from '../data/content';
+import { FISH } from '../data/content';
 import type { MapDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { buildFish } from './fishmodel';
-import { buildRodModel, buildTin } from './itemmodels';
 import type { FundState } from './fund';
 import type { Circle } from './player';
 
@@ -92,7 +91,6 @@ export class Hub {
   /** Fires as the pointer crosses a wedge while spinning. */
   onWheelTick: () => void = () => {};
   /** Goods on the stall: look at one and press E to buy. */
-  readonly stallItems: { kind: 'rod' | 'bait'; id: string; pos: THREE.Vector3 }[] = [];
   private fixed: Circle[] = [];
   private gateBlock: Circle[] = [];
   private locked = true;
@@ -198,57 +196,6 @@ export class Hub {
       hang.position.set(-1.3 + i * 2.6, 2.2, 1.0);
       this.hanging.push(hang);
       stall.add(hang);
-    });
-
-    // Goods for sale, each with a price tag.
-    const tag = (lx: number, y: number, lz: number, name: string, price: number) => {
-      const t = textPlane(0.44, 0.2, 256);
-      const { ctx } = t;
-      ctx.fillStyle = '#f3e6c8';
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      ctx.strokeStyle = '#6b4a2b';
-      ctx.lineWidth = 6;
-      ctx.strokeRect(3, 3, ctx.canvas.width - 6, ctx.canvas.height - 6);
-      ctx.fillStyle = '#2b1d10';
-      ctx.textAlign = 'center';
-      ctx.font = '800 36px system-ui, sans-serif';
-      ctx.fillText(name, ctx.canvas.width / 2, 46);
-      ctx.font = '700 30px system-ui, sans-serif';
-      ctx.fillText(price ? `${price} coins` : 'free', ctx.canvas.width / 2, 90);
-      t.tex.needsUpdate = true;
-      t.mesh.position.set(lx, y, lz);
-      stall.add(t.mesh);
-    };
-    // Bait jars sit on the counter; rods lean against its front so both are easy to aim at.
-    const { bait, rods } = this.map.stock;
-    const spacing = 0.9;
-    const count = bait.length + rods.length;
-    const xAt = (n: number) => (n - (count - 1) / 2) * spacing;
-    bait.forEach((id, n) => {
-      const b = byId(BAITS, id);
-      const lx = xAt(n);
-      for (const dx of [-0.2, 0.2]) {
-        const jar = buildTin(id);
-        jar.scale.setScalar(1.15);
-        jar.position.set(lx + dx, 1.17, 0.3);
-        stall.add(jar);
-      }
-      tag(lx, 1.62, 0.5, `${b.name} x5`, b.price * 5);
-      const w = this.world(shop, lx, 0.3);
-      this.stallItems.push({ kind: 'bait', id, pos: w.setY(w.y + 1.2) });
-    });
-    rods.forEach((id, n) => {
-      const r = byId(RODS, id);
-      const lx = xAt(bait.length + n);
-      const rod = buildRodModel();
-      rod.rotation.order = 'YXZ';
-      rod.rotation.set(-0.3, 0, Math.PI / 2);
-      rod.scale.setScalar(0.8);
-      rod.position.set(lx, 0.56, 0.75);
-      stall.add(rod);
-      tag(lx, 1.62, 0.5, r.name, r.price);
-      const w = this.world(shop, lx, 0.72);
-      this.stallItems.push({ kind: 'rod', id, pos: w.setY(w.y + 0.6) });
     });
 
     this.place(stall, shop);

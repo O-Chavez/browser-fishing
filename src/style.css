@@ -105,8 +105,36 @@ button.linklike { background: none; text-decoration: underline; opacity: .7; }
 #menu { z-index: 20; }
 body.shopping #hud { z-index: 30; }
 body.shopping #menu { align-items: flex-start; pointer-events: none; }
-body.shopping .panel { margin-top: 2vh; max-height: calc(100vh - 150px); pointer-events: auto; }
+body.shopping .panel { margin-top: 100px; max-height: calc(100vh - 250px); pointer-events: auto; }
 body.shopping #hotbar { pointer-events: auto; }
 #hotbar .slot.sellable { cursor: pointer; border-color: #6dff8f; }
 #hotbar .slot.sellable:hover { background: rgba(40,120,70,.9); }
 #hotbar .slot.sellable:hover::after { content: attr(data-sell); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px; white-space: nowrap; padding: 4px 8px; background: #1b6b3a; border-radius: 6px; font-weight: 700; }
+
+.tier { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border: 1px solid; border-radius: 8px; letter-spacing: .03em; }
+.row.gear { align-items: flex-start; }
+.row.gear > div:last-child { text-align: right; white-space: nowrap; }
+.row.locked:not(.me) { opacity: .6; }
+.ok { color: #7bd88f; font-weight: 700; }
+.setup { background: rgba(255,255,255,.07); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 8px; }
+.chip { border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 5px 6px; font-size: 11px; opacity: .55; display: flex; flex-direction: column; gap: 2px; }
+.chip.on { opacity: 1; border-color: var(--c); box-shadow: inset 0 0 10px color-mix(in srgb, var(--c) 35%, transparent); }
+.chip b { color: var(--c); }
+body.shopping nav:not(.sub) { display: none; }
+body.shopping .panel h1 { display: none; }
+body.shopping .controls { display: none; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; background: rgba(255,255,255,.07); border: 2px solid var(--c, #fff); border-radius: 10px; font-size: 12px; text-align: center; box-shadow: inset 0 0 12px color-mix(in srgb, var(--c) 25%, transparent); }
+.tile:hover { background: rgba(255,255,255,.16); box-shadow: 0 0 12px var(--c); }
+.tile .ic { font-size: 30px; line-height: 1.1; }
+.tile .nm { line-height: 1.15; font-weight: 700; color: var(--c); }
+.tile .pr { opacity: .85; }
+.tile.off { opacity: .45; }
+.tile.own { background: rgba(109,255,143,.12); }
+#tip { position: fixed; z-index: 100; pointer-events: none; max-width: 240px; padding: 8px 10px; background: rgba(5,12,24,.96); border: 1px solid rgba(255,255,255,.3); border-radius: 8px; font-size: 12px; line-height: 1.45; }
+#tip.hidden { display: none; }
+
+.danger { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.1); font-size: 13px; opacity: .85; }
+.danger button.bad { background: #b3261e; color: #fff; }

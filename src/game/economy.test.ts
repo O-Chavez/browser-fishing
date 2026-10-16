@@ -14,24 +14,45 @@ describe('carry slots', () => {
     expect(eco.freeSlots(s)).toBe(3);
   });
 
-  it('tops up a stack before using a new slot and caps stacks at 20', () => {
+  it('buying bait fills the locker and keeps the hotbar stack topped up', () => {
     const s = newSave();
     s.coins = 999;
     expect(eco.buyBait(s, 'worm')).toBe(true);
     expect(s.slots[1]).toMatchObject({ n: 20 });
+    expect(eco.baitCount(s, 'worm')).toBe(20);
     expect(eco.freeSlots(s)).toBe(3);
-    expect(eco.buyBait(s, 'worm')).toBe(true);
-    expect(s.slots[2]).toMatchObject({ k: 'bait', n: 5 });
   });
 
-  it('refuses to buy bait with no room', () => {
+  it('equips higher-tier bait from the locker and swaps rods', () => {
     const s = newSave();
-    s.coins = 999;
-    s.slots = [fishSlot(), fishSlot(), fishSlot(), fishSlot(), fishSlot()];
-    expect(eco.buyBait(s, 'worm')).toBe(false);
+    s.coins = 9999;
+    s.level = 10;
+    expect(eco.buyBait(s, 'minnow')).toBe(true);
+    expect(s.bait).toBe('minnow');
+    expect(eco.equipBait(s, 'worm')).toBe(true);
+    expect(s.bait).toBe('worm');
+    expect(eco.baitCount(s, 'minnow')).toBe(5);
+    expect(eco.buyRod(s, 'graphite')).toBe(true);
+    expect(s.rod).toBe('graphite');
+    expect(s.slots.filter((x) => x?.k === 'rod')).toHaveLength(1);
+    expect(eco.equipRod(s, 'twig')).toBe(true);
+    expect(s.rod).toBe('twig');
+    expect(eco.ownsRod(s, 'graphite')).toBe(true);
+    expect(eco.equipRod(s, 'carbon')).toBe(false);
   });
 
-  it('frees a slot when the last bait is used and only stores catches in free slots', () => {
+  it('stows gear and refills from the locker when a stack runs out', () => {
+    const s = newSave();
+    s.locker.bait.worm = 3;
+    s.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 1 }, null, null, null];
+    expect(eco.spendBait(s)).toBe(true);
+    expect(s.slots[1]).toMatchObject({ k: 'bait', n: 3 });
+    expect(eco.stowSlot(s, 1)).toBe(true);
+    expect(s.slots[1]).toBeNull();
+    expect(eco.baitCount(s, 'worm')).toBe(3);
+  });
+
+  it('only stores catches in free slots and blocks casting when full', () => {
     const s = newSave();
     s.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 1 }, null, null, null];
     expect(eco.spendBait(s)).toBe(true);
@@ -54,13 +75,8 @@ describe('carry slots', () => {
     expect(s.coins).toBeGreaterThan(20);
   });
 
-  it('selecting a rod or bait slot makes it the active one', () => {
+  it('selecting a rod slot makes it the active one', () => {
     const s = newSave();
-    s.coins = 999;
-    s.level = 10;
-    expect(eco.buyRod(s, 'fiberglass')).toBe(true);
-    expect(s.rod).toBe('fiberglass');
-    expect(s.held).toBe(2);
     eco.selectSlot(s, 0);
     expect(s.rod).toBe('twig');
     expect(eco.buyRod(s, 'fiberglass')).toBe(false);

@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { migrate, newSave, type SaveData } from '../src/game/state';
 
 export interface Account {
@@ -21,10 +20,9 @@ export class AccountStore {
   private accounts = new Map<string, Account>();
   private dirty = false;
 
-  constructor(private file?: URL) {
-    if (file && existsSync(file)) {
-      const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, Omit<Account, 'online'>>;
-      for (const [k, a] of Object.entries(raw)) this.accounts.set(k, { ...a, save: migrate(a.save), online: false });
+  constructor(raw: Record<string, unknown> = {}) {
+    for (const [k, a] of Object.entries(raw) as [string, Omit<Account, 'online'>][]) {
+      if (a?.name && a.hash) this.accounts.set(k, { ...a, save: migrate(a.save), online: false });
     }
   }
 
@@ -48,10 +46,18 @@ export class AccountStore {
     this.dirty = true;
   }
 
-  flush(): void {
-    if (!this.dirty || !this.file) return;
+  snapshot(): Record<string, unknown> {
+    return Object.fromEntries([...this.accounts].map(([k, a]) => [k, { name: a.name, hash: a.hash, save: { ...a.save, fund: {} } }]));
+  }
+
+  /** The data to persist if anything changed since the last call, else null. */
+  takeDirty(): Record<string, unknown> | null {
+    if (!this.dirty) return null;
     this.dirty = false;
-    const out = Object.fromEntries([...this.accounts].map(([k, a]) => [k, { name: a.name, hash: a.hash, save: { ...a.save, fund: {} } }]));
-    writeFileSync(this.file, JSON.stringify(out));
+    return this.snapshot();
+  }
+
+  markDirty(): void {
+    this.dirty = true;
   }
 }

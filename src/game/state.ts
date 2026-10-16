@@ -1,4 +1,4 @@
-import { FISH, byId, type BaitType } from '../data/content';
+import { BAITS, FISH, RODS, byId, type BaitType } from '../data/content';
 import { cleanLook, defaultLook, type Look } from '../data/cosmetics';
 import { sellValue } from './progression';
 
@@ -33,6 +33,8 @@ export interface SaveData {
   /** Character appearance and the cosmetics bought so far. */
   look: Look;
   owned: string[];
+  /** Tackle locker: rods and bait you own but are not carrying in the hotbar. */
+  locker: { rods: string[]; bait: Record<string, number> };
 }
 
 const KEY = 'fishing-game-save';
@@ -52,6 +54,7 @@ export const newSave = (): SaveData => ({
   contributed: {},
   look: defaultLook(),
   owned: [],
+  locker: { rods: [], bait: {} },
 });
 
 /** Upgrades older save layouts (bait counts, bag, owned rods, 4 slots) to the 5-slot hotbar. */
@@ -90,6 +93,10 @@ export function migrate(raw: object): SaveData {
   }
   if (!Array.isArray(out.owned)) out.owned = [];
   out.look = cleanLook(out.look, out.owned);
+  const lk = (out.locker ?? {}) as Partial<SaveData['locker']>;
+  const bait: Record<string, number> = {};
+  for (const [id, n] of Object.entries(lk.bait ?? {})) if (BAITS.some((b) => b.id === id) && n > 0) bait[id] = Math.floor(n);
+  out.locker = { rods: (lk.rods ?? []).filter((id) => RODS.some((r) => r.id === id)), bait };
   for (const k of ['baitStock', 'inventory', 'ownedRods']) delete out[k];
   return out;
 }

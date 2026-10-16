@@ -14,17 +14,19 @@ describe('progression', () => {
     expect(r.leveledUp).toBe(true);
   });
 
-  it('gates fish by rod tier, bait and location', () => {
-    const pike = byId(FISH, 'pike');
-    expect(canCatch(pike, 'lake', twig, 'minnow')).toBe(false);
-    expect(canCatch(pike, 'lake', graphite, 'worm')).toBe(false);
-    expect(canCatch(pike, 'pond', graphite, 'minnow')).toBe(false);
-    expect(canCatch(pike, 'lake', graphite, 'minnow')).toBe(true);
+  it('gates fish by the lower of rod and bait tier', () => {
+    const koi = byId(FISH, 'koi');
+    const minnow = byId(BAITS, 'minnow');
+    expect(canCatch(koi, 'pond', twig, minnow)).toBe(false);
+    expect(canCatch(koi, 'pond', graphite, worm)).toBe(false);
+    expect(canCatch(koi, 'pond', graphite, minnow)).toBe(true);
+    expect(canCatch(byId(FISH, 'aurorapike'), 'pond', graphite, minnow)).toBe(false);
   });
 
   it('never offers gated fish', () => {
     const pool = eligibleFish('pond', twig, worm);
-    expect(pool.every((f) => f.minRodTier <= 1 && f.locations.includes('pond'))).toBe(true);
+    expect(pool.length).toBeGreaterThan(0);
+    expect(pool.every((f) => f.tier <= 1 && f.locations.includes('pond'))).toBe(true);
     for (let i = 0; i < 200; i++) expect(pool).toContain(pickFish(pool, twig, worm));
   });
 
@@ -46,7 +48,7 @@ describe('progression', () => {
 
   it('every fish is catchable somewhere', () => {
     for (const f of FISH) {
-      const ok = RODS.some((r) => BAITS.some((b) => f.locations.some((l) => canCatch(f, l, r, b.id))));
+      const ok = RODS.some((r) => BAITS.some((b) => f.locations.some((l) => canCatch(f, l, r, b))));
       expect(ok, f.id).toBe(true);
     }
   });

@@ -91,10 +91,14 @@ describe('Room economy', () => {
     expect(a.acct.save.coins).toBeGreaterThan(20);
     a.acct.save.coins = 500;
     a.acct.save.level = 5;
+    room.handle(a.id, { t: 'buyrod', id: 'carbon' });
+    expect(eco.ownsRod(a.acct.save, 'carbon')).toBe(false);
+    room.handle(a.id, { t: 'buybait', id: 'pearl' });
+    expect(eco.baitCount(a.acct.save, 'pearl')).toBe(0);
     room.handle(a.id, { t: 'buyrod', id: 'fiberglass' });
-    expect(eco.hasRod(a.acct.save, 'fiberglass')).toBe(false);
-    room.handle(a.id, { t: 'buybait', id: 'fly' });
-    expect(eco.baitCount(a.acct.save, 'fly')).toBe(0);
+    expect(eco.ownsRod(a.acct.save, 'fiberglass')).toBe(true);
+    room.handle(a.id, { t: 'equiprod', id: 'twig' });
+    expect(a.acct.save.rod).toBe('twig');
     room.handle(a.id, { t: 'buybait', id: 'worm' });
     expect(a.acct.save.coins).toBeLessThan(500);
   });
@@ -117,6 +121,23 @@ describe('Room economy', () => {
     expect(fishCount()).toBe(1);
     room.handle(a.id, { t: 'catch' });
     expect(fishCount()).toBe(1);
+  });
+
+  it('resets progress but keeps the account, name and body color', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    s.coins = 999;
+    s.xp = 500;
+    s.look.color = 0x123456;
+    s.locker.rods.push('graphite');
+    room.handle(a.id, { t: 'reset' });
+    expect(s.coins).toBe(newSave().coins);
+    expect(s.xp).toBe(0);
+    expect(s.locker.rods).toEqual(newSave().locker.rods);
+    expect(s.look.color).toBe(0x123456);
+    expect(last(a.c, 'state')).toBeTruthy();
+    expect(a.acct.online).toBe(true);
   });
 
   it('refuses to cast without bait and to equip rods you do not own', () => {
