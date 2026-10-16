@@ -335,3 +335,15 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false)
   s.xp = res.xp;
   return { stored: true, first, record, gained, leveledUp: res.leveledUp, level: res.level };
 }
+
+export const BOTTLE_COINS = 40;
+export const BOTTLE_BONUS = 300;
+
+/** Opens a bottle; returns the coins gained (0 if already found or unknown). */
+export function collectBottle(s: SaveData, id: string, all: string[]): number {
+  if (!all.includes(id) || s.bottles.includes(id)) return 0;
+  s.bottles.push(id);
+  const gain = BOTTLE_COINS + (all.every((b) => s.bottles.includes(b)) ? BOTTLE_BONUS : 0);
+  s.coins += gain;
+  return gain;
+}

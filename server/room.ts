@@ -135,6 +135,12 @@ export class Room {
       case 'stow':
         changed = eco.stowSlot(s, Math.floor(Number(msg.i)));
         break;
+      case 'bottle': {
+        const town = this.maps[m.info.map]?.town;
+        const b = town?.bottles.find((x) => x.id === msg.id);
+        changed = !!b && Math.hypot(m.info.x - b.x, m.info.z - b.z) <= 4 && eco.collectBottle(s, b.id, town!.bottles.map((x) => x.id)) > 0;
+        break;
+      }
       case 'sell':
         changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, Math.floor(Number(msg.i))));
         break;

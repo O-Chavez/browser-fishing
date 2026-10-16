@@ -335,3 +335,10 @@ A full day is 10 real minutes (`DAY_SECONDS` in `daynight.ts`), driven by the wa
 ## 25. Persistent leaderboard
 
 The physical Top Anglers board is a hall of fame built from every account's best catch (`AccountStore.hall`, top 8), so players stay on it while offline. The server sends a `hall` message on join and whenever it changes. Offline play shows only the local player.
+
+## 26. The town
+
+The land hub is a small cozy fishing town: a cobbled main street from the pier to the Forest Lake gate, a plaza with a well, six cottages (Wren's Cottage, Smokehouse, Fishmonger, Net Mender and two homes) with lit windows at night, fish racks and a rowboat on the shore, flower beds and fences. Layout lives in `MapDef.town` (`src/data/maps.ts`), geometry in `src/game/town.ts`.
+
+- **Townsfolk**: Old Salty (pier tips), Pip, Granny Wren and Captain Reed. Press E to talk; lines cycle and some change at night.
+- **Messages in bottles**: 7 hidden around town, shore and pier. Each pays 40 coins once; finding all 7 pays a 300 coin bonus. Found bottles are saved per account (`SaveData.bottles`); the server verifies the player is within 4 m.

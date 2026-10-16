@@ -142,3 +142,16 @@ describe('drops', () => {
     expect(d.all()).toHaveLength(0);
   });
 });
+
+describe('message bottles', () => {
+  it('pays once per bottle, with a bonus for the last', () => {
+    const s = newSave();
+    const ids = ['a', 'b'];
+    const c0 = s.coins;
+    expect(eco.collectBottle(s, 'a', ids)).toBe(eco.BOTTLE_COINS);
+    expect(eco.collectBottle(s, 'a', ids)).toBe(0);
+    expect(eco.collectBottle(s, 'zzz', ids)).toBe(0);
+    expect(eco.collectBottle(s, 'b', ids)).toBe(eco.BOTTLE_COINS + eco.BOTTLE_BONUS);
+    expect(s.coins).toBe(c0 + 2 * eco.BOTTLE_COINS + eco.BOTTLE_BONUS);
+  });
+});

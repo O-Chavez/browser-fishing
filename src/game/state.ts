@@ -37,6 +37,8 @@ export interface SaveData {
   locker: { rods: string[]; bait: Record<string, number> };
   /** Most valuable fish ever caught, for the leaderboard. */
   best: BestCatch | null;
+  /** Ids of the town's message-in-a-bottle collectibles already found. */
+  bottles: string[];
 }
 
 export interface BestCatch {
@@ -65,6 +67,7 @@ export const newSave = (): SaveData => ({
   owned: [],
   locker: { rods: [], bait: {} },
   best: null,
+  bottles: [],
 });
 
 /** Upgrades older save layouts (bait counts, bag, owned rods, 4 slots) to the 5-slot hotbar. */

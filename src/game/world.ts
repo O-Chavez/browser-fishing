@@ -15,6 +15,7 @@ import {
   waveHeight,
 } from './env';
 import { Hub } from './hub';
+import { Town } from './town';
 import type { Circle } from './player';
 import { FX } from './fx';
 import { LineRenderer, Rig } from './rig';
@@ -104,6 +105,7 @@ export class World {
   readonly eye = new THREE.Vector3(0, 2.4, -1.2);
   walkBob = 0;
   hub: Hub | null = null;
+  town: Town | null = null;
   private trees: Circle[] = [];
   yaw = 0;
   pitch = -0.12;
@@ -337,6 +339,7 @@ export class World {
     this.dockGlow.color.set(0x6a5a3a).lerp(new THREE.Color(0xffd27a), 0.35 + 0.65 * n);
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
+    this.town?.setNight(n);
 
     const fl = this.flies;
     if (fl) {
@@ -406,6 +409,8 @@ export class World {
     this.hub = new Hub(map);
     this.hub.onWheelTick = () => audio.tick(0.07);
     this.decor.add(this.hub.group);
+    this.town = new Town(map);
+    this.decor.add(this.town.group);
   }
 
   private buildTerrain(loc: Location): void {
@@ -786,7 +791,7 @@ export class World {
   ];
 
   get colliders(): Circle[] {
-    return [...World.dockProps, ...this.trees, ...(this.hub?.colliders ?? [])];
+    return [...World.dockProps, ...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? [])];
   }
 
   surface(x: number, z: number): number {
@@ -821,6 +826,7 @@ export class World {
       .multiplyScalar(80)
       .add(this.sun.target.position);
     this.hub?.update(t, this.eye.x, this.eye.z);
+    this.town?.update(t, this.eye.x, this.eye.z);
     this.camera.rotation.set(
       this.pitch +
         this.pitchKick +

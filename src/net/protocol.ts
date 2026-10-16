@@ -35,6 +35,7 @@ export type ClientMsg =
   | { t: 'stow'; i: number }
   /** Sell the fish in hand, or in hotbar slot i. */
   | { t: 'sell'; i?: number }
+  | { t: 'bottle'; id: string }
   | { t: 'buycos'; id: string }
   | { t: 'equip'; slot: CosSlot; id: string | null }
   | { t: 'color'; color: number }

@@ -7,24 +7,24 @@ import { buildFish } from './fishmodel';
 import type { FundState } from './fund';
 import type { Circle } from './player';
 
-const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
+export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
   new THREE.MeshLambertMaterial({ color, ...extra });
-const WOOD = 0x9b7248;
-const DARK = 0x5b4128;
+export const WOOD = 0x9b7248;
+export const DARK = 0x5b4128;
 
-const rbox = (w: number, h: number, d: number, color: number, r = 0.05): THREE.Mesh => {
+export const rbox = (w: number, h: number, d: number, color: number, r = 0.05): THREE.Mesh => {
   const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat(color));
   m.castShadow = m.receiveShadow = true;
   return m;
 };
 
-const cyl = (rt: number, rb: number, h: number, color: number, seg = 14): THREE.Mesh => {
+export const cyl = (rt: number, rb: number, h: number, color: number, seg = 14): THREE.Mesh => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(color));
   m.castShadow = true;
   return m;
 };
 
-const ball = (r: number, color: number, sx = 1, sy = 1, sz = 1): THREE.Mesh => {
+export const ball = (r: number, color: number, sx = 1, sy = 1, sz = 1): THREE.Mesh => {
   const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12), mat(color));
   m.scale.set(sx, sy, sz);
   m.castShadow = true;
@@ -32,7 +32,7 @@ const ball = (r: number, color: number, sx = 1, sy = 1, sz = 1): THREE.Mesh => {
 };
 
 /** Capsule limb between two points. */
-function limb(a: THREE.Vector3, b: THREE.Vector3, r: number, color: number): THREE.Mesh {
+export function limb(a: THREE.Vector3, b: THREE.Vector3, r: number, color: number): THREE.Mesh {
   const dir = b.clone().sub(a);
   const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, dir.length() - 2 * r), 6, 10), mat(color));
   m.position.copy(a).add(b).multiplyScalar(0.5);
@@ -41,7 +41,7 @@ function limb(a: THREE.Vector3, b: THREE.Vector3, r: number, color: number): THR
   return m;
 }
 
-function textPlane(w: number, h: number, px: number): { mesh: THREE.Mesh; ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture } {
+export function textPlane(w: number, h: number, px: number): { mesh: THREE.Mesh; ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture } {
   const canvas = document.createElement('canvas');
   canvas.width = px;
   canvas.height = Math.round((px * h) / w);
@@ -54,7 +54,7 @@ function textPlane(w: number, h: number, px: number): { mesh: THREE.Mesh; ctx: C
   return { mesh, ctx: canvas.getContext('2d')!, tex };
 }
 
-function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#fff3d6'): void {
+export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#fff3d6'): void {
   const { width: w, height: h } = ctx.canvas;
   ctx.fillStyle = '#6b4a2b';
   ctx.fillRect(0, 0, w, h);

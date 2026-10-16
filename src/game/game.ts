@@ -800,6 +800,18 @@ export class Game {
     this.renderMenu();
   }
 
+  private openBottle(id: string, note: string): void {
+    const all = this.map.town.bottles.map((b) => b.id);
+    const gain = eco.collectBottle(this.s, id, all);
+    if (gain <= 0) return;
+    this.net.send({ t: 'bottle', id });
+    const left = all.length - this.s.bottles.length;
+    this.toast(`📜 "${note}" · +${gain} 🪙 · ${left ? `${left} bottle${left > 1 ? 's' : ''} left to find` : 'You found them all!'}`, 7);
+    audio.jingle('rare');
+    this.persist();
+    this.refreshHud();
+  }
+
   private interact(): void {
     this.near?.act();
   }
@@ -849,6 +861,18 @@ export class Game {
             ? { d: -40, label: `Spin the wheel with ${byId(FISH, wh.fishId).name} · 2× or nothing (${eco.fishValue(wh)} 🪙)`, act: () => this.gamble() }
             : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast('Hold a fish (1-5), then press E to spin.') },
         );
+      }
+      const town = w.town;
+      if (town) {
+        town.setFound(this.s.bottles);
+        for (const npc of town.npcs) {
+          spots.push({ d: Math.hypot(npc.pos.x - x, npc.pos.z - z) - 0.5, label: `Talk to ${npc.def.name}`, act: () => this.toast(town.talk(npc, w.night > 0.5), 6) });
+        }
+        for (const b of town.bottles) {
+          if (this.s.bottles.includes(b.id)) continue;
+          const db = Math.hypot(b.pos.x - x, b.pos.z - z);
+          if (db < 2.6) spots.push({ d: db - 20, label: 'Open the message in a bottle', act: () => this.openBottle(b.id, b.note) });
+        }
       }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
@@ -1537,11 +1561,11 @@ export class Game {
 
   // ---------- UI ----------
 
-  private toast(msg: string): void {
+  private toast(msg: string, secs = 2): void {
     const t = $('toast');
     t.textContent = msg;
     t.classList.add('show');
-    this.toastTimer = 2;
+    this.toastTimer = secs;
   }
 
   private drawGauge(time: number): void {

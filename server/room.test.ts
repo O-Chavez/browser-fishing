@@ -78,6 +78,20 @@ describe('Room economy', () => {
     expect(a.acct.save.coins).toBe(0);
   });
 
+  it('only opens bottles when standing next to them', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = MAPS[0].town.bottles[0];
+    const before = a.acct.save.coins;
+    room.handle(a.id, { t: 'pos', x: b.x + 30, z: b.z, yaw: 0 });
+    room.handle(a.id, { t: 'bottle', id: b.id });
+    expect(a.acct.save.coins).toBe(before);
+    room.handle(a.id, { t: 'pos', x: b.x, z: b.z, yaw: 0 });
+    room.handle(a.id, { t: 'bottle', id: b.id });
+    room.handle(a.id, { t: 'bottle', id: b.id });
+    expect(a.acct.save.coins).toBe(before + eco.BOTTLE_COINS);
+  });
+
   it('only sells and buys at the vendor', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
