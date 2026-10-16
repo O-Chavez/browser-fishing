@@ -308,5 +308,5 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 
 ## 22. Music and coin HUD
 
-- Background music is generated live with Web Audio (slow pad chords plus sparse pentatonic plucks through a soft echo), so there are no audio files and no licensing. Press **M** to toggle; the choice is remembered in localStorage.
+- Background music is generated live with Web Audio: a slow fingerpicked acoustic guitar (Karplus-Strong plucked strings) on a G-Em-C-D folk progression, a soft whistle melody now and then, and a faint campfire crackle, so there are no audio files and no licensing. Press **M** to toggle; the choice is remembered in localStorage.
 - The top bar shows coins in a gold pill that pulses whenever the amount changes.

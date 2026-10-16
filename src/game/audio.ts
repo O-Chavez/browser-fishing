@@ -44,74 +44,130 @@ class AudioFX {
     return this.musicOn;
   }
 
-  /** A slow, generated score: soft pad chords with sparse pentatonic plucks, all synthesised (no audio files, no licensing). */
+  private strings = new Map<number, AudioBuffer>();
+
+  /** Karplus-Strong plucked string, rendered once per pitch. */
+  private string(midi: number): AudioBuffer {
+    let buf = this.strings.get(midi);
+    if (buf) return buf;
+    const ctx = this.ctx!;
+    const sr = ctx.sampleRate;
+    const n = Math.round(sr / (440 * Math.pow(2, (midi - 69) / 12)));
+    buf = ctx.createBuffer(1, Math.round(sr * 3.2), sr);
+    const d = buf.getChannelData(0);
+    let prev = 0;
+    for (let i = 0; i < n; i++) d[i] = prev = prev * 0.5 + (Math.random() * 2 - 1) * 0.5;
+    for (let i = n; i < d.length; i++) d[i] = 0.4992 * (d[i - n] + d[i - n + 1]);
+    this.strings.set(midi, buf);
+    return buf;
+  }
+
+  /** Slow fingerpicked acoustic guitar with a soft whistle and a faint campfire, all synthesised (no audio files, no licensing). */
   private startMusic(): void {
     const ctx = this.ctx!;
     const out = ctx.createGain();
     out.gain.value = this.musicOn ? 0.5 : 0;
-    const delay = ctx.createDelay(1.5);
-    delay.delayTime.value = 0.62;
+    const body = ctx.createBiquadFilter();
+    body.type = 'peaking';
+    body.frequency.value = 220;
+    body.gain.value = 5;
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 3800;
+    const room = ctx.createDelay(0.5);
+    room.delayTime.value = 0.19;
     const fb = ctx.createGain();
-    fb.gain.value = 0.38;
+    fb.gain.value = 0.3;
     const wet = ctx.createGain();
-    wet.gain.value = 0.45;
-    delay.connect(fb).connect(delay);
-    delay.connect(wet).connect(out);
+    wet.gain.value = 0.28;
+    room.connect(fb).connect(room);
+    room.connect(wet).connect(out);
+    body.connect(tone).connect(out);
+    body.connect(room);
     out.connect(this.master!);
     this.musicGain = out;
 
-    const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
-    // Cmaj7 - Am7 - Fmaj7 - G6, one chord per 8 s
-    const chords = [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 55, 64]];
-    const scale = [72, 74, 76, 79, 81, 84];
-    const BAR = 8;
-
-    const pad = (m: number, t: number, dur: number) => {
-      for (const det of [-6, 6]) {
-        const o = ctx.createOscillator();
-        o.type = 'triangle';
-        o.frequency.value = hz(m);
-        o.detune.value = det;
-        const f = ctx.createBiquadFilter();
-        f.type = 'lowpass';
-        f.frequency.value = 900;
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.028, t + 2.5);
-        g.gain.linearRampToValueAtTime(0.0001, t + dur + 1.5);
-        o.connect(f).connect(g).connect(out);
-        o.start(t);
-        o.stop(t + dur + 1.6);
-      }
+    const pick = (midi: number, t: number, vel: number) => {
+      const src = ctx.createBufferSource();
+      src.buffer = this.string(midi);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(vel, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 3);
+      src.connect(g).connect(body);
+      src.start(t);
     };
-    const pluck = (m: number, t: number) => {
+    const whistle = (midi: number, t: number, dur: number) => {
       const o = ctx.createOscillator();
       o.type = 'sine';
-      o.frequency.value = hz(m);
+      o.frequency.value = 440 * Math.pow(2, (midi - 69) / 12);
+      const vib = ctx.createOscillator();
+      vib.frequency.value = 5;
+      const vg = ctx.createGain();
+      vg.gain.value = 5;
+      vib.connect(vg).connect(o.detune);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.07, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+      g.gain.linearRampToValueAtTime(0.05, t + 0.25);
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
       o.connect(g);
       g.connect(out);
-      g.connect(delay);
+      g.connect(room);
       o.start(t);
-      o.stop(t + 2.3);
+      vib.start(t);
+      o.stop(t + dur + 0.1);
+      vib.stop(t + dur + 0.1);
     };
 
-    let next = ctx.currentTime + 0.3;
+    // G - Em - C - D, each chord: bass root, then notes low to high
+    const chords = [
+      { bass: 43, up: [50, 55, 59, 62] },
+      { bass: 40, up: [47, 55, 59, 64] },
+      { bass: 48, up: [52, 55, 60, 64] },
+      { bass: 50, up: [54, 57, 62, 66] },
+    ];
+    const pattern = [-1, 0, 1, 2, 3, 2, 1, 0];
+    const melody = [67, 69, 71, 74, 76, 79];
+    const EIGHTH = 0.46;
+    const BAR = EIGHTH * 8;
+
+    let next = ctx.currentTime + 0.4;
     let bar = 0;
     const schedule = () => {
       while (next < ctx.currentTime + 6) {
-        for (const m of chords[bar % chords.length]) pad(m, next, BAR);
-        const notes = 2 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < notes; i++) pluck(scale[Math.floor(Math.random() * scale.length)], next + 1 + Math.random() * (BAR - 2));
+        const c = chords[bar % chords.length];
+        pattern.forEach((k, i) => {
+          const t = next + i * EIGHTH + (Math.random() - 0.5) * 0.012;
+          pick(k < 0 ? c.bass : c.up[k], t, k < 0 ? 0.32 : 0.15 + Math.random() * 0.06);
+        });
+        if (bar % 2 === 1 && Math.random() < 0.7) {
+          const m = melody[Math.floor(Math.random() * melody.length)];
+          whistle(m, next + EIGHTH * (1 + Math.floor(Math.random() * 3)), 2.2 + Math.random() * 1.2);
+        }
         next += BAR;
         bar++;
       }
     };
     schedule();
     setInterval(schedule, 2000);
+
+    const crackle = () => {
+      if (this.ctx && this.noiseBuf) {
+        const t = ctx.currentTime;
+        const src = ctx.createBufferSource();
+        src.buffer = this.noiseBuf;
+        const f = ctx.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.value = 1800 + Math.random() * 3000;
+        f.Q.value = 2;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.012 + Math.random() * 0.02, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03 + Math.random() * 0.04);
+        src.connect(f).connect(g).connect(out);
+        src.start(t, Math.random() * 2, 0.1);
+      }
+      setTimeout(crackle, 150 + Math.random() * 900);
+    };
+    crackle();
   }
 
   private loopNoise(type: BiquadFilterType, freq: number, q: number, gain: number, lfoRate: number, lfoDepth: number): void {
