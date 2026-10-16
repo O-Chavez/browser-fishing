@@ -1,4 +1,5 @@
 import { FISH, byId, type BaitType } from '../data/content';
+import { cleanLook, defaultLook, type Look } from '../data/cosmetics';
 import { sellValue } from './progression';
 
 export interface DexEntry { count: number; best: number }
@@ -29,6 +30,9 @@ export interface SaveData {
   /** Pooled town fund per map, and the local player's share of it. */
   fund: Record<string, number>;
   contributed: Record<string, number>;
+  /** Character appearance and the cosmetics bought so far. */
+  look: Look;
+  owned: string[];
 }
 
 const KEY = 'fishing-game-save';
@@ -46,6 +50,8 @@ export const newSave = (): SaveData => ({
   dex: {},
   fund: {},
   contributed: {},
+  look: defaultLook(),
+  owned: [],
 });
 
 /** Upgrades older save layouts (bait counts, bag, owned rods, 4 slots) to the 5-slot hotbar. */
@@ -82,6 +88,8 @@ export function migrate(raw: object): SaveData {
     const r = out.slots.find((x) => x?.k === 'rod');
     if (r?.k === 'rod') out.rod = r.id;
   }
+  if (!Array.isArray(out.owned)) out.owned = [];
+  out.look = cleanLook(out.look, out.owned);
   for (const k of ['baitStock', 'inventory', 'ownedRods']) delete out[k];
   return out;
 }

@@ -49,8 +49,17 @@ function rawGroundHeight(x: number, z: number): number {
   return base + hills + noise * Math.min(1, dd / 10) * 2.5;
 }
 
+/** Walkable timber over the water: the main pier, the T-shaped end platform and two side piers. */
+export interface DockRect { x0: number; x1: number; z0: number; z1: number }
+export const DOCK_RECTS: DockRect[] = [
+  { x0: -1.5, x1: 1.5, z0: -3.2, z1: 12 },
+  { x0: -5, x1: 5, z0: -6.4, z1: -3.2 },
+  { x0: 1.5, x1: 8.5, z0: 3.6, z1: 5.4 },
+  { x0: -8.5, x1: -1.5, z0: 3.6, z1: 5.4 },
+];
+
 export const onDock = (x: number, z: number, pad = 0): boolean =>
-  Math.abs(x) < 1.5 + pad && z > -3.2 - pad && z < 12 + pad;
+  DOCK_RECTS.some((r) => x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad);
 
 /** Height of the surface a player stands on. */
 export const standHeight = (x: number, z: number): number => {

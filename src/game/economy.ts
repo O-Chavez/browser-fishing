@@ -1,3 +1,4 @@
+import { COS_SLOTS, cosById, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { applyXp, catchXp, eligibleFish, pickFish, rollSize, sellValue, SHINY_CHANCE } from './progression';
 import { BAIT_STACK, type SaveData, type Slot } from './state';
@@ -107,6 +108,37 @@ export function sellHeld(s: SaveData): boolean {
   if (item?.k !== 'fish') return false;
   s.coins += fishValue(item);
   s.slots[s.held] = null;
+  return true;
+}
+
+/** Sells the fish in a specific hotbar slot. */
+export function sellSlot(s: SaveData, i: number): boolean {
+  const item = s.slots[i];
+  if (!Number.isInteger(i) || item?.k !== 'fish') return false;
+  s.coins += fishValue(item);
+  s.slots[i] = null;
+  return true;
+}
+
+export function buyCosmetic(s: SaveData, id: string): boolean {
+  const c = cosById(id);
+  if (!c || s.owned.includes(id) || s.coins < c.price) return false;
+  s.coins -= c.price;
+  s.owned.push(id);
+  return true;
+}
+
+/** Wears an owned item (or takes the slot's item off when id is null). */
+export function equipCosmetic(s: SaveData, slot: CosSlot, id: string | null): boolean {
+  if (!COS_SLOTS.includes(slot)) return false;
+  if (id !== null && (!s.owned.includes(id) || cosById(id)?.slot !== slot)) return false;
+  s.look[slot] = id;
+  return true;
+}
+
+export function setBodyColor(s: SaveData, color: number): boolean {
+  if (!Number.isInteger(color) || color < 0 || color > 0xffffff) return false;
+  s.look.color = color;
   return true;
 }
 

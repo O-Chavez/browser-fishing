@@ -37,6 +37,7 @@ export class Room {
   private nextId = 1;
   readonly drops: Drops;
   private maps: Record<string, MapDef>;
+  private lastBoard = '';
 
   constructor(
     readonly name: string,
@@ -54,9 +55,10 @@ export class Room {
     return this.members.size;
   }
 
-  join(conn: Conn, acct: Account, map: string): number {
+  join(conn: Conn, acct: Account, map: string, color?: number): number {
+    if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
     const id = this.nextId++;
-    const info: PlayerInfo = { id, name: acct.name, map: this.maps[map] ? map : Object.keys(this.maps)[0], x: 0, z: 0, yaw: 0 };
+    const info: PlayerInfo = { id, name: acct.name, map: this.maps[map] ? map : Object.keys(this.maps)[0], x: 0, z: 0, yaw: 0, look: acct.save.look, coins: acct.save.coins };
     const m: Member = { info, conn, acct, pending: null, spin: null };
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
@@ -119,7 +121,16 @@ export class Room {
         changed = this.atVendor(m) && this.stocks(m).bait.includes(str(msg.id)) && eco.buyBait(s, str(msg.id));
         break;
       case 'sell':
-        changed = this.atVendor(m) && eco.sellHeld(s);
+        changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, Math.floor(Number(msg.i))));
+        break;
+      case 'buycos':
+        changed = this.atVendor(m) && eco.buyCosmetic(s, str(msg.id));
+        break;
+      case 'equip':
+        changed = eco.equipCosmetic(s, msg.slot, msg.id === null ? null : str(msg.id));
+        break;
+      case 'color':
+        changed = eco.setBodyColor(s, Math.floor(Number(msg.color)));
         break;
       case 'gamble':
         this.gamble(m);
@@ -137,6 +148,7 @@ export class Room {
         return;
     }
     if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell')) this.syncCarry(m);
+    if (changed && (msg.t === 'equip' || msg.t === 'color')) this.broadcast({ t: 'look', id, look: s.look });
     if (changed) {
       this.onChange();
     }
@@ -262,6 +274,13 @@ export class Room {
   snapshot(): void {
     if (this.drops.expire()) this.broadcast({ t: 'drops', list: this.drops.all() });
     for (const m of this.members.values()) this.settle(m);
+    const coins = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, m.acct.save.coins]));
+    const key = JSON.stringify(coins);
+    if (key !== this.lastBoard) {
+      this.lastBoard = key;
+      for (const m of this.members.values()) m.info.coins = m.acct.save.coins;
+      this.broadcast({ t: 'board', coins });
+    }
     if (this.members.size < 2) return;
     const p = [...this.members.values()].map(
       (m) => [m.info.id, round(m.info.x), round(m.info.z), round(m.info.yaw)] as [number, number, number, number],

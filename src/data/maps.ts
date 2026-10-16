@@ -5,6 +5,9 @@ export interface Spot {
   facing: number;
 }
 
+/** Facing that points an object at a world position. */
+export const faceToward = (x: number, z: number, tx: number, tz: number): number => Math.atan2(tx - x, tz - z);
+
 export interface MapDef {
   id: string;
   /** Visual/fish palette in `LOCATIONS`. */
@@ -19,6 +22,11 @@ export interface MapDef {
   board: Spot;
   gate: Spot;
   wheel: Spot;
+  /** Live "Top Anglers" board; E opens the player list. */
+  leaderboard: Spot;
+  /** Dressing mirror; E opens the wardrobe. */
+  mirror: Spot;
+  campfire: Spot;
   /** What this map's stall sells (ids from `RODS` and `BAITS`). */
   stock: { rods: string[]; bait: string[] };
   /** Pooled coins the whole room must hand in to open the gate. */
@@ -38,15 +46,18 @@ export const MAPS: MapDef[] = [
     locationId: 'pond',
     name: 'Starter Pond',
     spawn: { x: 0, z: 2, yaw: 0 },
-    pad: { x: 0, z: 22, r: 10, h: 0.9 },
+    pad: { x: 0, z: 26, r: 14, h: 0.9 },
     vendor: {
       name: 'Marlow',
       shop: { x: 5.5, z: 21, facing: -Math.PI / 2 },
       npc: { x: 6.9, z: 21, facing: -Math.PI / 2 },
     },
     board: { x: -5.5, z: 25, facing: Math.PI / 2 + 0.5 },
-    gate: { x: 0, z: 31, facing: Math.PI },
+    gate: { x: 0, z: 37, facing: Math.PI },
     wheel: { x: -6, z: 18.5, facing: Math.PI / 2 },
+    leaderboard: { x: 10.5, z: 30, facing: faceToward(10.5, 30, 2, 27) },
+    mirror: { x: 11.5, z: 22, facing: -Math.PI / 2 },
+    campfire: { x: -9.5, z: 31, facing: 0 },
     stock: { rods: ['twig'], bait: ['worm'] },
     goal: 300,
     next: { id: 'lake', name: 'Forest Lake' },

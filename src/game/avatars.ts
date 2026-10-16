@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { FISH } from '../data/content';
 import type { Activity, PlayerInfo } from '../net/protocol';
+import { Character } from './character';
 import { standHeight } from './env';
 import { animateFish, buildFish, type FishModel } from './fishmodel';
 
-const PALETTE = [0xe0564a, 0x3f8fd8, 0xe3b341, 0x6bbf59, 0xa05fc8, 0xf08a4b];
 const NOSE = new THREE.Vector3(0, 0, -1);
 const UP = new THREE.Vector3(0, 1, 0);
 const HANG = 1.1;
@@ -21,6 +21,7 @@ class Avatar {
   private held: FishModel | null = null;
   private tipPos = new THREE.Vector3();
   private rod: THREE.Mesh;
+  private char: Character;
 
   constructor(
     info: PlayerInfo,
@@ -28,21 +29,13 @@ class Avatar {
     private surface: (x: number, z: number) => number,
   ) {
     const mat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.7, 4, 10), mat(PALETTE[info.id % PALETTE.length]));
-    body.position.y = 0.85;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(0xf1c7a0));
-    head.position.y = 1.62;
-    const hat = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.2, 10), mat(0x6b4a2b));
-    hat.position.y = 1.86;
-    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.03, 14), mat(0x6b4a2b));
-    brim.position.y = 1.76;
+    this.char = new Character(info.look);
     // The model faces +z; the rod points forward and up from the right hand.
     this.rod = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.035, 1.6, 6), mat(0x4a3320));
     this.rod.position.set(-0.3, 1.2, 0.55);
     this.rod.rotation.x = 0.9;
     this.tip.position.set(-0.3, 1.2 + 0.8 * Math.cos(0.9), 0.55 + 0.8 * Math.sin(0.9));
-    body.castShadow = head.castShadow = true;
-    this.group.add(body, head, hat, brim, this.rod, this.tip, this.nameplate(info.name));
+    this.group.add(this.char.group, this.rod, this.tip, this.nameplate(info.name));
     this.group.visible = false;
 
     this.bobber = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat(0xe8442f));
@@ -75,6 +68,10 @@ class Avatar {
     s.position.y = 2.25;
     s.renderOrder = 10;
     return s;
+  }
+
+  setLook(look: PlayerInfo['look']): void {
+    this.char.set(look);
   }
 
   setVisible(v: boolean): void {
@@ -172,6 +169,7 @@ export class Avatars {
         a = new Avatar(p, this.scene, this.surface);
         this.list.set(p.id, a);
       }
+      a.setLook(p.look);
       a.setVisible(p.map === map);
     }
   }

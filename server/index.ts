@@ -88,7 +88,7 @@ wss.on('connection', (ws, req) => {
       send({ t: 'error', msg: res.msg });
       return ws.close();
     }
-    id = r.join({ send }, res.account, msg.map);
+    id = r.join({ send }, res.account, msg.map, msg.color);
   });
   ws.on('close', () => id && r.leave(id));
 });

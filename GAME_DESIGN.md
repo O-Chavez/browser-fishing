@@ -267,3 +267,11 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 ### Scaled Goals & Shiny Fish
 - **Goal scaling:** a map's Town Fund goal is `base × (1 + 0.5 × (players − 1))` for the players currently in the room (e.g. 300 → 450 for two, 600 for three). Once a room's fund reaches its goal the gate stays open for good, even if more players join later.
 - **Shiny fish:** every hooked fish has a 5% chance to be shiny. A shiny is gold with a glint, fights about 40% harder (stronger, longer surges), is worth 5× the normal sale value and gives 3× XP. It is announced on bite, on the catch card, on the hotbar and to other players. It survives drop, pickup and the Lucky Wheel.
+
+## 15. Identity, Cosmetics & Expanded Hub
+- **Join screen:** pick a name and body color (live 3D preview). Saved locally; `?name=` skips it.
+- **Leaderboard:** Tab/Esc menu "Players" tab lists everyone online with coins; a "Top Anglers" board stands in the plaza.
+- **Cosmetics:** hats, shirts, jewelry (6 each, tiers 0–5; higher price = flashier, top tiers glow). Bought at Marlow's shop menu (Cosmetics/Gear tabs), equipped in the Wardrobe (Tab; also the plaza mirror). Visible to all players.
+- **Selling:** with the shop menu open, hover a hotbar fish to see its price and click to sell.
+- **Hub:** T-shaped dock with side piers, rowboat, barrel and rope; plaza gains a campfire with benches, leaderboard board, mirror and extra lamps.
+- **Persistence note:** cosmetics are stored in accounts.json; on Render use a persistent disk (`DATA_DIR`) to keep them across deploys.

@@ -66,3 +66,47 @@ button.active { background: #4a90e2; }
 #wheelres span { font-size: 24px; }
 #wheelres.win b { color: #6dff8f; }
 #wheelres.lose b { color: #ff5a4d; }
+
+/* players, wardrobe, shop */
+nav.sub { margin: 4px 0 8px; }
+.row.me { background: rgba(255,201,51,.12); border-radius: 6px; padding-left: 6px; padding-right: 6px; }
+.rank { display: inline-block; width: 26px; opacity: .6; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; border: 1px solid rgba(255,255,255,.5); }
+.split { display: flex; gap: 18px; align-items: flex-start; }
+.grow { flex: 1; min-width: 0; }
+canvas.preview { width: 240px; height: 300px; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,.14), rgba(255,255,255,.03)); border-radius: 12px; position: static; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
+.swatch { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); }
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 2px #4a90e2; }
+.swatches input[type=color] { width: 34px; height: 30px; padding: 0; border: 0; background: none; }
+.items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.item { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 8px 10px; background: rgba(255,255,255,.07); border: 2px solid transparent; font-size: 13px; }
+.item.on { border-color: #6dff8f; }
+.item b.t0 { color: #fff; }
+.item b.t1 { color: #8fe08f; }
+.item b.t2 { color: #6cc4ff; }
+.item b.t3 { color: #c58bff; }
+.item b.t4 { color: #ff9b3d; }
+.item b.t5 { color: #ffd23a; text-shadow: 0 0 8px #ffb300; }
+h4 { margin: 10px 0 6px; opacity: .8; }
+
+/* join screen */
+#join { position: fixed; inset: 0; z-index: 50; background: rgba(5,15,30,.92); display: flex; align-items: center; justify-content: center; }
+.panel.join { width: min(640px, 94vw); }
+#join label { display: block; margin: 10px 0 4px; font-size: 13px; opacity: .8; }
+#join-name { width: 100%; font: inherit; font-size: 18px; padding: 8px 10px; border-radius: 6px; border: 2px solid #2c4f7c; background: #0c1a2e; color: #fff; }
+.joinmsg { min-height: 22px; color: #ffb3a8; font-size: 14px; }
+button.primary { background: #3a9d5d; font-size: 18px; padding: 10px 22px; }
+button.primary:hover:not(:disabled) { background: #48b86d; }
+button.linklike { background: none; text-decoration: underline; opacity: .7; }
+
+/* shop: keep the hotbar clickable above the menu so fish can be sold */
+#hud { z-index: 1; }
+#menu { z-index: 20; }
+body.shopping #hud { z-index: 30; }
+body.shopping #menu { align-items: flex-start; pointer-events: none; }
+body.shopping .panel { margin-top: 2vh; max-height: calc(100vh - 150px); pointer-events: auto; }
+body.shopping #hotbar { pointer-events: auto; }
+#hotbar .slot.sellable { cursor: pointer; border-color: #6dff8f; }
+#hotbar .slot.sellable:hover { background: rgba(40,120,70,.9); }
+#hotbar .slot.sellable:hover::after { content: attr(data-sell); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px; white-space: nowrap; padding: 4px 8px; background: #1b6b3a; border-radius: 6px; font-weight: 700; }

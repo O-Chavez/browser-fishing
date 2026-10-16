@@ -37,6 +37,8 @@ import {
 } from './progression';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { SLOT_COUNT, load, save, type SaveData } from './state';
+import { BODY_COLORS, COSMETICS, COS_SLOTS, cosById, type CosSlot, type Look } from '../data/cosmetics';
+import { CharacterPreview } from './character';
 import { World } from './world';
 
 type Phase =
@@ -49,6 +51,19 @@ type Phase =
   | 'reeling'
   | 'landing'
   | 'result';
+
+const defaultLookWith = (color: number): Look => ({ color, hat: null, shirt: null, jewelry: null });
+
+const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+const CAMP_TIPS = [
+  'Tip: hold the cast longer for a farther throw.',
+  'Tip: release the reel when the fish surges, or the line may snap.',
+  'Tip: shiny fish fight harder but sell for 5×.',
+  'Tip: the Lucky Wheel can double a fish... or take it.',
+  'Tip: bigger rods and better bait attract rarer fish.',
+  'Tip: the Town Fund goal grows with every angler in the room.',
+];
 
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -114,7 +129,11 @@ export class Game {
   private atVendor = false;
   private near: { label: string; act: () => void } | null = null;
 
-  private tab = 'fund';
+  private tab = 'players';
+  private shopTab: 'cosmetics' | 'gear' = 'cosmetics';
+  private preview: CharacterPreview | null = null;
+  private joining = false;
+  private joinColor = BODY_COLORS[4];
   private toastTimer = 0;
   private spin = false;
   private last = performance.now();
@@ -126,13 +145,14 @@ export class Game {
     this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z));
     this.dropsView = new DropsView(this.world.scene, (x, z) => this.world.surface(x, z));
     const q = new URLSearchParams(location.search);
-    const name = q.get('name') || localStorage.getItem('fishing-name') || `Angler${Math.floor(Math.random() * 900 + 100)}`;
-    localStorage.setItem('fishing-name', name);
+    const urlName = q.get('name');
+    const name = urlName || localStorage.getItem('fishing-name') || '';
     let token = localStorage.getItem('fishing-token');
     if (!token) localStorage.setItem('fishing-token', (token = crypto.randomUUID() + crypto.randomUUID()));
     this.net = new NetClient(name, token, q.get('room') || 'lobby', {
       onState: (save) => {
         Object.assign(this.s, save);
+        if (this.joining) this.finishJoin();
         this.world.hub?.setFund(this.fund.state(this.map));
         this.refreshHud();
         if (this.menuOpen) this.renderMenu();
@@ -145,9 +165,18 @@ export class Game {
       onFund: (map, total, by, coins) => {
         if (map !== this.map.id) return;
         this.world.hub?.setFund(this.fund.state(this.map));
-        if (by && by !== name) this.toast(`${by} gave ${coins} 🪙 to the Town Fund (${total} / ${this.fund.state(this.map).goal})`);
+        if (by && by !== this.net.name) this.toast(`${by} gave ${coins} 🪙 to the Town Fund (${total} / ${this.fund.state(this.map).goal})`);
+      },
+      onBoard: () => {
+        this.world.hub?.setLeaders(this.leaders());
+        if (this.menuOpen && this.tab === 'players') this.renderMenu();
+      },
+      onFailed: () => {
+        if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
       },
       onPlayers: () => {
+        this.world.hub?.setLeaders(this.leaders());
+        if (this.menuOpen && (this.tab === 'players' || this.tab === 'wardrobe')) this.renderMenu();
         this.avatars.sync(this.net.players, this.net.id, this.map.id);
         this.world.hub?.setFund(this.fund.state(this.map));
         this.refreshHud();
@@ -163,7 +192,7 @@ export class Game {
       onCastFail: (msg) => {
         if (this.phase === 'flying' || this.phase === 'swing') this.reset(msg);
       },
-      onError: (msg) => this.toast(`Offline mode: ${msg}`),
+      onError: (msg) => (this.joining ? this.joinMessage(msg) : this.toast(`Offline mode: ${msg}`)),
       onClose: () => {
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
@@ -172,12 +201,106 @@ export class Game {
     });
     this.fund = new NetFund(this.net, new LocalFund(this.s), this.s);
     this.applyLocation();
-    this.net.connect(this.map.id);
     this.bind();
+    this.bindJoin(name, !!urlName);
     this.refreshHud();
     this.renderMenu();
     this.setIdlePose();
     requestAnimationFrame(this.loop);
+  }
+
+  // ---------- join screen ----------
+
+  private bindJoin(urlName: string | null, direct: boolean): void {
+    const input = $('join-name') as HTMLInputElement;
+    const swatches = $('join-colors');
+    const saved = Number(localStorage.getItem('fishing-color'));
+    if (Number.isInteger(saved) && localStorage.getItem('fishing-color')) this.joinColor = saved;
+    else this.joinColor = BODY_COLORS[Math.floor(Math.random() * BODY_COLORS.length)];
+    input.value = urlName ?? localStorage.getItem('fishing-name') ?? '';
+    const paint = () => {
+      swatches.innerHTML =
+        BODY_COLORS.map((c) => `<button type="button" class="swatch${c === this.joinColor ? ' on' : ''}" data-color="${c}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`).join('') +
+        `<input type="color" id="join-custom" value="#${this.joinColor.toString(16).padStart(6, '0')}" title="Custom color">`;
+      this.joinPreview();
+    };
+    swatches.addEventListener('click', (e) => {
+      const c = (e.target as HTMLElement).dataset.color;
+      if (c) {
+        this.joinColor = Number(c);
+        paint();
+      }
+    });
+    swatches.addEventListener('input', (e) => {
+      const el = e.target as HTMLInputElement;
+      if (el.id === 'join-custom') {
+        this.joinColor = parseInt(el.value.slice(1), 16);
+        this.joinPreview();
+      }
+    });
+    $('join-go').addEventListener('click', () => this.submitJoin());
+    input.addEventListener('keydown', (e) => e.key === 'Enter' && this.submitJoin());
+    $('join-offline').addEventListener('click', () => {
+      this.joining = false;
+      this.s.look.color = this.joinColor;
+      this.persist();
+      $('join').classList.add('hidden');
+      this.refreshHud();
+    });
+    if (direct) {
+      // ?name= links (and tests) skip the screen and keep the account's saved look.
+      this.net.name = urlName!;
+      this.net.connect(this.map.id);
+      return;
+    }
+    $('join').classList.remove('hidden');
+    paint();
+    input.focus();
+  }
+
+  private joinPreview(): void {
+    this.getPreview().set({ ...defaultLookWith(this.joinColor) });
+    const slot = $('join-preview');
+    if (!slot.contains(this.getPreview().canvas)) slot.appendChild(this.getPreview().canvas);
+    this.getPreview().start();
+  }
+
+  private getPreview(): CharacterPreview {
+    return (this.preview ??= new CharacterPreview(this.s.look));
+  }
+
+  private submitJoin(): void {
+    if (this.joining) return;
+    const name = ($('join-name') as HTMLInputElement).value.replace(/[^\w \-]/g, '').trim().slice(0, 16);
+    if (name.length < 2) return this.joinMessage('Pick a name of 2-16 letters, numbers, spaces or dashes.');
+    localStorage.setItem('fishing-name', name);
+    localStorage.setItem('fishing-color', String(this.joinColor));
+    this.joinStart(name);
+  }
+
+  private joinStart(name: string): void {
+    this.joining = true;
+    this.net.name = name;
+    this.net.color = this.joinColor;
+    this.joinMessage('Connecting…', false);
+    $('join-go').toggleAttribute('disabled', true);
+    this.net.connect(this.map.id);
+  }
+
+  private joinMessage(msg: string, failed = true): void {
+    $('join-msg').textContent = msg;
+    if (!failed) return;
+    this.joining = false;
+    $('join-go').toggleAttribute('disabled', false);
+    $('join').classList.remove('hidden');
+    this.joinPreview();
+  }
+
+  private finishJoin(): void {
+    this.joining = false;
+    $('join').classList.add('hidden');
+    this.preview?.stop();
+    this.world.hub?.setLeaders(this.leaders());
   }
 
   private get rod() {
@@ -253,12 +376,18 @@ export class Game {
     $('menu').addEventListener('click', (e) =>
       this.onMenuClick(e.target as HTMLElement),
     );
+    $('hotbar').addEventListener('click', (e) => {
+      const i = Number((e.target as HTMLElement).closest<HTMLElement>('.slot.sellable')?.dataset.i);
+      if (Number.isInteger(i)) this.sellSlot(i);
+    });
+    $('menu').addEventListener('mouseover', (e) => this.tryOn(e.target as HTMLElement, true));
+    $('menu').addEventListener('mouseout', (e) => this.tryOn(e.target as HTMLElement, false));
     document.addEventListener('pointerlockchange', () => {
       this.setMenu(!this.locked);
       if (!this.locked) {
         this.holding = false;
         this.keys.clear();
-        if (!this.keepTab) this.tab = 'dex';
+        if (!this.keepTab) this.tab = 'players';
         this.keepTab = false;
         this.renderMenu();
       }
@@ -288,6 +417,13 @@ export class Game {
         this.keys.add(e.code);
         if (e.code === 'KeyE' && !e.repeat && this.phase === 'idle') this.interact();
       } else if (e.code.startsWith('Shift') && this.active) this.keys.add(e.code);
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        if (e.repeat || !$('join').classList.contains('hidden')) return;
+        if (this.menuOpen) this.closeMenu();
+        else if (this.active) this.openMenu('wardrobe');
+        return;
+      }
       if (e.code === 'Escape' && this.menuOpen && !e.repeat) return this.closeMenu();
       if (e.repeat || this.menuOpen || !this.active) return;
       const i = Number(e.key) - 1;
@@ -309,6 +445,11 @@ export class Game {
       }
       this.tab = tab;
     } else if (act === 'give' && this.atVendor) this.give(id === 'all' ? this.s.coins : Number(id));
+    else if (act === 'shoptab') this.shopTab = id as 'cosmetics' | 'gear';
+    else if (act === 'buycos') this.buyCosmetic(id!);
+    else if (act === 'equip') this.equip(btn.dataset.slot as CosSlot, id || null);
+    else if (act === 'color') this.recolor(Number(id));
+    else if (act === 'buyrod' || act === 'buybait') this.buy(act === 'buyrod' ? 'rod' : 'bait', id!);
     this.persist();
     this.refreshHud();
     this.renderMenu();
@@ -427,8 +568,64 @@ export class Game {
     this.refreshHud();
   }
 
+  /** Shop open: clicking a fish in the hotbar sells it. */
+  private sellSlot(i: number): void {
+    if (this.spin || !this.atVendor) return;
+    const it = this.s.slots[i];
+    if (it?.k !== 'fish') return;
+    const value = eco.fishValue(it);
+    eco.sellSlot(this.s, i);
+    this.net.send({ t: 'sell', i });
+    this.toast(`Sold ${byId(FISH, it.fishId).name} for ${value} 🪙`);
+    audio.jingle('common');
+    this.persist();
+    this.refreshHud();
+    this.renderMenu();
+  }
+
+  private buyCosmetic(id: string): void {
+    const c = cosById(id);
+    if (!c) return;
+    if (!this.atVendor) return this.toast(`Walk to ${this.map.vendor.name}'s stall to buy.`);
+    if (this.s.owned.includes(id)) return;
+    if (this.s.coins < c.price) return this.toast(`Not enough coins (${c.price} 🪙).`);
+    eco.buyCosmetic(this.s, id);
+    this.net.send({ t: 'buycos', id });
+    this.toast(`Bought ${c.name} - wear it from the Wardrobe (Tab)`);
+    this.persist();
+    this.refreshHud();
+  }
+
+  private equip(slot: CosSlot, id: string | null): void {
+    if (!eco.equipCosmetic(this.s, slot, id)) return;
+    this.net.send({ t: 'equip', slot, id });
+    this.persist();
+  }
+
+  private recolor(color: number): void {
+    if (!eco.setBodyColor(this.s, color)) return;
+    this.net.send({ t: 'color', color });
+    localStorage.setItem('fishing-color', String(color));
+    this.persist();
+  }
+
+  /** Hovering an item in the shop or wardrobe previews it on the spinning character. */
+  private tryOn(el: HTMLElement, on: boolean): void {
+    const card = el.closest<HTMLElement>('[data-try]');
+    if (!card || !this.preview) return;
+    const [slot, id] = card.dataset.try!.split(':');
+    this.preview.set(on ? { ...this.s.look, [slot]: id } : this.s.look);
+  }
+
+  /** Everyone online with their coins, richest first. */
+  private leaders(): { name: string; coins: number; color: number; me: boolean }[] {
+    const rows = [{ name: this.net.name, coins: this.s.coins, color: this.s.look.color, me: true }];
+    for (const p of this.net.players.values()) rows.push({ name: p.name, coins: this.net.coins.get(p.id) ?? p.coins, color: p.look.color, me: false });
+    return rows.sort((a, b) => b.coins - a.coins);
+  }
+
   private closeMenu(): void {
-    this.tab = 'dex';
+    this.tab = 'players';
     if (this.forceActive) this.setMenu(false);
     else this.world.renderer.domElement.requestPointerLock();
   }
@@ -546,8 +743,8 @@ export class Game {
         }
         spots.push({
           d: dv,
-          label: `Talk to ${this.map.vendor.name} · town fund`,
-          act: () => this.openMenu('fund'),
+          label: `Talk to ${this.map.vendor.name} · shop & town fund`,
+          act: () => this.openMenu('shop'),
         });
       }
       const dw = Math.hypot(hub.wheelSpot.x - x, hub.wheelSpot.z - z);
@@ -559,7 +756,11 @@ export class Game {
             : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast('Hold a fish (1-5), then press E to spin.') },
         );
       }
+      const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
+        { d: near(hub.leaderSpot), label: 'Top Anglers · see who is richest', act: () => this.openMenu('players') },
+        { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
+        { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         {
           d: Math.hypot(hub.boardSpot.x - x, hub.boardSpot.z - z),
           label: `Town fund board · ${st.total} / ${st.goal} 🪙`,
@@ -1338,8 +1539,18 @@ export class Game {
       b.classList.toggle('active', b.dataset.tab === this.tab);
     });
     const el = $('tab');
-    if (this.tab === 'play') this.tab = 'fund';
+    if (this.tab === 'play') this.tab = 'players';
+    document.body.classList.toggle('shopping', this.menuOpen && this.tab === 'shop');
     switch (this.tab) {
+      case 'players':
+        el.innerHTML = this.playersHtml();
+        break;
+      case 'wardrobe':
+        el.innerHTML = this.wardrobeHtml();
+        break;
+      case 'shop':
+        el.innerHTML = this.shopHtml();
+        break;
       case 'dex':
         el.innerHTML = this.dexHtml();
         break;
@@ -1347,6 +1558,14 @@ export class Game {
         el.innerHTML = this.fundHtml();
         break;
     }
+    const slot = document.getElementById('pv-slot');
+    if (slot) {
+      const pv = this.getPreview();
+      pv.set(this.s.look);
+      slot.appendChild(pv.canvas);
+      pv.start();
+    } else if ($('join').classList.contains('hidden')) this.preview?.stop();
+    this.renderHotbar();
   }
 
   private renderHotbar(): void {
@@ -1367,13 +1586,84 @@ export class Game {
         body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${formatWeight(fishWeight(f, sl.size))}${sl.mult ? ` · ×${sl.mult}` : ''}</em>`;
       } else cls += ' empty';
       if (i === s.held) cls += ' held';
-      html += `<div class="${cls}"><i>${i + 1}</i>${body}</div>`;
+      const sellable = sl?.k === 'fish' && this.menuOpen && this.tab === 'shop' && this.atVendor;
+      if (sellable) cls += ' sellable';
+      const tip = sellable ? ` data-sell="Sell · ${eco.fishValue(sl)} 🪙"` : '';
+      html += `<div class="${cls}" data-i="${i}"${tip}><i>${i + 1}</i>${body}</div>`;
     });
     const el = $('hotbar');
     if (el.dataset.h !== html) {
       el.dataset.h = html;
       el.innerHTML = html;
     }
+  }
+
+  private playersHtml(): string {
+    const rows = this.leaders()
+      .map(
+        (p, i) =>
+          `<div class="row${p.me ? ' me' : ''}"><div><span class="rank">${i + 1}</span><span class="dot" style="background:#${p.color.toString(16).padStart(6, '0')}"></span>${i === 0 ? '👑 ' : ''}${escapeHtml(p.name)}${p.me ? ' <span class="muted">(you)</span>' : ''}</div><div><b>${p.coins}</b> 🪙</div></div>`,
+      )
+      .join('');
+    return `<h3>Players ${this.net.connected ? `· ${this.net.room}` : '· offline'}</h3>${rows}`;
+  }
+
+  private swatchHtml(): string {
+    return BODY_COLORS.map(
+      (c) => `<button class="swatch${c === this.s.look.color ? ' on' : ''}" data-act="color" data-id="${c}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`,
+    ).join('');
+  }
+
+  private wardrobeHtml(): string {
+    const sections = COS_SLOTS.map((slot) => {
+      const owned = COSMETICS.filter((c) => c.slot === slot && this.s.owned.includes(c.id));
+      const worn = this.s.look[slot];
+      const cards = owned
+        .map(
+          (c) =>
+            `<button class="item${worn === c.id ? ' on' : ''}" data-act="equip" data-slot="${slot}" data-id="${worn === c.id ? '' : c.id}" data-try="${slot}:${c.id}"><b class="t${c.tier}">${c.name}</b><span>${worn === c.id ? 'Wearing - click to remove' : 'Click to wear'}</span></button>`,
+        )
+        .join('');
+      return `<h4>${slot === 'jewelry' ? 'Jewelry' : slot[0].toUpperCase() + slot.slice(1) + 's'}</h4><div class="items">${cards || '<span class="muted">Nothing owned yet - visit the shop.</span>'}</div>`;
+    }).join('');
+    return `<h3>Wardrobe</h3><div class="split"><div><div id="pv-slot"></div><div class="swatches">${this.swatchHtml()}</div></div><div class="grow">${sections}</div></div>`;
+  }
+
+  private shopHtml(): string {
+    const here = this.atVendor;
+    const tabs = (['cosmetics', 'gear'] as const)
+      .map((k) => `<button data-act="shoptab" data-id="${k}" class="${this.shopTab === k ? 'active' : ''}">${k === 'cosmetics' ? 'Cosmetics' : 'Gear'}</button>`)
+      .join('');
+    let body: string;
+    if (this.shopTab === 'cosmetics') {
+      const cards = COSMETICS.slice()
+        .sort((a, b) => a.price - b.price)
+        .map((c) => {
+          const has = this.s.owned.includes(c.id);
+          const afford = this.s.coins >= c.price;
+          return `<button class="item${has ? ' on' : ''}" data-try="${c.slot}:${c.id}" ${has ? 'data-act="equip" data-slot="' + c.slot + '" data-id="' + (this.s.look[c.slot] === c.id ? '' : c.id) + '"' : `data-act="buycos" data-id="${c.id}"`} ${!has && (!here || !afford) ? 'disabled' : ''}><b class="t${c.tier}">${c.name}</b><span class="muted">${c.slot}</span><span>${has ? (this.s.look[c.slot] === c.id ? 'Wearing ✓' : 'Owned · wear') : `${c.price} 🪙`}</span></button>`;
+        })
+        .join('');
+      body = `<div class="split"><div><div id="pv-slot"></div><p class="muted">Hover an item to try it on.</p></div><div class="items grow">${cards}</div></div>`;
+    } else {
+      const rods = this.map.stock.rods.map((id) => {
+        const r = byId(RODS, id);
+        const has = eco.hasRod(this.s, id);
+        const off = has || !here || this.s.coins < r.price || this.s.level < r.unlockLevel || !eco.freeSlots(this.s);
+        return `<div class="row"><div><b>${r.name}</b> <span class="muted">rod${r.unlockLevel > 1 ? ` · level ${r.unlockLevel}` : ''}</span></div><div><button data-act="buyrod" data-id="${id}" ${off ? 'disabled' : ''}>${has ? 'Owned' : `${r.price} 🪙`}</button></div></div>`;
+      });
+      const bait = this.map.stock.bait.map((id) => {
+        const b = byId(BAITS, id);
+        const cost = b.price * eco.BAIT_PACK;
+        const off = !here || this.s.coins < cost || this.s.level < b.unlockLevel || eco.baitRoom(this.s, id) < eco.BAIT_PACK;
+        return `<div class="row"><div><b>${b.name}</b> <span class="muted">×${eco.BAIT_PACK}${b.unlockLevel > 1 ? ` · level ${b.unlockLevel}` : ''}</span></div><div><button data-act="buybait" data-id="${id}" ${off ? 'disabled' : ''}>${cost} 🪙</button></div></div>`;
+      });
+      body = rods.join('') + bait.join('');
+    }
+    return `<h3>${this.map.vendor.name}'s Shop · you have <b>${this.s.coins}</b> 🪙</h3>
+      <nav class="sub">${tabs}</nav>
+      ${here ? '<p class="muted">Click a fish in your hotbar (below) to sell it.</p>' : `<p class="muted">Walk up to ${this.map.vendor.name}'s stall to buy or sell.</p>`}
+      ${body}`;
   }
 
   private dexHtml(): string {

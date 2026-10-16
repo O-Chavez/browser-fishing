@@ -79,6 +79,13 @@ export class Hub {
   readonly boardSpot = new THREE.Vector3();
   readonly gateSpot = new THREE.Vector3();
   readonly wheelSpot = new THREE.Vector3();
+  readonly leaderSpot = new THREE.Vector3();
+  readonly mirrorSpot = new THREE.Vector3();
+  readonly campSpot = new THREE.Vector3();
+  private leaderCtx!: CanvasRenderingContext2D;
+  private leaderTex!: THREE.CanvasTexture;
+  private flames: THREE.Mesh[] = [];
+  private fireLight = new THREE.PointLight(0xff8a3c, 14, 11, 2);
   private disc = new THREE.Mesh();
   private spinAnim: { from: number; to: number; t0: number; ms: number } | null = null;
   private lastTick = 0;
@@ -108,6 +115,10 @@ export class Hub {
     this.buildGate(map.gate);
     this.buildWheel(map.wheel);
     this.buildProps();
+    this.buildLeaderboard(map.leaderboard);
+    this.buildMirror(map.mirror);
+    this.buildCampfire(map.campfire);
+    this.setLeaders([]);
     this.setFund({ total: 0, goal: map.goal, unlocked: false, mine: 0 });
   }
 
@@ -376,6 +387,18 @@ export class Hub {
       this.place(lamp, { x, z, facing: 0 });
       this.fixed.push({ x, z, r: 0.2 });
     }
+    // Lamps lighting the wider plaza
+    for (const [x, z] of [[-9, 36], [9, 36], [-12, 26], [13, 26], [-2.4, 30], [2.4, 30]]) {
+      const lamp = new THREE.Group();
+      const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
+      pole.position.y = 1.1;
+      const bulb = ball(0.14, 0xffd27a);
+      (bulb.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
+      bulb.position.y = 2.3;
+      lamp.add(pole, bulb);
+      this.place(lamp, { x, z, facing: 0 });
+      this.fixed.push({ x, z, r: 0.2 });
+    }
     // Barrels and crates around the stall
     const barrelGeo = new THREE.LatheGeometry(
       [[0.26, 0], [0.34, 0.2], [0.36, 0.45], [0.34, 0.7], [0.26, 0.9]].map(([x, y]) => new THREE.Vector2(x, y)),
@@ -394,6 +417,139 @@ export class Hub {
       this.place(c, { x, z, facing: rot }, 0, 0, groundHeight(x, z) + 0.35);
       this.fixed.push({ x, z, r: 0.55 });
     }
+  }
+
+  private buildLeaderboard(spot: Spot): void {
+    const g = new THREE.Group();
+    for (const lx of [-1.0, 1.0]) {
+      const post = cyl(0.08, 0.1, 2.8, DARK, 8);
+      post.position.set(lx, 1.4, 0);
+      g.add(post);
+    }
+    const frame = rbox(2.5, 2.0, 0.12, 0x6b4a2b, 0.05);
+    frame.position.set(0, 1.9, 0);
+    const face = textPlane(2.3, 1.8, 512);
+    face.mesh.position.set(0, 1.9, 0.07);
+    const roof = rbox(2.9, 0.12, 0.7, 0x2f6f9f, 0.05);
+    roof.position.set(0, 3.0, 0);
+    roof.rotation.x = 0.15;
+    g.add(frame, face.mesh, roof);
+    this.leaderCtx = face.ctx;
+    this.leaderTex = face.tex;
+    this.place(g, spot);
+    for (const lx of [-1.0, 1.0]) {
+      const c = this.world(spot, lx, 0);
+      this.fixed.push({ x: c.x, z: c.z, r: 0.3 });
+    }
+    this.world(spot, 0, 2.0, this.leaderSpot);
+  }
+
+  /** Redraws the "Top Anglers" board from the room's coin totals. */
+  setLeaders(rows: { name: string; coins: number }[]): void {
+    const ctx = this.leaderCtx;
+    const { width: w, height: h } = ctx.canvas;
+    ctx.fillStyle = '#1f3d5a';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(6, 6, w - 12, h - 12);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffe9b8';
+    ctx.font = '800 46px system-ui, sans-serif';
+    ctx.fillText('TOP ANGLERS', w / 2, 74);
+    ctx.font = '700 36px system-ui, sans-serif';
+    rows.slice(0, 5).forEach((r, i) => {
+      const y = 140 + i * 56;
+      ctx.fillStyle = i === 0 ? '#ffd23a' : '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${i + 1}. ${r.name.slice(0, 11)}`, 36, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${r.coins} 🪙`, w - 36, y);
+    });
+    if (!rows.length) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#9fc2de';
+      ctx.fillText('No anglers yet', w / 2, 200);
+    }
+    this.leaderTex.needsUpdate = true;
+  }
+
+  private buildMirror(spot: Spot): void {
+    const g = new THREE.Group();
+    const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 });
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.07, 8, 28), gold);
+    frame.scale.set(0.8, 1.25, 1);
+    frame.position.y = 1.55;
+    frame.castShadow = true;
+    const glass = new THREE.Mesh(
+      new THREE.CircleGeometry(0.62, 28),
+      new THREE.MeshStandardMaterial({ color: 0xbfe6ff, roughness: 0.05, metalness: 0.9, emissive: 0x2a5a7a, emissiveIntensity: 0.4 }),
+    );
+    glass.scale.set(0.8, 1.25, 1);
+    glass.position.set(0, 1.55, 0.01);
+    for (const lx of [-0.45, 0.45]) {
+      const leg = cyl(0.04, 0.05, 1.0, DARK, 6);
+      leg.position.set(lx, 0.5, -0.1);
+      leg.rotation.z = lx > 0 ? -0.12 : 0.12;
+      g.add(leg);
+    }
+    const base = rbox(1.2, 0.08, 0.5, DARK, 0.03);
+    base.position.y = 0.04;
+    const sign = textPlane(1.1, 0.3, 320);
+    woodSign(sign.ctx, 'WARDROBE');
+    sign.tex.needsUpdate = true;
+    sign.mesh.position.set(0, 2.55, 0);
+    g.add(frame, glass, base, sign.mesh);
+    this.place(g, spot);
+    this.fixed.push({ x: spot.x, z: spot.z, r: 0.5 });
+    this.world(spot, 0, 1.9, this.mirrorSpot);
+  }
+
+  private buildCampfire(spot: Spot): void {
+    const g = new THREE.Group();
+    const stone = mat(0x77746e);
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), stone);
+      s.position.set(Math.sin(a) * 0.65, 0.1, Math.cos(a) * 0.65);
+      s.scale.y = 0.7;
+      s.castShadow = true;
+      g.add(s);
+    }
+    for (let i = 0; i < 4; i++) {
+      const log = cyl(0.08, 0.09, 0.9, 0x5b3a1e, 7);
+      log.rotation.z = Math.PI / 2;
+      log.rotation.y = (i / 4) * Math.PI;
+      log.position.y = 0.16 + (i % 2) * 0.1;
+      g.add(log);
+    }
+    for (const [h, c] of [[0.9, 0xff6a1a], [0.65, 0xffa51f], [0.4, 0xffe14a]] as const) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.28 * (h / 0.9) + 0.08, h, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.9 }));
+      f.position.y = 0.3 + h / 2;
+      this.flames.push(f);
+      g.add(f);
+    }
+    this.fireLight.position.set(0, 1.0, 0);
+    g.add(this.fireLight);
+    this.place(g, spot);
+    this.fixed.push({ x: spot.x, z: spot.z, r: 0.8 });
+    // Benches around the fire, leaving the side facing the plaza open.
+    for (const a of [Math.PI, -Math.PI / 2, 0]) {
+      const bx = spot.x + Math.sin(a) * 2.5;
+      const bz = spot.z + Math.cos(a) * 2.5;
+      const bench = new THREE.Group();
+      const seat = rbox(1.7, 0.1, 0.5, 0x8a6a40, 0.03);
+      seat.position.y = 0.45;
+      bench.add(seat);
+      for (const lx of [-0.7, 0.7]) {
+        const leg = rbox(0.1, 0.45, 0.4, DARK, 0.02);
+        leg.position.set(lx, 0.22, 0);
+        bench.add(leg);
+      }
+      this.place(bench, { x: bx, z: bz, facing: Math.atan2(spot.x - bx, spot.z - bz) });
+      this.fixed.push({ x: bx, z: bz, r: 0.85 });
+    }
+    this.campSpot.set(spot.x + 1.8, groundHeight(spot.x, spot.z), spot.z);
   }
 
   private buildWheel(spot: Spot): void {
@@ -528,6 +684,12 @@ export class Hub {
       h.rotation.z = Math.sin(t * 1.2 + i * 1.7) * 0.06;
       h.rotation.x = Math.cos(t * 0.9 + i) * 0.04;
     });
+    this.flames.forEach((f, i) => {
+      const k = 1 + Math.sin(t * (9 + i * 3) + i) * 0.12 + Math.sin(t * 23 + i * 2) * 0.05;
+      f.scale.set(1 / k, k, 1 / k);
+      f.rotation.y = t * (1 + i);
+    });
+    this.fireLight.intensity = 13 + Math.sin(t * 11) * 2 + Math.sin(t * 17.3) * 1.5;
     this.npc.position.y = this.npcHome.y + Math.sin(t * 1.6) * 0.012;
     const dx = px - this.npcHome.x;
     const dz = pz - this.npcHome.z;

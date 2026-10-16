@@ -1,3 +1,4 @@
+import type { CosSlot, Look } from '../data/cosmetics';
 import type { Drop } from '../game/drops';
 import type { SaveData } from '../game/state';
 
@@ -8,6 +9,8 @@ export interface PlayerInfo {
   x: number;
   z: number;
   yaw: number;
+  look: Look;
+  coins: number;
   /** Current fishing activity, for other players' avatars. */
   act?: Activity;
 }
@@ -18,14 +21,17 @@ export type Activity =
   | { a: 'carry'; fish: string; size: number; shiny?: boolean };
 
 export type ClientMsg =
-  | { t: 'join'; name: string; token: string; map: string }
+  | { t: 'join'; name: string; token: string; map: string; color?: number }
   | { t: 'pos'; x: number; z: number; yaw: number }
   | { t: 'map'; map: string }
   | { t: 'give'; map: string; coins: number }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
-  /** Sell the fish in hand. */
-  | { t: 'sell' }
+  /** Sell the fish in hand, or in hotbar slot i. */
+  | { t: 'sell'; i?: number }
+  | { t: 'buycos'; id: string }
+  | { t: 'equip'; slot: CosSlot; id: string | null }
+  | { t: 'color'; color: number }
   /** Take the hotbar slot (0-based) in hand. */
   | { t: 'slot'; i: number }
   /** Drop the item in hand. */
@@ -49,6 +55,9 @@ export type ServerMsg =
   | { t: 'snap'; p: [number, number, number, number][] }
   | { t: 'moved'; id: number; map: string }
   | { t: 'act'; id: number; act: Activity | null }
+  | { t: 'look'; id: number; look: Look }
+  /** Coins per player id, for the leaderboard. */
+  | { t: 'board'; coins: Record<number, number> }
   | { t: 'fund'; map: string; total: number; by?: string; coins?: number; open?: boolean };
 
 export const SERVER_PORT = 8787;

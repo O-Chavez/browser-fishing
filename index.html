@@ -26,7 +26,7 @@
     <div id="toast"></div>
     <div id="wheelres"></div>
     <div id="hotbar"></div>
-    <div id="help"><b>WASD</b> walk · <b>Shift</b> run · <b>E</b> interact · hold <b>click</b> to charge · release to cast · click the <b>!</b> to hook · hold to reel, <b>release</b> when the fish surges · <b>1–5</b> hold item · <b>G</b> drop · <b>Esc</b> menu</div>
+    <div id="help"><b>WASD</b> walk · <b>Shift</b> run · <b>E</b> interact · hold <b>click</b> to charge · release to cast · click the <b>!</b> to hook · hold to reel, <b>release</b> when the fish surges · <b>1–5</b> hold item · <b>G</b> drop · <b>Tab</b> wardrobe · <b>Esc</b> menu</div>
   </div>
 
   <div id="catch" class="hidden"></div>
@@ -36,11 +36,33 @@
       <h1>Lakeside</h1>
       <nav>
         <button data-tab="play">Play</button>
-                <button data-tab="fund">Town Fund</button>
+        <button data-tab="players">Players</button>
+        <button data-tab="wardrobe">Wardrobe</button>
+        <button data-tab="shop">Shop</button>
+        <button data-tab="fund">Town Fund</button>
         <button data-tab="dex">Fishdex</button>
       </nav>
       <div id="tab"></div>
-      <p class="muted controls"><b>WASD</b> walk · <b>Shift</b> run · <b>E</b> talk / interact · <b>Click</b> cast &amp; reel · <b>1–5</b> hold item · <b>G</b> drop · <b>Esc</b> menu / close</p>
+      <p class="muted controls"><b>WASD</b> walk · <b>Shift</b> run · <b>E</b> talk / interact · <b>Click</b> cast &amp; reel · <b>1–5</b> hold item · <b>G</b> drop · <b>Tab</b> wardrobe · <b>Esc</b> menu / close</p>
+    </div>
+  </div>
+
+  <div id="join" class="hidden">
+    <div class="panel join">
+      <h1>Lakeside</h1>
+      <p class="muted">Pick a name and a color. Other anglers will see you this way.</p>
+      <div class="split">
+        <div id="join-preview"></div>
+        <div class="grow">
+          <label for="join-name">Name</label>
+          <input id="join-name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Your name" />
+          <label>Body color</label>
+          <div id="join-colors" class="swatches"></div>
+          <p id="join-msg" class="joinmsg"></p>
+          <button id="join-go" class="primary">Join the lake</button>
+          <button id="join-offline" class="linklike">or play offline</button>
+        </div>
+      </div>
     </div>
   </div>
 

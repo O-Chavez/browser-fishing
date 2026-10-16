@@ -286,3 +286,45 @@ describe('dropping a carried fish', () => {
     expect(room.drops.all()).toHaveLength(1);
   });
 });
+
+describe('cosmetics, selling by slot and the board', () => {
+  it('buys at the vendor only, equips owned items, and broadcasts looks', () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    a.acct.save.coins = 500;
+    room.handle(a.id, { t: 'buycos', id: 'cap' });
+    expect(a.acct.save.owned).toEqual([]);
+    atShop(a);
+    room.handle(a.id, { t: 'buycos', id: 'cap' });
+    room.handle(a.id, { t: 'buycos', id: 'cap' });
+    room.handle(a.id, { t: 'buycos', id: 'crown' });
+    expect(a.acct.save.owned).toEqual(['cap']);
+    expect(a.acct.save.coins).toBe(460);
+    room.handle(a.id, { t: 'equip', slot: 'hat', id: 'crown' });
+    room.handle(a.id, { t: 'equip', slot: 'shirt', id: 'cap' });
+    expect(a.acct.save.look.hat).toBeNull();
+    room.handle(a.id, { t: 'equip', slot: 'hat', id: 'cap' });
+    expect(last(b.c, 'look')).toMatchObject({ id: a.id, look: { hat: 'cap' } });
+    room.handle(a.id, { t: 'color', color: 0xff0000 });
+    expect(a.acct.save.look.color).toBe(0xff0000);
+    room.handle(a.id, { t: 'color', color: -5 });
+    expect(a.acct.save.look.color).toBe(0xff0000);
+  });
+
+  it('sells the clicked hotbar slot and reports coins to everyone', () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    a.acct.save.slots[3] = { k: 'fish', fishId: 'perch', size: 20 };
+    room.handle(a.id, { t: 'sell', i: 3 });
+    expect(a.acct.save.slots[3]).not.toBeNull();
+    atShop(a);
+    const before = a.acct.save.coins;
+    room.handle(a.id, { t: 'sell', i: 3 });
+    expect(a.acct.save.slots[3]).toBeNull();
+    expect(a.acct.save.coins).toBeGreaterThan(before);
+    room.snapshot();
+    expect(last(b.c, 'board').coins[a.id]).toBe(a.acct.save.coins);
+  });
+});

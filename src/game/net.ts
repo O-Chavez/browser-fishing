@@ -11,11 +11,14 @@ export interface NetEvents {
   onDrops(list: Drop[]): void;
   onFund(map: string, total: number, by?: string, coins?: number): void;
   onPlayers(): void;
+  onBoard(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
   onCast(roll: { fishId: string | null; size: number; wait: number }): void;
   onCastFail(msg: string): void;
   onError(msg: string): void;
   onClose(): void;
+  /** The socket closed before the server accepted the join. */
+  onFailed(): void;
 }
 
 /** Connection to the room server. The game stays fully playable offline if it can't connect. */
@@ -28,9 +31,12 @@ export class NetClient {
   private ws: WebSocket | null = null;
   private sendTimer = 0;
   private lastSent = '';
+  /** Everyone's coins by player id (self included), for the leaderboard. */
+  coins = new Map<number, number>();
+  color: number | undefined;
 
   constructor(
-    private name: string,
+    public name: string,
     private token: string,
     private roomName: string,
     private events: NetEvents,
@@ -51,7 +57,7 @@ export class NetClient {
       return;
     }
     this.ws = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, map }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, map, color: this.color }));
     ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
     ws.onclose = () => {
       const was = this.connected;
@@ -59,6 +65,7 @@ export class NetClient {
       this.players.clear();
       this.events.onPlayers();
       if (was) this.events.onClose();
+      else this.events.onFailed();
     };
   }
 
@@ -132,6 +139,20 @@ export class NetClient {
           const p = this.players.get(id);
           if (p && id !== this.id) Object.assign(p, { x, z, yaw });
         }
+        break;
+      case 'look': {
+        const p = this.players.get(m.id);
+        if (p) p.look = m.look;
+        this.events.onPlayers();
+        break;
+      }
+      case 'board':
+        this.coins = new Map(Object.entries(m.coins).map(([k, v]) => [Number(k), v]));
+        for (const [id, c] of this.coins) {
+          const p = this.players.get(id);
+          if (p) p.coins = c;
+        }
+        this.events.onBoard();
         break;
       case 'fund':
         this.funds[m.map] = m.total;
