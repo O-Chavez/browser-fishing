@@ -121,7 +121,7 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 - Rewards: coins, XP, rare bait.
 
 ### 5.8 Economy loop
-- Fish sell prices scale with rarity, size, and species base value.
+- Fish sell prices = species base value × tier multiplier × weight factor (0.5× for a species' lightest catch up to 1.5× for its heaviest; weight follows length cubed) × 5 if shiny.
 - Shop prices are tuned so each upgrade needs roughly 15–30 minutes of play at the current tier.
 - The player can keep a fish for the Fishdex or sell it; the first catch of a species is always recorded.
 
@@ -351,3 +351,8 @@ Night is the shortest part of the day, so it is the best time to fish. When the 
 - All non-common weights are multiplied by 1.8 (`NIGHT_LUCK`), and night-only fish get a further 2× weight.
 - The shiny chance rises from 5% to 15%.
 - A HUD chip tells the player when the fish are biting. The server decides night from the wall clock when it rolls a cast, so every player sees the same cycle.
+
+
+## 28. Tier visuals
+
+T1–T3 share a classic fish shape. T4 fish are larger with a glow halo, orbiting sparks, side fins and back spines. T5 fish are large serpentine creatures with a glowing mane, wing-fins, crown, orbiting rings and a per-species effect (veil, flames, colour-cycling ribbons, star sparkles).

@@ -122,6 +122,12 @@ export function rollSize(fish: Fish, rng: () => number = Math.random): number {
 
 const sizeRatio = (fish: Fish, size: number) => (size - fish.minSize) / Math.max(1, fish.maxSize - fish.minSize);
 
+/** Where a catch's weight falls between the species' lightest and heaviest (0..1). */
+const weightRatio = (fish: Fish, size: number) => {
+  const cube = (x: number) => Math.pow(x / fish.maxSize, 3);
+  return Math.min(1, Math.max(0, (cube(size) - cube(fish.minSize)) / (1 - cube(fish.minSize))));
+};
+
 /** Chance that any hooked fish is a shiny, and how much more a shiny is worth. */
 export const SHINY_CHANCE = 0.05;
 export const SHINY_CHANCE_NIGHT = 0.15;
@@ -129,7 +135,7 @@ export const SHINY_VALUE = 5;
 export const SHINY_DIFFICULTY = 1.4;
 
 export function sellValue(fish: Fish, size: number, shiny = false): number {
-  return Math.max(1, Math.round(fish.baseValue * RARITY_VALUE[fish.rarity] * (0.5 + sizeRatio(fish, size)) * (shiny ? SHINY_VALUE : 1)));
+  return Math.max(1, Math.round(fish.baseValue * RARITY_VALUE[fish.rarity] * (0.5 + weightRatio(fish, size)) * (shiny ? SHINY_VALUE : 1)));
 }
 
 export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = false): number {

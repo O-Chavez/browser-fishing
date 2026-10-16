@@ -1071,7 +1071,7 @@ export class Game {
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
     this.lastSurges = 0;
     this.leapT = -1;
-    this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier);
+    this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, this.hooked!.id);
     this.fish.group.scale.setScalar(Math.max(0.3, this.hookedSize / 100));
     w.scene.add(this.fish.group);
     w.rig.kick('pitch', 7);
@@ -1180,7 +1180,7 @@ export class Game {
     let model: FishModel | null = null;
     let obj: THREE.Object3D;
     if (it.k === 'fish') {
-      model = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier);
+      model = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
       model.group.scale.setScalar(Math.max(0.14, Math.min(0.28, it.size / 220)));
       model.group.rotation.set(0.3, 1.1, 0.35);
       obj = new THREE.Group();

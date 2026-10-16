@@ -18,7 +18,7 @@ export class DropsView {
     const g = new THREE.Group();
     const it = d.item;
     if (it.k === 'fish') {
-      const f = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier);
+      const f = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
       f.group.scale.setScalar(0.45 + Math.min(1, it.size / 100) * 0.5);
       g.add(f.group);
     } else if (it.k === 'bait') {
