@@ -12,6 +12,7 @@ import {
   onDock,
   padWeight,
   setPad,
+  smooth,
   waveHeight,
 } from './env';
 import { Hub } from './hub';
@@ -414,8 +415,8 @@ export class World {
   }
 
   private buildTerrain(loc: Location): void {
-    const NR = 70;
-    const NT = 160;
+    const NR = 220;
+    const NT = 240;
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
@@ -424,20 +425,21 @@ export class World {
     const rock = new THREE.Color(0x7d7a74);
     const dirt = new THREE.Color(0xa58b62);
     const c = new THREE.Color();
+    const tmp = new THREE.Color();
     for (let j = 0; j <= NT; j++) {
       const th = -Math.PI + (j / NT) * Math.PI * 2;
       const inner = innerRadius(th) - 14;
       for (let i = 0; i <= NR; i++) {
-        const r = inner + (175 - inner) * Math.pow(i / NR, 1.6);
+        const r = inner + (175 - inner) * Math.pow(i / NR, 1.3);
         const x = Math.sin(th) * r;
         const z = Math.cos(th) * r;
         const y = groundHeight(x, z);
         pos.push(x, y, z);
         const n =
           0.88 + 0.24 * (Math.sin(x * 0.4) * Math.cos(z * 0.37) * 0.5 + 0.5);
-        if (y < 0.15) c.copy(sand).multiplyScalar(0.65);
-        else if (y < 1.4) c.copy(sand).lerp(grass, (y - 0.15) / 1.25);
-        else c.copy(grass).multiplyScalar(n);
+        c.copy(sand).multiplyScalar(0.65 + 0.35 * smooth(-1.2, 0.4, y));
+        const gm = smooth(0.3, 1.6, y);
+        c.lerp(tmp.copy(grass).multiplyScalar(n), gm);
         if (y > 12) c.lerp(rock, Math.min(1, (y - 12) / 14));
         const pw = padWeight(x, z);
         if (pw > 0) c.lerp(dirt, pw * 0.85);

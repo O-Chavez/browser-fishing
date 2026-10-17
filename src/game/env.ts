@@ -4,6 +4,7 @@ export const DOCK_TOP = 0.7;
 /** Flattened build area (the town hub) blended into the terrain. */
 export interface Pad { x: number; z: number; r: number; h: number }
 const PAD_BLEND = 10;
+const BANK_SLOPE = 0.3;
 let pad: Pad | null = null;
 export const setPad = (p: Pad | null): void => {
   pad = p;
@@ -35,7 +36,11 @@ export function padWeight(x: number, z: number): number {
 export function groundHeight(x: number, z: number): number {
   const raw = rawGroundHeight(x, z);
   const w = padWeight(x, z);
-  return w > 0 && pad ? raw + (pad.h - raw) * w : raw;
+  if (!pad) return raw;
+  const blended = raw + (pad.h - raw) * w;
+  // Beyond the pad the bank slopes gently into the water instead of dropping off a cliff.
+  const bank = pad.h - Math.max(0, Math.hypot(x - pad.x, z - pad.z) - pad.r) * BANK_SLOPE;
+  return Math.max(blended, bank);
 }
 
 function rawGroundHeight(x: number, z: number): number {
