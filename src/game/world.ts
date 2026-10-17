@@ -415,8 +415,8 @@ export class World {
   }
 
   private buildTerrain(loc: Location): void {
-    const NR = 220;
-    const NT = 240;
+    const NR = 80;
+    const NT = 120;
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
@@ -430,7 +430,7 @@ export class World {
       const th = -Math.PI + (j / NT) * Math.PI * 2;
       const inner = innerRadius(th) - 14;
       for (let i = 0; i <= NR; i++) {
-        const r = inner + (175 - inner) * Math.pow(i / NR, 1.3);
+        const r = inner + (175 - inner) * Math.pow(i / NR, 1.5);
         const x = Math.sin(th) * r;
         const z = Math.cos(th) * r;
         const y = groundHeight(x, z);
