@@ -86,17 +86,21 @@ export class Town {
     this.colliders.push({ x, z, r });
   }
 
+  private pathLayers = 1;
+
   /** Flat cobbled strip between two points, laid just above the ground. */
   private path(ax: number, az: number, bx: number, bz: number, w: number): void {
+    // Overlapping strips each get their own height and depth bias so their cobbles never z-fight.
+    const layer = this.pathLayers++;
     const len = Math.hypot(bx - ax, bz - az);
     const geo = new THREE.PlaneGeometry(w, len).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (w / 2.2), uv.getY(i) * (len / 2.2));
-    const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2 - layer, polygonOffsetUnits: -2 - layer }));
     m.receiveShadow = true;
     const mx = (ax + bx) / 2;
     const mz = (az + bz) / 2;
-    m.position.set(mx, groundHeight(mx, mz) + 0.03, mz);
+    m.position.set(mx, groundHeight(mx, mz) + 0.03 + layer * 0.012, mz);
     m.rotation.y = Math.atan2(bx - ax, bz - az);
     this.group.add(m);
   }
