@@ -160,6 +160,9 @@ export class Game {
   private betSlot = -1;
   private bj: BlackjackView | null = null;
   private casinoMsg = '';
+  private table: 'roulette' | 'blackjack' | null = null;
+  private aim: { k: string; id: string } | null = null;
+  private tableHtml = '';
   private last = performance.now();
   private gauge = $('gauge') as HTMLCanvasElement;
   private gctx = this.gauge.getContext('2d')!;
@@ -187,6 +190,7 @@ export class Game {
       onRoulette: (r) => this.startRoulette(r),
       onBlackjack: (v) => {
         this.bj = v;
+        this.world.hall?.setBlackjack(v);
         if (this.menuOpen && this.tab === 'casino') this.renderMenu();
       },
       onNotice: (msg) => this.toast(msg),
@@ -527,11 +531,6 @@ export class Game {
       }
       this.tab = tab;
     } else if (act === 'give' && this.atVendor) this.give(id === 'all' ? this.s.coins : Number(id));
-    else if (act === 'cmode') {
-      this.casinoMode = id as 'roulette' | 'blackjack' | 'prizes';
-      this.casinoMsg = '';
-    } else if (act === 'rbet') this.rouletteBet(id as RouletteBet);
-    else if (act === 'bj') this.blackjackAct(id as 'deal' | 'hit' | 'stand' | 'double');
     else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
     else if (act === 'shoptab') this.shopTab = id as 'cosmetics' | 'gear';
     else if (act === 'invtab') this.invTab = id as 'tackle' | 'wardrobe';
@@ -552,7 +551,7 @@ export class Game {
 
   /** Number keys: take that hotbar slot in hand. */
   private takeSlot(i: number): void {
-    if (this.spin) return;
+    if (this.spin || (this.bj && !this.bj.done)) return;
     if (!eco.selectSlot(this.s, i)) return this.toast('Bait locked');
     this.net.send({ t: 'slot', i });
     this.refreshHud();
@@ -943,14 +942,8 @@ export class Game {
   }
 
   private casinoHtml(): string {
-    const modes = (['roulette', 'blackjack', 'prizes'] as const)
-      .map((k) => `<button data-act="cmode" data-id="${k}" class="${this.casinoMode === k ? 'active' : ''}">${k === 'prizes' ? 'Prize counter' : k[0].toUpperCase() + k.slice(1)}</button>`)
-      .join('');
-    const it = this.s.slots[this.betSlot];
     const busy = this.spin || (!!this.bj && !this.bj.done);
-    let body = '';
-    if (this.casinoMode === 'prizes') {
-      const perks = PERKS.map((p) => {
+    const perks = PERKS.map((p) => {
         const owned = !p.consumable && this.s.perks.includes(p.id);
         const locked = !!p.requires && !this.s.perks.includes(p.requires);
         const status = owned ? 'Owned ✓' : locked ? 'Needs the previous charm' : `${p.chips} chips`;
@@ -958,37 +951,78 @@ export class Game {
         const extra = p.id === 'lure' ? ` · ${this.s.lure} charges left` : '';
         return `<div class="card"><b>${p.icon} ${p.name}</b><div class="muted">${p.desc}${extra}</div><button data-act="perk" data-id="${p.id}" ${can ? '' : 'disabled'}>${status}</button></div>`;
       }).join('');
-      body = `<p class="muted">Click a fish in your hotbar (below) to turn it in. One chip is ${CHIP_COINS} 🪙 of fish value, so a winning fish is worth far more here than at the stall.</p><div class="grid">${perks}</div>`;
-    } else if (this.casinoMode === 'roulette') {
-      const can = !busy && it?.k === 'fish' && (it.mult ?? 1) < MULT_CAP;
-      const pick =
-        it?.k === 'fish'
-          ? `Betting <b>${byId(FISH, it.fishId).name}</b> · ${eco.fishValue(it)} 🪙${(it.mult ?? 1) >= MULT_CAP ? ' (too rich for the table, turn it in)' : ''}`
-          : 'Click a fish in your hotbar (below) to bet it.';
-      const btn = (b: RouletteBet, label: string) => `<button data-act="rbet" data-id="${b}" class="bet-${b}" ${can ? '' : 'disabled'}>${label} · ×${ROULETTE_PAY[b]}</button>`;
-      body = `<p>${pick}</p><p>${btn('red', 'Red')} ${btn('black', 'Black')} ${btn('green', 'Green')}</p><p class="muted">Win and the fish is worth that much more (max ×${MULT_CAP}). Lose and it is gone.</p>`;
-    } else {
-      const g = this.bj;
-      const pick =
-        it?.k === 'fish'
-          ? `Betting <b>${byId(FISH, it.fishId).name}</b> · ${eco.fishValue(it)} 🪙${(it.mult ?? 1) >= MULT_CAP ? ' (too rich for the table, turn it in)' : ''}`
-          : 'Click a fish in your hotbar (below) to bet it.';
-      if (!g) {
-        const can = it?.k === 'fish' && (it.mult ?? 1) < MULT_CAP;
-        body = `<p>${pick}</p><p><button data-act="bj" data-id="deal" ${can ? '' : 'disabled'}>Deal</button></p><p class="muted">Win ×2 · Blackjack ×3 · Double down and win ×4 · Push keeps your fish · Lose and it is gone. Dealer stands on 17.</p>`;
-      } else {
-        const verdict: Record<string, string> = { win: 'You win!', blackjack: 'Blackjack!', push: 'Push. Your fish is safe.', lose: 'Dealer wins. The fish is gone.', bust: 'Bust. The fish is gone.' };
-        const live = !g.done;
-        body = `<p>Dealer ${g.dealerTotal ?? ''}<br>${g.dealer.map((c) => this.cardHtml(c)).join('')}</p>
-          <p>You ${g.playerTotal}<br>${g.player.map((c) => this.cardHtml(c)).join('')}</p>
-          ${live ? `<p><button data-act="bj" data-id="hit">Hit</button> <button data-act="bj" data-id="stand">Stand</button> <button data-act="bj" data-id="double" ${g.canDouble ? '' : 'disabled'}>Double</button></p>` : `<p><b>${verdict[g.result ?? 'lose']}</b></p><p>${pick}</p><p><button data-act="bj" data-id="deal" ${it?.k === 'fish' && (it.mult ?? 1) < MULT_CAP ? '' : 'disabled'}>Deal again</button></p>`}`;
-      }
-    }
+    const body = `<p class="muted">Click a fish in your hotbar (below) to turn it in. One chip is ${CHIP_COINS} 🪙 of fish value, so a winning fish is worth far more here than at the stall.</p><div class="grid">${perks}</div>`;
     return `<h3>Casino · <b>${this.chipsText(this.s.chips)}</b> chips</h3>
-      <nav class="sub">${modes}</nav>
       ${body}
       <p class="casino-msg">${this.casinoMsg}</p>
       <p><button data-tab="play" ${busy ? 'disabled' : ''}>Leave table</button></p>`;
+  }
+
+  /** Which table (if any) the player is standing at; while there, clicks hit the 3D bet patches and buttons. */
+  private updateTable(walking: boolean): void {
+    const c = this.map.casino;
+    const hall = this.world.hall;
+    const hud = $('tablehud');
+    let t: 'roulette' | 'blackjack' | null = null;
+    if (c && hall && walking) {
+      const d = (sp: { x: number; z: number }) => Math.hypot(sp.x - this.player.x, sp.z - this.player.z);
+      if (d(c.roulette) <= 3.4) t = 'roulette';
+      else if (d(c.blackjack) <= 3.4) t = 'blackjack';
+    }
+    this.table = t;
+    if (!t || !hall) {
+      hall?.clearHover();
+      this.aim = null;
+      hud.classList.add('hidden');
+      return;
+    }
+    const busy = this.spin || (!!this.bj && !this.bj.done);
+    if (!busy) this.betSlot = this.s.slots[this.s.held]?.k === 'fish' ? this.s.held : -1;
+    this.aim = hall.pick(this.world.camera);
+    const it = this.s.slots[this.betSlot];
+    const fish = it?.k === 'fish' ? it : null;
+    const rich = !!fish && (fish.mult ?? 1) >= MULT_CAP;
+    const lines: string[] = [];
+    lines.push(
+      fish
+        ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${eco.fishValue(fish)} 🪙${rich ? ' <span class="lose">(too rich for the table, turn it in)</span>' : ''}`
+        : 'Hold a fish (1-5) to bet it.',
+    );
+    const g = this.bj;
+    if (t === 'blackjack' && g) {
+      lines.push(`Dealer <b>${g.dealerTotal ?? '?'}</b> · You <b>${g.playerTotal}</b>`);
+      if (g.done) {
+        const verdict: Record<string, string> = { win: 'You win!', blackjack: 'Blackjack!', push: 'Push. Your fish is safe.', lose: 'Dealer wins. The fish is gone.', bust: 'Bust. The fish is gone.' };
+        lines.push(`<b class="${g.result === 'win' || g.result === 'blackjack' ? 'win' : g.result === 'push' ? '' : 'lose'}">${verdict[g.result ?? 'lose']}</b>`);
+      }
+    }
+    if (this.casinoMsg) lines.push(this.casinoMsg);
+    if (this.aim && !this.spin) lines.push(`<span class="muted">Click: ${this.aimLabel(this.aim)}</span>`);
+    else if (!busy && t === 'roulette') lines.push('<span class="muted">Aim at red, black or green and click to bet.</span>');
+    else if (!busy && t === 'blackjack' && !g) lines.push('<span class="muted">Click DEAL on the table to play.</span>');
+    const html = lines.join('<br>');
+    if (html !== this.tableHtml) {
+      this.tableHtml = html;
+      hud.innerHTML = html;
+    }
+    hud.classList.remove('hidden');
+  }
+
+  private aimLabel(a: { k: string; id: string }): string {
+    if (a.k === 'rbet') return `bet on ${a.id} · ×${ROULETTE_PAY[a.id as RouletteBet]}`;
+    return { deal: 'deal a hand', hit: 'hit', stand: 'stand', double: 'double down' }[a.id] ?? a.id;
+  }
+
+  private tableClick(): void {
+    if (!this.table) return this.toast('No fishing in the casino. Head out the front door.');
+    const a = this.aim;
+    if (!a || this.spin) return;
+    const it = this.s.slots[this.betSlot];
+    const needsFish = a.k === 'rbet' || a.id === 'deal';
+    if (needsFish && it?.k !== 'fish') return this.toast('Hold a fish (1-5) to bet it.');
+    if (needsFish && (it as { mult?: number }).mult !== undefined && ((it as { mult?: number }).mult ?? 1) >= MULT_CAP) return this.toast('That fish is too rich for the table. Turn it in at the prize counter.');
+    if (a.k === 'rbet') this.rouletteBet(a.id as RouletteBet);
+    else this.blackjackAct(a.id as 'deal' | 'hit' | 'stand' | 'double');
   }
 
   private openBottle(id: string, note: string): void {
@@ -1042,13 +1076,12 @@ export class Game {
     }
 
     const c = this.map.casino;
+    this.updateTable(walking);
     if (c) {
       const at = (sp: { x: number; z: number }) => Math.hypot(sp.x - x, sp.z - z);
       const table = (sp: { x: number; z: number }, mode: 'roulette' | 'blackjack' | 'prizes', label: string) => {
         if (at(sp) <= CASINO_RANGE - 0.4) spots.push({ d: at(sp) - 25, label, act: () => this.openCasino(mode) });
       };
-      table(c.roulette, 'roulette', 'Roulette · bet a fish on red, black or green');
-      table(c.blackjack, 'blackjack', 'Blackjack · bet a fish against the dealer');
       table(c.prizes, 'prizes', 'Prize counter · turn fish in for chips, buy perks');
       spots.push(
         { d: at(c.mirror), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
@@ -1131,7 +1164,7 @@ export class Game {
       case 'idle':
       {
         if (this.spin) return;
-        if (this.map.casino) return this.toast('No fishing in the casino. Head out the front door.');
+        if (this.map.casino) return this.tableClick();
         const can = eco.canCast(this.s);
         if (can !== 'ok') return this.toast(eco.CAST_MESSAGES[can]);
       }

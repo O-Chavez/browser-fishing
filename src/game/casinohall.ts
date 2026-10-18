@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { ROULETTE_POCKETS } from '../data/casino';
+import { ROULETTE_PAY, ROULETTE_POCKETS, type RouletteBet } from '../data/casino';
 import type { MapDef, Spot } from '../data/maps';
-import { pocketColor } from './casino';
+import { pocketColor, type BlackjackView, type Card } from './casino';
 import { groundHeight } from './env';
 import { DARK, WOOD, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
@@ -42,6 +42,12 @@ export class CasinoHall {
   private anim: { from: number; to: number; t0: number; ms: number } | null = null;
   private glow: { m: THREE.MeshBasicMaterial; c: THREE.Color }[] = [];
   private neon = 0;
+  private cards = new THREE.Group();
+  private bjButtons: Record<string, THREE.Object3D> = {};
+  private picks: THREE.Object3D[] = [];
+  private hover: THREE.Object3D | null = null;
+  private ray = new THREE.Raycaster();
+  private texCache = new Map<string, THREE.CanvasTexture>();
 
   constructor(def: NonNullable<MapDef['casino']>) {
     buildRoom(
@@ -104,10 +110,29 @@ export class CasinoHall {
     const sign = neonSign('ROULETTE', 3, '#ff4f9a');
     sign.position.set(0, 3.5, 0);
     t.add(base, this.wheel, pointer, this.neonRing(1.4, 0.2, PINK), sign);
-    // Betting layout: three coloured patches along the front edge.
-    [0xc4262e, 0x1b1b1f, 0x1f9a4f].forEach((c, i) => {
-      const p = rbox(0.7, 0.03, 0.5, c, 0.01);
-      p.position.set((i - 1) * 0.85, 1.09, 1.0);
+    // Betting patches along the front edge: aim and click one to bet the fish in hand.
+    const bets = [
+      { bet: 'red', color: 0xc4262e, label: 'RED' },
+      { bet: 'black', color: 0x1b1b1f, label: 'BLACK' },
+      { bet: 'green', color: 0x1f9a4f, label: 'GREEN' },
+    ];
+    bets.forEach((b, i) => {
+      const p = rbox(0.8, 0.05, 0.7, b.color, 0.015);
+      p.position.set((i - 1) * 0.92, 1.1, 0.98);
+      const { mesh, ctx, tex } = textPlane(0.7, 0.4, 256);
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 64px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(b.label, 128, 64);
+      ctx.font = '700 44px system-ui, sans-serif';
+      ctx.fillStyle = '#ffd35a';
+      ctx.fillText(`×${ROULETTE_PAY[b.bet as RouletteBet]}`, 128, 108);
+      tex.needsUpdate = true;
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(0, 0.03, 0);
+      p.add(mesh);
+      this.addPick(p, { k: 'rbet', id: b.bet });
       t.add(p);
     });
     this.place(t, s, 1.7);
@@ -115,21 +140,120 @@ export class CasinoHall {
 
   private buildBlackjack(s: Spot): void {
     const t = this.table(3.0, 1.9);
-    for (let i = 0; i < 3; i++) {
-      const spot = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.2, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: GOLD }));
-      spot.position.set((i - 1) * 0.8, 1.085, 0.35);
-      t.add(spot);
-    }
-    for (let i = 0; i < 2; i++) {
-      const card = rbox(0.28, 0.01, 0.4, 0xffffff, 0.005);
-      card.position.set(-0.2 + i * 0.35, 1.085, -0.5);
-      card.rotation.y = 0.15 * (i ? -1 : 1);
-      t.add(card);
+    const spot = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.2, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: GOLD }));
+    spot.position.set(0, 1.085, 0.25);
+    t.add(spot, this.cards);
+    this.cards.position.y = 1.09;
+    const labels: [string, string][] = [['deal', 'DEAL'], ['hit', 'HIT'], ['stand', 'STAND'], ['double', 'DOUBLE']];
+    for (const [id, text] of labels) {
+      const b = rbox(0.62, 0.06, 0.3, 0x2a0f1c, 0.02);
+      b.position.set(0, 1.1, 0.72);
+      const { mesh, ctx, tex } = textPlane(0.56, 0.24, 256);
+      ctx.fillStyle = '#ffd35a';
+      ctx.font = '800 76px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 128, 56);
+      tex.needsUpdate = true;
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.y = 0.035;
+      b.add(mesh);
+      this.addPick(b, { k: 'bj', id });
+      this.bjButtons[id] = b;
+      t.add(b);
     }
     const sign = neonSign('BLACKJACK', 3, '#4fd2ff');
     sign.position.set(0, 3.5, 0);
     t.add(this.neonRing(1.2, 0.2, 0x4fd2ff), sign);
     this.place(t, s, 1.7);
+    this.setBlackjack(null);
+  }
+
+  private addPick(o: THREE.Object3D, tag: { k: string; id: string }): void {
+    o.userData.tag = tag;
+    this.picks.push(o);
+  }
+
+  private cardTex(c: Card | null): THREE.CanvasTexture {
+    const key = c ? `${c.r}-${c.s}` : 'back';
+    let t = this.texCache.get(key);
+    if (t) return t;
+    const cv = document.createElement('canvas');
+    cv.width = 96;
+    cv.height = 134;
+    const g = cv.getContext('2d')!;
+    g.fillStyle = c ? '#fbf8ef' : '#7a1d3a';
+    g.fillRect(0, 0, 96, 134);
+    g.strokeStyle = c ? '#999' : '#ffd35a';
+    g.lineWidth = 4;
+    g.strokeRect(2, 2, 92, 130);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    if (c) {
+      const rank = c.r === 1 ? 'A' : c.r === 11 ? 'J' : c.r === 12 ? 'Q' : c.r === 13 ? 'K' : String(c.r);
+      g.fillStyle = c.s === 1 || c.s === 2 ? '#c4262e' : '#1b1b1f';
+      g.font = '800 54px system-ui, sans-serif';
+      g.fillText(rank, 48, 44);
+      g.font = '56px system-ui, sans-serif';
+      g.fillText(['♠', '♥', '♦', '♣'][c.s], 48, 96);
+    } else {
+      g.fillStyle = '#ffd35a';
+      g.font = '800 54px system-ui, sans-serif';
+      g.fillText('?', 48, 67);
+    }
+    t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    this.texCache.set(key, t);
+    return t;
+  }
+
+  /** Lays the current hand out on the felt and shows only the buttons that make sense. */
+  setBlackjack(v: BlackjackView | null): void {
+    for (const ch of [...this.cards.children]) {
+      this.cards.remove(ch);
+      (ch as THREE.Mesh).geometry.dispose();
+    }
+    const row = (list: (Card | null)[], z: number) =>
+      list.forEach((c, i) => {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.56).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: this.cardTex(c), toneMapped: false }));
+        m.position.set((i - (list.length - 1) / 2) * 0.46, 0.002 * i, z);
+        m.rotation.y = (i % 2 ? -1 : 1) * 0.06;
+        this.cards.add(m);
+      });
+    if (v) {
+      row(v.dealer, -0.55);
+      row(v.player, 0.15);
+    }
+    const live = !!v && !v.done;
+    const show = live ? (v!.canDouble ? ['hit', 'stand', 'double'] : ['hit', 'stand']) : ['deal'];
+    for (const [id, b] of Object.entries(this.bjButtons)) {
+      const i = show.indexOf(id);
+      b.visible = i >= 0;
+      b.userData.tag.off = i < 0;
+      if (i >= 0) b.position.x = (i - (show.length - 1) / 2) * 0.75;
+    }
+  }
+
+  /** The bet patch or button under the crosshair, if any. */
+  pick(camera: THREE.Camera, maxDist = 4.2): { k: string; id: string } | null {
+    this.ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+    this.ray.far = maxDist;
+    const live = this.picks.filter((o) => o.visible);
+    const hit = this.ray.intersectObjects(live, true)[0];
+    let o: THREE.Object3D | null = hit?.object ?? null;
+    while (o && !o.userData.tag) o = o.parent;
+    const picked = o && !o.userData.tag.off ? o : null;
+    if (picked !== this.hover) {
+      this.hover?.position.setY(1.1);
+      this.hover = picked;
+      picked?.position.setY(1.15);
+    }
+    return picked ? picked.userData.tag : null;
+  }
+
+  clearHover(): void {
+    this.hover?.position.setY(1.1);
+    this.hover = null;
   }
 
   private buildPrizes(s: Spot): void {
