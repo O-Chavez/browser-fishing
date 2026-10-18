@@ -782,7 +782,7 @@ export class World {
     oar.rotation.z = Math.PI / 2.3;
     oar.position.set(0.15, 0.1, 0.1);
     g.add(hull, rim, seat, oar);
-    g.position.set(-5.5, 0.5, 9.5);
+    g.position.set(-5.5, 0.38, 7);
     g.rotation.y = Math.PI / 2 + 0.1;
     return g;
   }

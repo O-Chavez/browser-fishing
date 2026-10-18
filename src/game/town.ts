@@ -368,7 +368,7 @@ export class Town {
     oar.rotation.set(0.1, 0, 1.3);
     oar.position.set(0.5, 0.7, 0.2);
     g.add(hull, rim, oar);
-    this.at(g, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.25);
+    this.at(g, s.x, s.z, s.facing, -0.2);
     for (const lz of [-1.3, 0, 1.3]) {
       this.solid(s.x + Math.sin(s.facing) * lz, s.z + Math.cos(s.facing) * lz, 0.8);
     }

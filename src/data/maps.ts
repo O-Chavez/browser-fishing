@@ -159,7 +159,7 @@ export const MAPS: MapDef[] = [
         { x: 12, z: 16, facing: 0.3 },
         { x: 16, z: 19, facing: -0.2 },
       ],
-      boats: [{ x: -13, z: 17, facing: 0.6 }],
+      boats: [{ x: -13.5, z: 8.5, facing: 0.6 }],
       flowers: [
         { x: -12.5, z: 38.8, w: 3, d: 0.8 },
         { x: 12.5, z: 38.8, w: 3, d: 0.8 },

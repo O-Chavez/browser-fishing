@@ -12,7 +12,7 @@ export function mergeStatic(root: THREE.Object3D, keep: Iterable<THREE.Object3D>
   const kept = new Set(keep);
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
-  const buckets = new Map<string, { cast: boolean; recv: boolean; geos: THREE.BufferGeometry[] }>();
+  const buckets = new Map<string, { cast: boolean; recv: boolean; side: THREE.Side; geos: THREE.BufferGeometry[] }>();
   const doomed: THREE.Mesh[] = [];
 
   const isKept = (o: THREE.Object3D): boolean => {
@@ -28,7 +28,7 @@ export function mergeStatic(root: THREE.Object3D, keep: Iterable<THREE.Object3D>
     const wp = new THREE.Vector3().setFromMatrixPosition(m.matrixWorld);
     const key = `${m.castShadow}|${m.receiveShadow}|${mat.side}|${Math.floor(wp.x / CELL)},${Math.floor(wp.z / CELL)}`;
     let b = buckets.get(key);
-    if (!b) buckets.set(key, (b = { cast: m.castShadow, recv: m.receiveShadow, geos: [] }));
+    if (!b) buckets.set(key, (b = { cast: m.castShadow, recv: m.receiveShadow, side: mat.side, geos: [] }));
     const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()) as THREE.BufferGeometry;
     for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
@@ -49,7 +49,7 @@ export function mergeStatic(root: THREE.Object3D, keep: Iterable<THREE.Object3D>
     const geo = mergeGeometries(b.geos, false);
     b.geos.forEach((g) => g.dispose());
     if (!geo) continue;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: b.side }));
     mesh.castShadow = b.cast;
     mesh.receiveShadow = b.recv;
     root.add(mesh);
