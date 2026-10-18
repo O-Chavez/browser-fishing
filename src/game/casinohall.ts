@@ -35,6 +35,9 @@ function wheelTexture(): THREE.CanvasTexture {
 }
 
 /** The casino floor: a roulette table with a spinning wheel, a blackjack table and the prize counter. */
+/** Tables sit lower than real ones so the wheel, cards and buttons read from eye height. */
+const TABLE_DROP = 0.3;
+
 export class CasinoHall {
   readonly group = new THREE.Group();
   readonly colliders: Circle[] = [];
@@ -71,7 +74,7 @@ export class CasinoHall {
   }
 
   private place(obj: THREE.Object3D, s: Spot, r: number): void {
-    obj.position.set(s.x, groundHeight(s.x, s.z), s.z);
+    obj.position.set(s.x, groundHeight(s.x, s.z) - TABLE_DROP, s.z);
     obj.rotation.y = s.facing;
     this.group.add(obj);
     this.colliders.push({ x: s.x, z: s.z, r });
@@ -240,16 +243,19 @@ export class CasinoHall {
   pick(camera: THREE.Camera, maxDist = 4.2): { k: string; id: string } | null {
     this.ray.setFromCamera(new THREE.Vector2(0, 0), camera);
     this.ray.far = maxDist;
+    // Test against the resting pose so the hover lift can't change what is hit (that caused flicker).
+    if (this.hover) {
+      this.hover.position.y -= 0.05;
+      this.hover.updateMatrixWorld(true);
+    }
     const live = this.picks.filter((o) => o.visible);
     const hit = this.ray.intersectObjects(live, true)[0];
     let o: THREE.Object3D | null = hit?.object ?? null;
     while (o && !o.userData.tag) o = o.parent;
     const picked = o && !o.userData.tag.off ? o : null;
-    if (picked !== this.hover) {
-      if (this.hover) this.hover.position.y -= 0.05;
-      this.hover = picked;
-      if (picked) picked.position.y += 0.05;
-    }
+    if (picked) picked.position.y += 0.05;
+    this.hover = picked;
+    if (picked) picked.updateMatrixWorld(true);
     return picked ? picked.userData.tag : null;
   }
 
