@@ -5,6 +5,7 @@ import { pocketColor } from './casino';
 import { groundHeight } from './env';
 import { DARK, WOOD, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
+import { buildRoom, neonSign } from './casinoroom';
 
 const POCKETS = ROULETTE_POCKETS.red + ROULETTE_POCKETS.black + ROULETTE_POCKETS.green;
 const FELT = 0x1f6b43;
@@ -43,6 +44,19 @@ export class CasinoHall {
   private neon = 0;
 
   constructor(def: NonNullable<MapDef['casino']>) {
+    buildRoom(
+      {
+        group: this.group,
+        solid: (c) => this.colliders.push(c),
+        glow: (color) => {
+          const m = new THREE.MeshBasicMaterial({ color });
+          this.glow.push({ m, c: new THREE.Color(color) });
+          return m;
+        },
+      },
+      def.hall,
+      def.mirror,
+    );
     this.buildRoulette(def.roulette);
     this.buildBlackjack(def.blackjack);
     this.buildPrizes(def.prizes);
@@ -87,7 +101,9 @@ export class CasinoHall {
     const pointer = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28, 6), mat(0xffffff, { emissive: new THREE.Color(0xffffff) }));
     pointer.position.set(0, 1.4, -1.0);
     pointer.rotation.x = Math.PI;
-    t.add(base, this.wheel, pointer, this.neonRing(1.4, 0.2, PINK));
+    const sign = neonSign('ROULETTE', 3, '#ff4f9a');
+    sign.position.set(0, 3.5, 0);
+    t.add(base, this.wheel, pointer, this.neonRing(1.4, 0.2, PINK), sign);
     // Betting layout: three coloured patches along the front edge.
     [0xc4262e, 0x1b1b1f, 0x1f9a4f].forEach((c, i) => {
       const p = rbox(0.7, 0.03, 0.5, c, 0.01);
@@ -110,7 +126,9 @@ export class CasinoHall {
       card.rotation.y = 0.15 * (i ? -1 : 1);
       t.add(card);
     }
-    t.add(this.neonRing(1.2, 0.2, 0x4fd2ff));
+    const sign = neonSign('BLACKJACK', 3, '#4fd2ff');
+    sign.position.set(0, 3.5, 0);
+    t.add(this.neonRing(1.2, 0.2, 0x4fd2ff), sign);
     this.place(t, s, 1.7);
   }
 
@@ -142,7 +160,6 @@ export class CasinoHall {
     ctx.fillText('🎰 PRIZE COUNTER', 256, 64);
     tex.needsUpdate = true;
     mesh.position.set(0, 2.55, -0.3);
-    mesh.rotation.y = Math.PI;
     g.add(mesh);
     // Chips on the counter.
     [0xc4262e, 0x2a6fc4, 0x1f9a4f, 0xffffff].forEach((c, i) => {

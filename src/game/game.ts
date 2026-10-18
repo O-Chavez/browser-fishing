@@ -1028,6 +1028,33 @@ export class Game {
       if (dist <= PICKUP_RANGE) spots.push({ d: dist - 10, label: `Pick up ${itemName(d.item)}`, act: () => this.pickUp(d) });
     }
 
+    const town = w.town;
+    if (town) {
+      town.setFound(this.s.bottles);
+      for (const npc of town.npcs) {
+        spots.push({ d: Math.hypot(npc.pos.x - x, npc.pos.z - z) - 0.5, label: `Talk to ${npc.def.name}`, act: () => this.toast(town.talk(npc, w.night > 0.5), 6) });
+      }
+      for (const b of town.bottles) {
+        if (this.s.bottles.includes(b.id)) continue;
+        const db = Math.hypot(b.pos.x - x, b.pos.z - z);
+        if (db < 2.6) spots.push({ d: db - 20, label: 'Open the message in a bottle', act: () => this.openBottle(b.id, b.note) });
+      }
+    }
+
+    const c = this.map.casino;
+    if (c) {
+      const at = (sp: { x: number; z: number }) => Math.hypot(sp.x - x, sp.z - z);
+      const table = (sp: { x: number; z: number }, mode: 'roulette' | 'blackjack' | 'prizes', label: string) => {
+        if (at(sp) <= CASINO_RANGE - 0.4) spots.push({ d: at(sp) - 25, label, act: () => this.openCasino(mode) });
+      };
+      table(c.roulette, 'roulette', 'Roulette · bet a fish on red, black or green');
+      table(c.blackjack, 'blackjack', 'Blackjack · bet a fish against the dealer');
+      table(c.prizes, 'prizes', 'Prize counter · turn fish in for chips, buy perks');
+      spots.push(
+        { d: at(c.mirror), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
+        { d: at(this.map.gate) - 0.5, label: `Exit to ${this.map.next?.name ?? 'the pond'}`, act: () => this.useGate(true, 0) },
+      );
+    }
     if (hub) {
       const dv = Math.hypot(hub.vendorSpot.x - x, hub.vendorSpot.z - z);
       this.atVendor = dv < 3.2;
@@ -1053,29 +1080,7 @@ export class Game {
             : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast('Hold a fish (1-5), then press E to spin.') },
         );
       }
-      const town = w.town;
-      if (town) {
-        town.setFound(this.s.bottles);
-        for (const npc of town.npcs) {
-          spots.push({ d: Math.hypot(npc.pos.x - x, npc.pos.z - z) - 0.5, label: `Talk to ${npc.def.name}`, act: () => this.toast(town.talk(npc, w.night > 0.5), 6) });
-        }
-        for (const b of town.bottles) {
-          if (this.s.bottles.includes(b.id)) continue;
-          const db = Math.hypot(b.pos.x - x, b.pos.z - z);
-          if (db < 2.6) spots.push({ d: db - 20, label: 'Open the message in a bottle', act: () => this.openBottle(b.id, b.note) });
-        }
-      }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
-      const c = this.map.casino;
-      if (c) {
-        const at = (sp: { x: number; z: number }) => Math.hypot(sp.x - x, sp.z - z);
-        const table = (sp: { x: number; z: number }, mode: 'roulette' | 'blackjack' | 'prizes', label: string) => {
-          if (at(sp) <= CASINO_RANGE - 0.4) spots.push({ d: at(sp) - 25, label, act: () => this.openCasino(mode) });
-        };
-        table(c.roulette, 'roulette', 'Roulette · bet a fish on red, black or green');
-        table(c.blackjack, 'blackjack', 'Blackjack · bet a fish against the dealer');
-        table(c.prizes, 'prizes', 'Prize counter · turn fish in for chips, buy perks');
-      }
       spots.push(
         { d: near(hub.leaderSpot), label: 'Top Anglers · see who is richest', act: () => this.openMenu('players') },
         { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
@@ -1087,9 +1092,7 @@ export class Game {
         },
         {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
-          label: this.map.casino
-            ? `Back to ${this.map.next?.name ?? 'the pond'}`
-            : st.unlocked
+          label: st.unlocked
               ? `Travel to ${this.map.next?.name ?? 'the next area'}${this.s.level < CASINO_LEVEL ? ` · needs level ${CASINO_LEVEL}` : ''}`
               : `Gate sealed · fund ${st.total} / ${st.goal} 🪙`,
           act: () => this.useGate(st.unlocked, st.goal),
@@ -1128,6 +1131,7 @@ export class Game {
       case 'idle':
       {
         if (this.spin) return;
+        if (this.map.casino) return this.toast('No fishing in the casino. Head out the front door.');
         const can = eco.canCast(this.s);
         if (can !== 'ok') return this.toast(eco.CAST_MESSAGES[can]);
       }
@@ -1500,6 +1504,13 @@ export class Game {
 
   private updateSpot(): void {
     if (this.phase !== 'idle' && this.phase !== 'charging') return;
+    if (this.map.casino) {
+      if (this.spotShown) {
+        $('spot').className = 'hidden';
+        this.spotShown = '';
+      }
+      return;
+    }
     const id = fishingSpot(this.player.x, this.player.z);
     if (id === this.spotShown) return;
     this.spotShown = id;

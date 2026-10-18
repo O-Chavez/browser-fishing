@@ -168,3 +168,4 @@ body.shopping .controls { display: none; }
 button.bet-red { background: #c4262e; color: #fff; }
 button.bet-black { background: #1b1b1f; color: #fff; }
 button.bet-green { background: #1f9a4f; color: #fff; }
+#spot.hidden { display: none; }

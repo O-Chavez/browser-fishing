@@ -63,6 +63,11 @@ export class Town {
 
   constructor(private map: MapDef) {
     const t = map.town;
+    if (map.casino) {
+      t.npcs.forEach((n) => this.buildNpc(n));
+      mergeStatic(this.group, this.heads.map((h) => h.body));
+      return;
+    }
     this.buildStreets();
     this.buildSquare(t.square);
     t.houses.forEach((h, i) => this.buildHouse(h, i));

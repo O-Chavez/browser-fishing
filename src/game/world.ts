@@ -110,6 +110,7 @@ export class World {
   hub: Hub | null = null;
   town: Town | null = null;
   hall: CasinoHall | null = null;
+  private indoor = false;
   private nightNow = 0;
   private trees: Circle[] = [];
   yaw = 0;
@@ -323,6 +324,16 @@ export class World {
   private updateDaylight(t: number): void {
     const f = this.dayOverride ?? dayFraction(Date.now() / 1000);
     const n = nightness(f);
+    if (this.indoor) {
+      this.night = n;
+      this.nightNow = 1;
+      this.hemi.intensity = 2.6;
+      this.hemi.color.set(0xffe6c8);
+      this.hemi.groundColor.set(0x5a3038);
+      this.sun.intensity = 0;
+      this.town?.setNight(1);
+      return;
+    }
     const tw = twilight(n);
     this.night = n;
     const b = this.base;
@@ -370,11 +381,27 @@ export class World {
   }
 
   setLocation(loc: Location, map: MapDef): void {
+    this.indoor = !!map.casino;
     setPad(map.pad);
     this.scene.remove(this.decor);
     disposeGroup(this.decor);
     this.decor = new THREE.Group();
     this.scene.add(this.decor);
+    this.sky.visible = this.stars.visible = this.clouds.visible = !this.indoor;
+    this.trees = [];
+
+    if (this.indoor) {
+      const dark = new THREE.Color(0x120810);
+      this.scene.background = dark;
+      this.scene.fog = new THREE.Fog(dark, 45, 130);
+      this.town = new Town(map);
+      this.decor.add(this.town.group);
+      this.hub = null;
+      this.hall = new CasinoHall(map.casino!);
+      this.decor.add(this.hall.group);
+      this.lightPool.collect(this.decor);
+      return;
+    }
 
     const u = this.waterU;
     u.uShallow.value.set(loc.water);
@@ -421,8 +448,7 @@ export class World {
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);
-    this.hall = map.casino ? new CasinoHall(map.casino) : null;
-    if (this.hall) this.decor.add(this.hall.group);
+    this.hall = null;
     this.lightPool.collect(this.decor);
   }
 
@@ -805,7 +831,7 @@ export class World {
   ];
 
   get colliders(): Circle[] {
-    return [...World.dockProps, ...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? []), ...(this.hall?.colliders ?? [])];
+    return [...(this.indoor ? [] : World.dockProps), ...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? []), ...(this.hall?.colliders ?? [])];
   }
 
   surface(x: number, z: number): number {
