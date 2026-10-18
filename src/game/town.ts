@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { MapDef, NpcDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { DARK, WOOD, ball, cyl, mat, rbox, textPlane, woodSign } from './hub';
+import { mergeStatic } from './merge';
 import type { Circle } from './player';
 
 const rnd = (seed: number) => () => {
@@ -72,6 +73,7 @@ export class Town {
     this.buildFences();
     this.buildBottles();
     this.buildCozy();
+    mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.bottleMeshes.values()]);
   }
 
   private at(obj: THREE.Object3D, x: number, z: number, facing = 0, y?: number): void {

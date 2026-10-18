@@ -1,5 +1,6 @@
 import { audio } from './audio';
 import * as THREE from 'three';
+import { LightPool } from './lightpool';
 import type { Location } from '../data/content';
 import type { MapDef } from '../data/maps';
 import {
@@ -116,6 +117,7 @@ export class World {
   pitchKick = 0;
   private shake = 0;
   private decor = new THREE.Group();
+  private lightPool = new LightPool(8);
   private clouds = new THREE.Group();
   private cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.92 });
   private stars!: THREE.Points;
@@ -382,7 +384,7 @@ export class World {
     this.scene.background = null;
 
     const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(420, 420, 170, 170).rotateX(-Math.PI / 2),
+      new THREE.PlaneGeometry(420, 420, 110, 110).rotateX(-Math.PI / 2),
       new THREE.ShaderMaterial({
         uniforms: this.waterU,
         vertexShader: waterVert,
@@ -412,6 +414,7 @@ export class World {
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);
+    this.lightPool.collect(this.decor);
   }
 
   private buildTerrain(loc: Location): void {
@@ -829,6 +832,7 @@ export class World {
       .add(this.sun.target.position);
     this.hub?.update(t, this.eye.x, this.eye.z);
     this.town?.update(t, this.eye.x, this.eye.z);
+    this.lightPool.update(dt, this.eye);
     this.camera.rotation.set(
       this.pitch +
         this.pitchKick +

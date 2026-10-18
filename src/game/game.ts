@@ -361,6 +361,30 @@ export class Game {
         else this.keys.delete(code);
       },
       teleport: (x: number, z: number) => this.player.teleport(x, z),
+      perf: () => {
+        const w = this.world;
+        let lights = 0, meshes = 0, casters = 0, tris = 0;
+        this.world.scene.traverse((o) => {
+          if ((o as THREE.Light).isLight && o.visible) lights++;
+          const m = o as THREE.Mesh;
+          if (m.isMesh) { meshes++; if (m.castShadow) casters++; }
+        });
+        const i = w.renderer.info.render;
+        tris = i.triangles;
+        return { lights, meshes, casters, calls: i.calls, tris, programs: w.renderer.info.programs?.length ?? 0 };
+      },
+      renderMs: () => {
+        const w = this.world;
+        const gl = w.renderer.getContext();
+        const px = new Uint8Array(4);
+        const run = (): number => {
+          const t0 = performance.now();
+          for (let k = 0; k < 20; k++) { w.renderer.render(w.scene, w.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+          return +((performance.now() - t0) / 20).toFixed(2);
+        };
+        run();
+        return run();
+      },
       day: (f: number | null) => { this.world.dayOverride = f; },
       interact: () => this.interact(),
       openMenu: (tab: string) => this.openMenu(tab),

@@ -13,7 +13,7 @@ export const WOOD = 0x9b7248;
 export const DARK = 0x5b4128;
 
 export const rbox = (w: number, h: number, d: number, color: number, r = 0.05): THREE.Mesh => {
-  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat(color));
+  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 1, r), mat(color));
   m.castShadow = m.receiveShadow = true;
   return m;
 };
@@ -25,7 +25,7 @@ export const cyl = (rt: number, rb: number, h: number, color: number, seg = 14):
 };
 
 export const ball = (r: number, color: number, sx = 1, sy = 1, sz = 1): THREE.Mesh => {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12), mat(color));
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), mat(color));
   m.scale.set(sx, sy, sz);
   m.castShadow = true;
   return m;
