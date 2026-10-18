@@ -399,7 +399,10 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 6. Applying the effects: vest slots, sell bonus, reel time, shiny charges.
 7. Tests and a design-doc update.
 
+### Decisions
+- **No daily chip cap.** Chips are the endgame grind, so there is no cap or streak protection.
+- **No minimum fish tier at the tables.** Any fish can be bet. The chip rate gates progress instead: with a high rate (for example 1 chip per 1,000 coins of fish value), a low-tier fish needs a long lucky streak before it is worth any chips. Taking that gamble is the player's choice.
+- **Chips are the grind.** Unlock prices are set high enough that the chips are what players work toward after the last rod and bait.
+
 ### Open questions
-- Fish-to-chip rate and unlock prices.
-- Whether to add a daily chip cap or other protection against one huge streak.
-- Which low-value fish may be bet at all (a minimum tier).
+- The exact fish-to-chip rate and unlock prices, kept in one config so they can be tuned after playtesting.
