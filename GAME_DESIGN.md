@@ -363,23 +363,21 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 
 ### Access
 - The pond gate opens through the Town Fund as usual, and the casino also needs **level 15** (the Aurora Rod level) so players have fished before they gamble.
-- The casino is a `MapDef` with its own hub: a lit hall with a roulette table, a blackjack table, a chips-for-unlocks shop and a small fishing area outside.
+- The casino is a `MapDef` with its own hub: a lit hall with a roulette table, a blackjack table, a prize shop (turn in fish for chips, and buy unlocks with chips) and a small fishing area outside.
 
 ### Let it ride
-- A player puts a **fish** on a table. The fish keeps its identity and gains a **×multiplier** (as the Lucky Wheel does).
-- Each round is a choice: win to multiply the fish's value, lose and the fish is destroyed.
-- After every win the player chooses **ride again** or **cash out**. The decision is always theirs.
-- **Cash out** turns the fish in for **chips** at its current boosted value times a fixed rate.
-- The multiplier is capped (about ×16) and a cash-out is forced at the cap.
-- A disconnect mid-ride auto-cashes-out the fish, so a dropped connection never costs a streak.
-- The server rolls everything and applies the result after the animation, like the wheel.
+- A player bets a **fish** at a table. The fish keeps its identity and gains a **×multiplier** (as the Lucky Wheel does).
+- A win multiplies the fish's value. A loss destroys the fish. There is no cash-out prompt at the table: the player simply keeps playing or walks away.
+- Cashing out is separate. The player **turns the fish in manually at the casino prize shop**, which pays **chips** at its current boosted value times a fixed rate. The decision to stop is always theirs.
+- The multiplier is capped (about ×16). A fish at the cap is refused at the tables and can only be turned in.
+- The server rolls everything and applies the result after the animation, like the wheel. If a player disconnects mid-round, the round settles on the server so the result can't be dodged.
 
 ### Tables
 - **Roulette:** red, black or green. Red and black double the fish, green pays more. Slots are weighted so the house keeps about a 3% edge. One spin is shared by every player at the table.
 - **Blackjack:** hit, stand and double. The dealer stands on 17. A win pays 1:1 and a natural pays 3:2 on the multiplier.
 
 ### Chips
-- A separate currency in the account save. Chips are earned only by cashing out fish and are spent only on casino unlocks. Coins keep buying rods, bait and the Town Fund.
+- A separate currency in the account save. Chips are earned only by turning fish in at the prize shop and are spent only on casino unlocks. Coins keep buying rods, bait and the Town Fund.
 - One config holds the fish-to-chip rate and unlock prices so the grind can be tuned.
 
 ### Casino unlocks (bought with chips)
