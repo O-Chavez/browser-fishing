@@ -2073,7 +2073,7 @@ export class Game {
         if (sl.id === s.rod) cls += ' use';
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
-        body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${eco.fishValue(sl)} 🪙${sl.mult ? ` · ×${sl.mult}` : ''}</em>`;
+        body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${eco.fishValue(sl)} 🪙</em>`;
       } else cls += ' empty';
       if (i === s.held) cls += ' held';
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');

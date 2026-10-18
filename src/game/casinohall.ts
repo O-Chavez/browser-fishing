@@ -105,12 +105,14 @@ export class CasinoHall {
     const base = cyl(0.95, 1.05, 0.12, 0x5a2f1c, 28);
     base.position.y = 1.12;
     this.wheel.position.y = 1.2;
+    this.wheel.scale.setScalar(0.78);
+    base.scale.set(0.78, 1, 0.78);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(0.88, 38).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: wheelTexture() }));
     const hub = cyl(0.12, 0.16, 0.14, GOLD, 12);
     hub.position.y = 0.06;
     this.wheel.add(disc, hub);
     const pointer = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28, 6), mat(0xffffff, { emissive: new THREE.Color(0xffffff) }));
-    pointer.position.set(0, 1.4, -1.0);
+    pointer.position.set(0, 1.4, -0.8);
     pointer.rotation.x = Math.PI;
     const sign = neonSign('ROULETTE', 3, '#ff4f9a');
     sign.position.set(0, 3.5, 0);
@@ -122,9 +124,9 @@ export class CasinoHall {
       { bet: 'green', color: 0x1f9a4f, label: 'GREEN' },
     ];
     bets.forEach((b, i) => {
-      const p = rbox(0.8, 0.05, 0.7, b.color, 0.015);
-      p.position.set((i - 1) * 0.92, 1.1, 0.98);
-      const { mesh, ctx, tex } = textPlane(0.7, 0.4, 256);
+      const p = rbox(0.8, 0.05, 0.46, b.color, 0.015);
+      p.position.set((i - 1) * 0.92, 1.1, 1.16);
+      const { mesh, ctx, tex } = textPlane(0.7, 0.36, 256);
       ctx.fillStyle = '#fff';
       ctx.font = '800 64px system-ui, sans-serif';
       ctx.textAlign = 'center';
