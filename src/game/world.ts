@@ -117,6 +117,7 @@ export class World {
   pitchKick = 0;
   private shake = 0;
   private decor = new THREE.Group();
+  private frame = 0;
   private lightPool = new LightPool(8);
   private clouds = new THREE.Group();
   private cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.92 });
@@ -153,9 +154,11 @@ export class World {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Shadows refresh every few frames (see update); the sun and props move too slowly to notice.
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
 
@@ -852,6 +855,7 @@ export class World {
     this.rig.update(dt);
     this.fx.update(dt, t);
     this.bobber.visible = this.bobberVisible;
+    if (this.frame++ % 3 === 0) this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
   }
 }
