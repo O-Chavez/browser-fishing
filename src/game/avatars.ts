@@ -7,7 +7,7 @@ import { animateFish, buildFish, type FishModel } from './fishmodel';
 
 const NOSE = new THREE.Vector3(0, 0, -1);
 const UP = new THREE.Vector3(0, 1, 0);
-const HANG = 1.1;
+const HANG = 0.45;
 
 class Avatar {
   group = new THREE.Group();
@@ -94,7 +94,7 @@ class Avatar {
       const f = FISH.find((x) => x.id === act.fish);
       if (f) {
         this.held = buildFish(f.color, false, act.shiny, f.tier, f.id);
-        this.held.group.scale.setScalar(Math.max(0.3, act.size / 100));
+        this.held.group.scale.setScalar(Math.min(0.8, Math.max(0.3, act.size / 100)));
         this.scene.add(this.held.group);
       }
       this.bobber.visible = false;

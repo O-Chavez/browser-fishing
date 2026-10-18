@@ -143,9 +143,11 @@ export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = f
 }
 
 /** Next unlock, for the "next goal" HUD hint. */
-export function nextGoal(level: number): string {
+export function nextGoal(level: number, dex: Record<string, unknown> = {}): string {
   const rod = RODS.find((r) => r.unlockLevel > level);
-  return rod ? `Level ${rod.unlockLevel}: the ${rod.name} becomes available` : 'Complete your Fishdex!';
+  if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
+  const missing = FISH.filter((f) => !dex[f.id]).length;
+  return missing ? `Complete your Fishdex! (${missing} to go)` : 'Fishdex complete! Chase shinies and casino perks';
 }
 
 /** Weight in kg grows with the cube of length, topping out at the species' maxWeight. */

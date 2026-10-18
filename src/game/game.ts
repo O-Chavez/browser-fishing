@@ -189,7 +189,13 @@ export class Game {
       onWheel: (win, ms) => this.startSpin(win, ms),
       onRoulette: (r) => this.startRoulette(r),
       onBlackjack: (v) => {
+        const wasDone = !this.bj || this.bj.done;
         this.bj = v;
+        if (v?.done && !wasDone) {
+          const r = v.result ?? 'lose';
+          const label: Record<string, string> = { win: 'YOU WIN!', blackjack: 'BLACKJACK!', push: 'PUSH', lose: 'DEALER WINS', bust: 'BUST!' };
+          this.showResult(r === 'win' || r === 'blackjack' ? 'win' : r === 'push' ? 'push' : 'lose', label[r] ?? r.toUpperCase(), r === 'push' ? 'Your fish is safe' : r === 'win' || r === 'blackjack' ? 'Your fish is worth more' : 'The fish is gone');
+        }
         this.world.hall?.setBlackjack(v);
         if (this.menuOpen && this.tab === 'casino') this.renderMenu();
       },
@@ -220,7 +226,7 @@ export class Game {
       onAct: (p, act) => {
         const f = act?.a === 'hold' ? FISH.find((x) => x.id === act.fish) : null;
         if (f && act?.a === 'hold' && (act.shiny || (f.rarity !== 'common' && f.rarity !== 'uncommon')) && p.map === this.map.id)
-          this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${formatWeight(fishWeight(f, act.size))})!`);
+          this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${sellValue(f, act.size, act.shiny)} 🪙)!`);
       },
       onCast: (roll) => {
         this.roll = roll;
@@ -914,10 +920,23 @@ export class Game {
       this.casinoMsg = win
         ? `<b class="win">${r.color.toUpperCase()}! You win</b> ${name} is now worth ${Math.round(after)} 🪙`
         : `<b class="lose">${r.color.toUpperCase()}.</b> ${name} (${before} 🪙) is gone`;
+      this.showResult(win ? 'win' : 'lose', win ? `${r.color.toUpperCase()}! YOU WIN` : `${r.color.toUpperCase()}. YOU LOSE`, win ? `${name} is now worth ${Math.round(after)} 🪙` : `${name} is gone`);
       if (win) audio.jingle('epic');
       else audio.snap();
       if (this.menuOpen) this.renderMenu();
     }, r.ms);
+  }
+
+  private resultTimer = 0;
+  private showResult(kind: 'win' | 'lose' | 'push', title: string, sub: string): void {
+    const el = $('tableresult');
+    el.className = kind;
+    el.innerHTML = `${title}<small>${sub}</small>`;
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this.resultTimer);
+    this.resultTimer = window.setTimeout(() => el.classList.add('hidden'), 2600);
   }
 
   private blackjackAct(a: 'deal' | 'hit' | 'stand' | 'double'): void {
@@ -1402,8 +1421,8 @@ export class Game {
     const shiny = this.hookedShiny;
     el.innerHTML = `<div class="muted">${shiny ? '<b style="color:#ffd23a">✨ SHINY! ✨</b> ' : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
-      <div class="weight">${formatWeight(fishWeight(fish, size))}</div>
-      <div>${this.tierBadge(fish.tier)} · ${size} cm · ${sellValue(fish, size, shiny)} 🪙</div>
+      <div class="weight">${sellValue(fish, size, shiny)} 🪙</div>
+      <div>${this.tierBadge(fish.tier)} · ${size} cm · ${formatWeight(fishWeight(fish, size))}</div>
       <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
@@ -1987,7 +2006,7 @@ export class Game {
     if (this.net.connected) $('fundline').textContent += ` · ${this.net.players.size + 1} online (${this.net.room})`;
     $('baitinfo').textContent = `${this.bait.name} ×${eco.baitCount(s, s.bait)} · ${this.rod.name}`;
     this.renderHotbar();
-    $('goal').textContent = `Next: ${nextGoal(s.level)}`;
+    $('goal').textContent = `Next: ${nextGoal(s.level, s.dex)}`;
   }
 
   private renderMenu(): void {
@@ -2042,7 +2061,7 @@ export class Game {
         if (sl.id === s.rod) cls += ' use';
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
-        body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${formatWeight(fishWeight(f, sl.size))}${sl.mult ? ` · ×${sl.mult}` : ''}</em>`;
+        body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${eco.fishValue(sl)} 🪙${sl.mult ? ` · ×${sl.mult}` : ''}</em>`;
       } else cls += ' empty';
       if (i === s.held) cls += ' held';
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');

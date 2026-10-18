@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BAITS, FISH, RODS, byId } from '../data/content';
 import type { Drop } from './drops';
+import { standHeight } from './env';
 import { buildFish } from './fishmodel';
 import { buildRodModel, buildTin } from './itemmodels';
 
@@ -59,7 +60,7 @@ export class DropsView {
   /** Items blink during their last 5 seconds. */
   update(t: number, now = Date.now()): void {
     for (const { obj, drop } of this.meshes.values()) {
-      obj.position.set(drop.x, this.surface(drop.x, drop.z) + 0.3 + Math.sin(t * 2 + drop.id) * 0.05, drop.z);
+      obj.position.set(drop.x, Math.max(standHeight(drop.x, drop.z), this.surface(drop.x, drop.z)) + 0.3 + Math.sin(t * 2 + drop.id) * 0.05, drop.z);
       obj.rotation.y = t * 0.6 + drop.id;
       obj.visible = drop.expires - now > 5000 || Math.floor(t * 4) % 2 === 0;
     }
