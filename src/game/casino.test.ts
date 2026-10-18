@@ -68,12 +68,17 @@ describe('prize shop', () => {
     expect(eco.buyPerk(s, 'gloves')).toBe(false);
   });
 
-  it('charms raise the sell price', () => {
-    const s = saveWith(fish());
-    const item = s.slots[2] as ReturnType<typeof fish>;
-    const plain = eco.sellPrice(s, item);
-    s.perks.push('charm1');
-    expect(eco.sellPrice(s, item)).toBe(Math.round(plain * 1.05));
+  it('charms raise the value of fish when they are caught', () => {
+    const s = newSave();
+    const f = FISH[0];
+    eco.applyCatch(s, f, 30);
+    const plain = eco.fishValue(s.slots.find((x) => x?.k === 'fish') as ReturnType<typeof fish>);
+    const s2 = newSave();
+    s2.perks.push('charm1');
+    eco.applyCatch(s2, f, 30);
+    const item = s2.slots.find((x) => x?.k === 'fish') as ReturnType<typeof fish>;
+    expect(eco.fishValue(item)).toBeCloseTo(plain * 1.05, 5);
+    expect(eco.sellPrice(s2, item)).toBe(Math.round(plain * 1.05));
   });
 
   it('shiny lure forces a shiny and spends a charge', () => {

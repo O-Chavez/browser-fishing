@@ -386,7 +386,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 | Item | Effect | Type |
 |---|---|---|
 | Tackle Vest | +2 inventory slots | permanent |
-| Lucky Charms (3 tiers) | +5/10/15% sell value on every fish | permanent, total bonus capped |
+| Lucky Charms (3 tiers) | +5/10/15% value on every fish caught after buying (applied at catch, not at sale) | permanent, total bonus capped |
 | Quick-Reel Gloves | shorter reel time | permanent |
 | Shiny Lure | N charges, each guarantees a shiny catch | consumable, re-bought |
 | Night Owl Lantern | better night-fish luck | permanent |

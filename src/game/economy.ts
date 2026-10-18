@@ -182,9 +182,9 @@ export function charmBonus(s: Pick<SaveData, 'perks'>): number {
   return 0;
 }
 
-/** Coins a fish sells for at the stall, with charms. Gambling and chips use the raw `fishValue`. */
-export const sellPrice = (s: Pick<SaveData, 'perks'>, item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
-  Math.round(fishValue(item) * (1 + charmBonus(s)));
+/** Coins a fish sells for. Lucky Charms are baked into the fish's `mult` when it is caught. */
+export const sellPrice = (_s: Pick<SaveData, 'perks'>, item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
+  Math.round(fishValue(item));
 
 /** Rod control with the Quick-Reel Gloves on. */
 export const reelControl = (s: Pick<SaveData, 'perks'>, base: number): number => (s.perks.includes('gloves') ? base * GLOVES_CONTROL : base);
@@ -356,8 +356,9 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false)
   const gained = catchXp(fish, size, first, shiny);
   const record = !!entry && size > entry.best;
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0) };
-  s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}) };
-  const value = sellValue(fish, size, shiny);
+  const bonus = charmBonus(s);
+  s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(bonus > 0 ? { mult: 1 + bonus } : {}) };
+  const value = Math.round(sellValue(fish, size, shiny) * (1 + bonus));
   if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
   const res = applyXp(s.level, s.xp, gained);
   s.level = res.level;

@@ -41,9 +41,9 @@ export const LURE_CHARGES = 3;
 
 export const PERKS: Perk[] = [
   { id: 'vest', name: 'Tackle Vest', desc: `+${VEST_SLOTS} hotbar slots`, chips: 40, icon: '🦺' },
-  { id: 'charm1', name: 'Lucky Charm I', desc: 'Every fish sells for +5%', chips: 25, icon: '🍀' },
-  { id: 'charm2', name: 'Lucky Charm II', desc: 'Every fish sells for +10%', chips: 80, requires: 'charm1', icon: '🍀' },
-  { id: 'charm3', name: 'Lucky Charm III', desc: 'Every fish sells for +15%', chips: 200, requires: 'charm2', icon: '🍀' },
+  { id: 'charm1', name: 'Lucky Charm I', desc: 'Every fish you catch is worth +5%', chips: 25, icon: '🍀' },
+  { id: 'charm2', name: 'Lucky Charm II', desc: 'Every fish you catch is worth +10%', chips: 80, requires: 'charm1', icon: '🍀' },
+  { id: 'charm3', name: 'Lucky Charm III', desc: 'Every fish you catch is worth +15%', chips: 200, requires: 'charm2', icon: '🍀' },
   { id: 'gloves', name: 'Quick-Reel Gloves', desc: 'Fights are easier and reeling is faster', chips: 60, icon: '🧤' },
   { id: 'lantern', name: 'Night Owl Lantern', desc: 'Better luck with night fish', chips: 50, icon: '🏮' },
   { id: 'lure', name: 'Shiny Lure', desc: `${LURE_CHARGES} casts that always hook a shiny`, chips: 15, consumable: true, icon: '✨' },

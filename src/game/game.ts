@@ -1433,7 +1433,7 @@ export class Game {
     const shiny = this.hookedShiny;
     el.innerHTML = `<div class="muted">${shiny ? '<b style="color:#ffd23a">✨ SHINY! ✨</b> ' : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
-      <div class="weight">${sellValue(fish, size, shiny)} 🪙</div>
+      <div class="weight">${Math.round(sellValue(fish, size, shiny) * (1 + eco.charmBonus(this.s)))} 🪙</div>
       <div>${this.tierBadge(fish.tier)} · ${size} cm · ${formatWeight(fishWeight(fish, size))}</div>
       <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>
       <div class="muted">Click to release your hold</div>`;
