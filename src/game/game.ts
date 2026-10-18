@@ -622,7 +622,9 @@ export class Game {
       if (s.coins < cost) return this.toast(`Not enough coins (${cost} 🪙).`);
       if (!eco.buyBait(s, id)) return this.toast('Your locker is full of that bait.');
       this.net.send({ t: 'buybait', id });
-      this.toast(s.bait === id ? `Bought ${eco.BAIT_PACK} ${b.name} - equipped!` : `Bought ${eco.BAIT_PACK} ${b.name} - equip it in your Inventory (Tab)`);
+      const inHand = s.slots.reduce((a, x) => a + (x?.k === 'bait' && x.id === id ? x.n : 0), 0);
+      if (eco.baitCount(s, id) > inHand) this.toast(`Bought ${eco.BAIT_PACK} ${b.name}. Your hotbar stack holds ${inHand}, so the rest (${eco.baitCount(s, id) - inHand}) is in your tackle locker 🧰`);
+      else this.toast(s.bait === id ? `Bought ${eco.BAIT_PACK} ${b.name} - equipped!` : `Bought ${eco.BAIT_PACK} ${b.name} - equip it in your Inventory (Tab)`);
     }
     this.persist();
     this.refreshHud();
@@ -2064,7 +2066,7 @@ export class Game {
       let body = '';
       let cls = 'slot';
       if (sl?.k === 'bait') {
-        body = `<span>${byId(BAITS, sl.id).name}</span><em>×${sl.n}</em>`;
+        body = `<span>${byId(BAITS, sl.id).name}</span><em>×${sl.n}${s.locker.bait[sl.id] ? ` +${s.locker.bait[sl.id]} 🧰` : ''}</em>`;
         if (i === activeBait) cls += ' use';
       } else if (sl?.k === 'rod') {
         body = `<span>${byId(RODS, sl.id).name}</span><em>Rod</em>`;
