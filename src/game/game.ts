@@ -502,6 +502,16 @@ export class Game {
       if (this.phase === 'charging') this.releaseCast();
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    let wheelAcc = 0;
+    document.addEventListener('wheel', (e) => {
+      if (!this.active || this.menuOpen || this.phase !== 'idle') return;
+      wheelAcc += e.deltaY;
+      if (Math.abs(wheelAcc) < 40) return;
+      const n = this.s.slots.length;
+      const step = wheelAcc > 0 ? 1 : -1;
+      wheelAcc = 0;
+      this.takeSlot((this.s.held + step + n) % n);
+    }, { passive: true });
     document.addEventListener('keydown', (e) => {
       if (this.active && e.code.startsWith('Key')) {
         this.keys.add(e.code);
