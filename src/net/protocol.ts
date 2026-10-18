@@ -1,5 +1,7 @@
 import type { CosSlot, Look } from '../data/cosmetics';
 import type { Drop } from '../game/drops';
+import type { RouletteBet } from '../data/casino';
+import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 
 export interface PlayerInfo {
@@ -48,16 +50,29 @@ export type ClientMsg =
   | { t: 'cast'; x: number; z: number; perfect?: boolean }
   | { t: 'catch' }
   | { t: 'lost' }
-  | { t: 'gamble' };
+  | { t: 'gamble' }
+  /** Walk through the gate to another map. */
+  | { t: 'travel'; to: string }
+  /** Bet the fish in hotbar slot i on a roulette colour. */
+  | { t: 'roulette'; bet: RouletteBet; i: number }
+  /** Blackjack: `deal` starts a hand with the fish in slot i. */
+  | { t: 'bj'; a: 'deal' | 'hit' | 'stand' | 'double'; i?: number }
+  /** Turn the fish in slot i in at the prize shop for chips. */
+  | { t: 'cashout'; i: number }
+  | { t: 'buyperk'; id: string };
 
 export type ServerMsg =
   | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[] }
   | { t: 'error'; msg: string }
+  /** A plain message for the player (a refused bet, a locked gate). */
+  | { t: 'notice'; msg: string }
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
   | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; win: boolean; ms: number }
+  | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }
+  | { t: 'bj'; view: BlackjackView | null }
   | { t: 'joined'; player: PlayerInfo }
   | { t: 'left'; id: number }
   | { t: 'snap'; p: [number, number, number, number][] }

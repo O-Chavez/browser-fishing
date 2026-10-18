@@ -2,12 +2,15 @@ import type { MapDef } from '../data/maps';
 import type { Activity, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { SERVER_PORT } from '../net/protocol';
 import { fundGoal, openKey, type Fund, type FundState } from './fund';
+import type { BlackjackView } from './casino';
 import type { Drop } from './drops';
 import type { SaveData } from './state';
 
 export interface NetEvents {
   onState(save: SaveData): void;
   onWheel(win: boolean, ms: number): void;
+  onRoulette(r: { pocket: number; color: string; factor: number; ms: number }): void;
+  onBlackjack(view: BlackjackView | null): void;
   onDrops(list: Drop[]): void;
   onFund(map: string, total: number, by?: string, coins?: number): void;
   onPlayers(): void;
@@ -16,6 +19,7 @@ export interface NetEvents {
   onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }): void;
   onCastFail(msg: string): void;
   onError(msg: string): void;
+  onNotice(msg: string): void;
   onClose(): void;
   /** The socket closed before the server accepted the join. */
   onFailed(): void;
@@ -101,6 +105,9 @@ export class NetClient {
       case 'drops':
         this.events.onDrops(m.list);
         break;
+      case 'notice':
+        this.events.onNotice(m.msg);
+        break;
       case 'error':
         this.events.onError(m.msg);
         break;
@@ -109,6 +116,12 @@ export class NetClient {
         break;
       case 'wheel':
         this.events.onWheel(m.win, m.ms);
+        break;
+      case 'roulette':
+        this.events.onRoulette(m);
+        break;
+      case 'bj':
+        this.events.onBlackjack(m.view);
         break;
       case 'castfail':
         this.events.onCastFail(m.msg);

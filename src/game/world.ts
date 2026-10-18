@@ -19,6 +19,7 @@ import {
 import { Hub } from './hub';
 import { Town } from './town';
 import type { Circle } from './player';
+import { CasinoHall } from './casinohall';
 import { FX } from './fx';
 import { LineRenderer, Rig } from './rig';
 
@@ -108,6 +109,8 @@ export class World {
   walkBob = 0;
   hub: Hub | null = null;
   town: Town | null = null;
+  hall: CasinoHall | null = null;
+  private nightNow = 0;
   private trees: Circle[] = [];
   yaw = 0;
   pitch = -0.12;
@@ -346,6 +349,7 @@ export class World {
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
+    this.nightNow = n;
 
     const fl = this.flies;
     if (fl) {
@@ -417,6 +421,8 @@ export class World {
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);
+    this.hall = map.casino ? new CasinoHall(map.casino) : null;
+    if (this.hall) this.decor.add(this.hall.group);
     this.lightPool.collect(this.decor);
   }
 
@@ -799,7 +805,7 @@ export class World {
   ];
 
   get colliders(): Circle[] {
-    return [...World.dockProps, ...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? [])];
+    return [...World.dockProps, ...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? []), ...(this.hall?.colliders ?? [])];
   }
 
   surface(x: number, z: number): number {
@@ -835,6 +841,7 @@ export class World {
       .add(this.sun.target.position);
     this.hub?.update(t, this.eye.x, this.eye.z);
     this.town?.update(t, this.eye.x, this.eye.z);
+    this.hall?.update(t, this.nightNow);
     this.lightPool.update(dt, this.eye);
     this.camera.rotation.set(
       this.pitch +

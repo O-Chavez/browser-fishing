@@ -69,6 +69,10 @@ export interface MapDef {
   /** Walkable radius from the map origin. */
   radius: number;
   town: TownDef;
+  /** Casino maps: where the tables and prize counter stand. */
+  casino?: { roulette: Spot; blackjack: Spot; prizes: Spot };
+  /** Player level needed to travel here. */
+  minLevel?: number;
 }
 
 /**
@@ -95,7 +99,7 @@ export const MAPS: MapDef[] = [
     campfire: { x: -15, z: 24, facing: 0 },
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     goal: 300,
-    next: { id: 'lake', name: 'Forest Lake' },
+    next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
     town: {
       square: { x: 0, z: 32, r: 5.5 },
@@ -166,6 +170,52 @@ export const MAPS: MapDef[] = [
     },
   },
 ];
+
+const pond = MAPS[0];
+
+/** The endgame: same shoreline, but the square is a casino floor and the gate leads back to the pond. */
+MAPS.push({
+  ...pond,
+  id: 'casino',
+  locationId: 'lake',
+  name: 'Casino Cove',
+  goal: 1,
+  next: { id: 'pond', name: 'Starter Pond' },
+  minLevel: 15,
+  casino: {
+    roulette: { x: -3.6, z: 30.5, facing: faceToward(-3.6, 30.5, -3.6, 24) },
+    blackjack: { x: 3.6, z: 30.5, facing: faceToward(3.6, 30.5, 3.6, 24) },
+    prizes: { x: 0, z: 38, facing: faceToward(0, 38, 0, 28) },
+  },
+  town: {
+    ...pond.town,
+    square: { x: 0, z: 32, r: 7.5 },
+    houses: [
+      { x: -15, z: 43, facing: faceToward(-15, 43, 0, 35), wall: 0x3b2a4f, roof: 0xb8324a, sign: 'High Roller' },
+      { x: 15, z: 43, facing: faceToward(15, 43, 0, 35), wall: 0x2a3f4f, roof: 0xd9a432, sign: 'Lucky Lantern' },
+      { x: -9, z: 51, facing: faceToward(-9, 51, 0, 40), wall: 0x4f2a3b, roof: 0x6b4a8a },
+      { x: 9, z: 51, facing: faceToward(9, 51, 0, 40), wall: 0x2a4f3b, roof: 0x8a5a2b },
+      { x: 17, z: 28, facing: faceToward(17, 28, 4, 31), wall: 0x4f3b2a, roof: 0xb8324a, sign: 'Cashier' },
+      { x: -17, z: 33, facing: faceToward(-17, 33, -2, 33), wall: 0x2a2a4f, roof: 0x3f6f8f, sign: 'Night Cap' },
+    ],
+    npcs: [
+      {
+        name: 'Madame Fortuna', x: 0, z: 40.4, facing: faceToward(0, 40.4, 0, 30), coat: 0x7a1f3f, hat: 0xf2d16b,
+        lines: [
+          'Turn your catch in for chips, darling. Bet it first if you are feeling lucky.',
+          'Red, black or green. A fish that wins is worth more, a fish that loses is gone.',
+          'A fish worth sixteen times its price is too rich for the tables. Cash it in.',
+        ],
+      },
+      {
+        name: 'Old Salty', x: 4.2, z: 15, facing: faceToward(4.2, 15, 0, 18), coat: 0x3d5a80, hat: 0xd9b84a,
+        lines: ['The pier here bites just as well. Win a few chips, then come fish.'],
+        nightLines: ['Neon on the water. I could stay all night.'],
+      },
+    ],
+    bottles: [],
+  },
+});
 
 export const mapById = (id: string): MapDef => {
   const m = MAPS.find((x) => x.id === id);

@@ -6,6 +6,8 @@ import { isNight } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
 import { fundGoal, openKey } from '../src/game/fund';
 import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
+import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
+import * as cas from '../src/game/casino';
 import { newSave } from '../src/game/state';
 import type { Account } from './accounts';
 
@@ -26,8 +28,10 @@ interface Member {
   conn: Conn;
   acct: Account;
   pending: Pending | null;
-  /** A wheel spin in flight; its result is applied once the animation ends. */
-  spin: { win: boolean; at: number } | null;
+  /** A wheel or roulette spin in flight; its result is applied once the animation ends. */
+  spin: { at: number; run: () => void } | null;
+  /** A blackjack hand in progress. */
+  bj: cas.Blackjack | null;
 }
 
 const VENDOR_RANGE = 5;
@@ -65,7 +69,7 @@ export class Room {
     if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
     const id = this.nextId++;
     const info: PlayerInfo = { id, name: acct.name, map: this.maps[map] ? map : Object.keys(this.maps)[0], x: 0, z: 0, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null };
-    const m: Member = { info, conn, acct, pending: null, spin: null };
+    const m: Member = { info, conn, acct, pending: null, spin: null, bj: null };
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
     conn.send({
@@ -86,6 +90,7 @@ export class Room {
     const m = this.members.get(id);
     if (!m) return;
     if (m.spin) m.spin.at = 0;
+    if (m.bj) this.bjAct(m, 'stand');
     this.settle(m);
     m.acct.online = false;
     this.members.delete(id);
@@ -99,6 +104,7 @@ export class Room {
     const s = m.acct.save;
     let changed = false;
     if (m.spin && msg.t !== 'pos') return;
+    if (m.bj && msg.t !== 'pos' && msg.t !== 'bj') return;
     switch (msg.t) {
       case 'pos':
         if (finite(msg.x, msg.z, msg.yaw)) Object.assign(m.info, { x: msg.x, z: msg.z, yaw: msg.yaw });
@@ -163,6 +169,25 @@ export class Room {
       case 'gamble':
         this.gamble(m);
         return;
+      case 'travel':
+        changed = this.travel(m, str(msg.to));
+        break;
+      case 'roulette':
+        this.roulette(m, msg.bet, Math.floor(Number(msg.i)));
+        return;
+      case 'bj':
+        this.bj(m, msg.a, msg.i);
+        return;
+      case 'cashout':
+        if (this.atCasino(m, 'prizes')) {
+          const bad = cas.cashOutError(s, Math.floor(Number(msg.i)));
+          if (bad) m.conn.send({ t: 'notice', msg: bad });
+          else changed = cas.cashOut(s, Math.floor(Number(msg.i))) > 0;
+        }
+        break;
+      case 'buyperk':
+        changed = this.atCasino(m, 'prizes') && eco.buyPerk(s, str(msg.id));
+        break;
       case 'cast':
         changed = this.cast(m, msg.x, msg.z, msg.perfect === true);
         break;
@@ -204,16 +229,90 @@ export class Room {
     const held = m.acct.save.slots[m.acct.save.held];
     if (!w || held?.k !== 'fish' || Math.hypot(m.info.x - w.x, m.info.z - w.z) > eco.WHEEL_RANGE) return;
     const win = this.rng() < eco.WHEEL_WIN;
-    m.spin = { win, at: this.now() + SPIN_MS };
+    m.spin = { at: this.now() + SPIN_MS, run: () => eco.applyWheel(m.acct.save, win) };
     m.conn.send({ t: 'wheel', win, ms: SPIN_MS });
   }
 
   /** Applies a finished spin. */
   private settle(m: Member): void {
     if (!m.spin || this.now() < m.spin.at) return;
-    const { win } = m.spin;
+    const { run } = m.spin;
     m.spin = null;
-    eco.applyWheel(m.acct.save, win);
+    run();
+    this.syncCarry(m);
+    this.onChange();
+    m.conn.send({ t: 'state', save: this.view(m.acct) });
+  }
+
+  private atCasino(m: Member, what: 'roulette' | 'blackjack' | 'prizes'): boolean {
+    const spot = this.maps[m.info.map]?.casino?.[what];
+    return !!spot && Math.hypot(m.info.x - spot.x, m.info.z - spot.z) <= CASINO_RANGE;
+  }
+
+  /** Gate travel between the pond and the casino. */
+  private travel(m: Member, to: string): boolean {
+    const from = this.maps[m.info.map];
+    const dest = this.maps[to];
+    const s = m.acct.save;
+    if (!from || !dest || dest.id === from.id) return false;
+    if (Math.hypot(m.info.x - from.gate.x, m.info.z - from.gate.z) > CASINO_RANGE + 2) return false;
+    const back = !!from.casino && from.next?.id === dest.id;
+    const forward = !from.casino && from.next?.id === dest.id;
+    if (!forward && !back) return false;
+    if (forward && !this.funds[openKey(from.id)]) return this.deny(m, 'The gate is sealed until the Town Fund is full.');
+    if (forward && s.level < (dest.minLevel ?? 1)) return this.deny(m, `${dest.name} needs level ${dest.minLevel}.`);
+    s.location = dest.id;
+    m.info.map = dest.id;
+    m.info.x = dest.spawn.x;
+    m.info.z = dest.spawn.z;
+    this.broadcast({ t: 'moved', id: m.info.id, map: dest.id });
+    return true;
+  }
+
+  private deny(m: Member, msg: string): false {
+    m.conn.send({ t: 'notice', msg });
+    return false;
+  }
+
+  private roulette(m: Member, bet: RouletteBet, i: number): void {
+    if (!this.atCasino(m, 'roulette') || !(bet in { red: 1, black: 1, green: 1 })) return;
+    const bad = cas.betError(m.acct.save, i);
+    if (bad) return m.conn.send({ t: 'notice', msg: bad });
+    const r = cas.spinRoulette(bet, this.rng);
+    m.spin = { at: this.now() + ROULETTE_MS, run: () => { cas.settleBet(m.acct.save, i, r.factor); this.syncCarry(m); } };
+    m.conn.send({ t: 'roulette', ...r, ms: ROULETTE_MS });
+  }
+
+  private bj(m: Member, a: 'deal' | 'hit' | 'stand' | 'double', i?: number): void {
+    if (a === 'deal') {
+      const slot = Math.floor(Number(i));
+      if (m.bj || !this.atCasino(m, 'blackjack')) return;
+      const bad = cas.betError(m.acct.save, slot);
+      if (bad) return m.conn.send({ t: 'notice', msg: bad });
+      const g = cas.dealBlackjack(slot, this.rng);
+      m.bj = g;
+      m.acct.save.held = slot;
+      this.bjDone(m);
+      m.conn.send({ t: 'bj', view: cas.blackjackView(g) });
+      return;
+    }
+    if (!m.bj || !this.atCasino(m, 'blackjack')) return;
+    this.bjAct(m, a);
+  }
+
+  private bjAct(m: Member, a: 'hit' | 'stand' | 'double'): void {
+    const g = m.bj;
+    if (!g || !cas.actBlackjack(g, a)) return;
+    this.bjDone(m);
+    m.conn.send({ t: 'bj', view: cas.blackjackView(g) });
+  }
+
+  /** Pays out a finished hand and frees the table. */
+  private bjDone(m: Member): void {
+    const g = m.bj;
+    if (!g?.done) return;
+    m.bj = null;
+    cas.settleBet(m.acct.save, g.slot, cas.blackjackFactor(g));
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: this.view(m.acct) });

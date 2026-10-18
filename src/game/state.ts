@@ -1,16 +1,19 @@
 import { BAITS, FISH, RODS, byId, type BaitType } from '../data/content';
+import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, type Look } from '../data/cosmetics';
 import { sellValue } from './progression';
 
 export interface DexEntry { count: number; best: number }
 
 export const SLOT_COUNT = 5;
+/** Hotbar size: the base five, plus the Tackle Vest's extra slots. */
+export const slotCount = (s: { perks?: string[] }): number => SLOT_COUNT + (s.perks?.includes('vest') ? VEST_SLOTS : 0);
 export const BAIT_STACK = 20;
 
 /** The hotbar is the whole inventory: every slot holds one rod, one fish, or a stack of one bait type. */
 export type Slot =
   | { k: 'bait'; id: BaitType; n: number }
-  | { k: 'fish'; fishId: string; size: number; shiny?: boolean; /** Value multiplier won at the wheel. */ mult?: number }
+  | { k: 'fish'; fishId: string; size: number; shiny?: boolean; /** Value multiplier won at the wheel and casino tables. */ mult?: number }
   | { k: 'rod'; id: string };
 
 export interface SaveData {
@@ -39,6 +42,12 @@ export interface SaveData {
   best: BestCatch | null;
   /** Ids of the town's message-in-a-bottle collectibles already found. */
   bottles: string[];
+  /** Casino currency, earned by turning fish in at the prize shop. */
+  chips: number;
+  /** Casino perks owned (see `PERKS`). */
+  perks: string[];
+  /** Shiny Lure casts left. */
+  lure: number;
 }
 
 export interface BestCatch {
@@ -68,6 +77,9 @@ export const newSave = (): SaveData => ({
   locker: { rods: [], bait: {} },
   best: null,
   bottles: [],
+  chips: 0,
+  perks: [],
+  lure: 0,
 });
 
 /** Upgrades older save layouts (bait counts, bag, owned rods, 4 slots) to the 5-slot hotbar. */
@@ -97,9 +109,13 @@ export function migrate(raw: object): SaveData {
     out.slots = items.slice(0, SLOT_COUNT);
     for (const it of items.slice(SLOT_COUNT)) if (it.k === 'fish') out.coins += sellValue(byId(FISH, it.fishId), it.size);
   }
-  while (out.slots.length < SLOT_COUNT) out.slots.push(null);
-  out.slots = out.slots.slice(0, SLOT_COUNT);
-  if (!Number.isInteger(out.held) || out.held < 0 || out.held >= SLOT_COUNT) out.held = 0;
+  if (!Array.isArray(out.perks)) out.perks = [];
+  out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
+  out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
+  const size = slotCount(out);
+  while (out.slots.length < size) out.slots.push(null);
+  out.slots = out.slots.slice(0, size);
+  if (!Number.isInteger(out.held) || out.held < 0 || out.held >= size) out.held = 0;
   if (!out.slots.some((x) => x?.k === 'rod' && x.id === out.rod)) {
     const r = out.slots.find((x) => x?.k === 'rod');
     if (r?.k === 'rod') out.rod = r.id;

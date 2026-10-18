@@ -46,7 +46,9 @@ import {
 } from './progression';
 import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
-import { SLOT_COUNT, load, newSave, save, type SaveData } from './state';
+import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, MULT_CAP, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
+import { chipsFor, type BlackjackView, type Card } from './casino';
+import { load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_SLOTS, cosById, type CosSlot, type Look } from '../data/cosmetics';
 import { CharacterPreview } from './character';
 import { World } from './world';
@@ -154,6 +156,10 @@ export class Game {
   private confirmReset = false;
   private bannerTimer = 0;
   private spin = false;
+  private casinoMode: 'roulette' | 'blackjack' | 'prizes' = 'roulette';
+  private betSlot = -1;
+  private bj: BlackjackView | null = null;
+  private casinoMsg = '';
   private last = performance.now();
   private gauge = $('gauge') as HTMLCanvasElement;
   private gctx = this.gauge.getContext('2d')!;
@@ -169,13 +175,21 @@ export class Game {
     if (!token) localStorage.setItem('fishing-token', (token = crypto.randomUUID() + crypto.randomUUID()));
     this.net = new NetClient(name, token, q.get('room') || 'lobby', {
       onState: (save) => {
+        const moved = !!save.location && save.location !== this.s.location;
         Object.assign(this.s, save);
         if (this.joining) this.finishJoin();
-        this.world.hub?.setFund(this.fund.state(this.map));
+        if (moved) this.applyLocation();
+        this.setGateSign();
         this.refreshHud();
         if (this.menuOpen) this.renderMenu();
       },
       onWheel: (win, ms) => this.startSpin(win, ms),
+      onRoulette: (r) => this.startRoulette(r),
+      onBlackjack: (v) => {
+        this.bj = v;
+        if (this.menuOpen && this.tab === 'casino') this.renderMenu();
+      },
+      onNotice: (msg) => this.toast(msg),
       onDrops: (list) => {
         this.serverDrops = list;
         this.dropsView.sync(list, this.map.id);
@@ -435,7 +449,9 @@ export class Game {
     );
     $('hotbar').addEventListener('click', (e) => {
       const i = Number((e.target as HTMLElement).closest<HTMLElement>('.slot.sellable')?.dataset.i);
-      if (Number.isInteger(i)) this.sellSlot(i);
+      if (!Number.isInteger(i)) return;
+      if (this.tab === 'casino') this.pickBet(i);
+      else this.sellSlot(i);
     });
     $('menu').addEventListener('mouseover', (e) => {
       this.tryOn(e.target as HTMLElement, true);
@@ -491,7 +507,7 @@ export class Game {
       if (e.code === 'Escape' && this.menuOpen && !e.repeat) return this.closeMenu();
       if (e.repeat || this.menuOpen || !this.active) return;
       const i = Number(e.key) - 1;
-      if (i >= 0 && i < SLOT_COUNT && this.phase === 'idle') this.takeSlot(i);
+      if (i >= 0 && i < this.s.slots.length && this.phase === 'idle') this.takeSlot(i);
       else if (e.code === 'KeyG' && this.phase === 'idle') this.dropHeld();
       else if (e.code === 'Space' && this.active && this.phase === 'idle') { e.preventDefault(); this.player.jump(); }
       else if (e.code === 'KeyM' && !e.repeat) this.toast(audio.toggleMusic() ? '🎵 Music on' : '🔇 Music off');
@@ -511,6 +527,12 @@ export class Game {
       }
       this.tab = tab;
     } else if (act === 'give' && this.atVendor) this.give(id === 'all' ? this.s.coins : Number(id));
+    else if (act === 'cmode') {
+      this.casinoMode = id as 'roulette' | 'blackjack' | 'prizes';
+      this.casinoMsg = '';
+    } else if (act === 'rbet') this.rouletteBet(id as RouletteBet);
+    else if (act === 'bj') this.blackjackAct(id as 'deal' | 'hit' | 'stand' | 'double');
+    else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
     else if (act === 'shoptab') this.shopTab = id as 'cosmetics' | 'gear';
     else if (act === 'invtab') this.invTab = id as 'tackle' | 'wardrobe';
     else if (act === 'equiprod') this.equipRod(id!);
@@ -649,7 +671,7 @@ export class Game {
     if (this.spin) return;
     const it = this.s.slots[this.s.held];
     if (it?.k !== 'fish') return;
-    const value = eco.fishValue(it);
+    const value = eco.sellPrice(this.s, it);
     eco.sellHeld(this.s);
     this.net.send({ t: 'sell' });
     this.toast(`Sold ${byId(FISH, it.fishId).name} for ${value} 🪙`);
@@ -662,7 +684,7 @@ export class Game {
     if (this.spin || !this.atVendor) return;
     const it = this.s.slots[i];
     if (it?.k !== 'fish') return;
-    const value = eco.fishValue(it);
+    const value = eco.sellPrice(this.s, it);
     eco.sellSlot(this.s, i);
     this.net.send({ t: 'sell', i });
     this.toast(`Sold ${byId(FISH, it.fishId).name} for ${value} 🪙`);
@@ -794,11 +816,20 @@ export class Game {
     this.refreshHud();
   }
 
+  /** The fund board and gate sign: the casino's gate is always open and leads back to the pond. */
+  private setGateSign(): void {
+    const hub = this.world.hub;
+    if (!hub) return;
+    if (this.map.casino) hub.setFund({ total: 1, goal: 1, unlocked: true, mine: 0 }, this.map.next?.name ?? null);
+    else hub.setFund(this.fund.state(this.map));
+  }
+
   private applyLocation(): void {
     this.map = MAPS.find((m) => m.id === this.s.location) ?? MAPS[0];
     this.s.location = this.map.id;
     this.world.setLocation(byId(LOCATIONS, this.map.locationId), this.map);
-    this.world.hub?.setFund(this.fund.state(this.map));
+    this.setGateSign();
+    this.bj = null;
     this.player = new Player(this.map.radius);
     this.player.teleport(this.map.spawn.x, this.map.spawn.z);
     this.world.yaw = this.map.spawn.yaw;
@@ -824,6 +855,140 @@ export class Game {
       this.keepTab = false;
     }
     this.renderMenu();
+  }
+
+  // ---------- casino ----------
+
+  private useGate(open: boolean, goal: number): void {
+    const dest = this.map.next;
+    if (!dest) return this.toast('The road ends here.');
+    if (!this.map.casino && !open) return this.toast(`The gate opens when the Town Fund reaches ${goal} coins.`);
+    if (!this.net.connected) return this.toast('The casino needs a server connection.');
+    if (!this.map.casino && this.s.level < CASINO_LEVEL) return this.toast(`${dest.name} needs level ${CASINO_LEVEL}.`);
+    this.net.send({ t: 'travel', to: dest.id });
+  }
+
+  private openCasino(mode: 'roulette' | 'blackjack' | 'prizes'): void {
+    if (!this.net.connected) return this.toast('The tables need a server connection.');
+    this.casinoMode = mode;
+    this.casinoMsg = '';
+    if (this.bj?.done) this.bj = null;
+    if (this.s.slots[this.betSlot]?.k !== 'fish') this.betSlot = this.s.slots.findIndex((x) => x?.k === 'fish');
+    this.openMenu('casino');
+  }
+
+  private casinoSend(msg: Parameters<NetClient['send']>[0]): void {
+    if (!this.net.connected) return this.toast('The casino needs a server connection.');
+    this.net.send(msg);
+  }
+
+  private pickBet(i: number): void {
+    if (this.spin || (this.bj && !this.bj.done)) return;
+    if (this.casinoMode === 'prizes') {
+      this.casinoSend({ t: 'cashout', i });
+      return;
+    }
+    this.betSlot = i;
+    this.casinoMsg = '';
+    this.renderMenu();
+  }
+
+  private rouletteBet(bet: RouletteBet): void {
+    if (this.spin) return;
+    this.casinoMsg = '';
+    this.casinoSend({ t: 'roulette', bet, i: this.betSlot });
+  }
+
+  private startRoulette(r: { pocket: number; color: string; factor: number; ms: number }): void {
+    const it = this.s.slots[this.betSlot];
+    if (it?.k !== 'fish') return;
+    const name = byId(FISH, it.fishId).name;
+    const before = eco.fishValue(it);
+    const after = Math.min(MULT_CAP, (it.mult ?? 1) * r.factor) * (before / (it.mult ?? 1));
+    this.spin = true;
+    this.casinoMsg = '<span class="muted">The wheel is spinning…</span>';
+    this.world.hall?.spin(r.pocket, r.ms);
+    if (this.menuOpen) this.renderMenu();
+    setTimeout(() => {
+      this.spin = false;
+      const win = r.factor > 0;
+      this.casinoMsg = win
+        ? `<b class="win">${r.color.toUpperCase()}! You win</b> ${name} is now worth ${Math.round(after)} 🪙`
+        : `<b class="lose">${r.color.toUpperCase()}.</b> ${name} (${before} 🪙) is gone`;
+      if (win) audio.jingle('epic');
+      else audio.snap();
+      if (this.menuOpen) this.renderMenu();
+    }, r.ms);
+  }
+
+  private blackjackAct(a: 'deal' | 'hit' | 'stand' | 'double'): void {
+    if (this.spin) return;
+    if (a === 'deal') {
+      if (this.bj && !this.bj.done) return;
+      this.bj = null;
+      this.casinoMsg = '';
+      this.casinoSend({ t: 'bj', a, i: this.betSlot });
+    } else this.casinoSend({ t: 'bj', a });
+  }
+
+  private cardHtml(c: Card | null): string {
+    if (!c) return '<span class="pc back">?</span>';
+    const rank = c.r === 1 ? 'A' : c.r === 11 ? 'J' : c.r === 12 ? 'Q' : c.r === 13 ? 'K' : String(c.r);
+    const suit = ['♠', '♥', '♦', '♣'][c.s];
+    return `<span class="pc${c.s === 1 || c.s === 2 ? ' red' : ''}">${rank}${suit}</span>`;
+  }
+
+  private chipsText(n: number): string {
+    return String(Math.round(n * 10) / 10);
+  }
+
+  private casinoHtml(): string {
+    const modes = (['roulette', 'blackjack', 'prizes'] as const)
+      .map((k) => `<button data-act="cmode" data-id="${k}" class="${this.casinoMode === k ? 'active' : ''}">${k === 'prizes' ? 'Prize counter' : k[0].toUpperCase() + k.slice(1)}</button>`)
+      .join('');
+    const it = this.s.slots[this.betSlot];
+    const busy = this.spin || (!!this.bj && !this.bj.done);
+    let body = '';
+    if (this.casinoMode === 'prizes') {
+      const perks = PERKS.map((p) => {
+        const owned = !p.consumable && this.s.perks.includes(p.id);
+        const locked = !!p.requires && !this.s.perks.includes(p.requires);
+        const status = owned ? 'Owned ✓' : locked ? 'Needs the previous charm' : `${p.chips} chips`;
+        const can = !owned && !locked && this.s.chips >= p.chips;
+        const extra = p.id === 'lure' ? ` · ${this.s.lure} charges left` : '';
+        return `<div class="card"><b>${p.icon} ${p.name}</b><div class="muted">${p.desc}${extra}</div><button data-act="perk" data-id="${p.id}" ${can ? '' : 'disabled'}>${status}</button></div>`;
+      }).join('');
+      body = `<p class="muted">Click a fish in your hotbar (below) to turn it in. One chip is ${CHIP_COINS} 🪙 of fish value, so a winning fish is worth far more here than at the stall.</p><div class="grid">${perks}</div>`;
+    } else if (this.casinoMode === 'roulette') {
+      const can = !busy && it?.k === 'fish' && (it.mult ?? 1) < MULT_CAP;
+      const pick =
+        it?.k === 'fish'
+          ? `Betting <b>${byId(FISH, it.fishId).name}</b> · ${eco.fishValue(it)} 🪙${(it.mult ?? 1) >= MULT_CAP ? ' (too rich for the table, turn it in)' : ''}`
+          : 'Click a fish in your hotbar (below) to bet it.';
+      const btn = (b: RouletteBet, label: string) => `<button data-act="rbet" data-id="${b}" class="bet-${b}" ${can ? '' : 'disabled'}>${label} · ×${ROULETTE_PAY[b]}</button>`;
+      body = `<p>${pick}</p><p>${btn('red', 'Red')} ${btn('black', 'Black')} ${btn('green', 'Green')}</p><p class="muted">Win and the fish is worth that much more (max ×${MULT_CAP}). Lose and it is gone.</p>`;
+    } else {
+      const g = this.bj;
+      const pick =
+        it?.k === 'fish'
+          ? `Betting <b>${byId(FISH, it.fishId).name}</b> · ${eco.fishValue(it)} 🪙${(it.mult ?? 1) >= MULT_CAP ? ' (too rich for the table, turn it in)' : ''}`
+          : 'Click a fish in your hotbar (below) to bet it.';
+      if (!g) {
+        const can = it?.k === 'fish' && (it.mult ?? 1) < MULT_CAP;
+        body = `<p>${pick}</p><p><button data-act="bj" data-id="deal" ${can ? '' : 'disabled'}>Deal</button></p><p class="muted">Win ×2 · Blackjack ×3 · Double down and win ×4 · Push keeps your fish · Lose and it is gone. Dealer stands on 17.</p>`;
+      } else {
+        const verdict: Record<string, string> = { win: 'You win!', blackjack: 'Blackjack!', push: 'Push. Your fish is safe.', lose: 'Dealer wins. The fish is gone.', bust: 'Bust. The fish is gone.' };
+        const live = !g.done;
+        body = `<p>Dealer ${g.dealerTotal ?? ''}<br>${g.dealer.map((c) => this.cardHtml(c)).join('')}</p>
+          <p>You ${g.playerTotal}<br>${g.player.map((c) => this.cardHtml(c)).join('')}</p>
+          ${live ? `<p><button data-act="bj" data-id="hit">Hit</button> <button data-act="bj" data-id="stand">Stand</button> <button data-act="bj" data-id="double" ${g.canDouble ? '' : 'disabled'}>Double</button></p>` : `<p><b>${verdict[g.result ?? 'lose']}</b></p><p>${pick}</p><p><button data-act="bj" data-id="deal" ${it?.k === 'fish' && (it.mult ?? 1) < MULT_CAP ? '' : 'disabled'}>Deal again</button></p>`}`;
+      }
+    }
+    return `<h3>Casino · <b>${this.chipsText(this.s.chips)}</b> chips</h3>
+      <nav class="sub">${modes}</nav>
+      ${body}
+      <p class="casino-msg">${this.casinoMsg}</p>
+      <p><button data-tab="play" ${busy ? 'disabled' : ''}>Leave table</button></p>`;
   }
 
   private openBottle(id: string, note: string): void {
@@ -871,7 +1036,7 @@ export class Game {
         const held = this.s.slots[this.s.held];
         if (held?.k === 'fish') {
           const f = byId(FISH, held.fishId);
-          spots.push({ d: -30, label: `Sell ${f.name} · ${eco.fishValue(held)} 🪙`, act: () => this.sellHeld() });
+          spots.push({ d: -30, label: `Sell ${f.name} · ${eco.sellPrice(this.s, held)} 🪙`, act: () => this.sellHeld() });
         }
         spots.push({
           d: dv,
@@ -901,6 +1066,16 @@ export class Game {
         }
       }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
+      const c = this.map.casino;
+      if (c) {
+        const at = (sp: { x: number; z: number }) => Math.hypot(sp.x - x, sp.z - z);
+        const table = (sp: { x: number; z: number }, mode: 'roulette' | 'blackjack' | 'prizes', label: string) => {
+          if (at(sp) <= CASINO_RANGE - 0.4) spots.push({ d: at(sp) - 25, label, act: () => this.openCasino(mode) });
+        };
+        table(c.roulette, 'roulette', 'Roulette · bet a fish on red, black or green');
+        table(c.blackjack, 'blackjack', 'Blackjack · bet a fish against the dealer');
+        table(c.prizes, 'prizes', 'Prize counter · turn fish in for chips, buy perks');
+      }
       spots.push(
         { d: near(hub.leaderSpot), label: 'Top Anglers · see who is richest', act: () => this.openMenu('players') },
         { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
@@ -912,13 +1087,12 @@ export class Game {
         },
         {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
-          label: st.unlocked ? `Travel to ${this.map.next?.name ?? 'the next area'}` : `Gate sealed · fund ${st.total} / ${st.goal} 🪙`,
-          act: () =>
-            this.toast(
-              st.unlocked
-                ? `${this.map.next?.name ?? 'The next area'} is still being built — coming soon!`
-                : `The gate opens when the Town Fund reaches ${st.goal} coins.`,
-            ),
+          label: this.map.casino
+            ? `Back to ${this.map.next?.name ?? 'the pond'}`
+            : st.unlocked
+              ? `Travel to ${this.map.next?.name ?? 'the next area'}${this.s.level < CASINO_LEVEL ? ` · needs level ${CASINO_LEVEL}` : ''}`
+              : `Gate sealed · fund ${st.total} / ${st.goal} 🪙`,
+          act: () => this.useGate(st.unlocked, st.goal),
         },
       );
     }
@@ -1057,7 +1231,7 @@ export class Game {
     const w = this.world;
     if (!this.hooked) return this.reset('Nothing is biting that bait here.');
     this.phase = 'bite';
-    this.timer = 0.95 + this.rod.control * 0.2;
+    this.timer = 0.95 + eco.reelControl(this.s, this.rod.control) * 0.2;
     this.removeShadow();
     const b = w.bobber.position;
     w.fx.splash(b, 22, 0.9);
@@ -1090,8 +1264,8 @@ export class Game {
     const w = this.world;
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
-    const hard = reelDifficulty(this.hooked!, this.rod, this.hookedShiny);
-    this.reel = new Reel(hard, this.rod.control);
+    const hard = reelDifficulty(this.hooked!, { ...this.rod, control: eco.reelControl(this.s, this.rod.control) }, this.hookedShiny);
+    this.reel = new Reel(hard, eco.reelControl(this.s, this.rod.control));
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
     this.lastSurges = 0;
     this.leapT = -1;
@@ -1730,8 +1904,13 @@ export class Game {
         ? '100%'
         : `${(s.xp / xpForNextLevel(s.level)) * 100}%`;
     $('loc').textContent = this.map.name;
+    const chipsEl = $('chips');
+    chipsEl.textContent = this.chipsText(s.chips);
+    chipsEl.parentElement!.classList.toggle('hidden', s.chips <= 0 && !this.map.casino);
     const st = this.fund.state(this.map);
-    $('fundline').textContent = st.unlocked
+    $('fundline').textContent = this.map.casino
+      ? 'Casino Cove · turn fish in for chips at the prize counter'
+      : st.unlocked
       ? `Town Fund complete — ${this.map.next?.name ?? 'next area'} gate open`
       : `Town Fund: ${st.total} / ${st.goal} 🪙 · hand coins to ${this.map.vendor.name}`;
     if (this.net.connected) $('fundline').textContent += ` · ${this.net.players.size + 1} online (${this.net.room})`;
@@ -1746,7 +1925,7 @@ export class Game {
     });
     const el = $('tab');
     if (this.tab === 'play') this.tab = 'players';
-    document.body.classList.toggle('shopping', this.menuOpen && this.tab === 'shop');
+    document.body.classList.toggle('shopping', this.menuOpen && (this.tab === 'shop' || this.tab === 'casino'));
     switch (this.tab) {
       case 'players':
         el.innerHTML = this.playersHtml();
@@ -1756,6 +1935,9 @@ export class Game {
         break;
       case 'shop':
         el.innerHTML = this.shopHtml();
+        break;
+      case 'casino':
+        el.innerHTML = this.casinoHtml();
         break;
       case 'dex':
         el.innerHTML = this.dexHtml();
@@ -1792,9 +1974,10 @@ export class Game {
         body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${formatWeight(fishWeight(f, sl.size))}${sl.mult ? ` · ×${sl.mult}` : ''}</em>`;
       } else cls += ' empty';
       if (i === s.held) cls += ' held';
-      const sellable = sl?.k === 'fish' && this.menuOpen && this.tab === 'shop' && this.atVendor;
+      const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
+      if (this.tab === 'casino' && this.menuOpen && i === this.betSlot && sl?.k === 'fish') cls += ' bet';
       if (sellable) cls += ' sellable';
-      const tip = sellable ? ` data-sell="Sell · ${eco.fishValue(sl)} 🪙"` : '';
+      const tip = sellable ? ` data-sell="Sell · ${eco.sellPrice(this.s, sl)} 🪙"` : '';
       html += `<div class="${cls}" data-i="${i}"${tip}><i>${i + 1}</i>${body}</div>`;
     });
     const el = $('hotbar');

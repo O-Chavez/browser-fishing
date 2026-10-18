@@ -1,3 +1,4 @@
+import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { applyXp, catchXp, eligibleFish, fishingSpot, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
@@ -175,6 +176,19 @@ export const WHEEL_RANGE = 4;
 export const fishValue = (item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
   sellValue(byId(FISH, item.fishId), item.size, item.shiny) * (item.mult ?? 1);
 
+/** Sell-value bonus from the best Lucky Charm owned. */
+export function charmBonus(s: Pick<SaveData, 'perks'>): number {
+  for (const id of ['charm3', 'charm2', 'charm1'] as const) if (s.perks.includes(id)) return CHARM_BONUS[id];
+  return 0;
+}
+
+/** Coins a fish sells for at the stall, with charms. Gambling and chips use the raw `fishValue`. */
+export const sellPrice = (s: Pick<SaveData, 'perks'>, item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
+  Math.round(fishValue(item) * (1 + charmBonus(s)));
+
+/** Rod control with the Quick-Reel Gloves on. */
+export const reelControl = (s: Pick<SaveData, 'perks'>, base: number): number => (s.perks.includes('gloves') ? base * GLOVES_CONTROL : base);
+
 /** Resolves a spin for the fish in hand: a win doubles its value, a loss destroys it. */
 export function applyWheel(s: SaveData, win: boolean): number {
   const item = s.slots[s.held];
@@ -189,7 +203,7 @@ export function applyWheel(s: SaveData, win: boolean): number {
 export function sellHeld(s: SaveData): boolean {
   const item = s.slots[s.held];
   if (item?.k !== 'fish') return false;
-  s.coins += fishValue(item);
+  s.coins += sellPrice(s, item);
   s.slots[s.held] = null;
   return true;
 }
@@ -198,8 +212,21 @@ export function sellHeld(s: SaveData): boolean {
 export function sellSlot(s: SaveData, i: number): boolean {
   const item = s.slots[i];
   if (!Number.isInteger(i) || item?.k !== 'fish') return false;
-  s.coins += fishValue(item);
+  s.coins += sellPrice(s, item);
   s.slots[i] = null;
+  return true;
+}
+
+/** Spends chips on a casino perk. Consumables stack; everything else is bought once. */
+export function buyPerk(s: SaveData, id: string): boolean {
+  const p = perkById(id);
+  if (!p || s.chips < p.chips) return false;
+  if (p.requires && !s.perks.includes(p.requires)) return false;
+  if (!p.consumable && s.perks.includes(p.id)) return false;
+  s.chips = Math.round((s.chips - p.chips) * 10) / 10;
+  if (p.id === 'lure') s.lure += LURE_CHARGES;
+  else s.perks.push(p.id);
+  if (p.id === 'vest') for (let i = 0; i < VEST_SLOTS; i++) s.slots.push(null);
   return true;
 }
 
@@ -298,14 +325,16 @@ export interface Roll {
 export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Roll {
   const rod = byId(RODS, s.rod);
   const bait = byId(BAITS, s.bait);
-  const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night);
+  const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1);
+  const lure = !!fish && s.lure > 0;
+  if (lure) s.lure--;
   return {
     perfect,
     spot,
     fishId: fish?.id ?? null,
     size: fish ? rollSize(fish, rng) : 0,
     wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait,
-    shiny: !!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE),
+    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE)),
   };
 }
 

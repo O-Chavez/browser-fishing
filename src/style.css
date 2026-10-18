@@ -53,7 +53,7 @@ button.active { background: #4a90e2; }
 .controls { margin: 14px 0 0; }
 
 #hotbar { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; gap: 8px; }
-#hotbar .slot { position: relative; width: 92px; height: 62px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 12px; line-height: 1.2; background: rgba(10,20,40,.72); border: 2px solid rgba(255,255,255,.35); border-radius: 8px; }
+#hotbar .slot { position: relative; width: 84px; height: 62px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 12px; line-height: 1.2; background: rgba(10,20,40,.72); border: 2px solid rgba(255,255,255,.35); border-radius: 8px; }
 #hotbar .slot.use { border-color: #ffc933; }
 #hotbar .slot.held { border-color: #fff; box-shadow: 0 0 12px #4a90e2; transform: translateY(-6px); background: rgba(40,80,140,.8); }
 #hotbar .slot.empty { opacity: .45; }
@@ -154,3 +154,17 @@ body.shopping .controls { display: none; }
 #spot:empty { display: none; }
 #nightchip { position: absolute; top: 120px; left: 16px; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(20,24,70,.65); color: #b9c8ff; }
 #nightchip:empty { display: none; }
+
+/* casino */
+#chipbox { font-size: 18px; font-weight: 800; color: #ff9ad0; background: rgba(0,0,0,.45); border: 1px solid rgba(255,154,208,.5); border-radius: 999px; padding: 2px 14px; text-shadow: 0 1px 3px #000; }
+#chipbox.hidden { display: none; }
+#hotbar .slot.bet { border-color: #ff9ad0; box-shadow: 0 0 12px #ff4f9a; }
+.pc { display: inline-block; min-width: 38px; margin: 4px 6px 0 0; padding: 8px 6px; text-align: center; font-weight: 800; font-size: 18px; color: #111; background: #fff; border-radius: 6px; border: 1px solid #999; }
+.pc.red { color: #c4262e; }
+.pc.back { background: #324a8a; color: #fff; }
+.casino-msg { min-height: 1.4em; }
+.casino-msg .win { color: #6dff8f; }
+.casino-msg .lose { color: #ff7b7b; }
+button.bet-red { background: #c4262e; color: #fff; }
+button.bet-black { background: #1b1b1f; color: #fff; }
+button.bet-green { background: #1f9a4f; color: #fff; }
