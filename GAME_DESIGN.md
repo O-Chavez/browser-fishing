@@ -356,3 +356,52 @@ Night is the shortest part of the day, so it is the best time to fish. When the 
 ## 28. Tier visuals
 
 T1–T3 share a classic fish shape. T4 fish are larger with a glow halo, orbiting sparks, side fins and back spines. T5 fish are large serpentine creatures with a glowing mane, wing-fins, crown, orbiting rings and a per-species effect (veil, flames, colour-cycling ribbons, star sparkles).
+
+## 29. Casino (planned, not built)
+
+The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `next`. The Forest Lake stays in the data, shelved.
+
+### Access
+- The pond gate opens through the Town Fund as usual, and the casino also needs **level 15** (the Aurora Rod level) so players have fished before they gamble.
+- The casino is a `MapDef` with its own hub: a lit hall with a roulette table, a blackjack table, a chips-for-unlocks shop and a small fishing area outside.
+
+### Let it ride
+- A player puts a **fish** on a table. The fish keeps its identity and gains a **×multiplier** (as the Lucky Wheel does).
+- Each round is a choice: win to multiply the fish's value, lose and the fish is destroyed.
+- After every win the player chooses **ride again** or **cash out**. The decision is always theirs.
+- **Cash out** turns the fish in for **chips** at its current boosted value times a fixed rate.
+- The multiplier is capped (about ×16) and a cash-out is forced at the cap.
+- A disconnect mid-ride auto-cashes-out the fish, so a dropped connection never costs a streak.
+- The server rolls everything and applies the result after the animation, like the wheel.
+
+### Tables
+- **Roulette:** red, black or green. Red and black double the fish, green pays more. Slots are weighted so the house keeps about a 3% edge. One spin is shared by every player at the table.
+- **Blackjack:** hit, stand and double. The dealer stands on 17. A win pays 1:1 and a natural pays 3:2 on the multiplier.
+
+### Chips
+- A separate currency in the account save. Chips are earned only by cashing out fish and are spent only on casino unlocks. Coins keep buying rods, bait and the Town Fund.
+- One config holds the fish-to-chip rate and unlock prices so the grind can be tuned.
+
+### Casino unlocks (bought with chips)
+| Item | Effect | Type |
+|---|---|---|
+| Tackle Vest | +2 inventory slots | permanent |
+| Lucky Charms (3 tiers) | +5/10/15% sell value on every fish | permanent, total bonus capped |
+| Quick-Reel Gloves | shorter reel time | permanent |
+| Shiny Lure | N charges, each guarantees a shiny catch | consumable, re-bought |
+| Night Owl Lantern | better night-fish luck | permanent |
+| Cosmetics | casino-only outfits and trophies | permanent |
+
+### Build order
+1. Casino map, gate and travel.
+2. Chips currency in the save, the server and the HUD.
+3. Roulette.
+4. Blackjack.
+5. Unlock shop and equipping.
+6. Applying the effects: vest slots, sell bonus, reel time, shiny charges.
+7. Tests and a design-doc update.
+
+### Open questions
+- Fish-to-chip rate and unlock prices.
+- Whether to add a daily chip cap or other protection against one huge streak.
+- Which low-value fish may be bet at all (a minimum tier).
