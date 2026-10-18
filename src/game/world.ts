@@ -453,7 +453,7 @@ export class World {
   }
 
   private buildTerrain(loc: Location): void {
-    const NR = 80;
+    const NR = 150;
     const NT = 120;
     const pos: number[] = [];
     const col: number[] = [];
@@ -466,9 +466,10 @@ export class World {
     const tmp = new THREE.Color();
     for (let j = 0; j <= NT; j++) {
       const th = -Math.PI + (j / NT) * Math.PI * 2;
-      const inner = innerRadius(th) - 14;
+      // One shared start radius keeps neighbouring columns aligned. A per-column start made long slivers across the bay behind the dock.
+      const inner = 1;
       for (let i = 0; i <= NR; i++) {
-        const r = inner + (175 - inner) * Math.pow(i / NR, 1.5);
+        const r = inner + (175 - inner) * Math.pow(i / NR, 1.7);
         const x = Math.sin(th) * r;
         const z = Math.cos(th) * r;
         const y = groundHeight(x, z);
