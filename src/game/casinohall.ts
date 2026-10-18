@@ -42,6 +42,8 @@ export class CasinoHall {
   private anim: { from: number; to: number; t0: number; ms: number } | null = null;
   private glow: { m: THREE.MeshBasicMaterial; c: THREE.Color }[] = [];
   private neon = 0;
+  private chipBoard: ReturnType<typeof textPlane> | null = null;
+  private chipShown = -1;
   private cards = new THREE.Group();
   private bjButtons: Record<string, THREE.Object3D> = {};
   private picks: THREE.Object3D[] = [];
@@ -244,59 +246,159 @@ export class CasinoHall {
     while (o && !o.userData.tag) o = o.parent;
     const picked = o && !o.userData.tag.off ? o : null;
     if (picked !== this.hover) {
-      this.hover?.position.setY(1.1);
+      if (this.hover) this.hover.position.y -= 0.05;
       this.hover = picked;
-      picked?.position.setY(1.15);
+      if (picked) picked.position.y += 0.05;
     }
     return picked ? picked.userData.tag : null;
   }
 
   clearHover(): void {
-    this.hover?.position.setY(1.1);
+    if (this.hover) this.hover.position.y -= 0.05;
     this.hover = null;
   }
 
   private buildPrizes(s: Spot): void {
     const g = new THREE.Group();
-    const counter = rbox(4.2, 1.05, 1.0, 0x6b2a3a, 0.06);
+    const counter = rbox(5.0, 1.05, 1.1, 0x4a1a2c, 0.06);
     counter.position.y = 0.52;
-    const top = rbox(4.4, 0.1, 1.2, GOLD, 0.04);
+    const top = rbox(5.2, 0.1, 1.3, GOLD, 0.04);
     top.position.y = 1.08;
     g.add(counter, top);
-    for (const sx of [-2, 2]) {
-      const post = cyl(0.08, 0.08, 3.2, DARK, 8);
-      post.position.set(sx, 1.6, -0.45);
+
+    // Brass cage behind the counter, like a cashier's window.
+    for (let i = -6; i <= 6; i++) {
+      const bar = cyl(0.03, 0.03, 2.1, GOLD, 6);
+      bar.position.set(i * 0.4, 2.15, -0.5);
+      g.add(bar);
+    }
+    for (const sx of [-2.5, 2.5]) {
+      const post = cyl(0.1, 0.1, 3.4, GOLD, 8);
+      post.position.set(sx, 1.7, -0.5);
       g.add(post);
     }
-    const bar = rbox(4.5, 0.12, 0.2, DARK, 0.03);
-    bar.position.set(0, 3.2, -0.45);
+    const bar = rbox(5.3, 0.14, 0.24, GOLD, 0.03);
+    bar.position.set(0, 3.4, -0.5);
     g.add(bar);
-    const { mesh, ctx, tex } = textPlane(3.8, 0.9, 512);
+    const { mesh, ctx, tex } = textPlane(3.6, 0.8, 512);
     ctx.fillStyle = '#2a0f1c';
-    ctx.fillRect(0, 0, 512, 121);
+    ctx.fillRect(0, 0, 512, 114);
     ctx.strokeStyle = '#ffd35a';
     ctx.lineWidth = 8;
-    ctx.strokeRect(6, 6, 500, 109);
+    ctx.strokeRect(6, 6, 500, 102);
     ctx.fillStyle = '#ffd35a';
-    ctx.font = '800 58px system-ui, sans-serif';
+    ctx.font = '800 56px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🎰 PRIZE COUNTER', 256, 64);
+    ctx.fillText('🎰 CASHIER', 256, 60);
     tex.needsUpdate = true;
-    mesh.position.set(0, 2.55, -0.3);
+    mesh.position.set(0, 3.0, -0.35);
     g.add(mesh);
-    // Chips on the counter.
-    [0xc4262e, 0x2a6fc4, 0x1f9a4f, 0xffffff].forEach((c, i) => {
-      for (let k = 0; k < 3 + i; k++) {
-        const chip = cyl(0.14, 0.14, 0.04, c, 14);
-        chip.position.set(-1.5 + i * 0.35, 1.16 + k * 0.045, 0.1);
-        g.add(chip);
+
+    // Chip tray (left): hold a fish and click it to cash in.
+    const tray = new THREE.Group();
+    const trayBase = rbox(1.7, 0.08, 0.8, 0x5a2f1c, 0.03);
+    tray.add(trayBase);
+    [0xc4262e, 0x2a6fc4, 0x1f9a4f, 0xffffff, 0x1b1b1f].forEach((c, i) => {
+      const rows = 4 + ((i * 3) % 4);
+      for (let k = 0; k < rows; k++) {
+        const chip = cyl(0.15, 0.15, 0.045, c, 14);
+        chip.position.set(-0.64 + i * 0.32, 0.08 + k * 0.05, i % 2 ? 0.12 : -0.12);
+        tray.add(chip);
       }
     });
-    g.add(this.neonRing(2.3, 3.0, 0xffd35a).translateZ(-0.45).translateY(0));
+    const tag = textPlane(1.5, 0.34, 256);
+    tag.ctx.fillStyle = '#2a0f1c';
+    tag.ctx.fillRect(0, 0, 256, 57);
+    tag.ctx.strokeStyle = '#ffd35a';
+    tag.ctx.lineWidth = 4;
+    tag.ctx.strokeRect(2, 2, 252, 53);
+    tag.ctx.fillStyle = '#ffd35a';
+    tag.ctx.font = '800 30px system-ui, sans-serif';
+    tag.ctx.textAlign = 'center';
+    tag.ctx.textBaseline = 'middle';
+    tag.ctx.fillText('TURN IN FISH', 128, 30);
+    tag.tex.needsUpdate = true;
+    tag.mesh.rotation.x = -Math.PI / 2;
+    tag.mesh.position.set(0, 0.06, 0.52);
+    tray.add(tag.mesh);
+    tray.position.set(-1.4, 1.17, 0.05);
+    this.addPick(tray, { k: 'cash', id: 'cash' });
+    g.add(tray);
+
+    // Chip balance board (above the tray).
+    const board = textPlane(1.8, 0.7, 256);
+    board.mesh.position.set(-1.4, 2.1, -0.38);
+    this.chipBoard = board;
+    g.add(board.mesh);
+    this.setChips(0);
+
+    // Prize case (right): one glass box of perk plaques; click it to browse.
+    const caseG = new THREE.Group();
+    const frame = rbox(1.9, 0.08, 0.8, GOLD, 0.03);
+    caseG.add(frame);
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 0.6, 0.7),
+      new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.18, depthWrite: false }),
+    );
+    glass.position.y = 0.34;
+    caseG.add(glass);
+    const icons = ['🦺', '🍀', '🧤', '🏮', '✨'];
+    icons.forEach((ic, i) => {
+      const pl = textPlane(0.3, 0.3, 64);
+      pl.ctx.font = '48px system-ui, sans-serif';
+      pl.ctx.textAlign = 'center';
+      pl.ctx.textBaseline = 'middle';
+      pl.ctx.fillText(ic, 32, 34);
+      pl.tex.needsUpdate = true;
+      pl.mesh.material = new THREE.MeshBasicMaterial({ map: pl.tex, transparent: true, toneMapped: false, depthWrite: false });
+      pl.mesh.position.set(-0.7 + i * 0.35, 0.3, 0.1);
+      pl.mesh.rotation.x = -0.5;
+      caseG.add(pl.mesh);
+    });
+    const tag2 = textPlane(1.5, 0.34, 256);
+    tag2.ctx.fillStyle = '#2a0f1c';
+    tag2.ctx.fillRect(0, 0, 256, 57);
+    tag2.ctx.strokeStyle = '#ffd35a';
+    tag2.ctx.lineWidth = 4;
+    tag2.ctx.strokeRect(2, 2, 252, 53);
+    tag2.ctx.fillStyle = '#ffd35a';
+    tag2.ctx.font = '800 30px system-ui, sans-serif';
+    tag2.ctx.textAlign = 'center';
+    tag2.ctx.textBaseline = 'middle';
+    tag2.ctx.fillText('PRIZES', 128, 30);
+    tag2.tex.needsUpdate = true;
+    tag2.mesh.rotation.x = -Math.PI / 2;
+    tag2.mesh.position.set(0, 0.06, 0.52);
+    caseG.add(tag2.mesh);
+    caseG.position.set(1.4, 1.17, 0.05);
+    this.addPick(caseG, { k: 'shop', id: 'shop' });
+    g.add(caseG);
+
+    g.add(this.neonRing(2.4, 3.55, 0xffd35a).translateZ(-0.5));
     this.place(g, s, 2.3);
     // The counter is long; block its ends so nobody walks through.
-    this.colliders.push({ x: s.x - 1.5, z: s.z, r: 0.9 }, { x: s.x + 1.5, z: s.z, r: 0.9 });
+    this.colliders.push({ x: s.x - 1.7, z: s.z, r: 0.9 }, { x: s.x + 1.7, z: s.z, r: 0.9 });
+  }
+
+  /** Redraws the chip balance board above the tray. */
+  setChips(n: number): void {
+    if (!this.chipBoard || n === this.chipShown) return;
+    this.chipShown = n;
+    const { ctx, tex } = this.chipBoard;
+    ctx.fillStyle = '#12060c';
+    ctx.fillRect(0, 0, 256, 100);
+    ctx.strokeStyle = '#ffd35a';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, 250, 94);
+    ctx.fillStyle = '#ffd35a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.fillText('YOUR CHIPS', 128, 24);
+    ctx.font = '800 50px system-ui, sans-serif';
+    ctx.fillText(String(Math.round(n * 10) / 10), 128, 66);
+    tex.needsUpdate = true;
   }
 
   /** Spins the wheel and lands pocket `i` under the pointer. */

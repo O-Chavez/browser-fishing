@@ -357,13 +357,15 @@ Night is the shortest part of the day, so it is the best time to fish. When the 
 
 T1–T3 share a classic fish shape. T4 fish are larger with a glow halo, orbiting sparks, side fins and back spines. T5 fish are large serpentine creatures with a glowing mane, wing-fins, crown, orbiting rings and a per-species effect (veil, flames, colour-cycling ribbons, star sparkles).
 
-## 29. Casino (planned, not built)
+## 29. Casino
 
 The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `next`. The Forest Lake stays in the data, shelved.
 
 ### Access
 - The pond gate opens through the Town Fund as usual, and the casino also needs **level 15** (the Aurora Rod level) so players have fished before they gamble.
-- The casino is a `MapDef` with its own hub: a lit hall with a roulette table, a blackjack table, a prize shop (turn in fish for chips, and buy unlocks with chips) and a small fishing area outside.
+- The casino is an **indoor map** (no water, terrain or dock): a carpeted hall with a roulette table, a blackjack table and a cashier counter. Fishing is disabled inside. The front door returns to the pond.
+- Tables are played **in the world**: walk up, hold the fish to bet (keys 1-5), then aim and click the 3D red/black/green patches, or the DEAL / HIT / STAND / DOUBLE buttons on the felt. Cards are laid out on the table and a small status line shows the bet and result.
+- At the cashier, hold a fish and click the chip tray to turn it in. Click the prize case (or press E) to open the perk list and buy unlocks.
 
 ### Let it ride
 - A player bets a **fish** at a table. The fish keeps its identity and gains a **×multiplier** (as the Lucky Wheel does).

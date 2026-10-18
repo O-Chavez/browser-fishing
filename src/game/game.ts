@@ -160,7 +160,7 @@ export class Game {
   private betSlot = -1;
   private bj: BlackjackView | null = null;
   private casinoMsg = '';
-  private table: 'roulette' | 'blackjack' | null = null;
+  private table: 'roulette' | 'blackjack' | 'prizes' | null = null;
   private aim: { k: string; id: string } | null = null;
   private tableHtml = '';
   private last = performance.now();
@@ -963,13 +963,15 @@ export class Game {
     const c = this.map.casino;
     const hall = this.world.hall;
     const hud = $('tablehud');
-    let t: 'roulette' | 'blackjack' | null = null;
+    let t: 'roulette' | 'blackjack' | 'prizes' | null = null;
     if (c && hall && walking) {
       const d = (sp: { x: number; z: number }) => Math.hypot(sp.x - this.player.x, sp.z - this.player.z);
       if (d(c.roulette) <= 3.4) t = 'roulette';
       else if (d(c.blackjack) <= 3.4) t = 'blackjack';
+      else if (d(c.prizes) <= 3.6) t = 'prizes';
     }
     this.table = t;
+    hall?.setChips(this.s.chips);
     if (!t || !hall) {
       hall?.clearHover();
       this.aim = null;
@@ -983,6 +985,23 @@ export class Game {
     const fish = it?.k === 'fish' ? it : null;
     const rich = !!fish && (fish.mult ?? 1) >= MULT_CAP;
     const lines: string[] = [];
+    if (t === 'prizes') {
+      const held = this.s.slots[this.s.held];
+      if (held?.k === 'fish') {
+        const chips = chipsFor(eco.fishValue(held));
+        lines.push(`Holding <b>${byId(FISH, held.fishId).name}</b> · ${eco.fishValue(held)} 🪙 = <b>${chips}</b> chips`);
+        if (chips < 1) lines.push('<span class="muted">Worth under 1 chip. Gamble it up first.</span>');
+      } else lines.push('Hold a fish (1-5) to turn it in for chips.');
+      if (this.aim) lines.push(`<span class="muted">Click: ${this.aim.k === 'cash' ? 'turn in the fish you are holding' : 'browse the prize case'}</span>`);
+      else lines.push('<span class="muted">Click the chip tray to cash in · click the prize case to shop · E for the full list</span>');
+      const html = lines.join('<br>');
+      if (html !== this.tableHtml) {
+        this.tableHtml = html;
+        hud.innerHTML = html;
+      }
+      hud.classList.remove('hidden');
+      return;
+    }
     lines.push(
       fish
         ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${eco.fishValue(fish)} 🪙${rich ? ' <span class="lose">(too rich for the table, turn it in)</span>' : ''}`
@@ -1016,6 +1035,14 @@ export class Game {
   private tableClick(): void {
     if (!this.table) return this.toast('No fishing in the casino. Head out the front door.');
     const a = this.aim;
+    if (this.table === 'prizes') {
+      if (a?.k === 'shop') this.openCasino('prizes');
+      else if (a?.k === 'cash') {
+        if (this.s.slots[this.s.held]?.k !== 'fish') return this.toast('Hold a fish (1-5) to turn it in.');
+        this.casinoSend({ t: 'cashout', i: this.s.held });
+      }
+      return;
+    }
     if (!a || this.spin) return;
     const it = this.s.slots[this.betSlot];
     const needsFish = a.k === 'rbet' || a.id === 'deal';
