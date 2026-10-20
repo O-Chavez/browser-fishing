@@ -8,7 +8,8 @@ export interface DexEntry { count: number; best: number }
 export const SLOT_COUNT = 5;
 /** Hotbar size: the base five, plus the Tackle Vest's extra slots. */
 export const slotCount = (s: { perks?: string[] }): number => SLOT_COUNT + (s.perks?.includes('vest') ? VEST_SLOTS : 0);
-export const BAIT_STACK = 20;
+/** One hotbar slot holds a whole supply of a bait type; anything beyond waits in the tackle locker. */
+export const BAIT_STACK = 99;
 
 /** The hotbar is the whole inventory: every slot holds one rod, one fish, or a stack of one bait type. */
 export type Slot =

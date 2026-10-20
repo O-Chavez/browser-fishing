@@ -38,6 +38,16 @@ describe('carry slots', () => {
     expect(eco.freeSlots(s)).toBe(3);
   });
 
+  it('keeps a big bait supply in one hotbar stack, spilling only past 99 into the locker', () => {
+    const s = newSave();
+    s.coins = 99_999;
+    for (let i = 0; i < 20; i++) expect(eco.buyBait(s, 'worm')).toBe(true);
+    expect(eco.baitCount(s, 'worm')).toBe(115);
+    expect(s.slots[1]).toMatchObject({ k: 'bait', id: 'worm', n: 99 });
+    expect(s.locker.bait.worm).toBe(16);
+    expect(s.slots.filter((x) => x?.k === 'bait')).toHaveLength(1);
+  });
+
   it('equips higher-tier bait from the locker and swaps rods', () => {
     const s = newSave();
     s.coins = 9999;

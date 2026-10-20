@@ -58,6 +58,8 @@ canvas { display: block; position: fixed; inset: 0; }
 
 #toast { position: absolute; top: 28%; left: 50%; transform: translateX(-50%); max-width: 70vw; padding: 10px 20px; border-radius: 14px; background: var(--hud-bg); box-shadow: var(--hud-edge); text-align: center; font-size: 20px; font-weight: 800; opacity: 0; transition: opacity .3s; }
 #toast:empty { display: none; }
+/* in the shop and at the prize counter, keep messages above the hotbar instead of over the window */
+body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #toast.show { opacity: 1; }
 /* bottom left: the three keys worth remembering; the full list lives in the menu */
 #help { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 14px; font-size: 13px; font-weight: 800; color: var(--cream); opacity: .8; text-shadow: 0 1px 3px #000; }
