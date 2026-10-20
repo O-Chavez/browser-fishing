@@ -314,6 +314,13 @@ describe('cosmetics, selling by slot and the board', () => {
     room.handle(a.id, { t: 'buycos', id: 'crown' });
     expect(a.acct.save.owned).toEqual(['cap']);
     expect(a.acct.save.coins).toBe(350);
+    // Casino items are never sold at the stall, whatever the coins or chips.
+    a.acct.save.coins = 1_000_000;
+    a.acct.save.chips = 1000;
+    room.handle(a.id, { t: 'buycos', id: 'visor' });
+    expect(a.acct.save.owned).toEqual(['cap']);
+    a.acct.save.coins = 350;
+    a.acct.save.chips = 0;
     room.handle(a.id, { t: 'equip', slot: 'hat', id: 'crown' });
     room.handle(a.id, { t: 'equip', slot: 'shirt', id: 'cap' });
     expect(a.acct.save.look.hat).toBeNull();
