@@ -270,7 +270,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 
 ## 15. Identity, Cosmetics & Expanded Hub
 - **Join screen:** pick a name and body color (live 3D preview). Saved locally; `?name=` skips it.
-- **Leaderboard:** Tab/Esc menu "Players" tab lists everyone online with coins; a "Top Anglers" board stands in the plaza.
+- **Leaderboard:** Tab/Esc menu "Players" tab lists everyone online with their level, highest first; a "Top Anglers" board stands in the plaza.
 - **Cosmetics:** hats, shirts, jewelry (6 each, tiers 0–5; higher price = flashier, top tiers glow). Bought at Marlow's shop menu (Cosmetics/Gear tabs), equipped in the Wardrobe (Tab; also the plaza mirror). Visible to all players.
 - **Selling:** with the shop menu open, hover a hotbar fish to see its price and click to sell.
 - **Hub:** T-shaped dock with side piers, rowboat, barrel and rope; plaza gains a campfire with benches, leaderboard board, mirror and extra lamps.
@@ -304,7 +304,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 ## 21. Top Anglers board
 
 - The physical board ranks players in the room by their single most valuable catch (`save.best`, set in `applyCatch`, reset with the account). Each row shows rank, name, level, the fish's tier and name (tier-colored, ✨ if shiny) and its sell value. Players with no catch yet rank last, by coins.
-- The Players tab in the menu still ranks by coins.
+- The Players tab in the menu ranks by level.
 
 ## 22. Music and coin HUD
 

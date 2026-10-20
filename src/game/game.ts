@@ -776,11 +776,11 @@ export class Game {
     this.preview.set(on ? { ...this.s.look, [slot]: id } : this.s.look);
   }
 
-  /** Everyone online with their coins, richest first. */
-  private leaders(): { name: string; coins: number; color: number; me: boolean }[] {
-    const rows = [{ name: this.net.name, coins: this.s.coins, color: this.s.look.color, me: true }];
-    for (const p of this.net.players.values()) rows.push({ name: p.name, coins: this.net.coins.get(p.id) ?? p.coins, color: p.look.color, me: false });
-    return rows.sort((a, b) => b.coins - a.coins);
+  /** Everyone online with their level, highest first. */
+  private leaders(): { name: string; level: number; color: number; me: boolean }[] {
+    const rows = [{ name: this.net.name, level: this.s.level, color: this.s.look.color, me: true }];
+    for (const p of this.net.players.values()) rows.push({ name: p.name, level: p.level ?? 1, color: p.look.color, me: false });
+    return rows.sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
   }
 
   /** Online players ranked by their most valuable catch, for the physical board. */
@@ -1176,7 +1176,7 @@ export class Game {
       }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
-        { d: near(hub.leaderSpot), label: 'Top Anglers · see who is richest', act: () => this.openMenu('players') },
+        { d: near(hub.leaderSpot), label: 'Top Anglers · see everyone online', act: () => this.openMenu('players') },
         { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         {
@@ -2096,7 +2096,7 @@ export class Game {
     const rows = this.leaders()
       .map(
         (p, i) =>
-          `<div class="row${p.me ? ' me' : ''}"><div><span class="rank">${i + 1}</span><span class="dot" style="background:#${p.color.toString(16).padStart(6, '0')}"></span>${i === 0 ? '👑 ' : ''}${escapeHtml(p.name)}${p.me ? ' <span class="muted">(you)</span>' : ''}</div><div><b>${p.coins}</b> 🪙</div></div>`,
+          `<div class="row${p.me ? ' me' : ''}"><div><span class="rank">${i + 1}</span><span class="dot" style="background:#${p.color.toString(16).padStart(6, '0')}"></span>${i === 0 ? '👑 ' : ''}${escapeHtml(p.name)}${p.me ? ' <span class="muted">(you)</span>' : ''}</div><div>Lv <b>${p.level}</b></div></div>`,
       )
       .join('');
     const reset = this.confirmReset
