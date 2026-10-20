@@ -22,7 +22,7 @@
 - [ ] Make scroll-wheel slot switching smooth
   - Right now it doesn't respond evenly to scroll movement and feels sticky; each notch/gesture should move one slot consistently
   - Add a slight animation when the highlight moves to a new hotbar slot
-- [ ] Luck items in the casino shop should read as "caught fish are worth x more"
+- [x] Luck items in the casino shop should read as "caught fish are worth x more"
   - The in-game text currently says "Every fish sells for +X%"
   - Source already says "worth" (commit fa24e73, 2026-10-17), but the built `dist/` bundle still says "sells for", so the running game may be a stale build. Rebuild (and redeploy if the live server is behind) and check before changing any code
 - [x] Tab player list should show each player's level instead of their money
