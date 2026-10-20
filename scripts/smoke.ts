@@ -179,6 +179,20 @@ async function pondChecks(): Promise<void> {
   check('pond: Lucky Wheel spins with a fish in hand', wheel.spun, `prompt "${wheel.label}"`);
   await sleep(4000);
 
+  // Scroll wheel: each notch moves exactly one slot, and the new slot pops.
+  const heldNow = () => page.evaluate(() => (window.__game.s as any).held as number);
+  await page.keyboard.press('1');
+  const w0 = await heldNow();
+  for (let k = 0; k < 3; k++) {
+    await page.mouse.wheel({ deltaY: 100 });
+    await sleep(60);
+  }
+  const w1 = await heldNow();
+  const popped = await page.evaluate(() => !!document.querySelector('#hotbar .slot.held.pick'));
+  const n = await page.evaluate(() => (window.__game.s as any).slots.length as number);
+  check('hotbar: each scroll notch moves one slot', w1 === (w0 + 3) % n, `${w0 + 1} -> ${w1 + 1}`);
+  check('hotbar: newly held slot animates', popped);
+
   // Drop a fish and pick it back up.
   await page.evaluate((f) => { (window.__game.s as any).slots[3] = f; }, fish(4));
   await page.evaluate(() => window.__game.teleport(0, 20));

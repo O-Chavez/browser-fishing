@@ -65,6 +65,12 @@ button.active { background: #4a90e2; }
 #hotbar .slot { position: relative; width: 84px; height: 62px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 12px; line-height: 1.2; background: rgba(10,20,40,.72); border: 2px solid rgba(255,255,255,.35); border-radius: 8px; }
 #hotbar .slot.use { border-color: #ffc933; }
 #hotbar .slot.held { border-color: #fff; box-shadow: 0 0 12px #4a90e2; transform: translateY(-6px); background: rgba(40,80,140,.8); }
+#hotbar .slot.held.pick { animation: slot-pick .16s ease-out; }
+@media (prefers-reduced-motion: reduce) { #hotbar .slot.held.pick { animation: none; } }
+@keyframes slot-pick {
+  from { transform: translateY(0) scale(.94); box-shadow: 0 0 0 #4a90e2; }
+  60% { transform: translateY(-8px) scale(1.04); }
+}
 #hotbar .slot.empty { opacity: .45; }
 #hotbar .slot i { position: absolute; top: 2px; left: 6px; font-size: 10px; font-style: normal; opacity: .7; }
 #hotbar .slot em { font-style: normal; font-weight: 700; }

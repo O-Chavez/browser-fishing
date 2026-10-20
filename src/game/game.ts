@@ -18,6 +18,7 @@ import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
 import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
+import { WheelStepper } from './wheelstep';
 import { Player } from './player';
 import {
   animateFish,
@@ -156,6 +157,7 @@ export class Game {
   private spin = false;
   private casinoMode: 'roulette' | 'blackjack' | 'prizes' = 'roulette';
   private betSlot = -1;
+  private hotbarHeld = -1;
   private bj: BlackjackView | null = null;
   private casinoMsg = '';
   private table: 'roulette' | 'blackjack' | 'prizes' | null = null;
@@ -493,14 +495,12 @@ export class Game {
       if (this.phase === 'charging') this.releaseCast();
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    let wheelAcc = 0;
+    const wheel = new WheelStepper();
     document.addEventListener('wheel', (e) => {
       if (!this.active || this.menuOpen || this.phase !== 'idle') return;
-      wheelAcc += e.deltaY;
-      if (Math.abs(wheelAcc) < 40) return;
+      const step = wheel.step(e.deltaY, e.deltaMode, e.timeStamp);
+      if (!step) return;
       const n = this.s.slots.length;
-      const step = wheelAcc > 0 ? 1 : -1;
-      wheelAcc = 0;
       this.takeSlot((this.s.held + step + n) % n);
     }, { passive: true });
     document.addEventListener('keydown', (e) => {
@@ -2025,6 +2025,9 @@ export class Game {
 
   private renderHotbar(): void {
     const s = this.s;
+    // The newly held slot gets a one-off pop; later re-renders leave it still.
+    const moved = this.hotbarHeld !== s.held;
+    this.hotbarHeld = s.held;
     const activeBait = eco.activeSlot(s);
     let html = '';
     s.slots.forEach((sl, i) => {
@@ -2040,7 +2043,7 @@ export class Game {
         const f = byId(FISH, sl.fishId);
         body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${eco.fishValue(sl)} 🪙</em>`;
       } else cls += ' empty';
-      if (i === s.held) cls += ' held';
+      if (i === s.held) cls += moved ? ' held pick' : ' held';
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
       if (this.tab === 'casino' && this.menuOpen && i === this.betSlot && sl?.k === 'fish') cls += ' bet';
       if (sellable) cls += ' sellable';
