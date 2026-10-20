@@ -28,7 +28,6 @@ export type ClientMsg =
   | { t: 'join'; name: string; token: string; map: string; color?: number }
   | { t: 'pos'; x: number; z: number; yaw: number }
   | { t: 'map'; map: string }
-  | { t: 'give'; map: string; coins: number }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar, or a hotbar rod/bait stack back to the locker. */
@@ -82,8 +81,7 @@ export type ServerMsg =
   /** Coins per player id, for the leaderboard. */
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
-  | { t: 'hall'; rows: HallRow[] }
-  | { t: 'fund'; map: string; total: number; by?: string; coins?: number; open?: boolean };
+  | { t: 'hall'; rows: HallRow[] };
 
 export interface HallRow { name: string; level: number; best: BestCatch }
 

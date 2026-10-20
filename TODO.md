@@ -26,7 +26,7 @@
   - The in-game text currently says "Every fish sells for +X%"
   - Source already says "worth" (commit fa24e73, 2026-10-17), but the built `dist/` bundle still says "sells for", so the running game may be a stale build. Rebuild (and redeploy if the live server is behind) and check before changing any code
 - [ ] Tab player list should show each player's level instead of their money
-- [ ] Remove the Town Fund from the game entirely
+- [x] Remove the Town Fund from the game entirely
   - The level-15 casino lock (`CASINO_LEVEL`) is the only gate needed
   - Remove all references and elements: `src/game/fund.ts` + `fund.test.ts`, the HUD/menus (`game.ts`, `index.html`, `style.css`), world props (`town.ts`, `hub.ts`), the `fund` net message (`protocol.ts`, `net.ts`, `server/room.ts`), `goal` fields in `maps.ts`, the save `fund` field (`state.ts`, `accounts.ts`, `server/index.ts`), tests, and `GAME_DESIGN.md`
   - Watch out: the server gate (`server/room.ts:262`) currently checks only the fund, and the level check happens only on the client (`game.ts:887`). Swap in a server-side `CASINO_LEVEL` check, or the casino ends up open to everyone server-side

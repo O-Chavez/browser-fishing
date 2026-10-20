@@ -1,3 +1,5 @@
+import { CASINO_LEVEL } from './casino';
+
 export interface Spot {
   x: number;
   z: number;
@@ -53,7 +55,6 @@ export interface MapDef {
   /** Flat build area for the hub. */
   pad: { x: number; z: number; r: number; h: number };
   vendor: { name: string; shop: Spot; npc: Spot };
-  board: Spot;
   gate: Spot;
   wheel: Spot;
   /** Live "Top Anglers" board; E opens the player list. */
@@ -63,8 +64,6 @@ export interface MapDef {
   campfire: Spot;
   /** What this map's shop menu sells (ids from `RODS` and `BAITS`). */
   stock: { rods: string[]; bait: string[] };
-  /** Pooled coins the whole room must hand in to open the gate. */
-  goal: number;
   next: { id: string; name: string } | null;
   /** Walkable radius from the map origin. */
   radius: number;
@@ -77,7 +76,7 @@ export interface MapDef {
 
 /**
  * Map template. To add a map: add a `Location` palette and fish in content.ts, then add a
- * `MapDef` here with its own spawn, hub layout, goal and `next` link.
+ * `MapDef` here with its own spawn, hub layout and `next` link.
  */
 export const MAPS: MapDef[] = [
   {
@@ -91,14 +90,12 @@ export const MAPS: MapDef[] = [
       shop: { x: 5.5, z: 21, facing: -Math.PI / 2 },
       npc: { x: 6.9, z: 21, facing: -Math.PI / 2 },
     },
-    board: { x: -5.5, z: 25, facing: Math.PI / 2 + 0.5 },
     gate: { x: 0, z: 56, facing: Math.PI },
     wheel: { x: -6, z: 18.5, facing: Math.PI / 2 },
     leaderboard: { x: 10.5, z: 30, facing: faceToward(10.5, 30, 2, 27) },
     mirror: { x: -8.5, z: 40, facing: faceToward(-8.5, 40, 0, 32) },
     campfire: { x: -15, z: 24, facing: 0 },
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
-    goal: 300,
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
     town: {
@@ -141,8 +138,8 @@ export const MAPS: MapDef[] = [
         {
           name: 'Captain Reed', x: 4, z: 53.5, facing: faceToward(4, 53.5, 0, 56), coat: 0x2f4f4f, hat: 0x2b2b2b,
           lines: [
-            "Beyond the gate lies Forest Lake. Big water. I'll open it when the town fund is full.",
-            'Every coin in the fund brings the day closer. Hand yours to Marlow.',
+            `Beyond the gate lies Casino Cove. They only let in seasoned anglers: level ${CASINO_LEVEL} and up.`,
+            'Keep fishing and keep levelling. The gate opens for anyone who has earned it.',
           ],
         },
       ],
@@ -180,9 +177,8 @@ MAPS.push({
   id: 'casino',
   locationId: 'lake',
   name: 'Casino Cove',
-  goal: 1,
   next: { id: 'pond', name: 'Starter Pond' },
-  minLevel: 15,
+  minLevel: CASINO_LEVEL,
   spawn: { x: 0, z: 29.5, yaw: Math.PI },
   pad: { x: 0, z: 43, r: 80, h: 0 },
   radius: 400,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAPS } from '../src/data/maps';
 import { FISH } from '../src/data/content';
-import { openKey } from '../src/game/fund';
+import { CASINO_LEVEL } from '../src/data/casino';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { Room } from './room';
@@ -14,9 +14,8 @@ const conn = () => {
 const setup = () => {
   let now = 1_000_000;
   let roll = 0.5;
-  const funds: Record<string, number> = {};
   const store = new AccountStore();
-  const room = new Room('r', funds, MAPS, () => {}, () => now, () => roll);
+  const room = new Room('r', MAPS, () => {}, () => now, () => roll);
   const join = (name: string) => {
     const res = store.auth(name, 'token-token-token-' + name);
     if (!res.ok) throw new Error(res.msg);
@@ -24,7 +23,7 @@ const setup = () => {
     const id = room.join(c, res.account, 'pond');
     return { c, id, acct: res.account };
   };
-  return { room, join, funds, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
+  return { room, join, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
 };
 
 const casino = MAPS.find((m) => m.id === 'casino')!;
@@ -33,16 +32,15 @@ const goTo = (room: Room, id: number, s: { x: number; z: number }) => room.handl
 const dear = FISH[FISH.length - 1];
 
 describe('casino travel', () => {
-  it('needs the open gate, the level, and the gate nearby', () => {
-    const { room, join, funds } = setup();
+  it('needs the casino level and the gate nearby', () => {
+    const { room, join } = setup();
     const a = join('Ann');
     goTo(room, a.id, pond.gate);
+    a.acct.save.level = CASINO_LEVEL - 1;
     room.handle(a.id, { t: 'travel', to: 'casino' });
     expect(a.acct.save.location).toBe('pond');
-    funds[openKey('pond')] = 1;
-    room.handle(a.id, { t: 'travel', to: 'casino' });
-    expect(a.acct.save.location).toBe('pond');
-    a.acct.save.level = 15;
+    expect(a.c.log.some((m) => m.t === 'notice' && m.msg.includes(`level ${CASINO_LEVEL}`))).toBe(true);
+    a.acct.save.level = CASINO_LEVEL;
     goTo(room, a.id, pond.spawn);
     room.handle(a.id, { t: 'travel', to: 'casino' });
     expect(a.acct.save.location).toBe('pond');

@@ -5,7 +5,6 @@ import type { MapDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { mergeStatic } from './merge';
 import { buildFish } from './fishmodel';
-import type { FundState } from './fund';
 import type { Circle } from './player';
 
 export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
@@ -71,7 +70,7 @@ export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#
 
 const WHEEL_WEDGES = 8;
 
-/** The town hub: vendor stall with its keeper, the fund board and the gate to the next map. */
+/** The town hub: vendor stall with its keeper and the gate to the next map. */
 export interface LeaderRow {
   name: string;
   level: number;
@@ -86,7 +85,6 @@ export class Hub {
   readonly group = new THREE.Group();
   /** World-space spots the player can interact with. */
   readonly vendorSpot = new THREE.Vector3();
-  readonly boardSpot = new THREE.Vector3();
   readonly gateSpot = new THREE.Vector3();
   readonly wheelSpot = new THREE.Vector3();
   readonly leaderSpot = new THREE.Vector3();
@@ -107,14 +105,13 @@ export class Hub {
   private fixed: Circle[] = [];
   private gateBlock: Circle[] = [];
   private locked = true;
+  private gateKey = '';
 
   private head = new THREE.Group();
   private npc = new THREE.Group();
   private npcHome = new THREE.Vector3();
   private npcYaw = 0;
   private hanging: THREE.Object3D[] = [];
-  private boardCtx!: CanvasRenderingContext2D;
-  private boardTex!: THREE.CanvasTexture;
   private gateCtx!: CanvasRenderingContext2D;
   private gateTex!: THREE.CanvasTexture;
   private barrier!: THREE.Mesh;
@@ -122,7 +119,6 @@ export class Hub {
 
   constructor(private map: MapDef) {
     this.buildStall(map.vendor.shop, map.vendor.npc);
-    this.buildBoard(map.board);
     this.buildGate(map.gate);
     this.buildWheel(map.wheel);
     this.buildProps();
@@ -130,7 +126,7 @@ export class Hub {
     this.buildMirror(map.mirror);
     this.buildCampfire(map.campfire);
     this.setLeaders([]);
-    this.setFund({ total: 0, goal: map.goal, unlocked: false, mine: 0 });
+    this.setGate(false);
     // The shopkeeper and the hanging fish animate; everything else static is baked together.
     mergeStatic(this.group, [this.npc, ...this.hanging]);
   }
@@ -266,33 +262,6 @@ export class Hub {
     this.npcYaw = npcSpot.facing;
     const nc = this.world(npcSpot, 0, 0.4);
     this.fixed.push({ x: nc.x, z: nc.z, r: 0.5 });
-  }
-
-  private buildBoard(spot: Spot): void {
-    const g = new THREE.Group();
-    for (const lx of [-1.15, 1.15]) {
-      const post = cyl(0.09, 0.11, 3, DARK, 8);
-      post.position.set(lx, 1.5, 0);
-      g.add(post);
-    }
-    const frame = rbox(2.7, 1.8, 0.12, 0x6b4a2b, 0.05);
-    frame.position.set(0, 2.0, 0);
-    g.add(frame);
-    const face = textPlane(2.5, 1.6, 640);
-    face.mesh.position.set(0, 2.0, 0.07);
-    g.add(face.mesh);
-    const roof = rbox(3.1, 0.12, 0.7, 0xb5473a, 0.05);
-    roof.position.set(0, 3.0, 0);
-    roof.rotation.x = 0.15;
-    g.add(roof);
-    this.boardCtx = face.ctx;
-    this.boardTex = face.tex;
-    this.place(g, spot);
-    for (const lx of [-1.15, 1.15]) {
-      const c = this.world(spot, lx, 0);
-      this.fixed.push({ x: c.x, z: c.z, r: 0.3 });
-    }
-    this.world(spot, 0, 2.2, this.boardSpot);
   }
 
   private buildGate(spot: Spot): void {
@@ -605,46 +574,19 @@ export class Hub {
     this.spinAnim = { from, to: base + spins * Math.PI * 2, t0: performance.now(), ms };
   }
 
-  setFund(st: FundState, nextName: string | null = this.map.next?.name ?? null): void {
-    this.locked = !st.unlocked;
-    const ctx = this.boardCtx;
-    const { width: w, height: h } = ctx.canvas;
-    ctx.fillStyle = '#5a3d22';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#3f2b19';
-    ctx.lineWidth = 12;
-    ctx.strokeRect(6, 6, w - 12, h - 12);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffe9b8';
-    ctx.font = '800 54px system-ui, sans-serif';
-    ctx.fillText('TOWN FUND', w / 2, 80);
-    const bx = 60;
-    const bw = w - 120;
-    ctx.fillStyle = '#2a1c10';
-    ctx.fillRect(bx, 110, bw, 52);
-    ctx.fillStyle = st.unlocked ? '#5fd37a' : '#ffc933';
-    ctx.fillRect(bx + 4, 114, (bw - 8) * (st.total / st.goal), 44);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 40px system-ui, sans-serif';
-    ctx.fillText(`${st.total} / ${st.goal} coins`, w / 2, 215);
-    ctx.font = '500 28px system-ui, sans-serif';
-    ctx.fillStyle = '#e8d3a8';
-    ctx.fillText(
-      st.unlocked ? 'The gate is open!' : `Hand coins to ${this.map.vendor.name} to open`,
-      w / 2,
-      262,
-    );
-    if (!st.unlocked && nextName) ctx.fillText(`the gate to ${nextName}`, w / 2, 296);
-    ctx.fillText(`You gave ${st.mine}`, w / 2, 366);
-    this.boardTex.needsUpdate = true;
-
-    woodSign(this.gateCtx, `${st.unlocked ? '✔' : '🔒'} ${nextName ?? 'The End'}`, st.unlocked ? '#b8ffc9' : '#ffd7cf');
+  /** Opens or seals the gate for the local player; redraws only when something changed. */
+  setGate(open: boolean, nextName: string | null = this.map.next?.name ?? null): void {
+    const key = `${open}|${nextName}`;
+    if (key === this.gateKey) return;
+    this.gateKey = key;
+    this.locked = !open;
+    woodSign(this.gateCtx, `${open ? '✔' : '🔒'} ${nextName ?? 'The End'}`, open ? '#b8ffc9' : '#ffd7cf');
     this.gateTex.needsUpdate = true;
-    this.barrier.visible = !st.unlocked;
+    this.barrier.visible = !open;
     for (const t of this.torches) {
       const m = t.material as THREE.MeshLambertMaterial;
-      m.color.set(st.unlocked ? 0x6cff9a : 0xff5a3c);
-      m.emissive.set(st.unlocked ? 0x2fd36a : 0xff3c1e);
+      m.color.set(open ? 0x6cff9a : 0xff5a3c);
+      m.emissive.set(open ? 0x2fd36a : 0xff3c1e);
     }
   }
 

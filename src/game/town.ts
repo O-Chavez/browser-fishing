@@ -118,8 +118,7 @@ export class Town {
       const fz = h.z + Math.cos(h.facing) * 3.1;
       this.path(fx, fz, fx > 0 ? 1.5 : -1.5, fz, 1.6);
     }
-    // Spur to the fund board and the campfire cove
-    this.path(-1.5, this.map.board.z, -4.5, this.map.board.z, 1.6);
+    // Spur to the campfire cove
     this.path(-2, this.map.campfire.z + 1, this.map.campfire.x + 1.5, this.map.campfire.z + 1, 1.6);
   }
 

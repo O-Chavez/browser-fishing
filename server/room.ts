@@ -4,7 +4,6 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { isNight } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
-import { fundGoal, openKey } from '../src/game/fund';
 import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
@@ -38,7 +37,7 @@ const VENDOR_RANGE = 5;
 const MIN_FIGHT_MS = 1500;
 export const SPIN_MS = 3800;
 
-/** One lobby: its players and the pooled fund per map. Economy actions are validated here. */
+/** One lobby: its players and their shared drops. Economy actions are validated here. */
 export class Room {
   private members = new Map<number, Member>();
   private nextId = 1;
@@ -51,7 +50,6 @@ export class Room {
 
   constructor(
     readonly name: string,
-    readonly funds: Record<string, number>,
     maps: MapDef[],
     private onChange: () => void = () => {},
     private now: () => number = Date.now,
@@ -76,7 +74,7 @@ export class Room {
       t: 'welcome',
       id,
       room: this.name,
-      save: this.view(acct),
+      save: acct.save,
       players: [...this.members.values()].map((o) => o.info),
     });
     conn.send({ t: 'drops', list: this.drops.all() });
@@ -115,8 +113,6 @@ export class Room {
           this.broadcast({ t: 'moved', id, map: msg.map });
         }
         return;
-      case 'give':
-        changed = this.give(m, msg.map, msg.coins);
         break;
       case 'slot':
         changed = eco.selectSlot(s, Math.floor(Number(msg.i)));
@@ -205,7 +201,7 @@ export class Room {
     if (changed) {
       this.onChange();
     }
-    m.conn.send({ t: 'state', save: this.view(m.acct) });
+    m.conn.send({ t: 'state', save: m.acct.save });
   }
 
   /** Wipes progress but keeps the name, token and body color. Mutates in place: info.look aliases save.look. */
@@ -241,7 +237,7 @@ export class Room {
     run();
     this.syncCarry(m);
     this.onChange();
-    m.conn.send({ t: 'state', save: this.view(m.acct) });
+    m.conn.send({ t: 'state', save: m.acct.save });
   }
 
   private atCasino(m: Member, what: 'roulette' | 'blackjack' | 'prizes'): boolean {
@@ -259,7 +255,6 @@ export class Room {
     const back = !!from.casino && from.next?.id === dest.id;
     const forward = !from.casino && from.next?.id === dest.id;
     if (!forward && !back) return false;
-    if (forward && !this.funds[openKey(from.id)]) return this.deny(m, 'The gate is sealed until the Town Fund is full.');
     if (forward && s.level < (dest.minLevel ?? 1)) return this.deny(m, `${dest.name} needs level ${dest.minLevel}.`);
     s.location = dest.id;
     m.info.map = dest.id;
@@ -315,7 +310,7 @@ export class Room {
     cas.settleBet(m.acct.save, g.slot, cas.blackjackFactor(g));
     this.syncCarry(m);
     this.onChange();
-    m.conn.send({ t: 'state', save: this.view(m.acct) });
+    m.conn.send({ t: 'state', save: m.acct.save });
   }
 
   private atVendor(m: Member): boolean {
@@ -372,24 +367,6 @@ export class Room {
     return true;
   }
 
-  private give(m: Member, map: string, coins: number): boolean {
-    const def = this.maps[map];
-    if (!def || !Number.isFinite(coins) || !this.atVendor(m)) return false;
-    const total = this.funds[map] ?? 0;
-    const goal = fundGoal(def, this.members.size);
-    if (this.funds[openKey(map)]) return false;
-    const accepted = Math.max(0, Math.min(Math.floor(coins), goal - total, m.acct.save.coins));
-    if (accepted <= 0) return false;
-    m.acct.save.coins -= accepted;
-    m.acct.save.contributed[map] = (m.acct.save.contributed[map] ?? 0) + accepted;
-    this.funds[map] = total + accepted;
-    // Once the gate opens it stays open, even if the lobby later grows.
-    const open = total + accepted >= goal;
-    if (open) this.funds[openKey(map)] = 1;
-    this.broadcast({ t: 'fund', map, total: total + accepted, by: m.info.name, coins: accepted, open });
-    return true;
-  }
-
   /** Shows the fish in hand on this player's avatar, unless they are mid-cast. */
   private syncCarry(m: Member): void {
     const a = m.info.act;
@@ -403,11 +380,6 @@ export class Room {
     if (act) m.info.act = act;
     else delete m.info.act;
     this.broadcast({ t: 'act', id: m.info.id, act });
-  }
-
-  /** The account save with this room's fund filled in. */
-  private view(acct: Account) {
-    return { ...acct.save, fund: { ...this.funds } };
   }
 
   snapshot(): void {

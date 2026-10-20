@@ -13,12 +13,11 @@ import {
 import { audio } from './audio';
 import { MAPS, mapById, type MapDef } from '../data/maps';
 import { isWater } from './env';
-import { LocalFund, type Fund } from './fund';
 import { Avatars } from './avatars';
 import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
 import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
-import { NetClient, NetFund } from './net';
+import { NetClient } from './net';
 import { Player } from './player';
 import {
   animateFish,
@@ -74,7 +73,7 @@ const CAMP_TIPS = [
   'Tip: shiny fish fight harder but sell for 5×.',
   'Tip: the Lucky Wheel can double a fish... or take it.',
   'Tip: bigger rods and better bait attract rarer fish.',
-  'Tip: the Town Fund goal grows with every angler in the room.',
+  `Tip: the gate to Casino Cove opens at level ${CASINO_LEVEL}.`,
 ];
 
 const $ = <T extends HTMLElement>(id: string) =>
@@ -132,7 +131,6 @@ export class Game {
   private baseDist = 1;
   private map: MapDef = MAPS[0];
   private player!: Player;
-  private fund!: Fund;
   private net!: NetClient;
   private roll: eco.Roll | null = null;
   private avatars!: Avatars;
@@ -204,11 +202,6 @@ export class Game {
         this.serverDrops = list;
         this.dropsView.sync(list, this.map.id);
       },
-      onFund: (map, total, by, coins) => {
-        if (map !== this.map.id) return;
-        this.world.hub?.setFund(this.fund.state(this.map));
-        if (by && by !== this.net.name) this.toast(`${by} gave ${coins} 🪙 to the Town Fund (${total} / ${this.fund.state(this.map).goal})`);
-      },
       onBoard: () => {
         this.world.hub?.setLeaders(this.anglers());
         if (this.menuOpen && this.tab === 'players') this.renderMenu();
@@ -220,7 +213,6 @@ export class Game {
         this.world.hub?.setLeaders(this.anglers());
         if (this.menuOpen && (this.tab === 'players' || this.tab === 'inventory')) this.renderMenu();
         this.avatars.sync(this.net.players, this.net.id, this.map.id);
-        this.world.hub?.setFund(this.fund.state(this.map));
         this.refreshHud();
       },
       onAct: (p, act) => {
@@ -241,7 +233,6 @@ export class Game {
         this.toast('Disconnected - playing offline.');
       },
     });
-    this.fund = new NetFund(this.net, new LocalFund(this.s), this.s);
     this.applyLocation();
     this.bind();
     this.bindJoin(name, !!urlName);
@@ -415,7 +406,6 @@ export class Game {
       openMenu: (tab: string) => this.openMenu(tab),
       closeMenu: () => this.setMenu(false),
       player: () => ({ x: this.player.x, z: this.player.z, y: this.player.eyeY, near: this.near?.label ?? null }),
-      give: (n: number) => this.give(n),
       s: this.s,
       press: () => {
         this.holding = true;
@@ -547,8 +537,7 @@ export class Game {
         return;
       }
       this.tab = tab;
-    } else if (act === 'give' && this.atVendor) this.give(id === 'all' ? this.s.coins : Number(id));
-    else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
+    } else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
     else if (act === 'shoptab') this.shopTab = id as 'cosmetics' | 'gear';
     else if (act === 'invtab') this.invTab = id as 'tackle' | 'wardrobe';
     else if (act === 'equiprod') this.equipRod(id!);
@@ -819,27 +808,13 @@ export class Game {
     if (!this.net.connected) save(this.s);
   }
 
-  private give(coins: number): void {
-    const accepted = this.fund.contribute(this.map, Math.min(coins, this.s.coins));
-    if (accepted <= 0) return;
-    this.s.coins -= accepted;
-    const st = this.fund.state(this.map);
-    this.world.hub?.setFund(st);
-    this.toast(
-      st.unlocked
-        ? `The gate to ${this.map.next?.name ?? 'the next area'} is open!`
-        : `Thanks! The Town Fund is at ${st.total} / ${st.goal}`,
-    );
-    this.persist();
-    this.refreshHud();
+  /** The pond gate opens at the casino level; the casino's gate always leads back to the pond. */
+  private get gateOpen(): boolean {
+    return !!this.map.casino || this.s.level >= CASINO_LEVEL;
   }
 
-  /** The fund board and gate sign: the casino's gate is always open and leads back to the pond. */
   private setGateSign(): void {
-    const hub = this.world.hub;
-    if (!hub) return;
-    if (this.map.casino) hub.setFund({ total: 1, goal: 1, unlocked: true, mine: 0 }, this.map.next?.name ?? null);
-    else hub.setFund(this.fund.state(this.map));
+    this.world.hub?.setGate(this.gateOpen);
   }
 
   private applyLocation(): void {
@@ -879,12 +854,11 @@ export class Game {
 
   // ---------- casino ----------
 
-  private useGate(open: boolean, goal: number): void {
+  private useGate(): void {
     const dest = this.map.next;
     if (!dest) return this.toast('The road ends here.');
-    if (!this.map.casino && !open) return this.toast(`The gate opens when the Town Fund reaches ${goal} coins.`);
+    if (!this.gateOpen) return this.toast(`${dest.name} needs level ${CASINO_LEVEL}.`);
     if (!this.net.connected) return this.toast('The casino needs a server connection.');
-    if (!this.map.casino && this.s.level < CASINO_LEVEL) return this.toast(`${dest.name} needs level ${CASINO_LEVEL}.`);
     this.net.send({ t: 'travel', to: dest.id });
   }
 
@@ -1146,13 +1120,12 @@ export class Game {
       table(c.prizes, 'prizes', 'Prize counter · turn fish in for chips, buy perks');
       spots.push(
         { d: at(c.mirror), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
-        { d: at(this.map.gate) - 0.5, label: `Exit to ${this.map.next?.name ?? 'the pond'}`, act: () => this.useGate(true, 0) },
+        { d: at(this.map.gate) - 0.5, label: `Exit to ${this.map.next?.name ?? 'the pond'}`, act: () => this.useGate() },
       );
     }
     if (hub) {
       const dv = Math.hypot(hub.vendorSpot.x - x, hub.vendorSpot.z - z);
       this.atVendor = dv < 3.2;
-      const st = this.fund.state(this.map);
       if (this.atVendor) {
         const held = this.s.slots[this.s.held];
         if (held?.k === 'fish') {
@@ -1180,16 +1153,11 @@ export class Game {
         { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         {
-          d: Math.hypot(hub.boardSpot.x - x, hub.boardSpot.z - z),
-          label: `Town fund board · ${st.total} / ${st.goal} 🪙`,
-          act: () => this.openMenu('fund'),
-        },
-        {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
-          label: st.unlocked
-              ? `Travel to ${this.map.next?.name ?? 'the next area'}${this.s.level < CASINO_LEVEL ? ` · needs level ${CASINO_LEVEL}` : ''}`
-              : `Gate sealed · fund ${st.total} / ${st.goal} 🪙`,
-          act: () => this.useGate(st.unlocked, st.goal),
+          label: this.gateOpen
+            ? `Travel to ${this.map.next?.name ?? 'the next area'}`
+            : `Gate sealed · ${this.map.next?.name ?? 'next area'} needs level ${CASINO_LEVEL}`,
+          act: () => this.useGate(),
         },
       );
     }
@@ -2012,13 +1980,10 @@ export class Game {
     const chipsEl = $('chips');
     chipsEl.textContent = this.chipsText(s.chips);
     chipsEl.parentElement!.classList.toggle('hidden', s.chips <= 0 && !this.map.casino);
-    const st = this.fund.state(this.map);
-    $('fundline').textContent = this.map.casino
-      ? 'Casino Cove · turn fish in for chips at the prize counter'
-      : st.unlocked
-      ? `Town Fund complete — ${this.map.next?.name ?? 'next area'} gate open`
-      : `Town Fund: ${st.total} / ${st.goal} 🪙 · hand coins to ${this.map.vendor.name}`;
-    if (this.net.connected) $('fundline').textContent += ` · ${this.net.players.size + 1} online (${this.net.room})`;
+    const status = [this.map.casino ? 'Casino Cove · turn fish in for chips at the prize counter' : ''];
+    if (this.net.connected) status.push(`${this.net.players.size + 1} online (${this.net.room})`);
+    $('statusline').textContent = status.filter(Boolean).join(' · ');
+    this.setGateSign();
     $('baitinfo').textContent = `${this.bait.name} ×${eco.baitCount(s, s.bait)} · ${this.rod.name}`;
     this.renderHotbar();
     $('goal').textContent = `Next: ${nextGoal(s.level, s.dex)}`;
@@ -2046,9 +2011,6 @@ export class Game {
         break;
       case 'dex':
         el.innerHTML = this.dexHtml();
-        break;
-      case 'fund':
-        el.innerHTML = this.fundHtml();
         break;
     }
     const slot = document.getElementById('pv-slot');
@@ -2272,21 +2234,5 @@ export class Game {
       return `<div class="card unknown"><b>???</b><div class="muted">${this.tierBadge(f.tier)} · ${where}${f.night ? ' · 🌙 Night only' : ''}<br>Needs: ${rodName}+ and ${baitName}+</div></div>`;
     }).join('');
     return `<p>${found} / ${FISH.length} discovered</p><div class="grid">${cards}</div>`;
-  }
-
-  private fundHtml(): string {
-    const st = this.fund.state(this.map);
-    const pct = Math.round((st.total / st.goal) * 100);
-    const next = this.map.next?.name ?? 'the next area';
-    const buttons = [10, 50, 100]
-      .map((n) => `<button data-act="give" data-id="${n}" ${this.atVendor && !st.unlocked && this.s.coins >= n ? '' : 'disabled'}>${n} 🪙</button>`)
-      .join(' ');
-    const all = `<button data-act="give" data-id="all" ${this.atVendor && !st.unlocked && this.s.coins > 0 ? '' : 'disabled'}>All (${this.s.coins} 🪙)</button>`;
-    return `<h3>Town Fund</h3>
-      <p>The whole lobby pools coins toward one goal. When it is full, the gate to <b>${next}</b> opens for the room.</p>
-      <div class="fundbar"><div style="width:${pct}%"></div></div>
-      <p class="big"><b>${st.total}</b> / ${st.goal} 🪙 ${st.unlocked ? '— gate open!' : ''}</p>
-      <p class="muted">You have given ${st.mine} 🪙 · you carry ${this.s.coins} 🪙</p>
-      ${this.atVendor ? `<div class="row"><div>Hand in to ${this.map.vendor.name}</div><div>${buttons} ${all}</div></div>` : `<p class="muted">Walk to ${this.map.vendor.name}'s stall to hand in coins.</p>`}`;
   }
 }
