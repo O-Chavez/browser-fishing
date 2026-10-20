@@ -67,7 +67,7 @@
 - [ ] Smaller bait purchase popup, and reconsider the 20-bait cap
   - The shop's purchase popup is too large and blocks the view; it should just say the amount purchased
   - Oscar is fine with holding more than 20 bait unless there's a reason for the limit (`BAIT_STACK` in `src/game/state.ts:11`, covered by `economy.test.ts`)
-- [ ] UI sometimes disappears until Escape/Tab is toggled
+- [x] UI sometimes disappears until Escape/Tab is toggled
   - Find the repro first; the UI only comes back after pressing/toggling Escape or Tab
 - [ ] Cosmetic rework
   - Change the cosmetics' appearance so they fit the game's theme better. Taste-driven: propose options before coding

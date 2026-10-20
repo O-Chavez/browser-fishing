@@ -914,6 +914,8 @@ export class Game {
   private setMenu(open: boolean): void {
     this.menuOpen = open;
     $('menu').classList.toggle('hidden', !open);
+    // Shop mode hides parts of the HUD; it must end with the menu, not wait for the next redraw.
+    if (!open) document.body.classList.remove('shopping');
     if (open) $('resume').classList.add('hidden');
     // The wardrobe preview has its own render loop; renderMenu restarts it when the tab is shown again.
     if (!open && $('join').classList.contains('hidden')) this.preview?.stop();
