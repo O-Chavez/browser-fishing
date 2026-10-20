@@ -358,6 +358,15 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 #menu.casino .win { background: linear-gradient(180deg, #5a1a2c, #3d0f1c); box-shadow: 0 0 0 6px #b8862f, 0 0 0 9px #2a0a12, 0 24px 60px rgba(0,0,0,.55); }
 #menu.casino .who .who-ic { background: #2a0a12; }
 
+/* casino poster popup */
+#menu.fit .win { height: auto; }
+.peek { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.peek img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; object-position: 50% 40%; border-radius: 14px; box-shadow: 0 0 0 4px #b8862f; }
+.peek h3 { margin: 0 0 8px; font-size: 22px; font-weight: 900; }
+.peek p { margin: 0 0 10px; font-size: 15px; font-weight: 700; line-height: 1.45; color: var(--ink-muted); }
+.peek .peek-lock, .peek .peek-open { padding: 10px 14px; border-radius: 12px; background: var(--paper-2); color: var(--ink); font-weight: 900; }
+.peek .peek-open { background: var(--ok); color: #fff; }
+
 /* join screen */
 #join { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(8, 14, 22, .88); backdrop-filter: blur(4px); }
 .swatches input[type=color] { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; overflow: hidden; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); cursor: pointer; }

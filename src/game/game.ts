@@ -23,6 +23,7 @@ import { ChatBox } from './chatbox';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
 import { FISH_BLURB, TIER_THEME } from '../data/fishlook';
+import casinoPreview from '../assets/images/casino-preview.jpg';
 import { shortCoins } from './format';
 import { Player } from './player';
 import {
@@ -1250,6 +1251,7 @@ export class Game {
         { d: near(hub.leaderSpot), label: 'Top Anglers · see everyone online', act: () => this.openMenu('players') },
         { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
+        ...(hub.peekSpot ? [{ d: near(hub.peekSpot), label: 'Casino Cove poster · take a look inside', act: () => this.openMenu('peek') }] : []),
         {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
           label: this.gateOpen
@@ -2098,7 +2100,8 @@ export class Game {
     if (this.tab === 'play') this.tab = 'inventory';
     const vendor = this.tab === 'shop' || this.tab === 'casino';
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
-    $('menu').classList.toggle('casino', this.tab === 'casino');
+    $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
+    $('menu').classList.toggle('fit', this.tab === 'peek');
     $('menu-who').innerHTML = this.menuWhoHtml();
     $('menu-tabs').innerHTML = this.menuTabsHtml();
     const el = $('tab');
@@ -2124,6 +2127,9 @@ export class Game {
         break;
       case 'dex':
         el.innerHTML = this.dexHtml();
+        break;
+      case 'peek':
+        el.innerHTML = this.peekHtml();
         break;
     }
     const slot = document.getElementById('pv-slot');
@@ -2211,6 +2217,7 @@ export class Game {
       const v = this.map.vendor;
       return `<img src="${faceIcon(v.face ?? 'smile')}" alt=""><div><b>${v.name}'s Stall</b><span><span class="coin sm"></span> ${this.s.coins.toLocaleString()} to spend</span></div>`;
     }
+    if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
     return `<img src="${this.faceSrc(this.s.look.face as FaceId)}" alt=""><div><b>${escapeHtml(this.net.name || 'You')}</b><span>Level ${this.s.level} · ${this.s.coins.toLocaleString()} coins</span></div>`;
   }
@@ -2220,7 +2227,7 @@ export class Game {
       `<button class="tab${on ? ' on' : ''}" ${attr}="${id}"${label ? '' : ' title="Settings"'}><span>${icon}</span>${label}</button>`;
     if (this.tab === 'shop')
       return tab('gear', '🎣', 'Gear', this.shopTab === 'gear', 'data-shop') + tab('cosmetics', '👕', 'Cosmetics', this.shopTab === 'cosmetics', 'data-shop');
-    if (this.tab === 'casino') return '';
+    if (this.tab === 'casino' || this.tab === 'peek') return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
@@ -2395,6 +2402,20 @@ export class Game {
     }).join('');
     return `<div class="cols wardrobe"><div class="side"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><h4>Colour</h4><div class="swatches">${this.swatchHtml()}</div></div>
       <div class="main"><h4>Face</h4><div class="faces">${this.facesHtml()}</div>${sections}</div></div>`;
+  }
+
+  // ---------- Casino poster ----------
+
+  private peekHtml(): string {
+    const left = CASINO_LEVEL - this.s.level;
+    const status = left > 0
+      ? `<p class="peek-lock">🔒 Opens at level ${CASINO_LEVEL} · <b>${left}</b> level${left === 1 ? '' : 's'} to go</p>`
+      : `<p class="peek-open">✔ You're in! Walk through the gate.</p>`;
+    return `<div class="peek"><img src="${casinoPreview}" alt="Inside Casino Cove">
+      <div class="peek-text"><h3>Bet your best fish, win big</h3>
+        <p>Inside the Gilded Perch Casino you can put a fish on the roulette wheel or a hand of blackjack to multiply its value, then trade your winners for chips at the Prize Counter.</p>
+        <p>Chips buy unlocks you can't get anywhere else: Lucky Charms, Quick-Reel Gloves, the Night Owl Lantern, a Tackle Vest and Shiny Lures.</p>
+        ${status}</div></div>`;
   }
 
   // ---------- Fishdex ----------

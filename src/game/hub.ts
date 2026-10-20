@@ -7,6 +7,7 @@ import { mergeStatic } from './merge';
 import { buildFish } from './fishmodel';
 import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
+import casinoPreview from '../assets/images/casino-preview.jpg';
 
 export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
   new THREE.MeshLambertMaterial({ color, ...extra });
@@ -87,6 +88,8 @@ export class Hub {
   /** World-space spots the player can interact with. */
   readonly vendorSpot = new THREE.Vector3();
   readonly gateSpot = new THREE.Vector3();
+  /** The casino poster beside the pond gate (unset on maps without one). */
+  readonly peekSpot: THREE.Vector3 | null = null;
   readonly wheelSpot = new THREE.Vector3();
   readonly leaderSpot = new THREE.Vector3();
   readonly mirrorSpot = new THREE.Vector3();
@@ -121,6 +124,7 @@ export class Hub {
   constructor(private map: MapDef) {
     this.buildStall(map.vendor.shop, map.vendor.npc);
     this.buildGate(map.gate);
+    if (map.next?.id === 'casino') (this as { peekSpot: THREE.Vector3 | null }).peekSpot = this.buildPoster(map.gate);
     this.buildWheel(map.wheel);
     this.buildProps();
     this.buildLeaderboard(map.leaderboard);
@@ -256,6 +260,34 @@ export class Hub {
     this.npcYaw = npcSpot.facing;
     const nc = this.world(npcSpot, 0, 0.4);
     this.fixed.push({ x: nc.x, z: nc.z, r: 0.5 });
+  }
+
+  /** A framed poster of the casino floor beside the gate, so newer players can see what's waiting. */
+  private buildPoster(gate: Spot): THREE.Vector3 {
+    const spot: Spot = { ...this.world(gate, 5.2, 0.6), facing: gate.facing } as Spot;
+    const g = new THREE.Group();
+    for (const lx of [-0.95, 0.95]) {
+      const post = cyl(0.07, 0.09, 2.6, DARK, 8);
+      post.position.set(lx, 1.3, 0);
+      g.add(post);
+    }
+    const frame = rbox(2.2, 1.55, 0.1, 0xb8862f, 0.04);
+    frame.position.set(0, 1.85, 0);
+    const tex = new THREE.TextureLoader().load(casinoPreview);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(1.96, 1.1), new THREE.MeshBasicMaterial({ map: tex }));
+    pic.position.set(0, 1.78, 0.06);
+    const title = textPlane(2.0, 0.32, 512);
+    woodSign(title.ctx, 'CASINO COVE', '#ffd76a');
+    title.tex.needsUpdate = true;
+    title.mesh.position.set(0, 2.47, 0.06);
+    g.add(frame, pic, title.mesh);
+    this.place(g, spot);
+    for (const lx of [-0.95, 0.95]) {
+      const c = this.world(spot, lx, 0);
+      this.fixed.push({ x: c.x, z: c.z, r: 0.2 });
+    }
+    return this.world(spot, 0, 0.5);
   }
 
   private buildGate(spot: Spot): void {
