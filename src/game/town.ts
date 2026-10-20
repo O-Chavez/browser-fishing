@@ -548,8 +548,6 @@ export class Town {
   private buildCozy(): void {
     const posts = [[-2.6, 39, true], [2.6, 39, false], [-2.6, 45, false], [2.6, 45, true], [-2.6, 51, true], [2.6, 51, false], [12, 36, true], [-13, 39, false], [12, 47, false], [-3, 55, false]] as const;
     for (const [x, z, lit] of posts) this.lampPost(x, z, lit);
-    this.bench(-3.6, 32, Math.PI / 2);
-    this.bench(3.6, 32, -Math.PI / 2);
     this.bench(0, 27.4, 0);
     this.pot(-3.6, 29.5);
     this.pot(3.6, 29.5);
