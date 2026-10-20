@@ -58,7 +58,7 @@
   - Keep all fish ids so saves, Fishdex progress and records carry over; show renames before applying
 - [ ] Casino game menus/pop-ups block the screen since the UI changes
   - Regression from the menu/HUD polish; casino game panels should stay out of the way of the view
-- [ ] Hotbar fish icons show only total value
+- [x] Hotbar fish icons show only total value
   - Drop the "x.x" multiplier text on hotbar fish slots and show just the total value
 - [ ] Show a prompt in the casino when the player can trade fish for chips
   - A UI hint appears when the player is in range and able to click to trade fish in for chips
