@@ -172,6 +172,31 @@ async function pondChecks(): Promise<void> {
   const open2 = { loops: await loops(page), inSlot: await previewInSlot(page) };
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
   check('wardrobe: preview runs while shown', open1.loops === 2 && open1.inSlot, JSON.stringify(open1));
+
+  // Faces: the wardrobe lists them, and clicking one wears it.
+  await page.evaluate(() => window.__game.openMenu('inventory'));
+  await page.click('[data-act="invtab"][data-id="wardrobe"]');
+  await sleep(200);
+  const faceCount = await page.evaluate(() => document.querySelectorAll('#tab .face').length);
+  const pick = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tab .face')].find((b) => !b.classList.contains('on'))!.dataset.id!);
+  await page.click(`#tab .face[data-id="${pick}"]`);
+  await sleep(200);
+  await page.screenshot({ path: `${SHOTS}/wardrobe-faces.png` });
+  const worn = await page.evaluate(() => (window.__game.s as any).look.face as string);
+  // Dragging the preview turns the character, and the auto-spin waits instead of fighting it.
+  const spinNow = () => page.evaluate(() => (window.__game.preview() as any).spin as number);
+  const box = (await (await page.$('#pv-slot canvas'))!.boundingBox())!;
+  const s0 = await spinNow();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 100, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const s1 = await spinNow();
+  await sleep(500);
+  const s2 = await spinNow();
+  check('wardrobe: dragging the preview turns the character', s1 - s0 > 1 && Math.abs(s2 - s1) < 0.01, JSON.stringify({ s0, s1, s2 }));
+  await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
+  check('wardrobe: faces listed and clicking one wears it', faceCount === 8 && worn === pick, `${faceCount} faces, picked ${pick}, wearing ${worn}`);
   check('wardrobe: preview stops when the menu closes', closed === 1, `${closed} render loops`);
   check('wardrobe: preview runs again when reopened', open2.loops === 2 && open2.inSlot, JSON.stringify(open2));
 

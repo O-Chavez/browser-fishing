@@ -33,7 +33,7 @@
   - Make sure old saves and stored fund data still load cleanly after the field is removed
 - [ ] Remove the bench blocking the path in front of the well in the town square
   - Well benches are placed by `Town.benches()` (`src/game/town.ts:163`). Remove only the one in front of the well and keep the others
-- [ ] Faces on player models
+- [x] Faces on player models
   - Simple, happy, fun faces
   - Painted texture on the head sphere, on the side the player is looking
   - Optionally A/B against a simple 3D face if it fits the theme better and doesn't cost much performance
@@ -44,7 +44,12 @@
   - The 3D world is fine as is
 - [ ] Polish the menu systems
   - Inventory and shop menus are clumsy and cluttered; improve the flow so it's clear what everything does
-  - Escape should always close any open menu
+- [ ] Escape always closes the current menu
+  - If any menu is open (inventory, shop, wardrobe, etc.), pressing Escape closes it
+- [ ] Show a "XXXX has joined" message in chat when a player joins
+  - Sent to everyone already on the server, using the joining player's name
+- [ ] Lower the global chat's opacity when not in chat mode
+  - Fade the chat window while the player isn't typing; return to full opacity when they press Enter to open chat mode
 
 ## Ideas
 

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { cosById, type Cosmetic, type Look } from '../data/cosmetics';
-
-const SKIN = 0xf1c7a0;
+import { faceTexture } from './faces';
 
 const mat = (c: number, emissive = 0, flat = true) =>
   new THREE.MeshStandardMaterial({
@@ -129,11 +128,13 @@ const MODELS = { hat: hatModel, shirt: shirtModel, jewelry: jewelryModel };
 export class Character {
   readonly group = new THREE.Group();
   private body = mesh(new THREE.CapsuleGeometry(0.28, 0.7, 4, 10), mat(0xffffff), 0, 0.85, 0);
+  /** Skin and face come from the face texture, so the material stays white. */
+  private head = mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(0xffffff), 0, 1.62, 0);
   private outfit = new THREE.Group();
   private key = '';
 
   constructor(look: Look) {
-    this.group.add(this.body, mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(SKIN), 0, 1.62, 0), this.outfit);
+    this.group.add(this.body, this.head, this.outfit);
     this.set(look);
   }
 
@@ -142,6 +143,9 @@ export class Character {
     if (key === this.key) return;
     this.key = key;
     (this.body.material as THREE.MeshStandardMaterial).color.setHex(look.color);
+    const head = this.head.material as THREE.MeshStandardMaterial;
+    head.map = faceTexture(look.face);
+    head.needsUpdate = true;
     this.outfit.clear();
     for (const slot of ['hat', 'shirt', 'jewelry'] as const) {
       const c = cosById(look[slot]);
@@ -150,7 +154,16 @@ export class Character {
   }
 }
 
-/** One shared WebGL canvas showing a slowly spinning character; moved into whichever menu tab needs it. */
+/** Auto-spin speed (radians per second), and how long it waits after a drag before resuming. */
+const SPIN_SPEED = 0.7;
+const SPIN_RESUME_MS = 3000;
+/** Radians of turn per pixel dragged. */
+const DRAG_TURN = 0.012;
+
+/**
+ * One shared WebGL canvas showing a slowly spinning character; moved into whichever menu tab
+ * needs it. Click and drag to turn it by hand.
+ */
 export class CharacterPreview {
   readonly canvas = document.createElement('canvas');
   private renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
@@ -159,6 +172,8 @@ export class CharacterPreview {
   private char: Character;
   private raf = 0;
   private spin = 0.6;
+  private drag: { x: number; spin: number } | null = null;
+  private idleAt = 0;
 
   constructor(look: Look) {
     this.canvas.className = 'preview';
@@ -172,6 +187,23 @@ export class CharacterPreview {
     this.scene.add(sun);
     this.char = new Character(look);
     this.scene.add(this.char.group);
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      this.canvas.setPointerCapture(e.pointerId);
+      this.drag = { x: e.clientX, spin: this.spin };
+      this.canvas.classList.add('dragging');
+    });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (this.drag) this.spin = this.drag.spin + (e.clientX - this.drag.x) * DRAG_TURN;
+    });
+    const end = () => {
+      if (!this.drag) return;
+      this.drag = null;
+      this.idleAt = performance.now() + SPIN_RESUME_MS;
+      this.canvas.classList.remove('dragging');
+    };
+    this.canvas.addEventListener('pointerup', end);
+    this.canvas.addEventListener('pointercancel', end);
   }
 
   set(look: Look): void {
@@ -183,7 +215,7 @@ export class CharacterPreview {
     let last = performance.now();
     const loop = (t: number) => {
       this.raf = requestAnimationFrame(loop);
-      this.spin += ((t - last) / 1000) * 0.7;
+      if (!this.drag && t >= this.idleAt) this.spin += ((t - last) / 1000) * SPIN_SPEED;
       last = t;
       this.char.group.rotation.y = this.spin;
       this.renderer.render(this.scene, this.cam);

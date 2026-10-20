@@ -40,6 +40,7 @@ export type ClientMsg =
   | { t: 'buycos'; id: string }
   | { t: 'equip'; slot: CosSlot; id: string | null }
   | { t: 'color'; color: number }
+  | { t: 'face'; id: string }
   | { t: 'reset' }
   /** Take the hotbar slot (0-based) in hand. */
   | { t: 'slot'; i: number }

@@ -164,6 +164,9 @@ export class Room {
       case 'color':
         changed = eco.setBodyColor(s, Math.floor(Number(msg.color)));
         break;
+      case 'face':
+        changed = eco.setFace(s, msg.id);
+        break;
       case 'reset':
         if (m.spin) return;
         m.pending = null;
@@ -205,20 +208,20 @@ export class Room {
         return;
     }
     if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell')) this.syncCarry(m);
-    if (changed && (msg.t === 'equip' || msg.t === 'color')) this.broadcast({ t: 'look', id, look: s.look });
+    if (changed && (msg.t === 'equip' || msg.t === 'color' || msg.t === 'face')) this.broadcast({ t: 'look', id, look: s.look });
     if (changed) {
       this.onChange();
     }
     m.conn.send({ t: 'state', save: m.acct.save });
   }
 
-  /** Wipes progress but keeps the name, token and body color. Mutates in place: info.look aliases save.look. */
+  /** Wipes progress but keeps the name, token, body color and face. Mutates in place: info.look aliases save.look. */
   private resetAccount(m: Member): void {
     const s = m.acct.save;
     const look = s.look;
-    const color = look.color;
+    const { color, face } = look;
     Object.assign(s, newSave());
-    Object.assign(look, newSave().look, { color });
+    Object.assign(look, newSave().look, { color, face });
     s.look = look;
     this.setAct(m, null);
     this.broadcast({ t: 'look', id: m.info.id, look });

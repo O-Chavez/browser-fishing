@@ -50,7 +50,8 @@ import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, MULT_CAP, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { chipsFor, type BlackjackView, type Card } from './casino';
 import { load, newSave, save, type SaveData } from './state';
-import { BODY_COLORS, COSMETICS, COS_SLOTS, cosById, type CosSlot, type Look } from '../data/cosmetics';
+import { BODY_COLORS, COSMETICS, COS_SLOTS, FACES, cosById, type CosSlot, type FaceId, type Look } from '../data/cosmetics';
+import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
 import { World } from './world';
 
@@ -65,7 +66,7 @@ type Phase =
   | 'landing'
   | 'result';
 
-const defaultLookWith = (color: number): Look => ({ color, hat: null, shirt: null, jewelry: null });
+const defaultLookWith = (color: number, face: string): Look => ({ color, face, hat: null, shirt: null, jewelry: null });
 
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -321,7 +322,7 @@ export class Game {
   }
 
   private joinPreview(): void {
-    this.getPreview().set({ ...defaultLookWith(this.joinColor) });
+    this.getPreview().set({ ...defaultLookWith(this.joinColor, this.s.look.face) });
     const slot = $('join-preview');
     if (!slot.contains(this.getPreview().canvas)) slot.appendChild(this.getPreview().canvas);
     this.getPreview().start();
@@ -397,6 +398,7 @@ export class Game {
       },
       teleport: (x: number, z: number) => this.player.teleport(x, z),
       online: () => this.net.connected,
+      preview: () => this.preview,
       perf: () => {
         const w = this.world;
         let lights = 0, meshes = 0, casters = 0, tris = 0;
@@ -586,6 +588,7 @@ export class Game {
     else if (act === 'buycos') this.buyCosmetic(id!);
     else if (act === 'equip') this.equip(btn.dataset.slot as CosSlot, id || null);
     else if (act === 'color') this.recolor(Number(id));
+    else if (act === 'face') this.reface(id!);
     else if (act === 'reset') this.confirmReset = true;
     else if (act === 'resetno') this.confirmReset = false;
     else if (act === 'resetyes') this.resetAccount();
@@ -762,14 +765,20 @@ export class Game {
 
   private resetAccount(): void {
     this.confirmReset = false;
-    const color = this.s.look.color;
+    const { color, face } = this.s.look;
     this.roll = null;
     if (this.net.connected) this.net.send({ t: 'reset' });
     else {
       Object.assign(this.s, newSave());
-      this.s.look.color = color;
+      Object.assign(this.s.look, { color, face });
     }
     this.toast('Account reset. Fresh start!');
+  }
+
+  private reface(face: string): void {
+    if (!eco.setFace(this.s, face)) return;
+    this.net.send({ t: 'face', id: face });
+    this.persist();
   }
 
   private recolor(color: number): void {
@@ -2110,6 +2119,16 @@ export class Game {
     return `<h3>Players ${this.net.connected ? `· ${this.net.room}` : '· offline'}</h3>${rows}${reset}`;
   }
 
+  private faceIcons: Partial<Record<FaceId, string>> = {};
+
+  private facesHtml(): string {
+    return FACES.map((f) => {
+      const src = (this.faceIcons[f.id] ??= faceIcon(f.id));
+      const on = this.s.look.face === f.id;
+      return `<button class="face${on ? ' on' : ''}" data-act="face" data-id="${f.id}" data-try="face:${f.id}" data-tip="${f.name}${on ? ' · wearing' : ' · click to wear'}"><img src="${src}" alt="${f.name}"></button>`;
+    }).join('');
+  }
+
   private swatchHtml(): string {
     return BODY_COLORS.map(
       (c) => `<button class="swatch${c === this.s.look.color ? ' on' : ''}" data-act="color" data-id="${c}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`,
@@ -2212,7 +2231,7 @@ export class Game {
         .join('');
       return `<h4>${slot === 'jewelry' ? 'Jewelry' : slot[0].toUpperCase() + slot.slice(1) + 's'}</h4><div class="tiles">${cards || '<span class="muted">Nothing owned yet - visit the shop.</span>'}</div>`;
     }).join('');
-    return `<div class="split"><div><div id="pv-slot"></div><div class="swatches">${this.swatchHtml()}</div></div><div class="grow">${sections}</div></div>`;
+    return `<div class="split"><div><div id="pv-slot"></div><div class="swatches">${this.swatchHtml()}</div><p class="muted drag-hint">Drag to turn</p></div><div class="grow"><h4>Face</h4><div class="faces">${this.facesHtml()}</div>${sections}</div></div>`;
   }
 
   private shopHtml(): string {

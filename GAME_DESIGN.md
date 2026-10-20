@@ -270,6 +270,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 ## 15. Identity, Cosmetics & Expanded Hub
 - **Join screen:** pick a name and body color (live 3D preview). Saved locally; `?name=` skips it.
 - **Leaderboard:** Tab/Esc menu "Players" tab lists everyone online with their level, highest first; a "Top Anglers" board stands in the plaza.
+- **Faces:** 8 free painted faces (`FACES` in `src/data/cosmetics.ts`, drawn by `src/game/faces.ts`): smile, grin, wink, cat, joy, cheeky, toothy and sleepy. Each is one shared texture on the head sphere, facing where the player looks. New accounts and saves from before faces get a random one; players change it in the Wardrobe's Face section, and can drag the preview to turn their character. NPCs wear the same faces, one each, set by `face` on their `NpcDef` (and `vendor.face` for Marlow).
 - **Cosmetics:** hats, shirts, jewelry (6 each, tiers 0–5; higher price = flashier, top tiers glow). Bought at Marlow's shop menu (Cosmetics/Gear tabs), equipped in the Wardrobe (Tab; also the plaza mirror). Visible to all players.
 - **Selling:** with the shop menu open, hover a hotbar fish to see its price and click to sell.
 - **Hub:** T-shaped dock with side piers, rowboat, barrel and rope; plaza gains a campfire with benches, leaderboard board, mirror and extra lamps.
@@ -280,7 +281,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 - **Storage** (`server/storage.ts`): accounts are saved every 2 s when changed, and on SIGTERM/SIGINT (redeploys).
   - Default: JSON files in `DATA_DIR` (or the server folder). Lost on Render free redeploys unless a paid disk is mounted at `DATA_DIR`.
   - Set `DATABASE_URL` to use Postgres instead (Neon, Supabase or Render Postgres, no disk needed). A `game_state` table is created automatically.
-- **Reset:** Players tab (Tab/Esc) -> "Reset account" -> confirm. Wipes coins, level, gear, fish, dex and cosmetics; keeps name, login token and body color. Works offline too. Blocked mid wheel-spin.
+- **Reset:** Players tab (Tab/Esc) -> "Reset account" -> confirm. Wipes coins, level, gear, fish, dex and cosmetics; keeps name, login token, body color and face. Works offline too. Blocked mid wheel-spin.
 
 ## 18. Tier rules (bait gates, rod eases)
 

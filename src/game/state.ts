@@ -1,6 +1,6 @@
 import { BAITS, FISH, RODS, byId, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
-import { cleanLook, defaultLook, type Look } from '../data/cosmetics';
+import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { sellValue } from './progression';
 
 export interface DexEntry { count: number; best: number }
@@ -67,7 +67,7 @@ export const newSave = (): SaveData => ({
   held: 0,
   location: 'pond',
   dex: {},
-  look: defaultLook(),
+  look: { ...defaultLook(), face: randomFace() },
   owned: [],
   locker: { rods: [], bait: {} },
   best: null,
@@ -116,6 +116,8 @@ export function migrate(raw: object): SaveData {
     if (r?.k === 'rod') out.rod = r.id;
   }
   if (!Array.isArray(out.owned)) out.owned = [];
+  // Accounts from before faces get a random one.
+  if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
   out.look = cleanLook(out.look, out.owned);
   const lk = (out.locker ?? {}) as Partial<SaveData['locker']>;
   const bait: Record<string, number> = {};

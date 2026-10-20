@@ -5,6 +5,7 @@ import type { MapDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { mergeStatic } from './merge';
 import { buildFish } from './fishmodel';
+import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
 
 export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
@@ -225,19 +226,12 @@ export class Hub {
     const apron = rbox(0.5, 0.72, 0.06, 0xf3e6c8, 0.03);
     apron.position.set(0, 0.98, 0.25);
     npc.add(body, apron);
-    const skin = 0xe0b08a;
     this.head.position.y = 1.78;
-    this.head.add(ball(0.22, skin));
-    const nose = ball(0.045, 0xd49b78);
-    nose.position.set(0, -0.01, 0.21);
-    const beard = ball(0.16, 0xeeeeee, 1, 0.9, 0.7);
-    beard.position.set(0, -0.14, 0.1);
-    this.head.add(nose, beard);
-    for (const sx of [-1, 1]) {
-      const eye = ball(0.028, 0x1b1b1b);
-      eye.position.set(sx * 0.08, 0.05, 0.19);
-      this.head.add(eye);
-    }
+    this.head.add(faceHead(0.22, this.map.vendor.face));
+    // A short beard below the mouth, so the painted smile still shows.
+    const beard = ball(0.15, 0xeeeeee, 1, 0.75, 0.7);
+    beard.position.set(0, -0.17, 0.08);
+    this.head.add(beard);
     const brim = cyl(0.42, 0.42, 0.035, 24, 24);
     brim.material = mat(0xe3c26d);
     brim.position.y = 0.17;
@@ -253,7 +247,7 @@ export class Hub {
     for (const sx of [-1, 1]) {
       const sh = new THREE.Vector3(sx * 0.33, 1.4, 0);
       const hand = new THREE.Vector3(sx * 0.34, 1.07, 0.55);
-      const fist = ball(0.095, skin);
+      const fist = ball(0.095, SKIN);
       fist.position.copy(hand);
       npc.add(limb(sh, hand, 0.09, 0x2e8b8b), fist);
     }
