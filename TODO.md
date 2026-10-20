@@ -62,7 +62,7 @@
   - Drop the "x.x" multiplier text on hotbar fish slots and show just the total value
 - [ ] Show a prompt in the casino when the player can trade fish for chips
   - A UI hint appears when the player is in range and able to click to trade fish in for chips
-- [ ] Inventory/wardrobe shows equipped charms and their total buffs
+- [x] Inventory/wardrobe shows equipped charms and their total buffs
   - List the equipped charms and the summed buffs they give
 - [ ] Smaller bait purchase popup, and reconsider the 20-bait cap
   - The shop's purchase popup is too large and blocks the view; it should just say the amount purchased

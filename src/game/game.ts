@@ -2301,8 +2301,18 @@ export class Game {
           <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div></div><div class="pips">${pips}</div></div>
         <h4>Rods</h4><div class="tiles">${rods}</div>
         <h4>Bait</h4><div class="tiles">${baits}</div>
+        ${this.perksHtml()}
         <p class="foot">Your hotbar holds the rod and bait you fish with; everything else waits in your tackle locker.</p>
       </div>${this.bagDetail(sel)}</div>`;
+  }
+
+  /** Charms and casino perks that are working for you, and what they add up to. */
+  private perksHtml(): string {
+    const perks = eco.activePerks(this.s);
+    const body = perks.length
+      ? `<div class="perks">${perks.map((p) => `<div class="perk" data-tip="${this.esc(p.name)}"><span class="ic">${p.icon}</span><b>${p.effect}</b></div>`).join('')}</div>`
+      : `<p class="empty">None yet. Win chips at Casino Cove and trade them for charms at the Prize Counter.</p>`;
+    return `<h4 class="perks-h">Charms &amp; perks · active bonuses</h4>${body}`;
   }
 
   private bagDetail(sel: string): string {

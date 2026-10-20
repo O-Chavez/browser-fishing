@@ -198,3 +198,16 @@ describe('message bottles', () => {
     expect(s.coins).toBe(c0 + 2 * eco.BOTTLE_COINS + eco.BOTTLE_BONUS);
   });
 });
+
+describe('charms & perks summary', () => {
+  it('lists only working perks, with the best Lucky Charm replacing the lower ones', () => {
+    const s = newSave();
+    expect(eco.activePerks(s)).toEqual([]);
+    s.perks = ['charm1', 'charm2', 'gloves', 'vest'];
+    s.lure = 2;
+    const list = eco.activePerks(s);
+    expect(list.map((p) => p.id)).toEqual(['charm2', 'gloves', 'vest', 'lure']);
+    expect(list[0].effect).toBe('Fish worth +10%');
+    expect(list[3].effect).toBe('2 shiny casts left');
+  });
+});
