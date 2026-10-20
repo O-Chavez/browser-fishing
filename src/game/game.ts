@@ -23,18 +23,19 @@ import { ChatBox } from './chatbox';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
 import { cosIcon } from './cosicon';
-import { FISH_BLURB, TIER_THEME } from '../data/fishlook';
+import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { shortCoins } from './format';
 import { Player } from './player';
 import {
   animateFish,
   buildFish,
-  fishScale,
   faceDirection,
+  hangFacing,
   setFishOpacity,
   type FishModel,
 } from './fishmodel';
+import { carryScale, hangLen, hangPitch, heldScale, waterScale } from './fishscale';
 import type { LeaderRow } from './hub';
 import { buildTin } from './itemmodels';
 import {
@@ -80,8 +81,6 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
-/** Fish in the water (hooked, shadow) are shown a bit smaller than when held up as a catch. */
-const WATER_SCALE = 0.7;
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const CAMP_TIPS = [
@@ -96,9 +95,6 @@ const CAMP_TIPS = [
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const GRAVITY = 9.8;
-const HANG_LEN = 1.0;
-const FISH_NOSE = new THREE.Vector3(0, 0, -1);
-const HANG_PITCH = 0.85;
 
 export class Game {
   private s: SaveData = load();
@@ -524,6 +520,20 @@ export class Game {
       },
       skipWait: () => {
         this.elapsed = this.waitTotal - 0.01;
+      },
+      /** Lands a given fish straight away (dev only), to check how each tier looks when caught. */
+      land: (id: string, size: number, shiny = false) => {
+        if (this.phase !== 'idle' && this.phase !== 'result') return;
+        if (this.phase === 'result') this.dismissCatch();
+        this.hooked = byId(FISH, id);
+        this.hookedSize = size;
+        this.hookedShiny = shiny;
+        this.fish = buildFish(this.hooked.color, false, shiny, this.hooked.tier, id);
+        this.fish.group.scale.setScalar(waterScale(size, this.hooked.tier));
+        const f = this.world.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
+        this.fish.group.position.copy(this.world.camera.position).addScaledVector(f, 6).setY(-0.3);
+        this.world.scene.add(this.fish.group);
+        this.startLanding();
       },
       world: this.world,
     };
@@ -1442,7 +1452,7 @@ export class Game {
     this.approachAngle = Math.random() * Math.PI * 2;
     if (this.hooked) {
       this.shadow = buildFish(this.hooked.color, true, this.hookedShiny, this.hooked.tier, this.hooked.id);
-      this.shadow.group.scale.setScalar(fishScale(this.hookedSize) * WATER_SCALE);
+      this.shadow.group.scale.setScalar(waterScale(this.hookedSize, this.hooked.tier));
       this.shadow.group.visible = false;
       w.scene.add(this.shadow.group);
     }
@@ -1495,7 +1505,7 @@ export class Game {
     this.lastSurges = 0;
     this.leapT = -1;
     this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, this.hooked!.id);
-    this.fish.group.scale.setScalar(fishScale(this.hookedSize) * WATER_SCALE);
+    this.fish.group.scale.setScalar(waterScale(this.hookedSize, this.hooked!.tier));
     w.scene.add(this.fish.group);
     w.rig.kick('pitch', 7);
     w.fovKick = 4;
@@ -1514,7 +1524,7 @@ export class Game {
     w.fx.ripple(this.landFrom, 3.5);
     audio.splash(1);
     w.rig.pose({
-      pitch: HANG_PITCH,
+      pitch: hangPitch(this.heldScale()),
       yaw: 0,
       bendP: 0.5,
       bendY: 0,
@@ -1526,20 +1536,28 @@ export class Game {
     $('alert').classList.add('hidden');
   }
 
-  /** Pendulum: the fish's mouth hangs from the rod tip on an inextensible line. */
+  /**
+   * Pendulum: the fish hangs by its mouth from the rod tip on an inextensible line. `bob` is the
+   * fish's middle, so the line and the fish swing together as one stiff pendulum (a long fish on a
+   * short line would otherwise whip its body around).
+   */
   private stepBob(dt: number): void {
     const tip = this.world.rig.tip.getWorldPosition(this.tipPos);
     const n = 4;
     const h = Math.min(dt, 0.05) / n;
+    const sc = this.held ? this.held.group.scale.x : 1;
+    const reach = hangLen(sc) + 0.5 * sc;
+    // Heavier fish settle sooner.
+    const damp = 0.35 + 0.15 * Math.max(0, sc - 1.5);
     for (let i = 0; i < n; i++) {
       this.bobVel.y -= 9.8 * h;
-      this.bobVel.multiplyScalar(1 - 0.35 * h);
+      this.bobVel.multiplyScalar(1 - damp * h);
       this.bob.addScaledVector(this.bobVel, h);
       const d = this.swingDir.subVectors(this.bob, tip);
       const len = d.length();
-      if (len > HANG_LEN) {
+      if (len > reach) {
         d.multiplyScalar(1 / len);
-        this.bob.copy(tip).addScaledVector(d, HANG_LEN);
+        this.bob.copy(tip).addScaledVector(d, reach);
         const radial = this.bobVel.dot(d);
         if (radial > 0) this.bobVel.addScaledVector(d, -radial);
       }
@@ -1553,12 +1571,14 @@ export class Game {
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch' });
     this.world.hub?.setLeaders(this.anglers());
-    this.hangPoint(this.bob, 0, 0);
-    this.bobVel.set(0.5, 0, -0.2);
+    const sc = this.heldScale();
+    this.hangPoint(this.bob, 0, 0).y -= 0.5 * sc;
+    this.bobVel.set(0.5, 0, -0.2).multiplyScalar(Math.min(1, 1.6 / sc));
 
     const el = $('catch');
     el.style.borderColor = RARITY_COLOR[fish.rarity];
     el.style.boxShadow = fish.tier >= 3 ? `0 0 ${12 + fish.tier * 10}px ${RARITY_COLOR[fish.rarity]}` : '';
+    el.style.setProperty('--glow', RARITY_COLOR[fish.rarity]);
     el.dataset.tier = String(fish.tier);
     const shiny = this.hookedShiny;
     el.innerHTML = `<div class="muted">${shiny ? '<b style="color:#ffd23a">✨ SHINY! ✨</b> ' : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
@@ -1570,14 +1590,19 @@ export class Game {
       <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
+    // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
     audio.jingle(shiny ? 'legendary' : fish.rarity);
     this.topTierBanner(fish, 'caught', shiny);
+    this.catchMoment(fish, shiny);
 
     this.held = this.fish;
     this.fish = null;
     this.endCast('result');
     this.world.rig.pose({
-      pitch: HANG_PITCH,
+      pitch: hangPitch(this.heldScale()),
       yaw: 0,
       bendP: 0.45,
       bendY: 0,
@@ -1585,6 +1610,22 @@ export class Game {
       c: 8,
     });
     this.world.line.line.visible = true;
+  }
+
+  /** Jewel and spirit fish (and shinies) land with a burst of sparkles and a little camera kick. */
+  private catchMoment(fish: Fish, shiny: boolean): void {
+    if (fish.tier < 4 && !shiny) return;
+    const w = this.world;
+    const g = this.fish?.group;
+    if (!g) return;
+    const top = fish.tier >= 5;
+    const center = g.getWorldPosition(new THREE.Vector3());
+    const color = new THREE.Color(shiny ? 0xffd23a : FISH_LOOK[fish.id]?.accent ?? fish.color);
+    w.fx.burst(center, color, top ? 140 : 70, top ? 1.3 : 1, 0.25 * g.scale.x);
+    if (top) w.fx.burst(center, new THREE.Color(0xffffff), 40, 0.7, 0.4 * g.scale.x);
+    w.addShake(top ? 0.9 : 0.5);
+    w.fovKick = top ? -7 : -4;
+    w.rig.kick('pitch', top ? 3 : 1.5);
   }
 
   /** Shows the held item in place of the rod: a fish model or a bait jar. The rod only shows while rod in hand or fishing. */
@@ -1607,13 +1648,17 @@ export class Game {
     let model: FishModel | null = null;
     let obj: THREE.Object3D;
     if (it.k === 'fish') {
-      model = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
-      // Carried while walking: still grows by tier, but capped so a legend doesn't block the view.
-      model.group.scale.setScalar(Math.min(0.24, fishScale(it.size) * 0.13));
+      const f = byId(FISH, it.fishId);
+      model = buildFish(f.color, false, it.shiny, f.tier, it.fishId);
+      // Carried while walking: grows by size and tier, but eased toward a cap and pushed further
+      // out and down as it grows, so a legend reads as huge without blocking the view.
+      const sc = carryScale(it.size, f.tier);
+      const out = Math.max(0, sc - 0.2);
+      model.group.scale.setScalar(sc);
       model.group.rotation.set(0.3, 1.1, 0.35);
       obj = new THREE.Group();
       obj.add(model.group);
-      obj.position.set(0.17, -0.2, -0.42);
+      obj.position.set(0.17 + out * 0.6, -0.2 - out * 0.7, -0.42 - out * 1.2);
     } else {
       obj = buildTin(it.id);
       obj.scale.setScalar(0.2);
@@ -1631,7 +1676,7 @@ export class Game {
   }
 
   private heldScale(): number {
-    return Math.min(2.8, fishScale(this.hookedSize));
+    return heldScale(this.hookedSize, this.hooked?.tier ?? 1);
   }
 
   /** Mouth position of a fish dangling from the rod tip, with a gentle pendulum swing. */
@@ -1643,7 +1688,7 @@ export class Game {
     this.world.rig.tip.getWorldPosition(out);
     out.x += Math.sin(t * 1.7) * 0.07 * swing;
     out.z += Math.cos(t * 1.3) * 0.04 * swing;
-    out.y -= HANG_LEN;
+    out.y -= hangLen(this.heldScale());
     return out;
   }
 
@@ -1849,10 +1894,11 @@ export class Game {
           this.stepBob(dt);
           const tip = this.tipPos;
           const up = this.swingDir.subVectors(tip, this.bob).normalize();
-          g.quaternion.setFromUnitVectors(FISH_NOSE, up);
-          g.position.copy(this.bob).addScaledVector(up, -0.5 * g.scale.x);
+          hangFacing(g, up, this.world.camera.getWorldPosition(this.hang).sub(this.bob));
+          g.position.copy(this.bob);
+          const mouth = this.hang.copy(this.bob).addScaledVector(up, 0.5 * g.scale.x);
           animateFish(this.held, t, 6, 0.25);
-          this.world.line.update(tip, this.bob, 0.01, 0, t);
+          this.world.line.update(tip, mouth, 0.01, 0, t);
         }
         break;
     }
@@ -1991,12 +2037,14 @@ export class Game {
     g.position.lerpVectors(this.landFrom, target, e);
     g.position.y += Math.sin(u * Math.PI) * 1.2;
     g.scale.setScalar(
-      THREE.MathUtils.lerp(fishScale(this.hookedSize) * WATER_SCALE, sc, e),
+      THREE.MathUtils.lerp(waterScale(this.hookedSize, this.hooked!.tier), sc, e),
     );
     g.rotation.order = 'YXZ';
+    // Ends nose-up with a flank toward the camera, where the result view takes over.
+    const face = w.yaw - Math.PI / 2 - 2;
     g.rotation.set(
       (Math.PI / 2) * e,
-      (1 - e) * 2,
+      2 + Math.atan2(Math.sin(face), Math.cos(face)) * e,
       Math.sin(u * Math.PI * 3) * 0.5 * (1 - e),
     );
     animateFish(this.fish!, w.time, 22, 0.6);

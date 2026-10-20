@@ -333,6 +333,21 @@ canvas.preview.dragging { cursor: grabbing; }
 .dex-tier small { margin-left: auto; font-size: 13px; color: var(--ink-muted); }
 #catch .catch-ico .fishico { width: 96px; height: 60px; }
 #catch .blurb { margin: 0 0 6px; font-size: 14px; font-weight: 700; font-style: italic; color: var(--ink-muted); max-width: 300px; }
+/* Catch card: pops in, and jewel (4) and spirit (5) catches glow, shimmer and float their icon. */
+#catch { animation: catchIn .35s cubic-bezier(.2, 1.4, .4, 1) both; overflow: hidden; }
+#catch[data-tier="4"] { animation: catchIn .5s cubic-bezier(.2, 1.6, .4, 1) both, catchGlow 1.4s ease-in-out .5s infinite alternate; }
+#catch[data-tier="5"] { animation: catchIn .6s cubic-bezier(.2, 1.8, .35, 1) both, catchGlow 1s ease-in-out .6s infinite alternate; }
+#catch[data-tier="5"] { background: radial-gradient(ellipse at 50% 18%, color-mix(in srgb, var(--glow) 22%, var(--paper)) 0%, var(--paper) 60%); }
+#catch[data-tier="4"]::after, #catch[data-tier="5"]::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-120%); animation: catchShine 2.6s ease-in-out .4s infinite; }
+#catch[data-tier="5"]::after { animation-duration: 1.8s; }
+#catch .catch-ico { position: relative; }
+#catch[data-tier="3"] .catch-ico, #catch[data-tier="4"] .catch-ico, #catch[data-tier="5"] .catch-ico { background: radial-gradient(ellipse at center, color-mix(in srgb, var(--glow) 35%, transparent) 0%, transparent 65%); }
+#catch[data-tier="4"] .catch-ico .fishico, #catch[data-tier="5"] .catch-ico .fishico { animation: icoFloat 2.2s ease-in-out infinite alternate; }
+#catch[data-tier="5"] .catch-ico .fishico { width: 120px; height: 75px; }
+@keyframes catchIn { 0% { opacity: 0; transform: translateY(30px) scale(.6); } 100% { opacity: 1; transform: none; } }
+@keyframes catchGlow { from { box-shadow: 0 0 18px var(--glow); } to { box-shadow: 0 0 60px 6px var(--glow); } }
+@keyframes catchShine { 0% { transform: translateX(-120%); } 45%, 100% { transform: translateX(120%); } }
+@keyframes icoFloat { from { transform: translateY(2px) rotate(-2deg); } to { transform: translateY(-3px) rotate(2deg); } }
 
 /* Anglers */
 .list-head { margin: 0 0 12px; font-size: 15px; font-weight: 800; color: var(--ink-muted); }

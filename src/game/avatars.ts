@@ -3,11 +3,10 @@ import { FISH } from '../data/content';
 import type { Activity, PlayerInfo } from '../net/protocol';
 import { Character } from './character';
 import { standHeight } from './env';
-import { animateFish, buildFish, fishScale, type FishModel } from './fishmodel';
+import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
+import { remoteHang, remoteScale } from './fishscale';
 
-const NOSE = new THREE.Vector3(0, 0, -1);
 const UP = new THREE.Vector3(0, 1, 0);
-const HANG = 0.45;
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 /** Chat bubbles: how long they stay, how long they take to fade, and how much text they show. */
 const BUBBLE_MS = 6000;
@@ -23,6 +22,7 @@ const BUBBLE_FULL_AT = 2.5;
 class Avatar {
   group = new THREE.Group();
   private tip = new THREE.Object3D();
+  private view = new THREE.Vector3();
   private target = new THREE.Vector3();
   private yaw = 0;
   private fresh = true;
@@ -149,7 +149,7 @@ class Avatar {
       const f = FISH.find((x) => x.id === act.fish);
       if (f) {
         this.held = buildFish(f.color, false, act.shiny, f.tier, f.id);
-        this.held.group.scale.setScalar(Math.min(1.1, fishScale(act.size) * 0.5));
+        this.held.group.scale.setScalar(remoteScale(act.size, f.tier));
         this.scene.add(this.held.group);
       }
       this.bobber.visible = false;
@@ -193,8 +193,8 @@ class Avatar {
     } else if ((a?.a === 'hold' || a?.a === 'carry') && this.held) {
       const g = this.held.group;
       const sway = Math.sin(t * 1.7 + p.id) * 0.18;
-      const end = new THREE.Vector3(this.tipPos.x + sway, this.tipPos.y - HANG, this.tipPos.z + sway * 0.5);
-      g.quaternion.setFromUnitVectors(NOSE, UP);
+      const end = new THREE.Vector3(this.tipPos.x + sway, this.tipPos.y - remoteHang(g.scale.x), this.tipPos.z + sway * 0.5);
+      hangFacing(g, UP, this.view.set(viewX - end.x, 0, viewZ - end.z));
       g.position.copy(end).addScaledVector(UP, -0.5 * g.scale.x);
       animateFish(this.held, t, 6, 0.25);
       this.setLine(this.tipPos, end, 0);

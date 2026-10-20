@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { FISH_LOOK, SHAPES, envelope, type DorsalKind, type FishLook, type Shape, type TailKind } from '../data/fishlook';
 
+/** A glow material whose colour cycles through the rainbow (the aurora pike). */
+type Hue = { m: THREE.Material & { color: THREE.Color }; off: number };
+
 export interface FishModel {
   group: THREE.Group;
   tail: THREE.Object3D;
@@ -11,7 +14,7 @@ export interface FishModel {
   pulse?: THREE.Material[];
   body?: THREE.Object3D;
   flames?: THREE.Object3D[];
-  hue?: { m: THREE.MeshBasicMaterial; off: number }[];
+  hue?: Hue[];
   twinkle?: THREE.Object3D[];
 }
 
@@ -21,8 +24,43 @@ function extents(shape: Shape, t: number): { y: number; x: number } {
   return { y: SHAPES[shape].h * env, x: SHAPES[shape].w * env };
 }
 
-/** Body mesh geometry: a sphere stretched along Z (nose at -Z) and reshaped by the silhouette. */
+const bodyCache = new Map<Shape, THREE.BufferGeometry>();
+/** Body mesh geometry: a sphere stretched along Z (nose at -Z) and reshaped by the silhouette. Shared per shape. */
 function bodyGeometry(shape: Shape): THREE.BufferGeometry {
+  let g = bodyCache.get(shape);
+  if (!g) bodyCache.set(shape, (g = makeBody(shape)));
+  return g;
+}
+
+/** Small shared geometries (sparkles, eyes, gems), keyed by their parameters. */
+const geoCache = new Map<string, THREE.BufferGeometry>();
+function shared<T extends THREE.BufferGeometry>(key: string, make: () => T): T {
+  let g = geoCache.get(key);
+  if (!g) geoCache.set(key, (g = make()));
+  return g as T;
+}
+const sphereGeo = (r: number, w = 6, h = 5) => shared(`s${r}|${w}|${h}`, () => new THREE.SphereGeometry(r, w, h));
+
+/** A soft round glow for billboards behind jewel and spirit fish. */
+let glowTex: THREE.CanvasTexture | null = null;
+function glowTexture(): THREE.CanvasTexture {
+  if (glowTex) return glowTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.25, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.12)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  glowTex = new THREE.CanvasTexture(c);
+  glowTex.colorSpace = THREE.SRGBColorSpace;
+  return glowTex;
+}
+
+function makeBody(shape: Shape): THREE.BufferGeometry {
   const s = SHAPES[shape];
   const g = new THREE.SphereGeometry(0.5, 40, 24).rotateX(Math.PI / 2);
   const p = g.attributes.position;
@@ -235,7 +273,7 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
   const pulse: THREE.Material[] = [];
   const flames: THREE.Object3D[] = [];
   const twinkle: THREE.Object3D[] = [];
-  const hue: { m: THREE.MeshBasicMaterial; off: number }[] = [];
+  const hue: Hue[] = [];
   const accent = new THREE.Color(L.accent ?? new THREE.Color(L.fin).lerp(new THREE.Color(0xffffff), 0.4).getHex());
   const spirit = tier >= 5 && !shadow ? look.spirit : undefined;
 
@@ -253,6 +291,9 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
         // A clear-coat gloss that builds with tier: none on shallows fish, full on jewels and spirits.
         clearcoat: [0, 0.3, 0.8, 1, 1][Math.min(4, tier - 1)],
         clearcoatRoughness: 0.25,
+        // A colour-shifting shimmer from lake giants up, strongest on the jewels.
+        iridescence: [0, 0, 0.45, 0.9, 0.6][Math.min(4, tier - 1)],
+        iridescenceIOR: 1.35,
         roughness: shiny ? 0.25 : rough,
         metalness: shiny ? 0.4 : metal,
         emissive: hasGlowSkin ? 0xffffff : spirit ? accent.clone().multiplyScalar(0.22) : 0x000000,
@@ -274,7 +315,7 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
 
   // Fins scale with the body so a round bluegill gets big fins and an eel a low ribbon.
   // Lake giants and up carry bigger, showier fins.
-  const finScale = Math.max(0.6, sh.h / 0.15) * (tier >= 3 ? 1.2 : 1);
+  const finScale = Math.max(0.6, sh.h / 0.15) * [1, 1, 1.25, 1.3, 1.35][Math.min(4, tier - 1)];
   if (look.dorsal !== 'none') {
     const d = DORSAL[look.dorsal];
     const len = look.shape === 'eel' ? 1.3 : 1;
@@ -308,13 +349,13 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
   // Tail on a pivot at the tail root so it can wag.
   const tail = new THREE.Group();
   tail.position.z = 0.47;
-  const tailScale = look.shape === 'eel' ? 0.8 : Math.max(0.75, Math.min(1.7, sh.h / 0.15));
+  const tailScale = (look.shape === 'eel' ? 0.8 : Math.max(0.75, Math.min(1.7, sh.h / 0.15))) * (tier >= 3 ? 1.1 : 1);
   const tailFin = new THREE.Mesh(finGeo(TAILS[look.tail].map(([x, y]) => [x * Math.min(1.3, tailScale), y * tailScale])), finMat);
   tail.add(tailFin);
   group.add(tail);
 
   if (!shadow) {
-    addFace(group, look, L);
+    addFace(group, look, tier, accent, pulse);
     addExtras(group, look, L, finMat, pulse, accent);
   }
 
@@ -328,22 +369,31 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
       return m;
     };
     if (tier >= 4) {
-      const rim = new THREE.Mesh(bodyGeo, glowMat(tier >= 5 ? 0.5 : 0.38));
+      const rim = new THREE.Mesh(bodyGeo, glowMat(tier >= 5 ? 0.5 : 0.4));
       rim.scale.set(1.18, 1.14, 1.04);
       group.add(rim);
+      // A soft glow behind the whole fish so it lights up its surroundings on screen.
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: accent.clone(), transparent: true, opacity: tier >= 5 ? 0.55 : 0.32, blending: THREE.AdditiveBlending, depthWrite: false }));
+      halo.scale.setScalar(tier >= 5 ? 1.9 : 1.3);
+      pulse.push(halo.material);
+      if (spirit === 'aurora') hue.push({ m: halo.material, off: 0.5 });
+      group.add(halo);
     }
+    if (tier === 4) addGems(group, look, accent);
     if (spirit) {
-      const aura = new THREE.Mesh(bodyGeo, glowMat(0.14, accent, spirit === 'aurora'));
-      aura.scale.set(1.45, 1.4, 1.1);
+      const aura = new THREE.Mesh(bodyGeo, glowMat(0.16, accent, spirit === 'aurora'));
+      aura.scale.set(1.55, 1.5, 1.12);
       group.add(aura);
       addSpirit(group, spirit, look, accent, tail, flames, twinkle, hue, pulse);
+      addCrown(group, look, accent, spirit === 'aurora', twinkle, hue, pulse);
     }
     orbit = new THREE.Group();
-    const n = shiny ? 10 : tier >= 5 ? 12 : 6;
+    const n = tier >= 5 ? 18 : 10;
+    const spread = tier >= 5 ? 0.2 : 0.12;
     for (let i = 0; i < n; i++) {
-      const sp = new THREE.Mesh(new THREE.SphereGeometry(0.012 + (i % 3) * 0.004, 6, 5), new THREE.MeshBasicMaterial({ color: shiny ? 0xfff2a0 : accent, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const sp = new THREE.Mesh(sphereGeo(0.009 + (i % 3) * 0.003, 8, 6), new THREE.MeshBasicMaterial({ color: shiny ? 0xfff2a0 : i % 4 === 3 ? 0xffffff : accent, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
       const a = (i / n) * Math.PI * 2;
-      sp.position.set(Math.cos(a) * (sh.w + 0.12), Math.sin(a * 2) * (sh.h + 0.04), Math.sin(a) * 0.55);
+      sp.position.set(Math.cos(a) * (sh.w + spread), Math.sin(a * 2) * (sh.h + spread * 0.4), Math.sin(a) * (0.55 + spread * 0.5));
       orbit.add(sp);
       twinkle.push(sp);
     }
@@ -355,22 +405,89 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
   return { group: outer, body, tail, materials, orbit, pulse, flames, hue, twinkle };
 }
 
-/** Cartoon eyes (matching the players' painted faces) and a mouth line. */
-function addFace(group: THREE.Group, look: FishLook, L: FishLook): void {
+/**
+ * Cartoon eyes (matching the players' painted faces). Jewel fish get a glowing gem-coloured iris and
+ * spirits eyes that shine, each with a soft halo.
+ */
+function addFace(group: THREE.Group, look: FishLook, tier: number, accent: THREE.Color, pulse: THREE.Material[]): void {
   const t = look.shape === 'eel' ? 0.07 : look.shape === 'long' || look.shape === 'armored' ? 0.12 : 0.1;
   const e = extents(look.shape, t);
   const r = THREE.MathUtils.clamp(0.034 + SHAPES[look.shape].h * 0.07, 0.03, 0.05);
+  const glow = tier >= 4;
   const white = new THREE.MeshBasicMaterial({ color: look.spirit ? 0xfff6c8 : 0xf6f6f0 });
   const pupil = new THREE.MeshBasicMaterial({ color: look.spirit === 'ghost' ? 0x3a6aa8 : 0x111111 });
+  const iris = glow ? new THREE.MeshBasicMaterial({ color: accent.clone().lerp(new THREE.Color(0xffffff), tier >= 5 ? 0.5 : 0.15) }) : null;
+  const shine = glow ? new THREE.MeshBasicMaterial({ color: accent.clone(), transparent: true, opacity: tier >= 5 ? 0.4 : 0.28, blending: THREE.AdditiveBlending, depthWrite: false }) : null;
+  if (shine) pulse.push(shine);
   for (const s of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), white);
+    const w = new THREE.Mesh(sphereGeo(r, 12, 8), white);
     w.position.set(s * e.x * 0.78, e.y * 0.28, -0.5 + t);
-    const p = new THREE.Mesh(new THREE.SphereGeometry(r * 0.58, 10, 6), pupil);
-    p.position.set(s * r * 0.55, r * 0.08, -r * 0.35);
+    if (iris) {
+      const ir = new THREE.Mesh(sphereGeo(r * 0.72, 10, 6), iris);
+      ir.position.set(s * r * 0.4, r * 0.06, -r * 0.3);
+      w.add(ir);
+    }
+    const p = new THREE.Mesh(sphereGeo(r * (glow ? 0.4 : 0.58), 10, 6), pupil);
+    p.position.set(s * r * (glow ? 0.75 : 0.55), r * 0.08, -r * (glow ? 0.45 : 0.35));
     w.add(p);
+    if (shine) {
+      const h = new THREE.Mesh(sphereGeo(r * (tier >= 5 ? 1.45 : 1.25), 10, 6), shine);
+      w.add(h);
+    }
     group.add(w);
   }
-  void L;
+}
+
+/** Jewel fish (T4): a row of faceted gems along each flank and a crest gem on the brow. */
+function addGems(group: THREE.Group, look: FishLook, accent: THREE.Color): void {
+  const gem = new THREE.MeshStandardMaterial({ color: accent.clone().lerp(new THREE.Color(0xffffff), 0.25), emissive: accent.clone().multiplyScalar(0.55), roughness: 0.12, metalness: 0.3, flatShading: true });
+  const geo = shared('gem', () => new THREE.OctahedronGeometry(1, 0));
+  for (let i = 0; i < 5; i++) {
+    const t = 0.24 + i * 0.1;
+    const e = extents(look.shape, t);
+    const size = 0.022 * (1 - Math.abs(i - 1.5) * 0.12);
+    for (const sx of [-1, 1]) {
+      const g = new THREE.Mesh(geo, gem);
+      g.scale.set(size * 0.5, size, size * 1.3);
+      g.position.set(sx * e.x * 0.98, e.y * 0.1, -0.5 + t);
+      group.add(g);
+    }
+  }
+  const crest = new THREE.Mesh(geo, gem);
+  const e = extents(look.shape, 0.16);
+  crest.scale.set(0.022, 0.04, 0.03);
+  crest.position.set(0, e.y + 0.02, -0.34);
+  crest.rotation.x = -0.4;
+  group.add(crest);
+}
+
+/** Spirit fish (T5): a floating crown of light above the head, with glinting points. */
+function addCrown(
+  group: THREE.Group, look: FishLook, accent: THREE.Color, cycle: boolean,
+  twinkle: THREE.Object3D[], hue: Hue[], pulse: THREE.Material[],
+): void {
+  const m = new THREE.MeshBasicMaterial({ color: accent.clone().lerp(new THREE.Color(0xffd84a), 0.55), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  pulse.push(m);
+  if (cycle) hue.push({ m, off: 0.3 });
+  const crown = new THREE.Group();
+  const R = 0.07;
+  crown.add(new THREE.Mesh(shared('crownring', () => new THREE.TorusGeometry(R, 0.007, 6, 28).rotateX(Math.PI / 2)), m));
+  const spike = shared('crownspike', () => new THREE.ConeGeometry(0.013, 0.065, 5).translate(0, 0.0325, 0));
+  const star = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const sp = new THREE.Mesh(spike, m);
+    sp.position.set(Math.cos(a) * R, 0, Math.sin(a) * R);
+    crown.add(sp);
+    const tip = new THREE.Mesh(sphereGeo(0.008), star);
+    tip.position.set(Math.cos(a) * R, 0.07, Math.sin(a) * R);
+    crown.add(tip);
+    twinkle.push(tip);
+  }
+  const t = look.shape === 'eel' ? 0.1 : 0.14;
+  crown.position.set(0, extents(look.shape, t).y + 0.07, -0.5 + t + 0.02);
+  crown.rotation.x = 0.25;
+  group.add(crown);
 }
 
 function addExtras(group: THREE.Group, look: FishLook, L: FishLook, finMat: THREE.Material, pulse: THREE.Material[], accent: THREE.Color): void {
@@ -427,7 +544,7 @@ function addExtras(group: THREE.Group, look: FishLook, L: FishLook, finMat: THRE
 /** Tier-5 flourishes that make each spirit unmistakable without hiding the fish underneath. */
 function addSpirit(
   group: THREE.Group, kind: NonNullable<FishLook['spirit']>, look: FishLook, accent: THREE.Color, tail: THREE.Object3D,
-  flames: THREE.Object3D[], twinkle: THREE.Object3D[], hue: { m: THREE.MeshBasicMaterial; off: number }[], pulse: THREE.Material[],
+  flames: THREE.Object3D[], twinkle: THREE.Object3D[], hue: Hue[], pulse: THREE.Material[],
 ): void {
   const add = (op: number, c = accent, cycle = false) => {
     const m = new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -455,8 +572,9 @@ function addSpirit(
     }
   }
   if (kind === 'stars') {
+    const starMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     for (let i = 0; i < 16; i++) {
-      const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.012 + (i % 3) * 0.006), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      const st = new THREE.Mesh(shared(`star${i % 3}`, () => new THREE.OctahedronGeometry(0.012 + (i % 3) * 0.006)), starMat);
       const t = 0.05 + (i / 16) * 0.9;
       const e = extents(look.shape, t);
       st.position.set(Math.cos(i * 2.4) * e.x * 1.05, Math.sin(i * 2.4) * e.y * 1.05, -0.5 + t);
@@ -464,15 +582,6 @@ function addSpirit(
       twinkle.push(st);
     }
   }
-}
-
-/**
- * World scale for a fish of `cm` length when held up as a catch. It keeps growing across the whole
- * size range (15 cm ≈ 0.5, 90 cm ≈ 1.5, 230 cm ≈ 2.5) so every tier lands visibly bigger than the last,
- * but slower than real life so a legend still fits on screen. Other views use a fraction of this.
- */
-export function fishScale(cm: number): number {
-  return 0.0984 * Math.pow(Math.max(1, cm), 0.6);
 }
 
 export function setFishOpacity(m: FishModel, a: number): void {
@@ -495,4 +604,21 @@ export function animateFish(m: FishModel, t: number, speed: number, amp: number)
 /** Rotate so the nose (-Z) points along (vx, vz). */
 export function faceDirection(g: THREE.Object3D, vx: number, vz: number): void {
   if (vx * vx + vz * vz > 1e-8) g.rotation.y = Math.atan2(-vx, -vz);
+}
+
+const _x = new THREE.Vector3();
+const _y = new THREE.Vector3();
+const _z = new THREE.Vector3();
+const _m = new THREE.Matrix4();
+/**
+ * Orient a hanging fish: nose along `up` (toward the line), turned about that axis so a flank faces
+ * the viewer, so its colours, gems and eye are on show instead of its back.
+ */
+export function hangFacing(g: THREE.Object3D, up: THREE.Vector3, toViewer: THREE.Vector3): void {
+  _z.copy(up).negate();
+  _x.copy(toViewer).addScaledVector(up, -toViewer.dot(up));
+  if (_x.lengthSq() < 1e-8) _x.set(1, 0, 0);
+  _x.normalize();
+  _y.crossVectors(_z, _x);
+  g.quaternion.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
 }
