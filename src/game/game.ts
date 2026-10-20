@@ -517,7 +517,9 @@ export class Game {
       }
       if (e.code === 'Escape' && this.menuOpen && !e.repeat) return this.closeMenu();
       if (e.repeat || this.menuOpen || !this.active) return;
-      const i = Number(e.key) - 1;
+      // By key position, not e.key: holding Shift to sprint turns "1" into "!".
+      const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+      const i = digit ? Number(digit[1]) - 1 : -1;
       if (i >= 0 && i < this.s.slots.length && this.phase === 'idle') this.takeSlot(i);
       else if (e.code === 'KeyG' && this.phase === 'idle') this.dropHeld();
       else if (e.code === 'Space' && this.active && this.phase === 'idle') { e.preventDefault(); this.player.jump(); }
