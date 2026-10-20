@@ -322,8 +322,8 @@ export class Town {
       body.add(arm);
     }
     p.add(body);
+    // Townsfolk don't block: they stand on the main street to and from the casino gate.
     this.at(p, def.x, def.z, def.facing);
-    this.solid(def.x, def.z, 0.5);
     const pos = p.position.clone();
     this.npcs.push({ def, pos, next: 0 });
     this.heads.push({ head, body, pos, yaw: def.facing });
