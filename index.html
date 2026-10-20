@@ -31,7 +31,7 @@
     <div id="wheelres"></div>
     <div id="heldname"></div>
     <div id="hotbar"></div>
-    <div id="help"><span><kbd>Tab</kbd>Inventory</span><span><kbd>Enter</kbd>Chat</span><span><kbd>Esc</kbd>Menu</span></div>
+    <div id="help"><span><kbd>Tab</kbd>Bag</span><span><kbd>Enter</kbd>Chat</span><span><kbd>Esc</kbd>Menu</span></div>
   </div>
 
   <div id="catch" class="hidden"></div>
@@ -39,16 +39,13 @@
 
   <div id="resume" class="hidden"></div>
   <div id="menu">
-    <div class="panel">
-      <h1>Lakeside</h1>
-      <nav>
-        <button data-tab="play">Play</button>
-        <button data-tab="players">Players</button>
-        <button data-tab="inventory">Inventory</button>
-        <button data-tab="dex">Fishdex</button>
-      </nav>
-      <div id="tab"></div>
-      <p class="muted controls"><b>WASD</b> walk · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> talk / interact · <b>Click</b> cast &amp; reel · <b>1–5</b> / <b>scroll</b> hold item · <b>G</b> drop · <b>Tab</b> inventory · <b>Esc</b> menu / close</p>
+    <div class="win">
+      <header class="win-bar">
+        <div class="who" id="menu-who"></div>
+        <nav class="tabs" id="menu-tabs"></nav>
+        <button class="close" data-act="close" title="Close (Esc)"><kbd>Esc</kbd><span class="x">✕</span></button>
+      </header>
+      <div id="tab" class="sheet"></div>
     </div>
   </div>
 
