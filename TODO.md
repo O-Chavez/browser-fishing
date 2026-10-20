@@ -2,9 +2,9 @@
 
 ## Checklist
 
-- [ ] Improve performance
+- [x] Improve performance
   - Merged to `main` (2026-10-19): 23-29% faster rendering in every benchmark scene, original lighting kept. Results in `bench-results/ab-2a42083-vs-13dbd1f.json`
-  - Done = a tangible difference is noticed when playing (not yet confirmed in play)
+  - Done = a tangible difference is noticed when playing (confirmed by Oscar, 2026-10-19)
 - [ ] Global chat in the top right
   - Non-intrusive, with a clear hint on how to use it ("Press Enter to chat")
   - Everyone on the server; filterable by world (pond vs casino) with Tab while in chat mode, if needed
