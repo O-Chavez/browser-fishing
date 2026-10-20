@@ -814,20 +814,10 @@ export class World {
     [1.35, 10],
   ];
 
-  private static dockProps: Circle[] = [
-    { x: 0.85, z: 2.5, r: 0.45 },
-    { x: -0.8, z: 1.6, r: 0.22 },
-    { x: 7.8, z: 4.5, r: 0.35 },
-    { x: -7.6, z: 4.5, r: 0.25 },
-    ...[
-      [1.1, -2.8],
-      [-4.4, -5.9],
-      [4.4, -5.9],
-    ].map(([x, z]) => ({ x, z, r: 0.1 })),
-  ];
-
+  // The dock's crate, bucket, barrel, rope and lantern posts are decoration only: the dock is
+  // narrow, and snagging on them made walking out to fish a chore.
   get colliders(): Circle[] {
-    return [...(this.indoor ? [] : World.dockProps), ...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? []), ...(this.hall?.colliders ?? [])];
+    return [...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? []), ...(this.hall?.colliders ?? [])];
   }
 
   surface(x: number, z: number): number {

@@ -93,6 +93,15 @@ async function pondChecks(): Promise<void> {
   r = await page.evaluate(() => window.__smoke.attachedReport('town'));
   check('pond: town animated parts still in the scene', r.missing.length === 0, r.missing.join(', ') || `${r.checked} checked`);
 
+  // Dock decorations and townsfolk don't block movement; shore props still do.
+  const blocked = await page.evaluate(() => {
+    const cs = (window.__game.world as any).colliders as { x: number; z: number; r: number }[];
+    const hit = (x: number, z: number) => cs.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.05);
+    return { bucket: hit(-0.8, 1.6), barrel: hit(7.8, 4.5), reed: hit(4, 53.5), stallBarrel: hit(8.4, 19.2) };
+  });
+  check('pond: dock props and NPCs can be walked through', !blocked.bucket && !blocked.barrel && !blocked.reed, JSON.stringify(blocked));
+  check('pond: shore props still block', blocked.stallBarrel, JSON.stringify(blocked));
+
   // Night: lamps, windows and torches must still be on meshes that are drawn.
   await page.evaluate(() => { window.__game.day(0.7); window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.15); });
   await sleep(600);

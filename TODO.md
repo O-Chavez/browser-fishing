@@ -12,7 +12,7 @@
   - Messages disappear from the chat window after 5 minutes
   - Standard max message length, spam/rate limiting, basic profanity filter
   - Chat bubble above the speaker's head, as long as it isn't obnoxious
-- [ ] Stop the player getting stuck on dock objects
+- [x] Stop the player getting stuck on dock objects
   - Keep the decorative items sitting on the dock (bucket etc.) for the look, but don't let them block movement
   - Shore objects are fine as they are
   - Also let players walk through the NPCs on that map (they block the path to/from the casino)
