@@ -57,7 +57,7 @@ export class AccountStore {
   }
 
   snapshot(): Record<string, unknown> {
-    return Object.fromEntries([...this.accounts].map(([k, a]) => [k, { name: a.name, hash: a.hash, save: { ...a.save, fund: {} } }]));
+    return Object.fromEntries([...this.accounts].map(([k, a]) => [k, { name: a.name, hash: a.hash, save: a.save }]));
   }
 
   /** The data to persist if anything changed since the last call, else null. */

@@ -5,7 +5,6 @@ import { newSave } from '../src/game/state';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { FISH } from '../src/data/content';
-import { fundGoal } from '../src/game/fund';
 import { sellValue } from '../src/game/progression';
 import { Room } from './room';
 
@@ -20,7 +19,7 @@ const setup = () => {
   let now = 1_000_000;
   let roll = 0.5;
   const store = new AccountStore();
-  const room = new Room('r', {}, MAPS, () => {}, () => now, () => roll);
+  const room = new Room('r', MAPS, () => {}, () => now, () => roll);
   const join = (name: string) => {
     const res = store.auth(name, 'token-token-token-' + name);
     if (!res.ok) throw new Error(res.msg);
@@ -48,36 +47,6 @@ describe('accounts', () => {
 });
 
 describe('Room economy', () => {
-  it('pools coins from every player and caps at the goal', () => {
-    const { room, join, atShop } = setup();
-    const a = join('Ann');
-    const b = join('Bob');
-    a.acct.save.coins = 1000;
-    b.acct.save.coins = 1000;
-    atShop(a);
-    atShop(b);
-    room.handle(a.id, { t: 'give', map: 'pond', coins: 200 });
-    room.handle(b.id, { t: 'give', map: 'pond', coins: 900 });
-    const goal = fundGoal(MAPS[0], 2);
-    expect(room.funds.pond).toBe(goal);
-    expect(a.acct.save.coins).toBe(800);
-    expect(b.acct.save.coins).toBe(1000 - (goal - 200));
-  });
-
-  it('cannot give coins you do not have, or away from the vendor', () => {
-    const { room, join, atShop } = setup();
-    const a = join('Ann');
-    room.handle(a.id, { t: 'give', map: 'pond', coins: 10 });
-    expect(room.funds.pond ?? 0).toBe(0);
-    atShop(a);
-    room.handle(a.id, { t: 'give', map: 'pond', coins: 9999 });
-    expect(room.funds.pond).toBe(newSave().coins);
-    expect(a.acct.save.coins).toBe(0);
-    room.handle(a.id, { t: 'give', map: 'pond', coins: -5 });
-    room.handle(a.id, { t: 'give', map: 'nope', coins: 5 });
-    expect(a.acct.save.coins).toBe(0);
-  });
-
   it('only opens bottles when standing next to them', () => {
     const { room, join } = setup();
     const a = join('Ann');
@@ -273,27 +242,7 @@ describe('lucky wheel', () => {
   });
 });
 
-describe('scaled goal & shinies', () => {
-  const goalOf = (n: number) => fundGoal(MAPS[0], n);
-  it('raises the goal with the player count', () => {
-    expect(goalOf(1)).toBe(MAPS[0].goal);
-    expect(goalOf(3)).toBe(MAPS[0].goal * 2);
-  });
-  it('accepts coins up to the scaled goal and keeps the gate open once reached', () => {
-    const { room, join, atShop } = setup();
-    const a = join('Ann');
-    const b = join('Bob');
-    atShop(a);
-    a.acct.save.coins = 10_000;
-    room.handle(a.id, { t: 'give', map: 'pond', coins: 10_000 });
-    expect(room.funds.pond).toBe(goalOf(2));
-    expect(room.funds['pond:open']).toBe(1);
-    const c = join('Cat');
-    expect(room.funds.pond).toBe(goalOf(2));
-    room.handle(a.id, { t: 'give', map: 'pond', coins: 100 });
-    expect(room.funds.pond).toBe(goalOf(2));
-    expect(b.id).not.toBe(c.id);
-  });
+describe('shinies & fishing spots', () => {
   it('slows bites when casting from the shore instead of the pier', () => {
     const { room, join } = setup() as ReturnType<typeof setup>;
     const a = join('Ann');

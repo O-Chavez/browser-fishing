@@ -217,16 +217,17 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 ### 14.1 Traversable world
 - Each map is a walkable area (WASD + mouse look, jump optional) containing a **shop hub** (dock-side vendor stall), fishing spots (shore, dock, boat later) and scenery.
 - Fishing starts when the player stands at a valid spot and equips the rod; casting/reeling is unchanged.
-- Maps are separate zones joined by a travel point (gate/boat) that stays locked until the map goal is met.
+- Maps are separate zones joined by a travel point (gate/boat) that stays locked until the player reaches the destination's `minLevel`.
 
 ### 14.2 Map shop
 - One vendor per map. **Sell** fish (price by species rarity and weight, as today) and **buy** rods, bait and map-specific gear. Stock improves per map.
 - The hotbar is the entire inventory: 5 slots, each holding one rod, one fish, or a stack of up to 20 bait of one type. Each map's stall sells a fixed stock (Starter Pond: worm bait and the free Twig Rod; set per map in `stock`). Goods are bought by looking at them on the stall and pressing E; fish are sold by holding them near the vendor and pressing E. You cannot cast while a fish is in hand or when no slot is free for the catch, so sell or drop fish before the bar fills. Dropped items last 30 seconds in the world, visible to the whole room (anyone can pick them up).
 
-### 14.3 Map goal (progression gate)
-- Each map has a **turn-in goal**: deliver X coins to the map's vendor (a "contribution" that is spent, not just earned) to unlock the next map. Goal grows per map.
-- The next map brings rarer fish, better rods/bait and a higher shop tier. Account level stays as a soft gate for gear; the goal is the hard gate for maps.
+### 14.3 Progression gate
+- Each map's gate opens per player once they reach the destination map's `minLevel` (the casino uses `CASINO_LEVEL`, 15). The server checks the level on travel.
+- The next map brings rarer fish, better rods/bait and a higher shop tier.
 - Progress is saved per account, so it persists across sessions.
+- *History:* this used to be a pooled **Town Fund** (coins handed to the vendor until a room-wide goal was met). It was removed; old saves with `fund`/`contributed` fields and the old stored `rooms` fund totals are ignored on load.
 
 ### 14.4 Multiplayer (first version: shared world)
 - Players on the same map see each other walking, casting and holding a catch (simple avatars with nameplates), plus bobbers and lines.
@@ -234,38 +235,36 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 - Network model: 10–20 Hz position snapshots with client-side interpolation; discrete events for cast, bite, catch and sell.
 - Accounts: simple name + token for v2, with a database (SQLite) for saves. Server-side saves replace localStorage.
 - Rooms: one room per map instance with a player cap (about 16); players are routed into a room when they travel.
-- Social extras (later): chat, shared leaderboards (biggest fish per species), co-op goal contributions where a town fund unlocks the map for the whole room.
+- Social extras (later): chat, shared leaderboards (biggest fish per species).
 
 ### 14.5 Phasing
-1. **Phase A — World & shop (single-player):** walk controller, map layout with vendor, sell/buy at the vendor only, per-map goal and unlock, map data refactor.
+1. **Phase A — World & shop (single-player):** walk controller, map layout with vendor, sell/buy at the vendor only, per-map unlock, map data refactor.
 2. **Phase B — Server:** authoritative Node server, accounts and saves, move economy and fish rolls server-side.
 3. **Phase C — Shared presence:** avatars, nameplates, synced casts and catches, room management.
-4. **Phase D — Social & polish:** chat, leaderboards, shared goals.
+4. **Phase D — Social & polish:** chat, leaderboards.
 
 ### 14.6 Decisions
-- Coins are turned in to a **pooled lobby fund**; the map unlocks **per room**.
 - **No player-to-player trading.**
-- Only the first map (`pond`) is built, as a template. Phase A is implemented single-player behind a `Fund` interface (`src/game/fund.ts`) so a server can own the pooled state later.
+- Only the first map (`pond`) is built, as a template.
 
 ### 14.7 Adding a map (template)
-1. Add a `MapDef` to `src/data/maps.ts`: `spawn`, hub `pad`, `vendor`, `board` and `gate` spots, `goal`, `next`, `radius`.
+1. Add a `MapDef` to `src/data/maps.ts`: `spawn`, hub `pad`, `vendor` and `gate` spots, `next`, `radius`, and `minLevel` if travelling there needs a level.
 2. Give it a `locationId` in `src/data/content.ts` (palette, fish pool).
-3. Point the previous map's `next` at it. The hub, fund board and gate are built from the data by `src/game/hub.ts`.
+3. Point the previous map's `next` at it. The hub and gate are built from the data by `src/game/hub.ts`.
 
 ### 14.8 Multiplayer status
-- **Server** (`server/`): `npm run server` starts a WebSocket server on port 8787. Rooms are chosen with `?room=name` (default `lobby`); `?name=` sets your display name. The pooled fund per map is server-authoritative, capped at the goal, and persisted to `server/rooms.json`. Logic lives in `server/room.ts` (tested).
-- **Client** (`src/game/net.ts`, `avatars.ts`): other players in the same map appear as nameplated avatars; fund changes from anyone update the board and HUD live. If the server is unreachable the game falls back to the local single-player fund.
+- **Server** (`server/`): `npm run server` starts a WebSocket server on port 8787. Rooms are chosen with `?room=name` (default `lobby`); `?name=` sets your display name. Logic lives in `server/room.ts` (tested).
+- **Client** (`src/game/net.ts`, `avatars.ts`): other players in the same map appear as nameplated avatars. If the server is unreachable the game falls back to offline single-player.
 - **Run both:** `npm run server` and `npm run dev` in two terminals.
 - **Accounts:** the first join with a name claims it; a browser-held token (SHA-256 hashed server-side, `server/accounts.json`) proves ownership. Not a password system. Duplicate logins are rejected.
-- **Server-side economy:** coins, carry slots (fish and bait), rods, level and contributions live in the account save. Buy/sell/give are validated by the server (vendor proximity, funds, goal cap). The server rolls fish, size and bite wait on `cast`, and rejects a `catch` that arrives before the bite wait plus fight time. Shared logic is in `src/game/economy.ts`; the client mirrors it optimistically and the server `state` overwrites.
+- **Server-side economy:** coins, carry slots (fish and bait), rods and level live in the account save. Buy/sell are validated by the server (vendor proximity, funds). The server rolls fish, size and bite wait on `cast`, and rejects a `catch` that arrives before the bite wait plus fight time. Shared logic is in `src/game/economy.ts`; the client mirrors it optimistically and the server `state` overwrites.
 - **Synced visuals:** other players' casts (bobber and line) and held catches (fish hanging on a line from the rod tip) are broadcast as `act` messages.
 - **Remaining gaps:** the reel minigame outcome is still client-side (only timing is checked), positions are client-reported, no passwords, chat/leaderboards, and the second map.
 
 ### Lucky Wheel
 Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that fish: 45% chance its value doubles (stackable, shown as ×2 on the hotbar), 55% chance it is lost. The server rolls and applies the result only after the ~3.8 s spin ends (the hotbar doesn't spoil it); other actions are locked during the spin, and leaving mid-spin settles it immediately. A large DOUBLED!/LOST! banner reports the outcome.
 
-### Scaled Goals & Shiny Fish
-- **Goal scaling:** a map's Town Fund goal is `base × (1 + 0.5 × (players − 1))` for the players currently in the room (e.g. 300 → 450 for two, 600 for three). Once a room's fund reaches its goal the gate stays open for good, even if more players join later.
+### Shiny Fish
 - **Shiny fish:** every hooked fish has a 5% chance to be shiny. A shiny is gold with a glint, fights about 40% harder (stronger, longer surges), is worth 5× the normal sale value and gives 3× XP. It is announced on bite, on the catch card, on the hotbar and to other players. It survives drop, pickup and the Lucky Wheel.
 
 ## 15. Identity, Cosmetics & Expanded Hub
@@ -278,7 +277,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 
 ## 17. Persistence & account reset
 
-- **Storage** (`server/storage.ts`): accounts and town funds are saved every 2 s when changed, and on SIGTERM/SIGINT (redeploys).
+- **Storage** (`server/storage.ts`): accounts are saved every 2 s when changed, and on SIGTERM/SIGINT (redeploys).
   - Default: JSON files in `DATA_DIR` (or the server folder). Lost on Render free redeploys unless a paid disk is mounted at `DATA_DIR`.
   - Set `DATABASE_URL` to use Postgres instead (Neon, Supabase or Render Postgres, no disk needed). A `game_state` table is created automatically.
 - **Reset:** Players tab (Tab/Esc) -> "Reset account" -> confirm. Wipes coins, level, gear, fish, dex and cosmetics; keeps name, login token and body color. Works offline too. Blocked mid wheel-spin.
@@ -362,7 +361,7 @@ T1–T3 share a classic fish shape. T4 fish are larger with a glow halo, orbitin
 The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `next`. The Forest Lake stays in the data, shelved.
 
 ### Access
-- The pond gate opens through the Town Fund as usual, and the casino also needs **level 15** (the Aurora Rod level) so players have fished before they gamble.
+- The pond gate opens at **level 15** (`CASINO_LEVEL`, the Aurora Rod level) so players have fished before they gamble. The server enforces it on travel.
 - The casino is an **indoor map** (no water, terrain or dock): a carpeted hall with a roulette table, a blackjack table and a cashier counter. Fishing is disabled inside. The front door returns to the pond.
 - Tables are played **in the world**: walk up, hold the fish to bet (keys 1-5), then aim and click the 3D red/black/green patches, or the DEAL / HIT / STAND / DOUBLE buttons on the felt. Cards are laid out on the table and a small status line shows the bet and result.
 - At the cashier, hold a fish and click the chip tray to turn it in. Click the prize case (or press E) to open the perk list and buy unlocks.
@@ -379,7 +378,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 - **Blackjack:** hit, stand and double. The dealer stands on 17. A win pays 1:1 and a natural pays 3:2 on the multiplier.
 
 ### Chips
-- A separate currency in the account save. Chips are earned only by turning fish in at the prize shop and are spent only on casino unlocks. Coins keep buying rods, bait and the Town Fund.
+- A separate currency in the account save. Chips are earned only by turning fish in at the prize shop and are spent only on casino unlocks. Coins keep buying rods, bait and cosmetics.
 - One config holds the fish-to-chip rate and unlock prices so the grind can be tuned.
 
 ### Casino unlocks (bought with chips)

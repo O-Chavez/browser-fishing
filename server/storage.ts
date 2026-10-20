@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import pg from 'pg';
 
+/** Older versions also stored a `rooms` record of Town Fund totals; it is no longer read or written. */
 export interface GameData {
   accounts: Record<string, unknown>;
-  rooms: Record<string, Record<string, number>>;
 }
 
 export interface Storage {
@@ -39,12 +39,11 @@ export class FileStorage implements Storage {
   }
 
   async load(): Promise<GameData> {
-    return { accounts: this.read('accounts.json', {}), rooms: this.read('rooms.json', {}) };
+    return { accounts: this.read('accounts.json', {}) };
   }
 
   async save(data: GameData): Promise<void> {
     this.write('accounts.json', data.accounts);
-    this.write('rooms.json', data.rooms);
   }
 }
 
@@ -61,13 +60,12 @@ export class PgStorage implements Storage {
     await this.pool.query('CREATE TABLE IF NOT EXISTS game_state (key text PRIMARY KEY, value jsonb NOT NULL)');
     const { rows } = await this.pool.query('SELECT key, value FROM game_state');
     const get = (k: string) => rows.find((r) => r.key === k)?.value ?? {};
-    return { accounts: get('accounts'), rooms: get('rooms') };
+    return { accounts: get('accounts') };
   }
 
   async save(data: GameData): Promise<void> {
     const sql = 'INSERT INTO game_state (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value';
     await this.pool.query(sql, ['accounts', JSON.stringify(data.accounts)]);
-    await this.pool.query(sql, ['rooms', JSON.stringify(data.rooms)]);
   }
 }
 

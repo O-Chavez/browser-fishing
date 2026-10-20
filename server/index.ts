@@ -11,7 +11,6 @@ import { createStorage } from './storage';
 
 const storage = createStorage(process.env, fileURLToPath(new URL('./', import.meta.url)));
 const data = await storage.load();
-const stored = data.rooms;
 const accounts = new AccountStore(data.accounts);
 const rooms = new Map<string, Room>();
 console.log(`saves: ${storage.kind} (${Object.keys(data.accounts).length} accounts loaded)`);
@@ -19,26 +18,17 @@ if (process.env.RENDER && !process.env.DATABASE_URL) {
   console.warn('WARNING: running on Render without DATABASE_URL - progress will be lost on every deploy. Set it in the web service Environment tab.');
 }
 
-let roomsDirty = false;
-const persist = () => {
-  roomsDirty = true;
-  accounts.touch();
-};
+const persist = () => accounts.touch();
 let saving = false;
 async function flush(): Promise<void> {
   if (saving) return;
   const accts = accounts.takeDirty();
-  if (!accts && !roomsDirty) return;
+  if (!accts) return;
   saving = true;
-  roomsDirty = false;
   try {
-    await storage.save({
-      accounts: accts ?? accounts.snapshot(),
-      rooms: { ...stored, ...Object.fromEntries([...rooms].map(([k, r]) => [k, r.funds])) },
-    });
+    await storage.save({ accounts: accts });
   } catch (e) {
     console.error('save failed, will retry', e);
-    roomsDirty = true;
     accounts.markDirty();
   } finally {
     saving = false;
@@ -58,7 +48,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 function room(name: string): Room {
   let r = rooms.get(name);
   if (!r) {
-    r = new Room(name, stored[name] ?? {}, MAPS, persist);
+    r = new Room(name, MAPS, persist);
     r.hall = () => accounts.hall();
     rooms.set(name, r);
   }

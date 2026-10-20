@@ -30,9 +30,6 @@ export interface SaveData {
   held: number;
   location: string;
   dex: Record<string, DexEntry>;
-  /** Pooled town fund per map, and the local player's share of it. */
-  fund: Record<string, number>;
-  contributed: Record<string, number>;
   /** Character appearance and the cosmetics bought so far. */
   look: Look;
   owned: string[];
@@ -70,8 +67,6 @@ export const newSave = (): SaveData => ({
   held: 0,
   location: 'pond',
   dex: {},
-  fund: {},
-  contributed: {},
   look: defaultLook(),
   owned: [],
   locker: { rods: [], bait: {} },
@@ -126,7 +121,8 @@ export function migrate(raw: object): SaveData {
   const bait: Record<string, number> = {};
   for (const [id, n] of Object.entries(lk.bait ?? {})) if (BAITS.some((b) => b.id === id) && n > 0) bait[id] = Math.floor(n);
   out.locker = { rods: (lk.rods ?? []).filter((id) => RODS.some((r) => r.id === id)), bait };
-  for (const k of ['baitStock', 'inventory', 'ownedRods']) delete out[k];
+  // Leftovers from older layouts and the removed Town Fund.
+  for (const k of ['baitStock', 'inventory', 'ownedRods', 'fund', 'contributed']) delete out[k];
   return out;
 }
 

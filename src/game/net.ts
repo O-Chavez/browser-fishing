@@ -1,7 +1,5 @@
-import type { MapDef } from '../data/maps';
 import type { Activity, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { SERVER_PORT } from '../net/protocol';
-import { fundGoal, openKey, type Fund, type FundState } from './fund';
 import type { BlackjackView } from './casino';
 import type { Drop } from './drops';
 import type { SaveData } from './state';
@@ -12,7 +10,6 @@ export interface NetEvents {
   onRoulette(r: { pocket: number; color: string; factor: number; ms: number }): void;
   onBlackjack(view: BlackjackView | null): void;
   onDrops(list: Drop[]): void;
-  onFund(map: string, total: number, by?: string, coins?: number): void;
   onPlayers(): void;
   onBoard(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
@@ -30,7 +27,6 @@ export class NetClient {
   connected = false;
   id = 0;
   room = '';
-  funds: Record<string, number> = {};
   players = new Map<number, PlayerInfo>();
   private ws: WebSocket | null = null;
   private sendTimer = 0;
@@ -176,47 +172,10 @@ export class NetClient {
         }
         this.events.onBoard();
         break;
-      case 'fund':
-        this.funds[m.map] = m.total;
-        if (m.open) this.funds[openKey(m.map)] = 1;
-        this.events.onFund(m.map, m.total, m.by, m.coins);
-        break;
     }
   }
 
   private setSave(save: SaveData): void {
-    this.funds = { ...save.fund };
     this.events.onState(save);
-  }
-}
-
-/** The room's pooled fund when connected, otherwise the local save. */
-export class NetFund implements Fund {
-  constructor(
-    private net: NetClient,
-    private local: Fund,
-    private data: SaveData,
-  ) {}
-
-  state(map: MapDef): FundState {
-    if (!this.net.connected) return this.local.state(map);
-    const goal = fundGoal(map, this.net.players.size + 1);
-    const open = !!this.net.funds[openKey(map.id)];
-    const total = open ? goal : Math.min(goal, this.net.funds[map.id] ?? 0);
-    return { total, goal, unlocked: open || total >= goal, mine: this.data.contributed[map.id] ?? 0 };
-  }
-
-  /** Optimistic; the server's state message is the final word. */
-  contribute(map: MapDef, coins: number): number {
-    if (!this.net.connected) return this.local.contribute(map, coins);
-    const st = this.state(map);
-    if (st.unlocked) return 0;
-    const accepted = Math.max(0, Math.min(Math.floor(coins), st.goal - st.total));
-    if (accepted > 0) {
-      this.net.funds[map.id] = st.total + accepted;
-      this.data.contributed[map.id] = st.mine + accepted;
-      this.net.send({ t: 'give', map: map.id, coins: accepted });
-    }
-    return accepted;
   }
 }

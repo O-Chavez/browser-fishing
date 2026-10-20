@@ -128,6 +128,13 @@ describe('carry slots', () => {
     expect('inventory' in s).toBe(false);
     expect('ownedRods' in s).toBe(false);
   });
+
+  it('drops the removed Town Fund fields from old saves', () => {
+    const s = migrate({ ...newSave(), coins: 77, fund: { pond: 300, 'pond:open': 1 }, contributed: { pond: 120 } });
+    expect('fund' in s).toBe(false);
+    expect('contributed' in s).toBe(false);
+    expect(s.coins).toBe(77);
+  });
 });
 
 describe('drops', () => {
