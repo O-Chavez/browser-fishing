@@ -3,6 +3,7 @@ import {
   type Fish, type Rod, type Bait,
 } from '../data/content';
 
+import { CASINO_LEVEL } from '../data/casino';
 import { onDock } from './env';
 
 export const MAX_LEVEL = 50;
@@ -151,6 +152,28 @@ export function nextGoal(level: number, dex: Record<string, unknown> = {}): stri
   if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
   const missing = FISH.filter((f) => !dex[f.id]).length;
   return missing ? `Complete your Fishdex! (${missing} to go)` : 'Fishdex complete! Chase shinies and casino perks';
+}
+
+/** A save that has never caught a fish or earned xp: the player is brand new. */
+export function isFreshSave(s: { level: number; xp: number; dex: Record<string, unknown> }): boolean {
+  return s.level <= 1 && s.xp <= 0 && Object.keys(s.dex).length === 0;
+}
+
+/** The headline and progress line of the banner shown when a player joins. */
+export function welcomeText(
+  name: string,
+  s: { level: number; xp: number; coins: number; dex: Record<string, unknown> },
+): { title: string; line: string } {
+  if (isFreshSave(s)) return { title: 'Welcome to Lakeside', line: 'First goal: catch a fish, then sell it at the stall' };
+  const missing = FISH.filter((f) => !s.dex[f.id]).length;
+  const goal =
+    s.level < CASINO_LEVEL ? `next goal: Lv ${CASINO_LEVEL} casino`
+    : missing ? `next goal: ${missing} more Fishdex species`
+    : 'Fishdex complete · chase shinies';
+  return {
+    title: `~ Welcome back${name ? `, ${name}` : ''} ~`,
+    line: `Lv ${s.level} · ${s.coins.toLocaleString('en-US')} coins · ${goal}`,
+  };
 }
 
 /** Weight in kg grows with the cube of length, topping out at the species' maxWeight. */

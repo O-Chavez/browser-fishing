@@ -88,7 +88,16 @@ process.exit(failed.length ? 1 : 0);
 async function pondChecks(): Promise<void> {
   const page = await openPage(`http://localhost:${VITE_PORT}/`);
   await page.click('#join-offline');
+  const joined = await page.evaluate(() => ({
+    menu: !document.getElementById('menu')!.classList.contains('hidden'),
+    banner: document.getElementById('banner')!.classList.contains('hidden') ? '' : document.getElementById('banner')!.textContent,
+    resume: document.getElementById('resume')!.classList.contains('hidden') ? '' : document.getElementById('resume')!.textContent,
+  }));
+  check('join: the inventory stays closed after joining', !joined.menu);
+  check('join: a new player gets the welcome banner', joined.banner!.includes('Welcome to Lakeside'), joined.banner!);
+  check('join: the banner asks for a click to start fishing', joined.resume!.includes('Click to start fishing'), joined.resume!);
   await page.evaluate(() => window.__game.activate());
+  check('join: starting to play dismisses the welcome', await page.evaluate(() => document.getElementById('banner')!.classList.contains('hidden') && document.getElementById('resume')!.classList.contains('hidden')));
   await sleep(800);
 
   let r = await page.evaluate(() => window.__smoke.attachedReport('hub'));
@@ -324,6 +333,11 @@ async function casinoChecks(): Promise<void> {
   const ctx = await browser.createBrowserContext();
   const page = await openPage(`http://localhost:${VITE_PORT}/?name=Smoke&room=smoke`, ctx, TOKEN);
   await page.waitForFunction(() => (window.__game.world as any).hall, { timeout: 15000 });
+  const back = await page.evaluate(() => ({
+    menu: !document.getElementById('menu')!.classList.contains('hidden'),
+    banner: document.getElementById('banner')!.textContent ?? '',
+  }));
+  check('join: a returning player is welcomed back without the inventory', !back.menu && back.banner.includes('Welcome back, Smoke'), back.banner);
   await page.evaluate(() => { window.__game.activate(); window.__game.day(0.1); });
   await sleep(1000);
 
