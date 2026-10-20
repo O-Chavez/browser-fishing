@@ -15,4 +15,9 @@ describe('chat window lines', () => {
     expect(shownLines(lines, null).map((l) => l.text)).toEqual(['m4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11']);
     expect(shownLines(lines, 'casino').map((l) => l.text)).toEqual(['m1', 'm3', 'm5', 'm7', 'm9', 'm11']);
   });
+
+  it('keeps server notices in every world filter', () => {
+    const lines = [line('hi', 'pond'), { ...line('Bob has joined', ''), system: true }];
+    expect(shownLines(lines, 'casino').map((l) => l.text)).toEqual(['Bob has joined']);
+  });
 });

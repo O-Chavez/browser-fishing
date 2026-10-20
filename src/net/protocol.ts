@@ -86,7 +86,9 @@ export type ServerMsg =
   /** Hall of fame: best catches of every account, including players who are offline. */
   | { t: 'hall'; rows: HallRow[] }
   /** A chat line from anyone on the server; `room` and `id` let same-room clients show a bubble. */
-  | { t: 'chat'; room: string; id: number; name: string; map: string; text: string };
+  | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
+  /** A server-wide notice for the chat window ("Ann has joined"). */
+  | { t: 'sys'; text: string };
 
 export interface HallRow { name: string; level: number; best: BestCatch }
 
