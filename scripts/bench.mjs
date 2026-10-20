@@ -11,11 +11,15 @@ import puppeteer from 'puppeteer-core';
 import { createServer } from 'vite';
 
 const label = process.argv[2] ?? 'run';
-const SAMPLES = 15; // timed batches per scene; the median is reported
+// bench-ab.mjs points these at a git worktree of another commit and a scratch output folder.
+const ROOT = path.resolve(process.env.BENCH_ROOT ?? '.');
+const OUT_DIR = path.resolve(process.env.BENCH_OUT ?? 'bench-results');
+const SAMPLES = 9; // timed batches per scene visit; the median is that visit's result
+const ROUNDS = Number(process.env.BENCH_ROUNDS) || 3; // visits per scene; the median visit is reported, the min-max is the spread
 const PORT = 5299;
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-const server = await createServer({ server: { port: PORT, strictPort: true }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, cacheDir: path.join(ROOT, '.vite-bench-cache'), server: { port: PORT, strictPort: true }, logLevel: 'error' });
 await server.listen();
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -107,18 +111,15 @@ try {
       return (performance.now() - t0) / n;
     };
     const t = performance.now();
-    while (performance.now() - t < 3000) batch(10);
+    while (performance.now() - t < 2000) batch(10);
     const ms = Array.from({ length: samples }, () => batch(60)).sort((a, b) => a - b);
     r.render(w.scene, w.camera);
     const info = r.info;
     let lights = 0;
     w.scene.traverse((o) => { if (o.isLight && o.visible) lights++; });
     window.__hold(false);
-    const q = (f) => ms[Math.round((ms.length - 1) * f)];
     return {
-      renderMs: q(0.5),
-      renderMsP25: q(0.25),
-      renderMsP75: q(0.75),
+      renderMs: ms[ms.length >> 1],
       drawCalls: info.render.calls,
       triangles: info.render.triangles,
       visibleLights: lights,
@@ -143,11 +144,27 @@ try {
   await sleep(300);
   R.loops.afterWardrobeClosed = await loops();
 
-  await page.evaluate(() => window.__bench.goto('pond'));
-  R.scenes.pondDay = await scene(() => { const s = window.__bench.spawn('pond'); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.1); });
-  R.scenes.pondNight = await scene(() => window.__game.day(0.7));
-  R.scenes.plazaDay = await scene(() => { window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.1); window.__game.day(0.1); });
-  R.scenes.plazaNight = await scene(() => window.__game.day(0.7));
+  // Each scene is measured once per round, round-robin, and the median across rounds is reported,
+  // so slow drift in GPU clocks during a run shows up as spread instead of skewing one scene.
+  const SCENES = {
+    pondDay: ['pond', () => { const s = window.__bench.spawn('pond'); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.1); }],
+    pondNight: ['pond', () => { const s = window.__bench.spawn('pond'); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.7); }],
+    plazaDay: ['pond', () => { window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.1); window.__game.day(0.1); }],
+    plazaNight: ['pond', () => { window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.1); window.__game.day(0.7); }],
+    casino: ['casino', () => { const s = window.__bench.spawn('casino'); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.1); }],
+  };
+  const runs = {};
+  let map = '';
+  for (let round = 0; round < ROUNDS; round++) {
+    for (const [name, [id, setup]] of Object.entries(SCENES)) {
+      if (map !== id) await page.evaluate((id) => window.__bench.goto(id), (map = id));
+      (runs[name] ??= []).push(await scene(setup));
+    }
+  }
+  for (const [name, list] of Object.entries(runs)) {
+    const ms = list.map((r) => r.renderMs).sort((a, b) => a - b);
+    R.scenes[name] = { ...list[0], renderMs: median(ms), renderMsLo: ms[0], renderMsHi: ms[ms.length - 1], renderMsRounds: list.map((r) => r.renderMs) };
+  }
 
   // Map changes: build time, first-render (shader compile) time and leftover GPU resources.
   const mem = () => page.evaluate(() => {
@@ -177,15 +194,12 @@ try {
     newProgramsPerTrip: (after.programs - before.programs) / 3,
   };
 
-  await page.evaluate(() => window.__bench.goto('casino'));
-  R.scenes.casino = await scene(() => window.__game.day(0.1));
-
-  const out = path.resolve('bench-results', `${label}.json`);
+  const out = path.join(OUT_DIR, `${label}.json`);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(R, null, 2) + '\n');
   console.log(`GPU: ${gpu}`);
   for (const [k, s] of Object.entries(R.scenes)) {
-    console.log(`${k.padEnd(11)} render ${s.renderMs.toFixed(2)} ms (IQR ${s.renderMsP25.toFixed(2)}-${s.renderMsP75.toFixed(2)})  calls ${s.drawCalls}  lights ${s.visibleLights}`);
+    console.log(`${k.padEnd(11)} render ${s.renderMs.toFixed(2)} ms (rounds ${s.renderMsRounds.map((x) => x.toFixed(2)).join(' / ')})  calls ${s.drawCalls}  lights ${s.visibleLights}`);
   }
   console.log('render loops:', R.loops, '\nmap change:', R.mapChange);
   console.log(`\nWrote ${path.relative(process.cwd(), out)}`);

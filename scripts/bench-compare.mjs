@@ -24,9 +24,8 @@ for (const k of Object.keys(A.scenes)) {
   const t = B.scenes[k];
   if (!t) continue;
   row(`${k} render ms`, s.renderMs, t.renderMs);
-  // A change is only "real" if it clears the interquartile spread of both runs.
-  const noise = Math.max(s.renderMsP75 - s.renderMsP25, t.renderMsP75 - t.renderMsP25);
-  rows[rows.length - 1][5] += Math.abs(t.renderMs - s.renderMs) < noise ? ' (within noise)' : '';
+  // Only call it a change when the two runs' round-to-round ranges don't overlap.
+  if (s.renderMsLo <= t.renderMsHi && t.renderMsLo <= s.renderMsHi) rows[rows.length - 1][5] = '~ (ranges overlap)';
   row(`${k} draw calls`, s.drawCalls, t.drawCalls, true, 0);
   row(`${k} lights`, s.visibleLights, t.visibleLights, true, 0);
 }

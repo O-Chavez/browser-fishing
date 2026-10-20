@@ -12,7 +12,8 @@
     "start": "tsx server/index.ts",
     "dev:all": "tsx server/index.ts & vite",
     "bench": "node scripts/bench.mjs",
-    "bench:compare": "node scripts/bench-compare.mjs"
+    "bench:compare": "node scripts/bench-compare.mjs",
+    "bench:ab": "node scripts/bench-ab.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1",

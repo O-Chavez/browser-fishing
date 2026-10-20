@@ -12,3 +12,7 @@ server/accounts.json
 *.log
 .vercel/
 .DS_Store
+
+# benchmark scratch (worktrees, per-run results, vite cache)
+.bench/
+.vite-bench-cache/
