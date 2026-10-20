@@ -163,6 +163,18 @@ async function pondChecks(): Promise<void> {
   check('wardrobe: preview stops when the menu closes', closed === 1, `${closed} render loops`);
   check('wardrobe: preview runs again when reopened', open2.loops === 2 && open2.inSlot, JSON.stringify(open2));
 
+  // Switching slots while sprinting (Shift turns "2" into "@" in e.key).
+  await page.keyboard.down('ShiftLeft');
+  await page.keyboard.down('KeyW');
+  await sleep(200);
+  // 'Digit2' (not '2') so puppeteer applies Shift, as a real keyboard does.
+  await page.keyboard.press('Digit2');
+  await sleep(100);
+  const sprintSlot = await page.evaluate(() => (window.__game.s as any).held as number);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.up('ShiftLeft');
+  check('hotbar: number keys switch slots while sprinting', sprintSlot === 1, `held slot ${sprintSlot + 1}`);
+
   // Lucky Wheel with a fish in hand (offline, rolled locally).
   await page.evaluate((f) => { (window.__game.s as any).slots[2] = f; }, fish(3));
   await page.keyboard.press('3');
