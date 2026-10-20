@@ -10,7 +10,9 @@
     "test": "vitest run",
     "server": "tsx server/index.ts",
     "start": "tsx server/index.ts",
-    "dev:all": "tsx server/index.ts & vite"
+    "dev:all": "tsx server/index.ts & vite",
+    "bench": "node scripts/bench.mjs",
+    "bench:compare": "node scripts/bench-compare.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1",
@@ -23,6 +25,7 @@
     "@types/pg": "^8.23.1",
     "@types/three": "^0.186.0",
     "@types/ws": "^8.18.2",
+    "puppeteer-core": "^23.11.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"
