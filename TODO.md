@@ -44,7 +44,12 @@
   - The 3D world is fine as is
 - [ ] Polish the menu systems
   - Inventory and shop menus are clumsy and cluttered; improve the flow so it's clear what everything does
-  - Escape should always close any open menu
+- [ ] Escape always closes the current menu
+  - If any menu is open (inventory, shop, wardrobe, etc.), pressing Escape closes it
+- [ ] Show a "XXXX has joined" message in chat when a player joins
+  - Sent to everyone already on the server, using the joining player's name
+- [ ] Lower the global chat's opacity when not in chat mode
+  - Fade the chat window while the player isn't typing; return to full opacity when they press Enter to open chat mode
 
 ## Ideas
 
