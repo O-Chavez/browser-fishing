@@ -3,6 +3,7 @@ import * as eco from './economy';
 import { SLOT_COUNT, migrate, newSave, type SaveData } from './state';
 import { FISH } from '../data/content';
 import { Drops } from './drops';
+import { isFace } from '../data/cosmetics';
 
 const fishSlot = () => ({ k: 'fish' as const, fishId: FISH[0].id, size: 20 });
 
@@ -127,6 +128,28 @@ describe('carry slots', () => {
     expect(s.slots.filter((x) => x?.k === 'rod')).toHaveLength(2);
     expect('inventory' in s).toBe(false);
     expect('ownedRods' in s).toBe(false);
+  });
+
+  it('gives saves from before faces a random face, and keeps a valid one', () => {
+    const old = { ...newSave(), look: { color: 0x123456, hat: null, shirt: null, jewelry: null } };
+    const s = migrate(old);
+    expect(isFace(s.look.face)).toBe(true);
+    expect(s.look.color).toBe(0x123456);
+    expect(migrate({ ...newSave(), look: { ...newSave().look, face: 'cat' } }).look.face).toBe('cat');
+    expect(isFace(migrate({ ...newSave(), look: { ...newSave().look, face: 'bogus' } }).look.face)).toBe(true);
+  });
+
+  it('only accepts known faces', () => {
+    const s = newSave();
+    expect(eco.setFace(s, 'joy')).toBe(true);
+    expect(s.look.face).toBe('joy');
+    expect(eco.setFace(s, 'nope')).toBe(false);
+    expect(s.look.face).toBe('joy');
+  });
+
+  it('starts new saves with a random face', () => {
+    const seen = new Set(Array.from({ length: 200 }, () => newSave().look.face));
+    expect(seen.size).toBeGreaterThan(3);
   });
 
   it('drops the removed Town Fund fields from old saves', () => {

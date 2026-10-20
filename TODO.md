@@ -33,7 +33,7 @@
   - Make sure old saves and stored fund data still load cleanly after the field is removed
 - [ ] Remove the bench blocking the path in front of the well in the town square
   - Well benches are placed by `Town.benches()` (`src/game/town.ts:163`). Remove only the one in front of the well and keep the others
-- [ ] Faces on player models
+- [x] Faces on player models
   - Simple, happy, fun faces
   - Painted texture on the head sphere, on the side the player is looking
   - Optionally A/B against a simple 3D face if it fits the theme better and doesn't cost much performance

@@ -1,4 +1,5 @@
 import { CASINO_LEVEL } from './casino';
+import type { FaceId } from './cosmetics';
 
 export interface Spot {
   x: number;
@@ -26,6 +27,8 @@ export interface NpcDef extends Spot {
   nightLines?: string[];
   coat: number;
   hat?: number;
+  /** Painted face, from `FACES` (defaults to a smile). */
+  face?: FaceId;
 }
 
 export interface BottleDef { id: string; x: number; z: number; note: string }
@@ -54,7 +57,7 @@ export interface MapDef {
   spawn: { x: number; z: number; yaw: number };
   /** Flat build area for the hub. */
   pad: { x: number; z: number; r: number; h: number };
-  vendor: { name: string; shop: Spot; npc: Spot };
+  vendor: { name: string; shop: Spot; npc: Spot; face?: FaceId };
   gate: Spot;
   wheel: Spot;
   /** Live "Top Anglers" board; E opens the player list. */
@@ -87,6 +90,7 @@ export const MAPS: MapDef[] = [
     pad: { x: 0, z: 35, r: 24, h: 0.9 },
     vendor: {
       name: 'Marlow',
+      face: 'joy',
       shop: { x: 5.5, z: 21, facing: -Math.PI / 2 },
       npc: { x: 6.9, z: 21, facing: -Math.PI / 2 },
     },
@@ -110,7 +114,7 @@ export const MAPS: MapDef[] = [
       ],
       npcs: [
         {
-          name: 'Old Salty', x: 4.2, z: 15, facing: faceToward(4.2, 15, 0, 18), coat: 0x3d5a80, hat: 0xd9b84a,
+          name: 'Old Salty', face: 'sleepy', x: 4.2, z: 15, facing: faceToward(4.2, 15, 0, 18), coat: 0x3d5a80, hat: 0xd9b84a,
           lines: [
             'The far end of the pier is where the big ones bite. Stand out on the T and see.',
             "Nothing wrong with the shore, but the fish there are lazy and small. The pier's the thing.",
@@ -119,7 +123,7 @@ export const MAPS: MapDef[] = [
           nightLines: ['Fireflies on the water... best time of day. The quiet ones always bite after dark.'],
         },
         {
-          name: 'Pip', x: 2.6, z: 33.5, facing: faceToward(2.6, 33.5, 0, 32), coat: 0xc2543d,
+          name: 'Pip', face: 'tongue', x: 2.6, z: 33.5, facing: faceToward(2.6, 33.5, 0, 32), coat: 0xc2543d,
           lines: [
             'Psst! I found a message in a bottle behind the fish racks. There are more hidden around town!',
             'Better bait lets you hook rarer fish. A better rod makes the fight easier.',
@@ -127,7 +131,7 @@ export const MAPS: MapDef[] = [
           ],
         },
         {
-          name: 'Granny Wren', x: -10.5, z: 44.5, facing: faceToward(-10.5, 44.5, -6, 40), coat: 0x7a4a8a, hat: 0xeeeeee,
+          name: 'Granny Wren', face: 'smile', x: -10.5, z: 44.5, facing: faceToward(-10.5, 44.5, -6, 40), coat: 0x7a4a8a, hat: 0xeeeeee,
           lines: [
             "I've seen this town change. Folks used to leave notes in bottles for luck. They wash up in odd corners.",
             'Sit by the campfire down the shore when you tire. Cozy there.',
@@ -136,7 +140,7 @@ export const MAPS: MapDef[] = [
           nightLines: ['Mind the dark paths, dear. Follow the lamps.'],
         },
         {
-          name: 'Captain Reed', x: 4, z: 53.5, facing: faceToward(4, 53.5, 0, 56), coat: 0x2f4f4f, hat: 0x2b2b2b,
+          name: 'Captain Reed', face: 'grin', x: 4, z: 53.5, facing: faceToward(4, 53.5, 0, 56), coat: 0x2f4f4f, hat: 0x2b2b2b,
           lines: [
             `Beyond the gate lies Casino Cove. They only let in seasoned anglers: level ${CASINO_LEVEL} and up.`,
             'Keep fishing and keep levelling. The gate opens for anyone who has earned it.',
@@ -195,7 +199,7 @@ MAPS.push({
     houses: [],
     npcs: [
       {
-        name: 'Madame Fortuna', x: 0, z: 58.1, facing: Math.PI, coat: 0x7a1f3f, hat: 0xf2d16b,
+        name: 'Madame Fortuna', face: 'wink', x: 0, z: 58.1, facing: Math.PI, coat: 0x7a1f3f, hat: 0xf2d16b,
         lines: [
           'Turn your catch in for chips, darling. Bet it first if you are feeling lucky.',
           'A fish that wins is worth more, a fish that loses is gone.',
@@ -203,11 +207,11 @@ MAPS.push({
         ],
       },
       {
-        name: 'Croupier Vale', x: -9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0xc4262e,
+        name: 'Croupier Vale', face: 'toothy', x: -9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0xc4262e,
         lines: ['Red, black, or green. The wheel does not care who you are.', 'Hold a fish, click it in your hotbar, and place your bet.'],
       },
       {
-        name: 'Dealer Rue', x: 9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0x2a6fc4,
+        name: 'Dealer Rue', face: 'cat', x: 9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0x2a6fc4,
         lines: ['I stand on seventeen. Always.', 'Double down and a winning fish is worth four times as much.'],
       },
     ],

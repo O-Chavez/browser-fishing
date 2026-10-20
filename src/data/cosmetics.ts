@@ -16,6 +16,8 @@ export interface Cosmetic {
 /** What a character wears. Item ids are validated against COSMETICS. */
 export interface Look {
   color: number;
+  /** Face id from `FACES`. */
+  face: string;
   hat: string | null;
   shirt: string | null;
   jewelry: string | null;
@@ -51,13 +53,29 @@ export const cosById = (id: string | null | undefined): Cosmetic | undefined => 
 export const BODY_COLORS = [0xe8704a, 0xf2b441, 0x7bc86c, 0x38b6a8, 0x4a90e2, 0x8e6bd8, 0xe06aa8, 0xc9c9c9];
 export const DEFAULT_COLOR = BODY_COLORS[4];
 
-export const defaultLook = (): Look => ({ color: DEFAULT_COLOR, hat: null, shirt: null, jewelry: null });
+/** Free faces painted on the head; every account starts with a random one. */
+export const FACES = [
+  { id: 'smile', name: 'Smile' },
+  { id: 'grin', name: 'Grin' },
+  { id: 'wink', name: 'Wink' },
+  { id: 'cat', name: 'Cat' },
+  { id: 'joy', name: 'Joy' },
+  { id: 'tongue', name: 'Cheeky' },
+  { id: 'toothy', name: 'Toothy' },
+  { id: 'sleepy', name: 'Sleepy' },
+] as const;
+export type FaceId = (typeof FACES)[number]['id'];
+export const isFace = (id: unknown): id is FaceId => FACES.some((f) => f.id === id);
+export const randomFace = (rng: () => number = Math.random): FaceId => FACES[Math.floor(rng() * FACES.length)].id;
+
+export const defaultLook = (): Look => ({ color: DEFAULT_COLOR, face: 'smile', hat: null, shirt: null, jewelry: null });
 
 /** Clamps untrusted look data from a client or an old save. */
 export function cleanLook(raw: Partial<Look> | undefined, owned: readonly string[]): Look {
   const out = defaultLook();
   const col = Number(raw?.color);
   if (Number.isInteger(col) && col >= 0 && col <= 0xffffff) out.color = col;
+  if (isFace(raw?.face)) out.face = raw.face;
   for (const slot of COS_SLOTS) {
     const id = raw?.[slot];
     if (id && owned.includes(id) && cosById(id)?.slot === slot) out[slot] = id;

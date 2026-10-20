@@ -371,3 +371,18 @@ describe('chat', () => {
     expect(last(c, 'chat')).toMatchObject({ room: 'r', name: 'Ann', text: 'hello casino' });
   });
 });
+
+describe('faces', () => {
+  it('changes face, tells the room, and keeps it through a reset', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'face', id: 'toothy' });
+    expect(a.acct.save.look.face).toBe('toothy');
+    expect(last(b.c, 'look')).toMatchObject({ id: a.id, look: { face: 'toothy' } });
+    room.handle(a.id, { t: 'face', id: 'not-a-face' });
+    expect(a.acct.save.look.face).toBe('toothy');
+    room.handle(a.id, { t: 'reset' });
+    expect(a.acct.save.look.face).toBe('toothy');
+  });
+});

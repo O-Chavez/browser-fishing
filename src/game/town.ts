@@ -3,6 +3,7 @@ import type { MapDef, NpcDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { DARK, WOOD, ball, cyl, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
+import { faceHead } from './faces';
 import type { Circle } from './player';
 
 const rnd = (seed: number) => () => {
@@ -294,15 +295,7 @@ export class Town {
     torso.castShadow = true;
     const head = new THREE.Group();
     head.position.y = 1.75;
-    head.add(ball(0.22, 0xe0b08a));
-    for (const sx of [-1, 1]) {
-      const eye = ball(0.028, 0x1b1b1b);
-      eye.position.set(sx * 0.08, 0.04, 0.19);
-      head.add(eye);
-    }
-    const nose = ball(0.04, 0xd49b78);
-    nose.position.set(0, -0.02, 0.21);
-    head.add(nose);
+    head.add(faceHead(0.22, def.face));
     if (def.hat !== undefined) {
       const brim = cyl(0.34, 0.34, 0.035, def.hat, 20);
       brim.position.y = 0.17;

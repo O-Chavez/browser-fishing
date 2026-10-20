@@ -101,10 +101,17 @@ nav.sub { margin: 4px 0 8px; }
 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; border: 1px solid rgba(255,255,255,.5); }
 .split { display: flex; gap: 18px; align-items: flex-start; }
 .grow { flex: 1; min-width: 0; }
-canvas.preview { width: 240px; height: 300px; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,.14), rgba(255,255,255,.03)); border-radius: 12px; position: static; }
+canvas.preview.dragging { cursor: grabbing; }
+canvas.preview { cursor: grab; touch-action: none; width: 240px; height: 300px; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,.14), rgba(255,255,255,.03)); border-radius: 12px; position: static; }
 .swatches { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
 .swatch { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); }
 .swatch.on { border-color: #fff; box-shadow: 0 0 0 2px #4a90e2; }
+.faces { display: grid; grid-template-columns: repeat(auto-fill, 64px); gap: 8px; margin: 4px 0 10px; }
+.drag-hint { margin: 0; font-size: 12px; text-align: center; width: 240px; }
+.face { padding: 2px; border-radius: 10px; border: 2px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06); }
+.face img { display: block; width: 100%; aspect-ratio: 1; border-radius: 8px; }
+.face.on { border-color: #fff; box-shadow: 0 0 0 2px #4a90e2; }
+.face:hover { border-color: rgba(255,255,255,.7); }
 .swatches input[type=color] { width: 34px; height: 30px; padding: 0; border: 0; background: none; }
 .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .item { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 8px 10px; background: rgba(255,255,255,.07); border: 2px solid transparent; font-size: 13px; }

@@ -1,5 +1,5 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
-import { COS_SLOTS, cosById, type CosSlot } from '../data/cosmetics';
+import { COS_SLOTS, cosById, isFace, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { applyXp, catchXp, eligibleFish, fishingSpot, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import { BAIT_STACK, type SaveData, type Slot } from './state';
@@ -243,6 +243,12 @@ export function equipCosmetic(s: SaveData, slot: CosSlot, id: string | null): bo
   if (!COS_SLOTS.includes(slot)) return false;
   if (id !== null && (!s.owned.includes(id) || cosById(id)?.slot !== slot)) return false;
   s.look[slot] = id;
+  return true;
+}
+
+export function setFace(s: SaveData, face: unknown): boolean {
+  if (!isFace(face)) return false;
+  s.look.face = face;
   return true;
 }
 
