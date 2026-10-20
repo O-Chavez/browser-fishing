@@ -16,7 +16,7 @@
   - Keep the decorative items sitting on the dock (bucket etc.) for the look, but don't let them block movement
   - Shore objects are fine as they are
   - Also let players walk through the NPCs on that map (they block the path to/from the casino)
-- [ ] Remove the duplicated set of benches in the town square
+- [x] Remove the duplicated set of benches in the town square
   - Bench code lives in several places: `Town.benches()` around the well (`src/game/town.ts`), `Town.buildCozy()` (also `town.ts`), and the fire-pit benches in `src/game/hub.ts`. Confirm in-game which set is the extra one before removing it
 - [x] Allow changing inventory slots while sprinting
 - [x] Make scroll-wheel slot switching smooth
