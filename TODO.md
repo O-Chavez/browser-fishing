@@ -19,7 +19,7 @@
 - [ ] Remove the duplicated set of benches in the town square
   - Bench code lives in several places: `Town.benches()` around the well (`src/game/town.ts`), `Town.buildCozy()` (also `town.ts`), and the fire-pit benches in `src/game/hub.ts`. Confirm in-game which set is the extra one before removing it
 - [x] Allow changing inventory slots while sprinting
-- [ ] Make scroll-wheel slot switching smooth
+- [x] Make scroll-wheel slot switching smooth
   - Right now it doesn't respond evenly to scroll movement and feels sticky; each notch/gesture should move one slot consistently
   - Add a slight animation when the highlight moves to a new hotbar slot
 - [x] Luck items in the casino shop should read as "caught fish are worth x more"
