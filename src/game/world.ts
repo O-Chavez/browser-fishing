@@ -122,7 +122,7 @@ export class World {
   private shake = 0;
   private decor = new THREE.Group();
   private frame = 0;
-  private lightPool = new LightPool(8);
+  private lightPool = new LightPool(4);
   private clouds = new THREE.Group();
   private cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.92 });
   private stars!: THREE.Points;
