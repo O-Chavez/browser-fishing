@@ -3,7 +3,7 @@ import { FISH } from '../data/content';
 import type { Activity, PlayerInfo } from '../net/protocol';
 import { Character } from './character';
 import { standHeight } from './env';
-import { animateFish, buildFish, type FishModel } from './fishmodel';
+import { animateFish, buildFish, fishScale, type FishModel } from './fishmodel';
 
 const NOSE = new THREE.Vector3(0, 0, -1);
 const UP = new THREE.Vector3(0, 1, 0);
@@ -149,7 +149,7 @@ class Avatar {
       const f = FISH.find((x) => x.id === act.fish);
       if (f) {
         this.held = buildFish(f.color, false, act.shiny, f.tier, f.id);
-        this.held.group.scale.setScalar(Math.min(0.8, Math.max(0.3, act.size / 100)));
+        this.held.group.scale.setScalar(Math.min(1.1, fishScale(act.size) * 0.5));
         this.scene.add(this.held.group);
       }
       this.bobber.visible = false;

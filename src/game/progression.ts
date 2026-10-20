@@ -74,8 +74,11 @@ export function eligibleFish(locationId: string, rod: Rod, bait: Bait, night = f
   return FISH.filter((f) => canCatch(f, locationId, rod, bait, night));
 }
 
-/** Fish far below your gear tier turn up less often, so upgrading visibly shifts what you catch. */
-export const OUTGROWN = 0.55;
+/**
+ * Fish below your gear tier turn up less often (×0.3 per tier below), so each upgrade visibly
+ * shifts what you catch: with top gear about 1 in 5 catches is still a tier 1-2 fish.
+ */
+export const OUTGROWN = 0.3;
 
 /** Luck multiplier for a perfect cast; it also drops the lowest tiers from the pool. */
 export const PERFECT_LUCK = 2;
@@ -105,7 +108,7 @@ export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number =
     (f) =>
       (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) *
       (night && f.night ? NIGHT_FISH_BOOST : 1) *
-      (perfect ? 1 : Math.pow(OUTGROWN, Math.max(0, g - f.tier))),
+      Math.pow(OUTGROWN, Math.max(0, g - f.tier)),
   );
   let r = rng() * weights.reduce((a, b) => a + b, 0);
   for (let i = 0; i < pool.length; i++) {

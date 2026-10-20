@@ -74,8 +74,8 @@ import { FISH as ALL_FISH } from '../data/content';
 describe('fish weight', () => {
   it('increases with size and scales value', () => {
     const carp = ALL_FISH.find((f) => f.id === 'carp')!;
-    expect(fishWeight(carp, 60)).toBe(12);
-    expect(fishWeight(carp, 40)).toBeLessThan(fishWeight(carp, 50));
+    expect(fishWeight(carp, carp.maxSize)).toBe(carp.maxWeight);
+    expect(fishWeight(carp, 25)).toBeLessThan(fishWeight(carp, 35));
     expect(formatWeight(0.45)).toBe('450 g');
     expect(formatWeight(12)).toBe('12.0 kg');
   });
@@ -148,5 +148,37 @@ describe('night fishing', () => {
       return t / 4000;
     };
     expect(avg(true)).toBeGreaterThan(avg(false));
+  });
+});
+
+describe('fish progression feel', () => {
+  const tierFish = (t: number) => FISH.filter((f) => f.tier === t);
+  const mid = (f: (typeof FISH)[number]) => (f.minSize + f.maxSize) / 2;
+
+  it('each tier is clearly bigger than the last', () => {
+    for (let t = 1; t < 5; t++) {
+      const avg = (k: number) => tierFish(k).reduce((a, f) => a + mid(f), 0) / tierFish(k).length;
+      expect(avg(t + 1), `tier ${t + 1} vs ${t}`).toBeGreaterThan(avg(t) * 1.4);
+      expect(Math.max(...tierFish(t + 1).map((f) => f.maxSize))).toBeGreaterThan(Math.max(...tierFish(t).map((f) => f.maxSize)));
+    }
+  });
+
+  it('better gear shifts the catch up while legendaries stay special', () => {
+    const share = (gear: number, test: (tier: number) => boolean) => {
+      const rod = RODS[gear - 1];
+      const bait = BAITS[gear - 1];
+      const pool = eligibleFish('pond', rod, bait);
+      let seed = 1;
+      const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      let hits = 0;
+      for (let i = 0; i < 20000; i++) if (test(pickFish(pool, rod, bait, rng)!.tier)) hits++;
+      return hits / 20000;
+    };
+    expect(share(3, (t) => t === 3)).toBeGreaterThan(0.4);
+    expect(share(4, (t) => t === 4)).toBeGreaterThan(0.35);
+    expect(share(5, (t) => t <= 2)).toBeLessThan(0.3);
+    const legend = share(5, (t) => t === 5);
+    expect(legend).toBeGreaterThan(0.1);
+    expect(legend).toBeLessThan(0.25);
   });
 });

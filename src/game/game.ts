@@ -22,11 +22,13 @@ import { WheelStepper } from './wheelstep';
 import { ChatBox } from './chatbox';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
+import { FISH_BLURB, TIER_THEME } from '../data/fishlook';
 import { shortCoins } from './format';
 import { Player } from './player';
 import {
   animateFish,
   buildFish,
+  fishScale,
   faceDirection,
   setFishOpacity,
   type FishModel,
@@ -75,6 +77,8 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
+/** Fish in the water (hooked, shadow) are shown a bit smaller than when held up as a catch. */
+const WATER_SCALE = 0.7;
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const CAMP_TIPS = [
@@ -1374,9 +1378,8 @@ export class Game {
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
     if (this.hooked) {
-      this.shadow = buildFish(this.hooked.color, true, this.hookedShiny);
-      const len = Math.max(0.3, this.hookedSize / 100);
-      this.shadow.group.scale.setScalar(len);
+      this.shadow = buildFish(this.hooked.color, true, this.hookedShiny, this.hooked.tier, this.hooked.id);
+      this.shadow.group.scale.setScalar(fishScale(this.hookedSize) * WATER_SCALE);
       this.shadow.group.visible = false;
       w.scene.add(this.shadow.group);
     }
@@ -1428,7 +1431,7 @@ export class Game {
     this.lastSurges = 0;
     this.leapT = -1;
     this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, this.hooked!.id);
-    this.fish.group.scale.setScalar(Math.max(0.3, this.hookedSize / 100));
+    this.fish.group.scale.setScalar(fishScale(this.hookedSize) * WATER_SCALE);
     w.scene.add(this.fish.group);
     w.rig.kick('pitch', 7);
     w.fovKick = 4;
@@ -1495,9 +1498,11 @@ export class Game {
     el.dataset.tier = String(fish.tier);
     const shiny = this.hookedShiny;
     el.innerHTML = `<div class="muted">${shiny ? '<b style="color:#ffd23a">✨ SHINY! ✨</b> ' : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
+      <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
-      <div class="weight">${Math.round(sellValue(fish, size, shiny) * (1 + eco.charmBonus(this.s)))} 🪙</div>
-      <div>${this.tierBadge(fish.tier)} · ${size} cm · ${formatWeight(fishWeight(fish, size))}</div>
+      <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
+      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * (1 + eco.charmBonus(this.s))).toLocaleString()}</div>
+      <div>${this.tierBadge(fish.tier)} ${TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
@@ -1537,7 +1542,7 @@ export class Game {
     let obj: THREE.Object3D;
     if (it.k === 'fish') {
       model = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
-      model.group.scale.setScalar(Math.max(0.14, Math.min(0.28, it.size / 220)));
+      model.group.scale.setScalar(Math.min(0.36, fishScale(it.size) * 0.17));
       model.group.rotation.set(0.3, 1.1, 0.35);
       obj = new THREE.Group();
       obj.add(model.group);
@@ -1559,7 +1564,7 @@ export class Game {
   }
 
   private heldScale(): number {
-    return Math.max(0.7, Math.min(1.7, this.hookedSize / 32));
+    return Math.min(2.8, fishScale(this.hookedSize));
   }
 
   /** Mouth position of a fish dangling from the rod tip, with a gentle pendulum swing. */
@@ -1919,7 +1924,7 @@ export class Game {
     g.position.lerpVectors(this.landFrom, target, e);
     g.position.y += Math.sin(u * Math.PI) * 1.2;
     g.scale.setScalar(
-      THREE.MathUtils.lerp(Math.max(0.3, this.hookedSize / 100), sc, e),
+      THREE.MathUtils.lerp(fishScale(this.hookedSize) * WATER_SCALE, sc, e),
     );
     g.rotation.order = 'YXZ';
     g.rotation.set(
@@ -2148,7 +2153,7 @@ export class Game {
         const f = byId(FISH, sl.fishId);
         ring = sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity];
         const mult = sl.mult && sl.mult > 1 ? `<span class="q">×${sl.mult}</span>` : '';
-        body = `${mult}<span class="ic">${fishIcon(f.color, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
+        body = `${mult}<span class="ic">${fishIcon(f.id, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
         cls += ' fish';
       } else cls += ' empty';
       if (i === s.held) cls += moved ? ' held pick' : ' held';
@@ -2381,15 +2386,22 @@ export class Game {
 
   private dexHtml(): string {
     const found = FISH.filter((f) => this.s.dex[f.id]).length;
-    const cards = FISH.map((f) => {
+    const card = (f: (typeof FISH)[number]) => {
       const e = this.s.dex[f.id];
-      const moon = f.night ? '<span class="moon" title="Bites at night">🌙</span>' : '';
-      if (e) return `<div class="fish" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.color)}<b>${f.name}</b>${this.badge(f.tier)}<span>Caught ${e.count} · best ${e.best} cm</span></div>`;
+      const moon = f.night ? '<span class="moon" title="Only bites at night">🌙</span>' : '';
+      const size = `${f.minSize}-${f.maxSize} cm`;
+      if (e) return `<div class="fish" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.id)}<b>${f.name}</b><p>${FISH_BLURB[f.id] ?? ''}</p><span>Caught ${e.count} · best ${e.best} cm</span></div>`;
       const rodName = shortRod(RODS.find((r) => r.tier === f.tier)!.name);
       const baitName = BAITS.find((b) => b.tier === f.tier)!.name;
-      return `<div class="fish unknown" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.color, { hidden: true })}<b>???</b>${this.badge(f.tier)}<span>Try a ${rodName} rod with ${baitName}</span></div>`;
+      return `<div class="fish unknown" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}${f.night ? ' · bites at night' : ''}</p><span>Try a ${rodName} rod with ${baitName}</span></div>`;
+    };
+    // One section per tier, under its theme name, so the ladder from Shallows to Spirit fish reads at a glance.
+    const sections = TIER_THEME.map((theme, i) => {
+      const fish = FISH.filter((f) => f.tier === i + 1);
+      const got = fish.filter((f) => this.s.dex[f.id]).length;
+      return `<h4 class="dex-tier"><span class="badge" style="--c:var(--t${i + 1})">Tier ${i + 1} · ${tierName(i + 1)}</span> ${theme}<small>${got} / ${fish.length}</small></h4><div class="dex">${fish.map(card).join('')}</div>`;
     }).join('');
-    return `<div class="dex-head"><b>${found} / ${FISH.length}</b> species discovered<div class="meter big"><i style="width:${(found / FISH.length) * 100}%;--c:var(--gold)"></i></div></div><div class="dex">${cards}</div>`;
+    return `<div class="dex-head"><b>${found} / ${FISH.length}</b> species discovered<div class="meter big"><i style="width:${(found / FISH.length) * 100}%;--c:var(--gold)"></i></div></div>${sections}`;
   }
 
   // ---------- Anglers ----------
@@ -2409,7 +2421,7 @@ export class Game {
       .map((a, i) => {
         const f = FISH.find((x) => x.name === a.fish);
         const me = a.name === this.net.name;
-        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.color, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span></div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
+        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span></div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
       })
       .join('');
     return `<div class="cols anglers-cols">
