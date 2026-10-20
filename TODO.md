@@ -75,7 +75,7 @@
   - Currently joining just shows the inventory; replace it with a proper join/welcome-back screen. Taste-driven: propose options before coding
 - [ ] Continue fish rework
   - Higher tiers of fish should be more extreme/special (visually and in size)
-- [ ] Add an in game element by the casino teleport that add a popup with a screenshot of the inside of the casino
+- [x] Add an in game element by the casino teleport that add a popup with a screenshot of the inside of the casino
   - This is nice to show newer players whats waiting for them.
 
 ## Ideas
