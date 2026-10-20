@@ -48,7 +48,7 @@
   - If any menu is open (inventory, shop, wardrobe, etc.), pressing Escape closes it
 - [x] Show a "XXXX has joined" message in chat when a player joins
   - Sent to everyone already on the server, using the joining player's name
-- [ ] Lower the global chat's opacity when not in chat mode
+- [x] Lower the global chat's opacity when not in chat mode
   - Fade the chat window while the player isn't typing; return to full opacity when they press Enter to open chat mode
 
 ## Ideas
