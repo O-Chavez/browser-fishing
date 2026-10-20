@@ -1,3 +1,4 @@
+import { FISH } from '../data/content';
 import { FISH_LOOK, SHAPES, envelope, type FishLook, type TailKind } from '../data/fishlook';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -21,6 +22,8 @@ const TAIL_PATHS: Record<TailKind, string> = {
  * A small side-on fish icon for the UI, drawn from the same shape and colours as the 3D model:
  * the species' silhouette, back-to-belly shading, signature markings and a cartoon eye.
  * `hidden` draws a dark silhouette for undiscovered species; `shiny` adds a gold tint and glint.
+ * The tier adds a finish, as on the 3D model: a gloss streak from tier 3, a coloured glow, gems and
+ * sparkles on jewels (4), and on spirits (5) a stronger glow, a crown and their signature flourish.
  */
 export function fishIcon(id: string, opts: { hidden?: boolean; shiny?: boolean } = {}): string {
   const look: FishLook | undefined = FISH_LOOK[id];
@@ -83,14 +86,55 @@ export function fishIcon(id: string, opts: { hidden?: boolean; shiny?: boolean }
     extras += `<path d="M${HEAD - 2} ${MID + 1} q2 ${len * 0.6} ${-len * 0.4} ${len}" stroke="${ink}" stroke-width=".9" fill="none"/>`;
   }
   if (!opts.hidden && ex.includes('lantern')) extras += `<path d="M${HEAD - 4} ${topAt(0.1)} q3 -8 7 -7" stroke="${fin}" stroke-width="1" fill="none"/><circle cx="${HEAD + 3}" cy="${topAt(0.1) - 7}" r="2.3" fill="${hex(look.accent ?? 0x7dffd8)}"/>`;
+  const tier = opts.hidden ? 1 : (FISH.find((f) => f.id === id)?.tier ?? 1);
+  const accent = hex(opts.shiny ? 0xffe27a : look.accent ?? mix(look.fin, 0xffffff, 0.4));
   const eyeT = look.shape === 'eel' ? 0.07 : 0.11;
-  const eye = opts.hidden ? '' : `<circle cx="${HEAD - eyeT * PX}" cy="${MID - sh.h * envelope(look.shape, eyeT) * PX * hScale * 0.3}" r="2.9" fill="#fff"/><circle cx="${HEAD - eyeT * PX + 0.8}" cy="${MID - sh.h * envelope(look.shape, eyeT) * PX * hScale * 0.3}" r="1.6" fill="${ink}"/>`;
-  const glint = opts.shiny ? '<path d="M50 4l1.4 3.2 3.2 1.4-3.2 1.4L50 13.2l-1.4-3.2L45.4 8.6l3.2-1.4z" fill="#fff6c2"/>' : '';
-  return `<svg class="fishico" viewBox="0 0 64 40" aria-hidden="true">
-    <defs><linearGradient id="fg${k}" x1="0" y1="0" x2="0" y2="1"><stop offset=".25" stop-color="${back}"/><stop offset=".8" stop-color="${belly}"/></linearGradient><clipPath id="fc${k}"><path d="${body}"/></clipPath></defs>
-    <path d="${TAIL_PATHS[look.tail]}" fill="${fin}"/>${dorsal}
+  const ex0 = HEAD - eyeT * PX;
+  const ey = MID - sh.h * envelope(look.shape, eyeT) * PX * hScale * 0.3;
+  const iris = tier >= 4 ? `<circle cx="${ex0 + 0.6}" cy="${ey}" r="2" fill="${accent}"/>` : '';
+  const eye = opts.hidden ? '' : `<circle cx="${ex0}" cy="${ey}" r="2.9" fill="#fff"/>${iris}<circle cx="${ex0 + 0.8}" cy="${ey}" r="${tier >= 4 ? 1.1 : 1.6}" fill="${ink}"/>`;
+  // The shiny glint moves aside on spirits so it doesn't sit on the crown.
+  const gx = tier >= 5 ? -12 : 0;
+  const glint = opts.shiny ? `<path d="M${50 + gx} 4l1.4 3.2 3.2 1.4-3.2 1.4L${50 + gx} 13.2l-1.4-3.2L${45.4 + gx} 8.6l3.2-1.4z" fill="#fff6c2"/>` : '';
+
+  // Tier finish. Behind the fish: a blurred glow in the accent colour. On top: gloss, gems, crown, sparkles.
+  const spark = (x: number, y: number, r: number, c = '#fff') => `<path d="M${x} ${y - r}L${x + r * 0.3} ${y - r * 0.3}L${x + r} ${y}L${x + r * 0.3} ${y + r * 0.3}L${x} ${y + r}L${x - r * 0.3} ${y + r * 0.3}L${x - r} ${y}L${x - r * 0.3} ${y - r * 0.3}Z" fill="${c}"/>`;
+  let defs = '';
+  let under = '';
+  let gloss = '';
+  let over = '';
+  if (tier >= 3) gloss = `<ellipse cx="${HEAD - 0.4 * PX}" cy="${topAt(0.4) + 2.4}" rx="${PX * 0.28}" ry="1.3" fill="#fff" opacity="${tier >= 4 ? 0.5 : 0.35}"/>`;
+  if (tier >= 4) {
+    defs += `<filter id="fb${k}" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="${tier >= 5 ? 2.6 : 1.8}"/></filter>`;
+    under = `<g filter="url(#fb${k})" opacity="${tier >= 5 ? 0.95 : 0.75}"><path d="${body}" fill="${accent}" stroke="${accent}" stroke-width="${tier >= 5 ? 4 : 2.5}"/><path d="${TAIL_PATHS[look.tail]}" fill="${accent}"/></g>`;
+    over += spark(8, 6, 2.6) + spark(60, 33, 2);
+  }
+  if (tier === 4) {
+    // A row of gems along the flank.
+    for (let i = 0; i < 4; i++) {
+      const x = HEAD - (0.3 + i * 0.14) * PX;
+      gloss += `<path d="M${x} ${MID - 1.8}l1.3 1.8-1.3 1.8-1.3-1.8z" fill="${accent}" stroke="#fff" stroke-width=".5"/>`;
+    }
+  }
+  if (tier >= 5) {
+    const hx = HEAD - 0.16 * PX;
+    const hy = topAt(0.16) - 2;
+    // A little crown of light floating over the head.
+    over += `<path d="M${hx - 5} ${hy} L${hx - 5} ${hy - 4} L${hx - 2.5} ${hy - 2} L${hx} ${hy - 6} L${hx + 2.5} ${hy - 2} L${hx + 5} ${hy - 4} L${hx + 5} ${hy} Z" fill="#ffe27a" stroke="${accent}" stroke-width=".8"/>`;
+    over += spark(30, 4, 2.2, accent) + spark(4, 32, 1.8);
+    if (look.spirit === 'flame') for (let i = 0; i < 3; i++) {
+      const x = HEAD - (0.32 + i * 0.13) * PX;
+      const y = topAt(0.32 + i * 0.13);
+      under += `<path d="M${x - 2} ${y} Q${x - 2.5} ${y - 5} ${x + 1} ${y - 9 + i} Q${x + 1} ${y - 4} ${x + 2.5} ${y} Z" fill="${i % 2 ? '#ffd040' : '#ff5a10'}"/>`;
+    }
+    if (look.spirit === 'aurora' || look.spirit === 'ghost')
+      under += `<path d="M${ROOT} ${MID - 1} C10 ${MID - 7} 6 ${MID + 4} 0 ${MID - 3}" stroke="${accent}" stroke-width="2" fill="none" opacity=".8"/><path d="M${ROOT} ${MID + 1} C10 ${MID + 6} 6 ${MID - 3} 0 ${MID + 5}" stroke="${look.spirit === 'aurora' ? '#c58aff' : accent}" stroke-width="1.6" fill="none" opacity=".7"/>`;
+  }
+  return `<svg class="fishico${tier >= 4 ? ` t${tier}` : ''}" viewBox="0 0 64 40" aria-hidden="true">
+    <defs><linearGradient id="fg${k}" x1="0" y1="0" x2="0" y2="1"><stop offset=".25" stop-color="${back}"/><stop offset=".8" stop-color="${belly}"/></linearGradient><clipPath id="fc${k}"><path d="${body}"/></clipPath>${defs}</defs>
+    ${under}<path d="${TAIL_PATHS[look.tail]}" fill="${fin}"/>${dorsal}
     <path d="${body}" fill="url(#fg${k})" stroke="${ink}" stroke-opacity=".25" stroke-width=".8"/>
-    <g clip-path="url(#fc${k})">${marks}</g>${extras}${eye}${glint}
+    <g clip-path="url(#fc${k})">${marks}${gloss}</g>${extras}${eye}${over}${glint}
   </svg>`;
 }
 

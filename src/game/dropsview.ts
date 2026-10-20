@@ -3,7 +3,9 @@ import { BAITS, FISH, RODS, byId } from '../data/content';
 import type { Drop } from './drops';
 import { standHeight } from './env';
 import { disposeTree } from './dispose';
-import { buildFish, fishScale } from './fishmodel';
+import { FISH_LOOK, SHAPES } from '../data/fishlook';
+import { buildFish } from './fishmodel';
+import { dropScale } from './fishscale';
 import { buildRodModel, buildTin } from './itemmodels';
 
 
@@ -20,8 +22,13 @@ export class DropsView {
     const g = new THREE.Group();
     const it = d.item;
     if (it.k === 'fish') {
-      const f = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
-      f.group.scale.setScalar(Math.min(1.1, fishScale(it.size) * 0.5));
+      const fish = byId(FISH, it.fishId);
+      const f = buildFish(fish.color, false, it.shiny, fish.tier, it.fishId);
+      const sc = dropScale(it.size, fish.tier);
+      f.group.scale.setScalar(sc);
+      // Lift big, deep-bodied fish so their belly stays above the ground.
+      const sh = SHAPES[FISH_LOOK[it.fishId]?.shape ?? 'torpedo'];
+      f.group.position.y = Math.max(0, (sh.h + sh.sag) * sc - 0.22);
       g.add(f.group);
     } else if (it.k === 'bait') {
       g.add(buildTin(it.id));
