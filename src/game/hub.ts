@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { FISH } from '../data/content';
 import type { MapDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
+import { mergeStatic } from './merge';
 import { buildFish } from './fishmodel';
 import type { FundState } from './fund';
 import type { Circle } from './player';
@@ -130,6 +131,8 @@ export class Hub {
     this.buildCampfire(map.campfire);
     this.setLeaders([]);
     this.setFund({ total: 0, goal: map.goal, unlocked: false, mine: 0 });
+    // The shopkeeper and the hanging fish animate; everything else static is baked together.
+    mergeStatic(this.group, [this.npc, ...this.hanging]);
   }
 
   get colliders(): Circle[] {

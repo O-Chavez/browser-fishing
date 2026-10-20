@@ -6,6 +6,7 @@ import { groundHeight } from './env';
 import { DARK, WOOD, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
 import { buildRoom, neonSign } from './casinoroom';
+import { mergeStatic } from './merge';
 
 const POCKETS = ROULETTE_POCKETS.red + ROULETTE_POCKETS.black + ROULETTE_POCKETS.green;
 const FELT = 0x1f6b43;
@@ -71,6 +72,10 @@ export class CasinoHall {
     this.buildRoulette(def.roulette);
     this.buildBlackjack(def.blackjack);
     this.buildPrizes(def.prizes);
+    // Bake the static room into a few meshes; anything that spins, gets clicked or is redrawn stays
+    // separate. Clickable pieces are baked on their own so raycasts still find them.
+    for (const p of this.picks) mergeStatic(p, []);
+    mergeStatic(this.group, [this.wheel, this.cards, ...this.picks, ...(this.chipBoard ? [this.chipBoard.mesh] : [])]);
   }
 
   private place(obj: THREE.Object3D, s: Spot, r: number): void {
