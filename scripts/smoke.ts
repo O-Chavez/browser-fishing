@@ -413,8 +413,12 @@ async function chatChecks(): Promise<void> {
   await a.page.evaluate(() => window.__game.teleport(0, -2.5));
   await b.page.evaluate(() => { window.__game.teleport(0, 2); window.__game.look(0, -0.05); });
   await sleep(800);
+  const chatOpacity = () => a.page.evaluate(() => Number(getComputedStyle(document.getElementById('chat')!).opacity));
+  const faded = await chatOpacity();
   await a.page.keyboard.press('Enter');
   const typing = await a.page.evaluate(() => document.activeElement?.classList.contains('chat-input') ?? false);
+  await sleep(300);
+  const full = await chatOpacity();
   await a.page.keyboard.type('hello from the pier');
   await a.page.keyboard.press('Enter');
   await sleep(600);
@@ -428,6 +432,7 @@ async function chatChecks(): Promise<void> {
   });
   await b.page.screenshot({ path: `${SHOTS}/chat.png` });
   check('chat: Enter opens the chat input', typing);
+  check('chat: window is faded while playing and full while typing', faded < 0.7 && full === 1, JSON.stringify({ faded, full }));
   check('chat: line shows for the sender and others in the room', la.includes('hello from the pier') && lb.includes('Ann: hello from the pier'), `"${lb}"`);
   check('chat: line reaches players in other rooms', lc.includes('hello from the pier'), `"${lc}"`);
   check('chat: speaker gets a bubble for players nearby', bubble);

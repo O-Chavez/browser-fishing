@@ -37,7 +37,7 @@ export class ChatBox {
   private escapedAt = -Infinity;
 
   constructor(
-    root: HTMLElement,
+    private root: HTMLElement,
     private opts: {
       send: (text: string) => void;
       /** Current map id, for the world filter and tags. */
@@ -87,6 +87,7 @@ export class ChatBox {
   open(): void {
     this.input.value = '';
     this.input.classList.remove('hidden');
+    this.root.classList.add('typing');
     this.input.focus();
     this.render();
   }
@@ -94,6 +95,7 @@ export class ChatBox {
   close(): void {
     if (!this.isOpen) return;
     this.input.classList.add('hidden');
+    this.root.classList.remove('typing');
     this.input.blur();
     this.render();
   }
