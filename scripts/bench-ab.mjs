@@ -77,15 +77,25 @@ function report(A, B) {
     const verdict = down === n ? `${lower} in ${n}/${n} pairs` : down === 0 ? `${higher} in ${n}/${n} pairs` : `mixed (${down}/${n} ${lower})`;
     rows.push([name, median(a).toFixed(2), median(b).toFixed(2), pct(median(ch)), verdict, ch.map(pct).join(' ')]);
   };
-  const exact = (name, get) => {
-    const x = get(A.runs[0]);
-    const y = get(B.runs[0]);
-    // Draw calls wobble by one or two as clouds drift in and out of view.
-    if (Math.abs(x - y) > 2) rows.push([name, String(x), String(y), x ? pct((100 * (y - x)) / x) : '', 'exact count', '']);
+  // Counts should be identical on every run; report the most common value and flag any disagreement.
+  const exact = (name, get, tolerance = 0) => {
+    const mode = (side) => {
+      const vals = side.runs.map(get);
+      const c = new Map();
+      vals.forEach((v) => c.set(v, (c.get(v) ?? 0) + 1));
+      const [v, n] = [...c].sort((a, b) => b[1] - a[1])[0];
+      return { v, varied: n < vals.length ? ` (${vals.length - n}/${vals.length} runs differ)` : '' };
+    };
+    const x = mode(A);
+    const y = mode(B);
+    if (Math.abs(x.v - y.v) <= tolerance) return;
+    const fmtN = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+    rows.push([name, fmtN(x.v), fmtN(y.v), x.v ? pct((100 * (y.v - x.v)) / x.v) : '', `exact count${x.varied}${y.varied}`, '']);
   };
   for (const scene of Object.keys(A.runs[0].scenes)) {
     paired(`${scene} render ms`, (r) => r.scenes[scene].renderMs);
-    exact(`${scene} draw calls`, (r) => r.scenes[scene].drawCalls);
+    // Draw calls wobble by one or two as clouds drift in and out of view.
+    exact(`${scene} draw calls`, (r) => r.scenes[scene].drawCalls, 2);
     exact(`${scene} lights`, (r) => r.scenes[scene].visibleLights);
   }
   for (const k of Object.keys(A.runs[0].loops)) exact(`render loops ${k}`, (r) => r.loops[k]);
