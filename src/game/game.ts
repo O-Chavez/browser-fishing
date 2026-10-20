@@ -1093,13 +1093,15 @@ export class Game {
     const lines: string[] = [];
     if (t === 'prizes') {
       const held = this.s.slots[this.s.held];
+      const onTray = this.aim?.k === 'cash';
       if (held?.k === 'fish') {
+        const name = byId(FISH, held.fishId).name;
         const chips = chipsFor(eco.fishValue(held));
-        lines.push(`Holding <b>${byId(FISH, held.fishId).name}</b> · ${eco.fishValue(held)} 🪙 = <b>${chips}</b> chips`);
-        if (chips < 1) lines.push('<span class="muted">Worth under 1 chip. Gamble it up first.</span>');
-      } else lines.push('Hold a fish (1-5) to turn it in for chips.');
-      if (this.aim) lines.push(`<span class="muted">Click: ${this.aim.k === 'cash' ? 'turn in the fish you are holding' : 'browse the prize case'}</span>`);
-      else lines.push('<span class="muted">Click the chip tray to cash in · click the prize case to shop · E for the full list</span>');
+        // The trade prompt: exactly what a click on the chip tray will do.
+        if (chips >= 1) lines.push(`<span class="trade${onTray ? ' ready' : ''}"><kbd>Click</kbd> ${onTray ? '' : 'the chip tray '}to trade <b>${name}</b> for <b>${chips}</b> chips</span>`);
+        else lines.push(`<b>${name}</b> is worth ${chips} chips. Win it bigger at a table first.`);
+      } else lines.push('Hold a fish (<kbd>1</kbd>-<kbd>5</kbd>) to trade it for chips.');
+      if (this.aim?.k !== 'cash') lines.push('<span class="muted">Prize case: click it, or press <kbd>E</kbd></span>');
       const html = lines.join('<br>');
       if (html !== this.tableHtml) {
         this.tableHtml = html;
@@ -1539,12 +1541,15 @@ export class Game {
       w.camera.remove(this.carry.obj);
       this.carry = null;
     }
+    // At a casino table or the counter the fish is your bet, shown in the hotbar; keep the view clear.
+    if (this.carry) this.carry.obj.visible = !this.table;
     if (!key || this.carry || !it || it.k === 'rod') return;
     let model: FishModel | null = null;
     let obj: THREE.Object3D;
     if (it.k === 'fish') {
       model = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
-      model.group.scale.setScalar(Math.min(0.36, fishScale(it.size) * 0.17));
+      // Carried while walking: still grows by tier, but capped so a legend doesn't block the view.
+      model.group.scale.setScalar(Math.min(0.24, fishScale(it.size) * 0.13));
       model.group.rotation.set(0.3, 1.1, 0.35);
       obj = new THREE.Group();
       obj.add(model.group);
