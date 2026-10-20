@@ -21,6 +21,7 @@ import { Town } from './town';
 import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { FX } from './fx';
+import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
 
 import { dayFraction, nightness, twilight } from './daynight';
@@ -88,13 +89,6 @@ const lambert = (
   color: number,
   extra: THREE.MeshLambertMaterialParameters = {},
 ) => new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
-
-function disposeGroup(g: THREE.Object3D): void {
-  g.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.geometry) m.geometry.dispose();
-  });
-}
 
 export class World {
   readonly scene = new THREE.Scene();
@@ -385,7 +379,7 @@ export class World {
     this.indoor = !!map.casino;
     setPad(map.pad);
     this.scene.remove(this.decor);
-    disposeGroup(this.decor);
+    disposeTree(this.decor);
     this.decor = new THREE.Group();
     this.scene.add(this.decor);
     this.sky.visible = this.stars.visible = this.clouds.visible = !this.indoor;

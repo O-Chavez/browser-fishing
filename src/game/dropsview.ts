@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BAITS, FISH, RODS, byId } from '../data/content';
 import type { Drop } from './drops';
 import { standHeight } from './env';
+import { disposeTree } from './dispose';
 import { buildFish } from './fishmodel';
 import { buildRodModel, buildTin } from './itemmodels';
 
@@ -47,6 +48,7 @@ export class DropsView {
     for (const [id, m] of this.meshes) {
       if (ids.has(id)) continue;
       this.group.remove(m.obj);
+      disposeTree(m.obj);
       this.meshes.delete(id);
     }
     for (const d of list) {
