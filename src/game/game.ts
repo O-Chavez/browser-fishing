@@ -493,7 +493,7 @@ export class Game {
         this.chat.close();
         this.holding = false;
         this.keys.clear();
-        $('resume').classList.remove('hidden');
+        this.showResume('Chat closed · ');
         return;
       }
       this.setMenu(!this.locked);
@@ -547,7 +547,7 @@ export class Game {
         e.preventDefault();
         if (e.repeat || !$('join').classList.contains('hidden')) return;
         if (this.menuOpen) this.closeMenu();
-        else if (this.active) this.openMenu('inventory');
+        else if (this.active || !$('resume').classList.contains('hidden')) this.openMenu('inventory');
         return;
       }
       if (e.code === 'Escape' && !e.repeat && !$('resume').classList.contains('hidden')) {
@@ -846,10 +846,24 @@ export class Game {
       });
   }
 
+  /**
+   * Closes the menu right away. Browsers won't re-capture the mouse from an Esc press, so if the
+   * capture fails a "click to keep playing" overlay waits for the click that can.
+   */
   private closeMenu(): void {
     this.tab = 'players';
-    if (this.forceActive) this.setMenu(false);
-    else this.world.renderer.domElement.requestPointerLock();
+    this.setMenu(false);
+    if (this.forceActive) return;
+    this.showResume();
+    const req = this.world.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+    req?.catch?.(() => {});
+  }
+
+  /** The overlay shown while the game is running but the mouse isn't captured; hidden on capture. */
+  private showResume(prefix = ''): void {
+    const el = $('resume');
+    el.innerHTML = `${prefix}<b>Click</b> to keep playing`;
+    el.classList.remove('hidden');
   }
 
   /** Offline play saves locally; online, the server owns the save. */
@@ -884,6 +898,7 @@ export class Game {
   private setMenu(open: boolean): void {
     this.menuOpen = open;
     $('menu').classList.toggle('hidden', !open);
+    if (open) $('resume').classList.add('hidden');
     // The wardrobe preview has its own render loop; renderMenu restarts it when the tab is shown again.
     if (!open && $('join').classList.contains('hidden')) this.preview?.stop();
   }

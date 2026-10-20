@@ -173,6 +173,18 @@ async function pondChecks(): Promise<void> {
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
   check('wardrobe: preview runs while shown', open1.loops === 2 && open1.inSlot, JSON.stringify(open1));
 
+  // Escape closes whichever menu tab is open.
+  const escClosed: string[] = [];
+  for (const tab of ['inventory', 'shop', 'players', 'dex']) {
+    await page.evaluate((t) => window.__game.openMenu(t), tab);
+    await sleep(100);
+    await page.keyboard.press('Escape');
+    await sleep(100);
+    if (await page.evaluate(() => document.getElementById('menu')!.classList.contains('hidden'))) escClosed.push(tab);
+  }
+  await page.evaluate(() => window.__game.activate());
+  check('menus: Escape closes every tab', escClosed.length === 4, escClosed.join(', '));
+
   // Faces: the wardrobe lists them, and clicking one wears it.
   await page.evaluate(() => window.__game.openMenu('inventory'));
   await page.click('[data-act="invtab"][data-id="wardrobe"]');
