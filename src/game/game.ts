@@ -208,6 +208,7 @@ export class Game {
         this.chat.add({ name: m.name, map: m.map, text: m.text, self });
         if (!self && m.room === this.net.room && m.map === this.map.id) this.avatars.say(m.id, m.text);
       },
+      onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
       onDrops: (list) => {
         this.serverDrops = list;
         this.dropsView.sync(list, this.map.id);

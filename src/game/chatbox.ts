@@ -11,6 +11,8 @@ export interface ChatLine {
   map: string;
   text: string;
   self: boolean;
+  /** A server notice ("Ann has joined"): no speaker, shown in every world filter. */
+  system?: boolean;
   at: number;
 }
 
@@ -19,7 +21,7 @@ export const liveLines = (lines: ChatLine[], now: number): ChatLine[] => lines.f
 
 /** The newest lines for the window, optionally only those from one map. */
 export const shownLines = (lines: ChatLine[], onlyMap: string | null): ChatLine[] =>
-  lines.filter((l) => !onlyMap || l.map === onlyMap).slice(-SHOWN);
+  lines.filter((l) => !onlyMap || l.system || l.map === onlyMap).slice(-SHOWN);
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -119,6 +121,7 @@ export class ChatBox {
     const here = this.opts.map();
     this.log.innerHTML = shownLines(this.lines, this.onlyHere ? here : null)
       .map((l) => {
+        if (l.system) return `<div class="chat-line sys">${esc(l.text)}</div>`;
         const tag = !this.onlyHere && l.map !== here ? `<span class="chat-tag">${esc(this.opts.mapName(l.map))}</span> ` : '';
         return `<div class="chat-line${l.self ? ' self' : ''}">${tag}<b>${esc(l.name)}:</b> ${esc(l.text)}</div>`;
       })

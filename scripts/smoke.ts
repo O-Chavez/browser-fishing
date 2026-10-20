@@ -443,6 +443,7 @@ async function chatChecks(): Promise<void> {
   check('chat: line shows for the sender and others in the room', la.includes('hello from the pier') && lb.includes('Ann: hello from the pier'), `"${lb}"`);
   check('chat: line reaches players in other rooms', lc.includes('hello from the pier'), `"${lc}"`);
   check('chat: speaker gets a bubble for players nearby', bubble);
+  check('chat: players already online see who joined', la.includes('Bob has joined') && la.includes('Cat has joined') && lb.includes('Cat has joined') && !lc.includes('Cat has joined'), `"${la}"`);
 
   // Bubbles fade out far away and when standing right on the speaker; they're clear in between.
   const bubbleShown = async (x: number, z: number) => {

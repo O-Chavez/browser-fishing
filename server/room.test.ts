@@ -386,3 +386,18 @@ describe('faces', () => {
     expect(a.acct.save.look.face).toBe('toothy');
   });
 });
+
+describe('join notices', () => {
+  it('tells everyone else on the server, but not the player who joined', () => {
+    const { room, join, store } = setup();
+    const other = new Room('other', MAPS);
+    room.say = (msg) => [room, other].forEach((r) => r.broadcast(msg));
+    const res = store.auth('Cat', 'token-token-token-Cat');
+    if (!res.ok) throw new Error(res.msg);
+    const c = conn();
+    other.join(c, res.account, 'pond');
+    const a = join('Ann');
+    expect(last(c, 'sys')).toEqual({ t: 'sys', text: 'Ann has joined' });
+    expect(a.c.log.some((m) => m.t === 'sys')).toBe(false);
+  });
+});

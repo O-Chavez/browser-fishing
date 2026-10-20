@@ -50,7 +50,7 @@ export class Room {
   hall: () => HallRow[] = () => [];
   /** Chat rules; the server shares one gate between rooms so limits follow the account. */
   chatGate: ChatGate;
-  /** Delivers an accepted chat line; the server points this at every room. */
+  /** Delivers chat lines and notices; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
   constructor(
@@ -86,6 +86,8 @@ export class Room {
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
     this.broadcast({ t: 'joined', player: info });
+    // Before adding the member, so everyone else on the server hears it but not the joiner.
+    this.say({ t: 'sys', text: `${acct.name} has joined` });
     this.members.set(id, m);
     return id;
   }
