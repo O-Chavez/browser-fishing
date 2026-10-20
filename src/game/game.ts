@@ -287,6 +287,7 @@ export class Game {
       this.s.look.color = this.joinColor;
       this.persist();
       $('join').classList.add('hidden');
+      this.preview?.stop();
       this.refreshHud();
     });
     if (direct) {
@@ -859,6 +860,8 @@ export class Game {
   private setMenu(open: boolean): void {
     this.menuOpen = open;
     $('menu').classList.toggle('hidden', !open);
+    // The wardrobe preview has its own render loop; renderMenu restarts it when the tab is shown again.
+    if (!open && $('join').classList.contains('hidden')) this.preview?.stop();
   }
 
   private openMenu(tab: string): void {
