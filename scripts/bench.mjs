@@ -157,7 +157,11 @@ try {
   let map = '';
   for (let round = 0; round < ROUNDS; round++) {
     for (const [name, [id, setup]] of Object.entries(SCENES)) {
-      if (map !== id) await page.evaluate((id) => window.__bench.goto(id), (map = id));
+      if (map !== id) {
+        const visit = await page.evaluate((id) => window.__bench.goto(id), (map = id));
+        // The very first casino visit pays for compiling its shaders; later visits hit the cache.
+        if (id === 'casino' && !R.firstVisit) R.firstVisit = { firstCasinoVisitBuildMs: visit.build, firstCasinoVisitRenderMs: visit.firstRender };
+      }
       (runs[name] ??= []).push(await scene(setup));
     }
   }
@@ -192,7 +196,9 @@ try {
     leakedGeometriesPerTrip: (after.geometries - before.geometries) / 3,
     leakedTexturesPerTrip: (after.textures - before.textures) / 3,
     newProgramsPerTrip: (after.programs - before.programs) / 3,
+    ...R.firstVisit,
   };
+  delete R.firstVisit;
 
   const out = path.join(OUT_DIR, `${label}.json`);
   fs.mkdirSync(path.dirname(out), { recursive: true });

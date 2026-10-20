@@ -1,16 +1,26 @@
-// A/B benchmark of two commits, alternating runs (A B A B ...) so GPU clock and thermal drift hit
-// both sides equally. A render-time difference only counts when the two sets of runs don't overlap.
+// A/B benchmark of two commits. Runs alternate (A B, B A, A B, ...) and each A run is paired with
+// the B run next to it, so machine-wide drift (GPU clocks, heat, other apps) cancels out within a
+// pair even when it swamps the difference between runs. A change is only called when every pair
+// agrees on its direction.
 //
-//   npm run bench:ab -- <revA> <revB> [runs=4]
+//   npm run bench:ab -- <revA> <revB> [runs=6]
+//   npm run bench:ab -- --report bench-results/ab-<A>-vs-<B>.json   (re-print a saved comparison)
 //
 // Writes bench-results/ab-<A>-vs-<B>.json with every run's numbers.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const [revA, revB, n = '4'] = process.argv.slice(2);
+const args = process.argv.slice(2);
+if (args[0] === '--report') {
+  const saved = JSON.parse(fs.readFileSync(args[1], 'utf8'));
+  report(saved.A, saved.B);
+  process.exit(0);
+}
+
+const [revA, revB, n = '6'] = args;
 if (!revA || !revB) {
-  console.error('usage: npm run bench:ab -- <revA> <revB> [runs=4]');
+  console.error('usage: npm run bench:ab -- <revA> <revB> [runs=6]');
   process.exit(1);
 }
 const RUNS = Number(n);
@@ -27,7 +37,8 @@ const sides = [revA, revB].map((rev) => {
 });
 
 for (let i = 0; i < RUNS; i++) {
-  for (const s of sides) {
+  // Swap the order every other pair (A B, B A, ...): the second run of a pair tends to be slower.
+  for (const s of i % 2 ? [...sides].reverse() : sides) {
     const label = `${s.sha}-${i}`;
     process.stdout.write(`run ${i + 1}/${RUNS} ${s.rev} (${s.sha})... `);
     // Always run the current bench script, so both sides are measured the same way.
@@ -40,45 +51,54 @@ for (let i = 0; i < RUNS; i++) {
   }
 }
 
-const med = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
 const [A, B] = sides;
-const rows = [];
-for (const scene of Object.keys(A.runs[0].scenes)) {
-  const a = A.runs.map((r) => r.scenes[scene].renderMs);
-  const b = B.runs.map((r) => r.scenes[scene].renderMs);
-  const d = med(b) - med(a);
-  const clear = Math.max(...b) < Math.min(...a) ? 'faster' : Math.min(...b) > Math.max(...a) ? 'slower' : 'no clear change';
-  rows.push([`${scene} render ms`, med(a).toFixed(2), med(b).toFixed(2), `${d >= 0 ? '+' : ''}${((100 * d) / med(a)).toFixed(0)}%`, clear, `A ${a.map((x) => x.toFixed(1)).join('/')}  B ${b.map((x) => x.toFixed(1)).join('/')}`]);
-  for (const k of ['drawCalls', 'visibleLights']) {
-    const x = A.runs[0].scenes[scene][k];
-    const y = B.runs[0].scenes[scene][k];
-    // Draw calls wobble by one or two as clouds drift in and out of view.
-    if (Math.abs(x - y) > 2) rows.push([`${scene} ${k}`, String(x), String(y), `${((100 * (y - x)) / x).toFixed(0)}%`, 'exact', '']);
-  }
-}
-for (const k of Object.keys(A.runs[0].loops)) {
-  const x = A.runs[0].loops[k];
-  const y = B.runs[0].loops[k];
-  if (x !== y) rows.push([`render loops ${k}`, String(x), String(y), '', 'exact', '']);
-}
-for (const k of Object.keys(A.runs[0].mapChange)) {
-  const a = A.runs.map((r) => r.mapChange[k]);
-  const b = B.runs.map((r) => r.mapChange[k]);
-  const d = med(b) - med(a);
-  if (Math.abs(d) < 1e-9 && Math.max(...a) === Math.min(...a)) continue;
-  const clear = Math.max(...b) < Math.min(...a) ? 'lower' : Math.min(...b) > Math.max(...a) ? 'higher' : 'no clear change';
-  rows.push([`map ${k}`, med(a).toFixed(1), med(b).toFixed(1), med(a) ? `${d >= 0 ? '+' : ''}${((100 * d) / med(a)).toFixed(0)}%` : '', clear, `A ${a.map((x) => x.toFixed(1)).join('/')}  B ${b.map((x) => x.toFixed(1)).join('/')}`]);
-}
-
-const head = ['metric', `A ${A.rev}`, `B ${B.rev}`, 'Δ', 'verdict', 'all runs'];
-const w = head.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
-const fmt = (r) => r.map((c, i) => (i === 0 || i >= 4 ? c.padEnd(w[i]) : c.padStart(w[i]))).join('  ');
-console.log(`\n${A.runs[0].gpu}, ${RUNS} alternating runs per side (medians shown)\n`);
-console.log(fmt(head));
-console.log(w.map((x) => '-'.repeat(x)).join('  '));
-rows.forEach((r) => console.log(fmt(r)));
-
 const safe = (s) => s.replace(/[^\w.-]+/g, '_');
 const out = path.resolve('bench-results', `ab-${safe(revA)}-vs-${safe(revB)}.json`);
-fs.writeFileSync(out, JSON.stringify({ A: { rev: A.rev, sha: A.sha, runs: A.runs }, B: { rev: B.rev, sha: B.sha, runs: B.runs }, rows }, null, 2) + '\n');
+fs.writeFileSync(out, JSON.stringify({ A: { rev: A.rev, sha: A.sha, runs: A.runs }, B: { rev: B.rev, sha: B.sha, runs: B.runs } }, null, 2) + '\n');
+report(A, B);
 console.log(`\nWrote ${path.relative(process.cwd(), out)}`);
+
+function report(A, B) {
+  const median = (a) => {
+    const s = [...a].sort((x, y) => x - y);
+    const h = s.length >> 1;
+    return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2;
+  };
+  const pct = (x) => `${x >= 0 ? '+' : ''}${x.toFixed(0)}%`;
+  const rows = [];
+  // Per-pair % change of B against the A run just before it.
+  const paired = (name, get, lower = 'faster', higher = 'slower') => {
+    const a = A.runs.map(get);
+    const b = B.runs.map(get);
+    const n = Math.min(a.length, b.length);
+    const ch = Array.from({ length: n }, (_, i) => (a[i] ? (100 * (b[i] - a[i])) / a[i] : 0));
+    if (ch.every((c) => Math.abs(c) < 1e-9)) return;
+    const down = ch.filter((c) => c < 0).length;
+    const verdict = down === n ? `${lower} in ${n}/${n} pairs` : down === 0 ? `${higher} in ${n}/${n} pairs` : `mixed (${down}/${n} ${lower})`;
+    rows.push([name, median(a).toFixed(2), median(b).toFixed(2), pct(median(ch)), verdict, ch.map(pct).join(' ')]);
+  };
+  const exact = (name, get) => {
+    const x = get(A.runs[0]);
+    const y = get(B.runs[0]);
+    // Draw calls wobble by one or two as clouds drift in and out of view.
+    if (Math.abs(x - y) > 2) rows.push([name, String(x), String(y), x ? pct((100 * (y - x)) / x) : '', 'exact count', '']);
+  };
+  for (const scene of Object.keys(A.runs[0].scenes)) {
+    paired(`${scene} render ms`, (r) => r.scenes[scene].renderMs);
+    exact(`${scene} draw calls`, (r) => r.scenes[scene].drawCalls);
+    exact(`${scene} lights`, (r) => r.scenes[scene].visibleLights);
+  }
+  for (const k of Object.keys(A.runs[0].loops)) exact(`render loops ${k}`, (r) => r.loops[k]);
+  for (const k of Object.keys(A.runs[0].mapChange)) {
+    if (/PerTrip$/.test(k)) exact(`map ${k}`, (r) => r.mapChange[k]);
+    else paired(`map ${k}`, (r) => r.mapChange[k], 'lower', 'higher');
+  }
+
+  const head = ['metric', `A ${A.rev}`, `B ${B.rev}`, 'Δ (median pair)', 'verdict', 'each pair'];
+  const w = head.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
+  const fmt = (r) => r.map((c, i) => (i === 0 || i >= 4 ? c.padEnd(w[i]) : c.padStart(w[i]))).join('  ');
+  console.log(`\n${A.runs[0].gpu}, ${Math.min(A.runs.length, B.runs.length)} alternating pairs\n`);
+  console.log(fmt(head));
+  console.log(w.map((x) => '-'.repeat(x)).join('  '));
+  rows.forEach((r) => console.log(fmt(r)));
+}
