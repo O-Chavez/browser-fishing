@@ -434,22 +434,6 @@ export class Town {
     this.solid(x, z, 0.2);
   }
 
-  private bench(x: number, z: number, facing: number): void {
-    const g = new THREE.Group();
-    const seat = rbox(1.5, 0.08, 0.45, WOOD, 0.02);
-    seat.position.y = 0.45;
-    const back = rbox(1.5, 0.4, 0.06, WOOD, 0.02);
-    back.position.set(0, 0.75, -0.2);
-    g.add(seat, back);
-    for (const sx of [-0.6, 0.6]) {
-      const leg = rbox(0.07, 0.45, 0.4, DARK, 0.01);
-      leg.position.set(sx, 0.22, 0);
-      g.add(leg);
-    }
-    this.at(g, x, z, facing);
-    this.solid(x, z, 0.7);
-  }
-
   private pot(x: number, z: number): void {
     const g = new THREE.Group();
     const p = cyl(0.22, 0.16, 0.34, 0xb5653a, 8);
@@ -537,11 +521,10 @@ export class Town {
     }
   }
 
-  /** Lamp posts, benches, a fire pit, picnic spots and string lights that make the town feel lived in. */
+  /** Lamp posts, flower pots, a fire pit, picnic spots and string lights that make the town feel lived in. */
   private buildCozy(): void {
     const posts = [[-2.6, 39, true], [2.6, 39, false], [-2.6, 45, false], [2.6, 45, true], [-2.6, 51, true], [2.6, 51, false], [12, 36, true], [-13, 39, false], [12, 47, false], [-3, 55, false]] as const;
     for (const [x, z, lit] of posts) this.lampPost(x, z, lit);
-    this.bench(0, 27.4, 0);
     this.pot(-3.6, 29.5);
     this.pot(3.6, 29.5);
     this.pot(-3.6, 34.5);
