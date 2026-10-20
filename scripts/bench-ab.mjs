@@ -9,6 +9,7 @@
 // Writes bench-results/ab-<A>-vs-<B>.json with every run's numbers.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const args = process.argv.slice(2);
@@ -26,9 +27,11 @@ if (!revA || !revB) {
 const RUNS = Number(n);
 const git = (...a) => execFileSync('git', a, { encoding: 'utf8' }).trim();
 const work = path.resolve('.bench');
+// Checkouts live outside the repo so test runners and editors don't pick up their copies of the code.
+const trees = path.join(os.tmpdir(), `${path.basename(process.cwd())}-bench`);
 const sides = [revA, revB].map((rev) => {
   const sha = git('rev-parse', '--short', rev);
-  const dir = path.join(work, `wt-${sha}`);
+  const dir = path.join(trees, `wt-${sha}`);
   if (!fs.existsSync(dir)) {
     git('worktree', 'add', '--detach', dir, sha);
     fs.symlinkSync(path.resolve('node_modules'), path.join(dir, 'node_modules'));
