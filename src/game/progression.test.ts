@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BAITS, FISH, RODS, byId } from '../data/content';
-import { applyXp, canCatch, eligibleFish, pickFish, reelDifficulty, rollSize, sellValue, xpForNextLevel } from './progression';
+import { applyXp, canCatch, eligibleFish, pickFish, reelDifficulty, rollSize, sellValue, welcomeText, xpForNextLevel } from './progression';
 
 const twig = byId(RODS, 'twig');
 const graphite = byId(RODS, 'graphite');
@@ -180,5 +180,23 @@ describe('fish progression feel', () => {
     const legend = share(5, (t) => t === 5);
     expect(legend).toBeGreaterThan(0.1);
     expect(legend).toBeLessThan(0.25);
+  });
+});
+
+describe('welcome banner', () => {
+  const fresh = { level: 1, xp: 0, coins: 20, dex: {} };
+  it('greets new players with their first goal', () => {
+    expect(welcomeText('Ana', fresh)).toEqual({ title: 'Welcome to Lakeside', line: 'First goal: catch a fish, then sell it at the stall' });
+  });
+  it('points returning players below the casino level at the casino', () => {
+    const t = welcomeText('Ana', { level: 12, xp: 5, coins: 1240, dex: { [FISH[0].id]: {} } });
+    expect(t.title).toBe('~ Welcome back, Ana ~');
+    expect(t.line).toBe('Lv 12 · 1,240 coins · next goal: Lv 15 casino');
+  });
+  it('counts the missing Fishdex species once the casino is open', () => {
+    const t = welcomeText('Ana', { level: 20, xp: 0, coins: 5, dex: { [FISH[0].id]: {} } });
+    expect(t.line).toBe(`Lv 20 · 5 coins · next goal: ${FISH.length - 1} more Fishdex species`);
+    const all = Object.fromEntries(FISH.map((f) => [f.id, {}]));
+    expect(welcomeText('Ana', { level: 20, xp: 0, coins: 5, dex: all }).line).toContain('Fishdex complete');
   });
 });

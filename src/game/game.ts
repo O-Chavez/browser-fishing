@@ -41,6 +41,7 @@ import {
   fishWeight,
   formatWeight,
   nextGoal,
+  welcomeText,
   sellValue,
   difficultyLabel,
   reelDifficulty,
@@ -153,7 +154,7 @@ export class Game {
   private localDrops = new Drops();
   private serverDrops: Drop[] = [];
   private keys = new Set<string>();
-  private menuOpen = true;
+  private menuOpen = false;
   private keepTab = false;
   private atVendor = false;
   private near: { label: string; act: () => void } | null = null;
@@ -165,6 +166,8 @@ export class Game {
   private rigLook = '';
   private preview: CharacterPreview | null = null;
   private joining = false;
+  /** A ?name= link joins without the card; the welcome banner waits for the first save (or the failure). */
+  private pendingWelcome = false;
   private joinColor = BODY_COLORS[4];
   private toastTimer = 0;
   private confirmReset = false;
@@ -198,6 +201,7 @@ export class Game {
         const moved = !!save.location && save.location !== this.s.location;
         Object.assign(this.s, save);
         if (this.joining) this.finishJoin();
+        else if (this.pendingWelcome) this.welcome();
         if (moved) this.applyLocation();
         this.setGateSign();
         this.refreshHud();
@@ -233,6 +237,7 @@ export class Game {
       },
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
+        else if (this.pendingWelcome) this.welcome();
       },
       onPlayers: () => {
         this.world.hub?.setLeaders(this.anglers());
@@ -251,7 +256,11 @@ export class Game {
       onCastFail: (msg) => {
         if (this.phase === 'flying' || this.phase === 'swing') this.reset(msg);
       },
-      onError: (msg) => (this.joining ? this.joinMessage(msg) : this.toast(`Offline mode: ${msg}`)),
+      onError: (msg) => {
+        if (this.joining) return this.joinMessage(msg);
+        this.toast(`Offline mode: ${msg}`);
+        if (this.pendingWelcome) this.welcome();
+      },
       onClose: () => {
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
@@ -315,10 +324,13 @@ export class Game {
       $('join').classList.add('hidden');
       this.preview?.stop();
       this.refreshHud();
+      this.welcome(($('join-name') as HTMLInputElement).value.trim().slice(0, 16));
     });
     if (direct) {
       // ?name= links (and tests) skip the screen and keep the account's saved look.
       this.net.name = urlName!;
+      this.pendingWelcome = true;
+      this.showResume('', 'to start fishing');
       this.net.connect(this.map.id);
       return;
     }
@@ -383,6 +395,36 @@ export class Game {
     $('join').classList.add('hidden');
     this.preview?.stop();
     this.world.hub?.setLeaders(this.anglers());
+    this.welcome();
+  }
+
+  /**
+   * After joining: no window, just the scene with a welcome banner and a "click to start" overlay.
+   * The click that captures the mouse dismisses the banner; otherwise it fades by itself.
+   */
+  private welcome(name = this.net.name): void {
+    this.pendingWelcome = false;
+    this.setMenu(false);
+    const { title, line } = welcomeText(name, this.s);
+    const el = $('banner');
+    el.classList.add('welcome');
+    el.style.color = '';
+    el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>`;
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => this.dismissWelcome(), 4200);
+    if (!this.locked && !this.forceActive) this.showResume('', 'to start fishing');
+  }
+
+  private dismissWelcome(): void {
+    const el = $('banner');
+    if (!el.classList.contains('welcome')) return;
+    clearTimeout(this.bannerTimer);
+    el.classList.add('hidden');
+    el.classList.remove('welcome');
   }
 
   private get rod() {
@@ -405,6 +447,9 @@ export class Game {
       activate: () => {
         this.forceActive = true;
         this.setMenu(false);
+        // Stands in for the click that captures the mouse.
+        $('resume').classList.add('hidden');
+        this.dismissWelcome();
         audio.start();
       },
       key: (code: string, down: boolean) => {
@@ -502,6 +547,7 @@ export class Game {
     });
     document.addEventListener('pointerlockchange', () => {
       $('resume').classList.add('hidden');
+      if (this.locked) this.dismissWelcome();
       // Esc while typing: the browser always releases the mouse, but that should only cancel the
       // chat, not pause the game. A click picks the mouse back up.
       if (!this.locked && this.chat.active) {
@@ -875,9 +921,9 @@ export class Game {
   }
 
   /** The overlay shown while the game is running but the mouse isn't captured; hidden on capture. */
-  private showResume(prefix = ''): void {
+  private showResume(prefix = '', action = 'to keep playing'): void {
     const el = $('resume');
-    el.innerHTML = `${prefix}<b>Click</b> to keep playing`;
+    el.innerHTML = `${prefix}<b>Click</b> ${action}`;
     el.classList.remove('hidden');
   }
 
@@ -1414,6 +1460,7 @@ export class Game {
   private topTierBanner(fish: { tier: number }, verb: string, shiny: boolean): void {
     if (fish.tier !== this.bait.tier) return;
     const el = $('banner');
+    el.classList.remove('welcome');
     const name = tierName(fish.tier);
     el.style.color = this.tierColor(fish.tier);
     el.innerHTML = `${shiny ? '✨ Shiny ' : ''}${name} fish ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
