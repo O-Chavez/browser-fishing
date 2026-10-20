@@ -104,6 +104,15 @@ export function migrate(raw: object): SaveData {
     out.slots = items.slice(0, SLOT_COUNT);
     for (const it of items.slice(SLOT_COUNT)) if (it.k === 'fish') out.coins += sellValue(byId(FISH, it.fishId), it.size);
   }
+  // Fish sizes were reworked so every tier is bigger than the last; pull old records and
+  // carried fish into each species' new range so nothing shows an impossible size.
+  const fit = (fishId: string, cm: number) => {
+    const f = FISH.find((x) => x.id === fishId);
+    return f ? Math.min(f.maxSize, Math.max(f.minSize, cm)) : cm;
+  };
+  for (const [id, e] of Object.entries(out.dex ?? {})) if (e && Number.isFinite(e.best)) e.best = fit(id, e.best);
+  for (const sl of out.slots) if (sl?.k === 'fish') sl.size = fit(sl.fishId, sl.size);
+  if (out.best) out.best.size = fit(out.best.fishId, out.best.size);
   if (!Array.isArray(out.perks)) out.perks = [];
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;

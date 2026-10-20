@@ -139,6 +139,19 @@ describe('carry slots', () => {
     expect(isFace(migrate({ ...newSave(), look: { ...newSave().look, face: 'bogus' } }).look.face)).toBe(true);
   });
 
+  it('pulls records and carried fish from before the size rework into the new ranges', () => {
+    const minnow = FISH.find((f) => f.id === 'minnow')!;
+    const sturgeon = FISH.find((f) => f.id === 'sturgeon')!;
+    const old = { ...newSave(), dex: { minnow: { count: 3, best: 30 }, sturgeon: { count: 1, best: 100 } }, best: { fishId: 'sturgeon', size: 100, value: 500 } };
+    old.slots = [{ k: 'rod', id: 'twig' }, { k: 'fish', fishId: 'minnow', size: 12 }, null, null, null];
+    const s = migrate(old);
+    expect(s.dex.minnow.best).toBe(minnow.maxSize);
+    expect(s.dex.sturgeon.best).toBe(sturgeon.minSize);
+    expect(s.best!.size).toBe(sturgeon.minSize);
+    expect(s.best!.value).toBe(500);
+    expect(s.slots[1]).toMatchObject({ k: 'fish', size: minnow.maxSize });
+  });
+
   it('only accepts known faces', () => {
     const s = newSave();
     expect(eco.setFace(s, 'joy')).toBe(true);

@@ -50,6 +50,12 @@
   - Sent to everyone already on the server, using the joining player's name
 - [x] Lower the global chat's opacity when not in chat mode
   - Fade the chat window while the player isn't typing; return to full opacity when they press Enter to open chat mode
+- [x] Rework the fish and tiers into a cohesive set
+  - Each tier gets a clear identity (Shallows, Sport fish, Lake giants, Jewel fish, Spirit fish) carried through look, name and value
+  - Distinct 3D silhouettes and species markings instead of one shared egg body; tier 5 stays recognisably fish; 2D icons match
+  - Balance pass: better gear catches fewer low-tier fish, values spread sensibly, bait cost vs earnings checked, catch mixes covered by tests
+  - Fishdex and catch card: one-line description, day/night note
+  - Keep all fish ids so saves, Fishdex progress and records carry over; show renames before applying
 
 ## Ideas
 

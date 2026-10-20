@@ -65,7 +65,7 @@ canvas { display: block; position: fixed; inset: 0; }
 
 
 #catch { position: fixed; left: 3%; bottom: 12%; padding: 20px 32px; background: var(--paper); color: var(--ink); border: 4px solid var(--wood-600); outline: 3px solid var(--wood-900); border-radius: 18px; text-align: center; min-width: 260px; }
-#catch h2 { margin: 6px 0; font-size: 28px; font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,.15); }
+#catch h2 { margin: 6px 0; font-size: 30px; font-weight: 900; -webkit-text-stroke: 6px var(--wood-800); paint-order: stroke fill; letter-spacing: .5px; }
 #catch .muted { color: var(--ink-muted); opacity: 1; }
 
 
@@ -73,7 +73,8 @@ canvas { display: block; position: fixed; inset: 0; }
 #alert { position: fixed; left: 50%; top: 34%; transform: translateX(-50%); font-size: 96px; font-weight: 900; color: #ff3b30; text-shadow: 0 0 18px #fff, 0 4px 8px #000; pointer-events: none; animation: pop .25s ease-in-out infinite alternate; }
 @keyframes pop { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.2); } }
 #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,10,25,.45) 100%); }
-#catch .weight { font-size: 40px; font-weight: 900; margin: 4px 0 8px; color: var(--gold-dark); }
+#catch .weight { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 40px; font-weight: 900; margin: 4px 0 8px; color: var(--gold-dark); }
+#catch .weight .coin { width: 34px; height: 34px; }
 #vignette { transition: box-shadow .15s; }
 #vignette.surge { box-shadow: inset 0 0 160px 30px rgba(255, 40, 30, .55); animation: flash .35s ease-in-out infinite alternate; }
 @keyframes flash { from { opacity: .55; } to { opacity: 1; } }
@@ -294,6 +295,12 @@ canvas.preview.dragging { cursor: grabbing; }
 .fish > span:last-child { font-size: 12px; font-weight: 800; color: var(--ink-muted); }
 .fish.unknown { background: var(--paper-2); }
 .fish .moon { position: absolute; top: 6px; right: 8px; font-size: 14px; }
+.fish p { margin: 0; font-size: 12px; font-weight: 700; line-height: 1.3; color: var(--ink-muted); }
+.dex { margin-bottom: 16px; }
+.dex-tier { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px !important; font-size: 15px !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--ink) !important; }
+.dex-tier small { margin-left: auto; font-size: 13px; color: var(--ink-muted); }
+#catch .catch-ico .fishico { width: 96px; height: 60px; }
+#catch .blurb { margin: 0 0 6px; font-size: 14px; font-weight: 700; font-style: italic; color: var(--ink-muted); max-width: 300px; }
 
 /* Anglers */
 .list-head { margin: 0 0 12px; font-size: 15px; font-weight: 800; color: var(--ink-muted); }

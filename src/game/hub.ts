@@ -198,7 +198,7 @@ export class Hub {
     const fishList = [FISH[1], FISH[4]];
     fishList.forEach((f, i) => {
       const hang = new THREE.Group();
-      const fish = buildFish(f.color);
+      const fish = buildFish(f.color, false, false, f.tier, f.id);
       fish.group.scale.setScalar(0.5);
       fish.group.rotation.x = Math.PI / 2;
       fish.group.position.y = -0.35;

@@ -300,7 +300,7 @@ async function pondChecks(): Promise<void> {
       if (st.phase === 'waiting') g.skipWait();
       else if (st.phase === 'bite') g.press();
       else if (st.phase === 'reeling') g.hold((st.tension ?? 0) < 0.6);
-      else if (st.phase === 'result') { g.press(); break; }
+      else if (st.phase === 'result') break;
       else if (st.phase === 'idle' && seen.has('reeling')) break;
       await new Promise((r) => setTimeout(r, 50));
     }
@@ -308,6 +308,12 @@ async function pondChecks(): Promise<void> {
     return [...seen];
   });
   check('pond: cast, bite, reel and land a fish', fishing.includes('reeling') && (fishing.includes('result') || fishing.includes('idle')), fishing.join(' > '));
+  if (fishing.includes('result')) {
+    // Let the landing animation finish, keep the catch card for visual review, then release it.
+    await sleep(1500);
+    await page.screenshot({ path: `${SHOTS}/pond-catch.png` });
+    await page.evaluate(() => window.__game.press());
+  }
   await page.close();
 }
 

@@ -3,7 +3,7 @@ import { BAITS, FISH, RODS, byId } from '../data/content';
 import type { Drop } from './drops';
 import { standHeight } from './env';
 import { disposeTree } from './dispose';
-import { buildFish } from './fishmodel';
+import { buildFish, fishScale } from './fishmodel';
 import { buildRodModel, buildTin } from './itemmodels';
 
 
@@ -21,7 +21,7 @@ export class DropsView {
     const it = d.item;
     if (it.k === 'fish') {
       const f = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
-      f.group.scale.setScalar(0.45 + Math.min(1, it.size / 100) * 0.5);
+      f.group.scale.setScalar(Math.min(1.1, fishScale(it.size) * 0.5));
       g.add(f.group);
     } else if (it.k === 'bait') {
       g.add(buildTin(it.id));
