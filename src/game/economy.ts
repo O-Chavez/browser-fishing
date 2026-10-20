@@ -186,6 +186,23 @@ export function charmBonus(s: Pick<SaveData, 'perks'>): number {
 export const sellPrice = (_s: Pick<SaveData, 'perks'>, item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
   Math.round(fishValue(item));
 
+/** The perks that are actually working for this player, with what each one does right now. */
+export function activePerks(s: Pick<SaveData, 'perks' | 'lure'>): { id: string; icon: string; name: string; effect: string }[] {
+  const out: { id: string; icon: string; name: string; effect: string }[] = [];
+  const add = (id: string, effect: string) => {
+    const p = perkById(id)!;
+    out.push({ id, icon: p.icon, name: p.name, effect });
+  };
+  // Lucky Charms replace each other, so only the best one counts.
+  const charm = (['charm3', 'charm2', 'charm1'] as const).find((id) => s.perks.includes(id));
+  if (charm) add(charm, `Fish worth +${Math.round(CHARM_BONUS[charm] * 100)}%`);
+  if (s.perks.includes('gloves')) add('gloves', `Fights ×${GLOVES_CONTROL} easier`);
+  if (s.perks.includes('lantern')) add('lantern', `Night luck ×${LANTERN_NIGHT_LUCK}`);
+  if (s.perks.includes('vest')) add('vest', `+${VEST_SLOTS} hotbar slots`);
+  if (s.lure > 0) add('lure', `${s.lure} shiny cast${s.lure === 1 ? '' : 's'} left`);
+  return out;
+}
+
 /** Rod control with the Quick-Reel Gloves on. */
 export const reelControl = (s: Pick<SaveData, 'perks'>, base: number): number => (s.perks.includes('gloves') ? base * GLOVES_CONTROL : base);
 

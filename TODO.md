@@ -62,7 +62,7 @@
   - Drop the "x.x" multiplier text on hotbar fish slots and show just the total value
 - [x] Show a prompt in the casino when the player can trade fish for chips
   - A UI hint appears when the player is in range and able to click to trade fish in for chips
-- [ ] Inventory/wardrobe shows equipped charms and their total buffs
+- [x] Inventory/wardrobe shows equipped charms and their total buffs
   - List the equipped charms and the summed buffs they give
 - [ ] Smaller bait purchase popup, and reconsider the 20-bait cap
   - The shop's purchase popup is too large and blocks the view; it should just say the amount purchased
@@ -73,6 +73,10 @@
   - Change the cosmetics' appearance so they fit the game's theme better. Taste-driven: propose options before coding
 - [ ] Join/welcome-back screen
   - Currently joining just shows the inventory; replace it with a proper join/welcome-back screen. Taste-driven: propose options before coding
+- [ ] Continue fish rework
+  - Higher tiers of fish should be more extreme/special (visually and in size)
+- [ ] Add an in game element by the casino teleport that add a popup with a screenshot of the inside of the casino
+  - This is nice to show newer players whats waiting for them.
 
 ## Ideas
 
