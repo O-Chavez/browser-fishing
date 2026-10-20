@@ -150,24 +150,36 @@ async function pondChecks(): Promise<void> {
   await sleep(300);
   const shop = await page.evaluate(() => !document.getElementById('menu')!.classList.contains('hidden') && document.body.classList.contains('shopping'));
   check('pond: talking to the vendor opens the shop', shop, `prompt "${label}"`);
+  // Shop: picking a tile shows it in the details panel, and its Buy button buys it.
+  await page.click('[data-shop="gear"]');
+  await page.click('[data-pick="gear"][data-id="bait:worm"]');
+  await sleep(100);
+  const picked = await page.evaluate(() => document.querySelector('#tab .detail .hero b')?.textContent ?? '');
+  const coins0 = await page.evaluate(() => (window.__game.s as any).coins as number);
+  await page.click('#tab .detail [data-act="buybait"]');
+  await sleep(150);
+  const coins1 = await page.evaluate(() => (window.__game.s as any).coins as number);
+  check('shop: picking an item shows it, and Buy buys it', picked === 'Worm' && coins1 < coins0, `${picked}, ${coins0} -> ${coins1} coins`);
+  await page.click('#menu .close');
+  await sleep(100);
+  check('menus: the close button closes the window', await page.evaluate(() => document.getElementById('menu')!.classList.contains('hidden')));
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
 
   // Players tab lists levels, not coins.
   await page.evaluate(() => window.__game.openMenu('players'));
   await sleep(200);
-  const me = await page.evaluate(() => ({ row: document.querySelector('#tab .row.me')?.textContent ?? '', level: (window.__game.s as any).level as number }));
+  const me = await page.evaluate(() => ({ row: document.querySelector('#tab .angler.me')?.textContent ?? '', level: (window.__game.s as any).level as number }));
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
   check('players tab: shows your level, not coins', me.row.includes(`Lv ${me.level}`) && !me.row.includes('🪙'), `"${me.row}"`);
 
   // Wardrobe preview: running while shown, stopped when the menu closes, running again on reopen.
-  await page.evaluate(() => window.__game.openMenu('inventory'));
-  await page.click('[data-act="invtab"][data-id="wardrobe"]');
+  await page.evaluate(() => window.__game.openMenu('wardrobe'));
   await sleep(300);
   const open1 = { loops: await loops(page), inSlot: await previewInSlot(page) };
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
   await sleep(300);
   const closed = await loops(page);
-  await page.evaluate(() => window.__game.openMenu('inventory'));
+  await page.evaluate(() => window.__game.openMenu('wardrobe'));
   await sleep(300);
   const open2 = { loops: await loops(page), inSlot: await previewInSlot(page) };
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
@@ -186,8 +198,7 @@ async function pondChecks(): Promise<void> {
   check('menus: Escape closes every tab', escClosed.length === 4, escClosed.join(', '));
 
   // Faces: the wardrobe lists them, and clicking one wears it.
-  await page.evaluate(() => window.__game.openMenu('inventory'));
-  await page.click('[data-act="invtab"][data-id="wardrobe"]');
+  await page.evaluate(() => window.__game.openMenu('wardrobe'));
   await sleep(200);
   const faceCount = await page.evaluate(() => document.querySelectorAll('#tab .face').length);
   const pick = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tab .face')].find((b) => !b.classList.contains('on'))!.dataset.id!);

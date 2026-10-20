@@ -1,0 +1,1 @@
+`nunito-latin.woff2`: Nunito (variable, weights 600-900, Latin subset) by Vernon Adams, Cyreal and Jacques Le Bailly, from Google Fonts. Licensed under the SIL Open Font License 1.1 (https://openfontlicense.org), which allows bundling it with the game.

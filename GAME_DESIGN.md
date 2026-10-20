@@ -269,7 +269,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 
 ## 15. Identity, Cosmetics & Expanded Hub
 - **Join screen:** pick a name and body color (live 3D preview). Saved locally; `?name=` skips it.
-- **Leaderboard:** Tab/Esc menu "Players" tab lists everyone online with their level, highest first; a "Top Anglers" board stands in the plaza.
+- **Leaderboard:** the menu's Anglers tab lists everyone online with their face and level, highest first; a "Top Anglers" board stands in the plaza.
 - **Faces:** 8 free painted faces (`FACES` in `src/data/cosmetics.ts`, drawn by `src/game/faces.ts`): smile, grin, wink, cat, joy, cheeky, toothy and sleepy. Each is one shared texture on the head sphere, facing where the player looks. New accounts and saves from before faces get a random one; players change it in the Wardrobe's Face section, and can drag the preview to turn their character. NPCs wear the same faces, one each, set by `face` on their `NpcDef` (and `vendor.face` for Marlow).
 - **Cosmetics:** hats, shirts, jewelry (6 each, tiers 0–5; higher price = flashier, top tiers glow). Bought at Marlow's shop menu (Cosmetics/Gear tabs), equipped in the Wardrobe (Tab; also the plaza mirror). Visible to all players.
 - **Selling:** with the shop menu open, hover a hotbar fish to see its price and click to sell.
@@ -281,7 +281,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 - **Storage** (`server/storage.ts`): accounts are saved every 2 s when changed, and on SIGTERM/SIGINT (redeploys).
   - Default: JSON files in `DATA_DIR` (or the server folder). Lost on Render free redeploys unless a paid disk is mounted at `DATA_DIR`.
   - Set `DATABASE_URL` to use Postgres instead (Neon, Supabase or Render Postgres, no disk needed). A `game_state` table is created automatically.
-- **Reset:** Players tab (Tab/Esc) -> "Reset account" -> confirm. Wipes coins, level, gear, fish, dex and cosmetics; keeps name, login token, body color and face. Works offline too. Blocked mid wheel-spin.
+- **Reset:** menu ⚙ Settings tab -> "Reset account…" -> confirm. Wipes coins, level, gear, fish, dex and cosmetics; keeps name, login token, body color and face. Works offline too. Blocked mid wheel-spin.
 
 ## 18. Tier rules (bait gates, rod eases)
 
@@ -304,7 +304,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 ## 21. Top Anglers board
 
 - The physical board ranks players in the room by their single most valuable catch (`save.best`, set in `applyCatch`, reset with the account). Each row shows rank, name, level, the fish's tier and name (tier-colored, ✨ if shiny) and its sell value. Players with no catch yet rank last, by coins.
-- The Players tab in the menu ranks by level.
+- The Anglers tab in the menu ranks by level.
 
 ## 22. Music and coin HUD
 
@@ -417,3 +417,11 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 - **Window** (top right, `src/game/chatbox.ts`): the last 8 lines, each removed 5 minutes after it arrived. "Press Enter to chat" sits under it. The window is half transparent while playing and full strength while typing. Enter opens the input (movement and hotkeys pause), Enter sends, Esc cancels. The browser always releases the mouse on Esc, so cancelling shows a small "click to keep playing" overlay instead of the pause menu (Esc again opens the menu). Tab while typing switches between all worlds and the current world; lines from another world are tagged with its name.
 - **Bubbles** (`src/game/avatars.ts`): players in the same room and map see a speech bubble over the speaker for 6 s (fading in the last second), cut to 40 characters. Only nearby players see it (full within 15 m, gone by 20 m), and it fades out when you stand right on the speaker (gone within 1.2 m, full again at 2.5 m) so it never covers your view.
 - **Rules** (`server/chat.ts`, one `ChatGate` shared by every room): 120 characters, control characters stripped and whitespace collapsed; 3 lines per 5 s per account, and no repeating the same line within 10 s (the sender gets a notice). Rude words, including common spellings like `sh1t`, are masked with asterisks.
+
+## 31. Interface style (Cozy Wood)
+
+- **Look:** walnut frames, parchment cards and gold accents, matching the town's stalls and signs, in the bundled Nunito font (`src/assets/fonts`). Colours are CSS variables at the top of `src/style.css` (`--wood-*`, `--paper*`, `--gold`, tier colours `--t1`-`--t5`). The casino counter uses the same pieces in burgundy and gold.
+- **HUD:** level badge with an XP ring and a coin counter (chips only in the casino) top left; spot and night hints only with a rod in hand; chat top right; hotbar with icons (fish drawn in their species colour by `src/game/fishicon.ts`), and the item's name pops up when switching slots; a short Tab / Enter / Esc reminder bottom left.
+- **Menu window:** one frame for everything. Header: who it belongs to (you, Marlow's Stall or the Prize Counter), tabs, and Esc ✕. Player tabs: Bag (setup, rods, bait), Wardrobe (preview, colour, face, owned cosmetics), Fishdex, Anglers, ⚙ Settings (controls, music, reset). Shop tabs: Gear, Cosmetics.
+- **Tiles and details:** items are tiles with their tier colour along the bottom edge. Clicking one selects it and shows it in the details panel on the right (stats, one plain sentence, and the main action: Equip, Buy, Wear). The Wardrobe applies clicks straight away since nothing is spent.
+- **Selling:** the shop and prize counter sit higher so the hotbar stays visible; a strip at the bottom explains clicking a fish to sell (or turn in), with "Sell all" in the shop.

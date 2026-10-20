@@ -20,6 +20,9 @@ import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
 import { ChatBox } from './chatbox';
+import { fishIcon } from './fishicon';
+import { rodIcon } from './rodicon';
+import { shortCoins } from './format';
 import { Player } from './player';
 import {
   animateFish,
@@ -50,7 +53,7 @@ import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, MULT_CAP, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { chipsFor, type BlackjackView, type Card } from './casino';
 import { load, newSave, save, type SaveData } from './state';
-import { BODY_COLORS, COSMETICS, COS_SLOTS, FACES, cosById, type CosSlot, type FaceId, type Look } from '../data/cosmetics';
+import { BODY_COLORS, COSMETICS, COS_SLOTS, FACES, cosById, isFace, type CosSlot, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
 import { World } from './world';
@@ -68,6 +71,10 @@ type Phase =
 
 const defaultLookWith = (color: number, face: string): Look => ({ color, face, hat: null, shirt: null, jewelry: null });
 
+/** Item icons shared by the hotbar and the menus. */
+const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
+/** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
+const shortRod = (name: string) => name.replace(/ Rod$/, '');
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const CAMP_TIPS = [
@@ -146,10 +153,11 @@ export class Game {
   private atVendor = false;
   private near: { label: string; act: () => void } | null = null;
 
-  private tab = 'players';
-  private shopTab: 'cosmetics' | 'gear' = 'cosmetics';
+  private tab = 'inventory';
+  private shopTab: 'cosmetics' | 'gear' = 'gear';
+  /** The item selected in each menu's tile grid, shown in its details panel. */
+  private pick: Partial<Record<'bag' | 'gear' | 'cos' | 'perk', string>> = {};
   private rigLook = '';
-  private invTab: 'tackle' | 'wardrobe' = 'tackle';
   private preview: CharacterPreview | null = null;
   private joining = false;
   private joinColor = BODY_COLORS[4];
@@ -161,6 +169,7 @@ export class Game {
   private betSlot = -1;
   private chat!: ChatBox;
   private hotbarHeld = -1;
+  private ctxShown: boolean | null = null;
   private bj: BlackjackView | null = null;
   private casinoMsg = '';
   private table: 'roulette' | 'blackjack' | 'prizes' | null = null;
@@ -501,7 +510,7 @@ export class Game {
       if (!this.locked) {
         this.holding = false;
         this.keys.clear();
-        if (!this.keepTab) this.tab = 'players';
+        if (!this.keepTab) this.tab = 'inventory';
         this.keepTab = false;
         this.renderMenu();
       }
@@ -571,18 +580,14 @@ export class Game {
   private onMenuClick(el: HTMLElement): void {
     const btn = el.closest('button') as HTMLButtonElement | null;
     if (!btn || btn.disabled) return;
-    const { tab, act, id } = btn.dataset;
-    if (tab) {
-      if (tab === 'play') {
-        audio.start();
-        if (this.forceActive) this.setMenu(false);
-        else this.world.renderer.domElement.requestPointerLock();
-        return;
-      }
-      this.tab = tab;
-    } else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
-    else if (act === 'shoptab') this.shopTab = id as 'cosmetics' | 'gear';
-    else if (act === 'invtab') this.invTab = id as 'tackle' | 'wardrobe';
+    const { tab, shop, pick, act, id } = btn.dataset;
+    if (act === 'close') return this.closeMenu();
+    if (tab) this.tab = tab;
+    else if (shop) this.shopTab = shop as 'cosmetics' | 'gear';
+    else if (pick) this.pick[pick as keyof typeof this.pick] = id;
+    else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
+    else if (act === 'music') audio.toggleMusic();
+    else if (act === 'sellall') return this.sellAll();
     else if (act === 'equiprod') this.equipRod(id!);
     else if (act === 'equipbait') this.equipBait(id!);
     else if (act === 'stow') this.stow(Number(id));
@@ -730,6 +735,11 @@ export class Game {
     this.refreshHud();
   }
 
+  /** Shop "Sell all": every fish in the hotbar, last slot first so indexes stay valid. */
+  private sellAll(): void {
+    for (let i = this.s.slots.length - 1; i >= 0; i--) if (this.s.slots[i]?.k === 'fish') this.sellSlot(i);
+  }
+
   /** Shop open: clicking a fish in the hotbar sells it. */
   private sellSlot(i: number): void {
     if (this.spin || !this.atVendor) return;
@@ -812,13 +822,14 @@ export class Game {
     const card = el.closest<HTMLElement>('[data-try]');
     if (!card || !this.preview) return;
     const [slot, id] = card.dataset.try!.split(':');
-    this.preview.set(on ? { ...this.s.look, [slot]: id } : this.s.look);
+    this.preview.set(on ? { ...this.previewLook(), [slot]: id } : this.previewLook());
   }
 
   /** Everyone online with their level, highest first. */
-  private leaders(): { name: string; level: number; color: number; me: boolean }[] {
-    const rows = [{ name: this.net.name, level: this.s.level, color: this.s.look.color, me: true }];
-    for (const p of this.net.players.values()) rows.push({ name: p.name, level: p.level ?? 1, color: p.look.color, me: false });
+  private leaders(): { name: string; level: number; color: number; face: FaceId; me: boolean }[] {
+    const face = (f: string) => (isFace(f) ? f : 'smile');
+    const rows = [{ name: this.net.name, level: this.s.level, color: this.s.look.color, face: face(this.s.look.face), me: true }];
+    for (const p of this.net.players.values()) rows.push({ name: p.name, level: p.level ?? 1, color: p.look.color, face: face(p.look.face), me: false });
     return rows.sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
   }
 
@@ -852,7 +863,7 @@ export class Game {
    * capture fails a "click to keep playing" overlay waits for the click that can.
    */
   private closeMenu(): void {
-    this.tab = 'players';
+    this.tab = 'inventory';
     this.setMenu(false);
     if (this.forceActive) return;
     this.showResume();
@@ -1015,20 +1026,36 @@ export class Game {
   }
 
   private casinoHtml(): string {
-    const busy = this.spin || (!!this.bj && !this.bj.done);
-    const perks = PERKS.map((p) => {
-        const owned = !p.consumable && this.s.perks.includes(p.id);
-        const locked = !!p.requires && !this.s.perks.includes(p.requires);
-        const status = owned ? 'Owned ✓' : locked ? 'Needs the previous charm' : `${p.chips} chips`;
-        const can = !owned && !locked && this.s.chips >= p.chips;
-        const extra = p.id === 'lure' ? ` · ${this.s.lure} charges left` : '';
-        return `<div class="card"><b>${p.icon} ${p.name}</b><div class="muted">${p.desc}${extra}</div><button data-act="perk" data-id="${p.id}" ${can ? '' : 'disabled'}>${status}</button></div>`;
-      }).join('');
-    const body = `<p class="muted">Click a fish in your hotbar (below) to turn it in. One chip is ${CHIP_COINS} 🪙 of fish value, so a winning fish is worth far more here than at the stall.</p><div class="grid">${perks}</div>`;
-    return `<h3>Casino · <b>${this.chipsText(this.s.chips)}</b> chips</h3>
-      ${body}
-      <p class="casino-msg">${this.casinoMsg}</p>
-      <p><button data-tab="play" ${busy ? 'disabled' : ''}>Leave table</button></p>`;
+    const s = this.s;
+    // Perks have no tier; colour them by price so the rarer unlocks stand out.
+    const tierOf = (chips: number) => (chips <= 20 ? 2 : chips <= 50 ? 3 : chips <= 100 ? 4 : 5);
+    const p = PERKS.find((x) => x.id === this.pick.perk) ?? PERKS.find((x) => !s.perks.includes(x.id)) ?? PERKS[0];
+    this.pick.perk = p.id;
+    const tiles = PERKS.map((p) => {
+      const owned = !p.consumable && s.perks.includes(p.id);
+      const locked = !!p.requires && !s.perks.includes(p.requires);
+      const sub = owned ? 'Owned' : locked ? '🔒 Locked' : `${p.chips} chips`;
+      return this.itemTile({ icon: p.icon, name: p.name, sub, tier: tierOf(p.chips), on: this.pick.perk === p.id, check: owned, ghost: !owned && (locked || s.chips < p.chips), attrs: `data-pick="perk" data-id="${p.id}"` });
+    }).join('');
+    const owned = !p.consumable && s.perks.includes(p.id);
+    const locked = !!p.requires && !s.perks.includes(p.requires);
+    const action = owned
+      ? this.btn('Owned ✓', '', 'ok', true)
+      : locked
+        ? this.btn(`Buy ${PERKS.find((x) => x.id === p.requires)!.name} first`, '', 'plain', true)
+        : s.chips < p.chips
+          ? this.btn(`Need ${p.chips} chips`, '', 'plain', true)
+          : this.btn(`Buy for ${p.chips} chips`, `data-act="perk" data-id="${p.id}"`);
+    const detail = this.detail({
+      icon: p.icon,
+      name: p.name,
+      tier: tierOf(p.chips),
+      badge: `<span class="badge" style="--c:var(--t${tierOf(p.chips)})">${p.consumable ? 'Consumable' : 'Permanent'} · ${p.chips} chips</span>`,
+      body: p.id === 'lure' ? `<div class="have">Charges left: <b>${s.lure}</b></div>` : '',
+      note: p.desc,
+      actions: action,
+    });
+    return `<div class="cols"><div class="main"><h4>Casino unlocks</h4><div class="tiles">${tiles}</div><p class="casino-msg">${this.casinoMsg}</p></div>${detail}</div>${this.sellStrip()}`;
   }
 
   /** Which table (if any) the player is standing at; while there, clicks hit the 3D bet patches and buttons. */
@@ -1184,7 +1211,7 @@ export class Game {
       };
       table(c.prizes, 'prizes', 'Prize counter · turn fish in for chips, buy perks');
       spots.push(
-        { d: at(c.mirror), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
+        { d: at(c.mirror), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
         { d: at(this.map.gate) - 0.5, label: `Exit to ${this.map.next?.name ?? 'the pond'}`, act: () => this.useGate() },
       );
     }
@@ -1215,7 +1242,7 @@ export class Game {
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
         { d: near(hub.leaderSpot), label: 'Top Anglers · see everyone online', act: () => this.openMenu('players') },
-        { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => { this.invTab = 'wardrobe'; this.openMenu('inventory'); } },
+        { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
@@ -1646,8 +1673,17 @@ export class Game {
     el.className = id;
   }
 
+  /** Spot and night hints only matter with a rod in hand, outside the casino. */
+  private updateContext(): void {
+    const fishing = !this.map.casino && this.s.slots[this.s.held]?.k === 'rod';
+    if (fishing === this.ctxShown) return;
+    this.ctxShown = fishing;
+    $('ctx').classList.toggle('hidden', !fishing);
+  }
+
   private tick(dt: number): void {
     this.updateWalking(dt);
+    this.updateContext();
     this.updateSpot();
     this.updateNight();
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
@@ -2037,36 +2073,38 @@ export class Game {
       void purse.offsetWidth;
       purse.classList.add('bump');
     }
-    $('xpbar').style.width =
-      s.level >= MAX_LEVEL
-        ? '100%'
-        : `${(s.xp / xpForNextLevel(s.level)) * 100}%`;
-    $('loc').textContent = this.map.name;
-    const chipsEl = $('chips');
-    chipsEl.textContent = this.chipsText(s.chips);
-    chipsEl.parentElement!.classList.toggle('hidden', s.chips <= 0 && !this.map.casino);
-    const status = [this.map.casino ? 'Casino Cove · turn fish in for chips at the prize counter' : ''];
-    if (this.net.connected) status.push(`${this.net.players.size + 1} online (${this.net.room})`);
-    $('statusline').textContent = status.filter(Boolean).join(' · ');
+    // XP fills the ring around the level badge (circumference 2π·25).
+    const xp = s.level >= MAX_LEVEL ? 1 : Math.min(1, s.xp / xpForNextLevel(s.level));
+    $('xpring').style.strokeDasharray = `${(xp * 157.08).toFixed(1)} 157.08`;
+    $('lvl').title = s.level >= MAX_LEVEL ? `Level ${s.level} (max)` : `Level ${s.level} · ${s.xp} / ${xpForNextLevel(s.level)} XP`;
+    // Chips only matter inside the casino.
+    $('chips').textContent = this.chipsText(s.chips);
+    $('chipbox').classList.toggle('hidden', !this.map.casino);
     this.setGateSign();
-    $('baitinfo').textContent = `${this.bait.name} ×${eco.baitCount(s, s.bait)} · ${this.rod.name}`;
     this.renderHotbar();
-    $('goal').textContent = `Next: ${nextGoal(s.level, s.dex)}`;
   }
 
   private renderMenu(): void {
-    document.querySelectorAll<HTMLButtonElement>('nav button').forEach((b) => {
-      b.classList.toggle('active', b.dataset.tab === this.tab);
-    });
+    if (this.tab === 'play') this.tab = 'inventory';
+    const vendor = this.tab === 'shop' || this.tab === 'casino';
+    document.body.classList.toggle('shopping', this.menuOpen && vendor);
+    $('menu').classList.toggle('casino', this.tab === 'casino');
+    $('menu-who').innerHTML = this.menuWhoHtml();
+    $('menu-tabs').innerHTML = this.menuTabsHtml();
     const el = $('tab');
-    if (this.tab === 'play') this.tab = 'players';
-    document.body.classList.toggle('shopping', this.menuOpen && (this.tab === 'shop' || this.tab === 'casino'));
+    el.className = `sheet tab-${this.tab}`;
     switch (this.tab) {
       case 'players':
         el.innerHTML = this.playersHtml();
         break;
       case 'inventory':
-        el.innerHTML = this.inventoryHtml();
+        el.innerHTML = this.bagHtml();
+        break;
+      case 'wardrobe':
+        el.innerHTML = this.wardrobeHtml();
+        break;
+      case 'settings':
+        el.innerHTML = this.settingsHtml();
         break;
       case 'shop':
         el.innerHTML = this.shopHtml();
@@ -2081,7 +2119,7 @@ export class Game {
     const slot = document.getElementById('pv-slot');
     if (slot) {
       const pv = this.getPreview();
-      pv.set(this.s.look);
+      pv.set(this.previewLook());
       slot.appendChild(pv.canvas);
       pv.start();
     } else if ($('join').classList.contains('hidden')) this.preview?.stop();
@@ -2096,59 +2134,51 @@ export class Game {
     const activeBait = eco.activeSlot(s);
     let html = '';
     s.slots.forEach((sl, i) => {
+      // Icon, a short label underneath, and an optional corner badge (stack size or win multiplier).
       let body = '';
       let cls = 'slot';
+      let ring = '';
       if (sl?.k === 'bait') {
-        body = `<span>${byId(BAITS, sl.id).name}</span><em>×${sl.n}${s.locker.bait[sl.id] ? ` +${s.locker.bait[sl.id]} 🧰` : ''}</em>`;
+        body = `<span class="q">×${sl.n}</span><span class="ic">${BAIT_ICON[sl.id] ?? '🪱'}</span><span class="nm">${byId(BAITS, sl.id).name}</span>`;
         if (i === activeBait) cls += ' use';
       } else if (sl?.k === 'rod') {
-        body = `<span>${byId(RODS, sl.id).name}</span><em>Rod</em>`;
+        body = `<span class="ic">${rodIcon(byId(RODS, sl.id).tier)}</span><span class="nm">${shortRod(byId(RODS, sl.id).name)}</span>`;
         if (sl.id === s.rod) cls += ' use';
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
-        body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${eco.fishValue(sl)} 🪙</em>`;
+        ring = sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity];
+        const mult = sl.mult && sl.mult > 1 ? `<span class="q">×${sl.mult}</span>` : '';
+        body = `${mult}<span class="ic">${fishIcon(f.color, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
+        cls += ' fish';
       } else cls += ' empty';
       if (i === s.held) cls += moved ? ' held pick' : ' held';
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
       if (this.tab === 'casino' && this.menuOpen && i === this.betSlot && sl?.k === 'fish') cls += ' bet';
       if (sellable) cls += ' sellable';
       const tip = sellable ? ` data-sell="Sell · ${eco.sellPrice(this.s, sl)} 🪙"` : '';
-      html += `<div class="${cls}" data-i="${i}"${tip}><i>${i + 1}</i>${body}</div>`;
+      const name = sl?.k === 'fish' ? ` title="${byId(FISH, sl.fishId).name}"` : '';
+      html += `<div class="${cls}" data-i="${i}"${tip}${name}${ring ? ` style="--ring:${ring}"` : ''}><i>${i + 1}</i>${body}</div>`;
     });
     const el = $('hotbar');
     if (el.dataset.h !== html) {
       el.dataset.h = html;
       el.innerHTML = html;
     }
+    if (moved) this.showHeldName();
   }
 
-  private playersHtml(): string {
-    const rows = this.leaders()
-      .map(
-        (p, i) =>
-          `<div class="row${p.me ? ' me' : ''}"><div><span class="rank">${i + 1}</span><span class="dot" style="background:#${p.color.toString(16).padStart(6, '0')}"></span>${i === 0 ? '👑 ' : ''}${escapeHtml(p.name)}${p.me ? ' <span class="muted">(you)</span>' : ''}</div><div>Lv <b>${p.level}</b></div></div>`,
-      )
-      .join('');
-    const reset = this.confirmReset
-      ? `<div class="danger">Erase all progress (coins, gear, fish, cosmetics)? This cannot be undone.<br><button data-act="resetyes" class="bad">Yes, reset</button> <button data-act="resetno">Cancel</button></div>`
-      : `<div class="danger"><button data-act="reset">Reset account</button></div>`;
-    return `<h3>Players ${this.net.connected ? `· ${this.net.room}` : '· offline'}</h3>${rows}${reset}`;
-  }
-
-  private faceIcons: Partial<Record<FaceId, string>> = {};
-
-  private facesHtml(): string {
-    return FACES.map((f) => {
-      const src = (this.faceIcons[f.id] ??= faceIcon(f.id));
-      const on = this.s.look.face === f.id;
-      return `<button class="face${on ? ' on' : ''}" data-act="face" data-id="${f.id}" data-try="face:${f.id}" data-tip="${f.name}${on ? ' · wearing' : ' · click to wear'}"><img src="${src}" alt="${f.name}"></button>`;
-    }).join('');
-  }
-
-  private swatchHtml(): string {
-    return BODY_COLORS.map(
-      (c) => `<button class="swatch${c === this.s.look.color ? ' on' : ''}" data-act="color" data-id="${c}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`,
-    ).join('');
+  /** Names the item in hand above the hotbar for a moment after switching slots. */
+  private showHeldName(): void {
+    const sl = this.s.slots[this.s.held];
+    const el = $('heldname');
+    if (!sl) return el.classList.remove('show');
+    el.textContent =
+      sl.k === 'fish' ? `${sl.shiny ? '✨ ' : ''}${byId(FISH, sl.fishId).name} · ${eco.fishValue(sl)} 🪙`
+      : sl.k === 'rod' ? byId(RODS, sl.id).name
+      : `${byId(BAITS, sl.id).name} ×${sl.n}`;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
   }
 
   private tierColor(tier: number): string {
@@ -2159,158 +2189,366 @@ export class Game {
     return h.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
-  private tile(icon: string, name: string, price: string, tier: number, tip: string, act: string, id: string, off: boolean, own = false, raw = ''): string {
-    const attrs = raw || `data-act="${act}" data-id="${id}"`;
-    return `<button class="tile${off ? ' off' : ''}${own ? ' own' : ''}" style="--c:${this.tierColor(tier)}" data-tip="${this.esc(tip)}" ${attrs}><span class="ic">${icon}</span><span class="nm">${name}</span><span class="pr">${price}</span></button>`;
-  }
-
-
   private tierBadge(tier: number): string {
     return `<span class="tier" style="color:${RARITY_COLOR[TIERS[tier - 1]]};border-color:${RARITY_COLOR[TIERS[tier - 1]]}">T${tier} ${tierName(tier)}</span>`;
   }
 
-  private rodStats(r: (typeof RODS)[number]): string {
-    return `Reach ${r.castDistance} m · luck ×${r.luck} · easier reeling ×${r.control} · easy fights up to tier ${r.tier}`;
+  // ---------- menu frame ----------
+
+  /** Header left: who the window belongs to (you, or the vendor whose counter it is). */
+  private menuWhoHtml(): string {
+    if (this.tab === 'shop') {
+      const v = this.map.vendor;
+      return `<img src="${faceIcon(v.face ?? 'smile')}" alt=""><div><b>${v.name}'s Stall</b><span><span class="coin sm"></span> ${this.s.coins.toLocaleString()} to spend</span></div>`;
+    }
+    if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
+    return `<img src="${this.faceSrc(this.s.look.face as FaceId)}" alt=""><div><b>${escapeHtml(this.net.name || 'You')}</b><span>Level ${this.s.level} · ${this.s.coins.toLocaleString()} coins</span></div>`;
   }
 
-  private baitStats(b: (typeof BAITS)[number]): string {
-    return `Luck ×${b.luck} · faster bites · hooks fish up to tier ${b.tier}`;
+  private menuTabsHtml(): string {
+    const tab = (id: string, icon: string, label: string, on: boolean, attr = 'data-tab') =>
+      `<button class="tab${on ? ' on' : ''}" ${attr}="${id}"${label ? '' : ' title="Settings"'}><span>${icon}</span>${label}</button>`;
+    if (this.tab === 'shop')
+      return tab('gear', '🎣', 'Gear', this.shopTab === 'gear', 'data-shop') + tab('cosmetics', '👕', 'Cosmetics', this.shopTab === 'cosmetics', 'data-shop');
+    if (this.tab === 'casino') return '';
+    return [
+      tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
+      tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
+      tab('dex', '📖', 'Fishdex', this.tab === 'dex'),
+      tab('players', '👥', 'Anglers', this.tab === 'players'),
+      tab('settings', '⚙️', '', this.tab === 'settings'),
+    ].join('');
   }
 
-  private inventoryHtml(): string {
-    const tabs = (['tackle', 'wardrobe'] as const)
-      .map((k) => `<button data-act="invtab" data-id="${k}" class="${this.invTab === k ? 'active' : ''}">${k === 'tackle' ? 'Tackle' : 'Wardrobe'}</button>`)
-      .join('');
-    return `<h3>Inventory</h3><nav class="sub">${tabs}</nav>${this.invTab === 'tackle' ? this.tackleHtml() : this.wardrobeHtml()}`;
+  private faceSrc(id: FaceId): string {
+    return (this.faceIcons[id] ??= faceIcon(id));
   }
 
-  private tackleHtml(): string {
+  /** What the wardrobe/shop preview wears: your look, plus the cosmetic picked in the shop. */
+  private previewLook(): Look {
+    const c = this.tab === 'shop' && this.shopTab === 'cosmetics' ? cosById(this.pick.cos) : undefined;
+    return c ? { ...this.s.look, [c.slot]: c.id } : this.s.look;
+  }
+
+  // ---------- shared pieces ----------
+
+  /** A square item tile; clicking it selects the item (`data-pick`) unless `attrs` says otherwise. */
+  private itemTile(o: { icon: string; name: string; sub: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string }): string {
+    const t = Math.max(1, Math.min(5, o.tier));
+    return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}" style="--c:var(--t${t})" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span><span class="st">${o.sub}</span></button>`;
+  }
+
+  private badge(tier: number): string {
+    const t = Math.max(1, Math.min(5, tier));
+    return `<span class="badge" style="--c:var(--t${t})">Tier ${t} · ${tierName(t)}</span>`;
+  }
+
+  private meter(label: string, value: string, frac: number, tier = 3): string {
+    return `<div class="stat"><div class="srow"><span>${label}</span><span>${value}</span></div><div class="meter"><i style="width:${Math.round(Math.max(0.06, Math.min(1, frac)) * 100)}%;--c:var(--t${tier})"></i></div></div>`;
+  }
+
+  /** The details panel on the right: big icon, name, stats, one plain sentence, and the main action. */
+  private detail(o: { icon: string; name: string; tier: number; badge?: string; body: string; note: string; actions: string; top?: string }): string {
+    const t = Math.max(1, Math.min(5, o.tier));
+    return `<aside class="detail">${o.top ?? ''}<div class="hero"><span class="ic" style="--c:var(--t${t})">${o.icon}</span><div><b>${o.name}</b>${o.badge ?? this.badge(o.tier)}</div></div>${o.body}<p>${o.note}</p><div class="actions">${o.actions}</div></aside>`;
+  }
+
+  private btn(label: string, attrs: string, kind: 'gold' | 'ok' | 'plain' | 'bad' = 'gold', disabled = false): string {
+    return `<button class="btn ${kind}" ${attrs}${disabled ? ' disabled' : ''}>${label}</button>`;
+  }
+
+  // ---------- Bag ----------
+
+  private bagHtml(): string {
     const s = this.s;
     const rod = this.rod;
     const bait = this.bait;
     const have = eco.baitCount(s, s.bait);
     const reach = bait.tier;
-    const chips = TIERS.map((_, i) => {
-      const t = i + 1;
-      const on = t <= reach;
-      const names = FISH.filter((f) => f.tier === t)
-        .map((f) => (s.dex[f.id] ? f.name : '???') + (f.night ? ' 🌙' : ''))
-        .join(', ');
-      return `<div class="chip${on ? ' on' : ''}" style="--c:${RARITY_COLOR[TIERS[i]]}"><b>T${t} ${tierName(t)}</b><span>${on ? names : '🔒 need T' + t + ' bait'}</span></div>`;
-    }).join('');
-    let hint = '';
-    if (have <= 0) hint = 'You have no bait equipped - buy or equip some below.';
-    else if (rod.tier < bait.tier) hint = `Your rod (T${rod.tier}) is under-tier for ${bait.name} (T${bait.tier}) - you can hook those fish, but they will fight much harder. Upgrade your rod!`;
-    else if (bait.tier < rod.tier) hint = `Your bait (T${bait.tier}) is holding you back - equip higher-tier bait.`;
-    else if (reach < 5) hint = `Use tier ${reach + 1} bait to reach ${tierName(reach + 1)} fish - and a matching rod to land them easily.`;
-    else hint = 'Maxed out - nothing can stop you now.';
+    let hint: string;
+    if (have <= 0) hint = 'No bait in your hotbar - equip some below.';
+    else if (rod.tier < bait.tier) hint = `Your rod is lower tier than your bait, so those fish fight hard. Upgrade your rod.`;
+    else if (bait.tier < rod.tier) hint = `Your bait is holding you back - better bait reaches rarer fish.`;
+    else if (reach < 5) hint = `${BAITS.find((b) => b.tier === reach + 1)!.name} bait unlocks ${tierName(reach + 1)} fish.`;
+    else hint = 'Maxed out - every fish in the lake can bite.';
+    const pips = TIERS.map((_, i) => `<span class="pip${i < reach ? ' on' : ''}" style="--c:var(--t${i + 1})">${i + 1}</span>`).join('');
+    const vendor = this.map.vendor.name;
+    // Until the player picks something, show the rod in use (recomputed, since the save can change underneath).
+    const sel = this.pick.bag ?? `rod:${s.rod}`;
 
-    const hotRod = s.slots.findIndex((x) => x?.k === 'rod' && x.id === s.rod);
     const rods = RODS.map((r) => {
       const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
       const owned = eco.ownsRod(s, r.id);
-      const tip = `<b style="color:${this.tierColor(r.tier)}">${r.name}</b><br>${this.tierBadge(r.tier)}<br>${this.rodStats(r)}<br>${equipped ? 'Equipped - click to stow' : owned ? 'Click to equip' : s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Buy at the shop · ${r.price} 🪙`}`;
-      const label = equipped ? 'Equipped ✓' : owned ? 'Owned' : s.level < r.unlockLevel ? `🔒 Lv ${r.unlockLevel}` : 'In shop';
-      const act = equipped ? `data-act="stow" data-id="${hotRod}"` : owned ? `data-act="equiprod" data-id="${r.id}"` : '';
-      return this.tile('🎣', r.name, label, r.tier, tip, '', '', !owned, equipped, act);
+      const sub = equipped ? 'Equipped' : owned ? 'Owned' : s.level < r.unlockLevel ? `🔒 Lv ${r.unlockLevel}` : `At ${vendor}'s`;
+      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, tier: r.tier, on: sel === `rod:${r.id}`, check: equipped, ghost: !owned, attrs: `data-pick="bag" data-id="rod:${r.id}"` });
     }).join('');
-    const baitIcon: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
-    const baitRows = BAITS.map((b) => {
+    const baits = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
       const equipped = s.bait === b.id && s.slots.some((x) => x?.k === 'bait' && x.id === b.id);
-      const slot = s.slots.findIndex((x) => x?.k === 'bait' && x.id === b.id);
-      const lvl = s.level < b.unlockLevel;
-      const usable = n > 0 && !lvl;
-      const note = equipped ? 'Equipped - click to stow' : !usable ? (lvl ? `Unlocks at level ${b.unlockLevel}` : `Buy at the shop · ${b.price * eco.BAIT_PACK} 🪙 / ${eco.BAIT_PACK}`) : 'Click to equip';
-      const tip = `<b style="color:${this.tierColor(b.tier)}">${b.name}</b><br>${this.tierBadge(b.tier)}<br>${this.baitStats(b)}<br>You have ${n}<br>${note}`;
-      const label = equipped ? `×${n} ✓` : lvl ? `🔒 Lv ${b.unlockLevel}` : n > 0 ? `×${n}` : 'In shop';
-      const act = equipped ? `data-act="stow" data-id="${slot}"` : usable ? `data-act="equipbait" data-id="${b.id}"` : '';
-      return this.tile(baitIcon[b.id] ?? '🪱', b.name, label, b.tier, tip, '', '', !usable, equipped, act);
+      const sub = n > 0 ? `×${n}` : s.level < b.unlockLevel ? `🔒 Lv ${b.unlockLevel}` : `At ${vendor}'s`;
+      return this.itemTile({ icon: BAIT_ICON[b.id] ?? '🪱', name: b.name, sub, tier: b.tier, on: sel === `bait:${b.id}`, check: equipped, ghost: n <= 0, attrs: `data-pick="bag" data-id="bait:${b.id}"` });
     }).join('');
-    return `<div class="setup"><div><b>${rod.name}</b> + <b>${bait.name}</b> → reach <b style="color:${RARITY_COLOR[TIERS[reach - 1]]}">tier ${reach} · ${tierName(reach)}</b></div><div class="muted">${hint}</div></div>
-      <div class="chips">${chips}</div>
-      <p class="muted">Your hotbar holds the rod and bait you use; the rest of your tackle waits in the locker.</p>
-      <h4>Rods</h4><div class="tiles">${rods}</div><h4>Bait</h4><div class="tiles">${baitRows}</div>`;
+
+    return `<div class="cols"><div class="main">
+        <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex)}</p>
+        <h4>Your setup</h4>
+        <div class="setup"><span class="big">${rodIcon(rod.tier)}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>
+          <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div></div><div class="pips">${pips}</div></div>
+        <h4>Rods</h4><div class="tiles">${rods}</div>
+        <h4>Bait</h4><div class="tiles">${baits}</div>
+        <p class="foot">Your hotbar holds the rod and bait you fish with; everything else waits in your tackle locker.</p>
+      </div>${this.bagDetail(sel)}</div>`;
+  }
+
+  private bagDetail(sel: string): string {
+    const s = this.s;
+    const [kind, id] = sel.split(':');
+    const vendor = this.map.vendor.name;
+    if (kind === 'bait') {
+      const b = byId(BAITS, id);
+      const n = eco.baitCount(s, b.id);
+      const slot = s.slots.findIndex((x) => x?.k === 'bait' && x.id === b.id);
+      const equipped = s.bait === b.id && slot >= 0;
+      const lvl = s.level < b.unlockLevel;
+      const actions = equipped
+        ? this.btn('In your hotbar ✓', '', 'ok', true) + this.btn('Put away in locker', `data-act="stow" data-id="${slot}"`, 'plain')
+        : n > 0 && !lvl
+          ? this.btn('Equip', `data-act="equipbait" data-id="${b.id}"`)
+          : this.btn(lvl ? `Unlocks at level ${b.unlockLevel}` : `Sold at ${vendor}'s · ${b.price * eco.BAIT_PACK} 🪙 / ${eco.BAIT_PACK}`, '', 'plain', true);
+      return this.detail({
+        icon: BAIT_ICON[b.id] ?? '🪱',
+        name: b.name,
+        tier: b.tier,
+        body: this.meter('Luck', `×${b.luck}`, b.luck / 2, b.tier) + this.meter('Reaches', `Tier ${b.tier}`, b.tier / 5, b.tier) + `<div class="have">You have <b>${n}</b></div>`,
+        note: `Bait decides which fish can bite: this one hooks fish up to ${tierName(b.tier)}.`,
+        actions,
+      });
+    }
+    const r = byId(RODS, id);
+    const owned = eco.ownsRod(s, r.id);
+    const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
+    const hotRod = s.slots.findIndex((x) => x?.k === 'rod' && x.id === r.id);
+    const actions = equipped
+      ? this.btn('Equipped ✓', '', 'ok', true) + this.btn('Put away in locker', `data-act="stow" data-id="${hotRod}"`, 'plain')
+      : owned
+        ? this.btn('Equip', `data-act="equiprod" data-id="${r.id}"`)
+        : this.btn(s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Sold at ${vendor}'s · ${r.price.toLocaleString()} 🪙`, '', 'plain', true);
+    return this.detail({
+      icon: rodIcon(r.tier),
+      name: r.name,
+      tier: r.tier,
+      body: this.meter('Cast reach', `${r.castDistance} m`, r.castDistance / 34, r.tier) + this.meter('Luck', `×${r.luck}`, r.luck / 2.5, r.tier) + this.meter('Easier fights', `×${r.control}`, r.control / 2.2, r.tier),
+      note: `Fights with fish up to ${tierName(r.tier)} feel easy. Rarer fish still bite, they just pull harder.`,
+      actions,
+    });
+  }
+
+  // ---------- Wardrobe ----------
+
+  private faceIcons: Partial<Record<FaceId, string>> = {};
+
+  private facesHtml(): string {
+    return FACES.map((f) => {
+      const on = this.s.look.face === f.id;
+      return `<button class="face${on ? ' on' : ''}" data-act="face" data-id="${f.id}" data-try="face:${f.id}" data-tip="${f.name}${on ? ' · wearing' : ''}"><img src="${this.faceSrc(f.id)}" alt="${f.name}"></button>`;
+    }).join('');
+  }
+
+  private swatchHtml(): string {
+    return BODY_COLORS.map(
+      (c) => `<button class="swatch${c === this.s.look.color ? ' on' : ''}" data-act="color" data-id="${c}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`,
+    ).join('');
   }
 
   private wardrobeHtml(): string {
+    const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
     const sections = COS_SLOTS.map((slot) => {
-      const owned = COSMETICS.filter((c) => c.slot === slot && this.s.owned.includes(c.id));
       const worn = this.s.look[slot];
-      const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
-      const cards = owned
+      const cards = COSMETICS.filter((c) => c.slot === slot && this.s.owned.includes(c.id))
         .map((c) => {
           const on = worn === c.id;
-          const tip = `<b style="color:${this.tierColor(c.tier)}">${c.name}</b><br>${c.slot} · style tier ${c.tier}<br>${on ? 'Wearing - click to remove' : 'Click to wear'}`;
-          return `<button class="tile${on ? ' own' : ''}" style="--c:${this.tierColor(c.tier)}" data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}" data-tip="${this.esc(tip)}"><span class="ic">${icon[c.slot]}</span><span class="nm">${c.name}</span><span class="pr">${on ? 'Wearing ✓' : 'Owned'}</span></button>`;
+          return this.itemTile({ icon: icon[slot], name: c.name, sub: on ? 'Wearing' : 'Wear', tier: c.tier + 1, on, check: on, attrs: `data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}"`, tip: on ? 'Click to take off' : 'Click to wear' });
         })
         .join('');
-      return `<h4>${slot === 'jewelry' ? 'Jewelry' : slot[0].toUpperCase() + slot.slice(1) + 's'}</h4><div class="tiles">${cards || '<span class="muted">Nothing owned yet - visit the shop.</span>'}</div>`;
+      const title = slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`;
+      return `<h4>${title}</h4><div class="tiles">${cards || `<p class="empty">Nothing yet - ${this.map.vendor.name}'s stall sells ${title.toLowerCase()}.</p>`}</div>`;
     }).join('');
-    return `<div class="split"><div><div id="pv-slot"></div><div class="swatches">${this.swatchHtml()}</div><p class="muted drag-hint">Drag to turn</p></div><div class="grow"><h4>Face</h4><div class="faces">${this.facesHtml()}</div>${sections}</div></div>`;
+    return `<div class="cols wardrobe"><div class="side"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><h4>Colour</h4><div class="swatches">${this.swatchHtml()}</div></div>
+      <div class="main"><h4>Face</h4><div class="faces">${this.facesHtml()}</div>${sections}</div></div>`;
   }
 
-  private shopHtml(): string {
-    const here = this.atVendor;
-    const tabs = (['cosmetics', 'gear'] as const)
-      .map((k) => `<button data-act="shoptab" data-id="${k}" class="${this.shopTab === k ? 'active' : ''}">${k === 'cosmetics' ? 'Cosmetics' : 'Gear'}</button>`)
-      .join('');
-    let body: string;
-    if (this.shopTab === 'cosmetics') {
-      const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
-      const cards = COSMETICS.slice()
-        .sort((a, b) => a.price - b.price)
-        .map((c) => {
-          const has = this.s.owned.includes(c.id);
-          const wearing = this.s.look[c.slot] === c.id;
-          const tip = `<b style="color:${this.tierColor(c.tier)}">${c.name}</b><br>${c.slot} · style tier ${c.tier}<br>${has ? (wearing ? 'Wearing - click to remove' : 'Owned - click to wear') : `Click to buy · ${c.price} 🪙`}`;
-          const act = has ? `data-act="equip" data-slot="${c.slot}" data-id="${wearing ? '' : c.id}"` : `data-act="buycos" data-id="${c.id}"`;
-          return `<button class="tile${has ? ' own' : ''}${!has && this.s.coins < c.price ? ' off' : ''}" style="--c:${this.tierColor(c.tier)}" data-try="${c.slot}:${c.id}" data-tip="${this.esc(tip)}" ${act}><span class="ic">${icon[c.slot]}</span><span class="nm">${c.name}</span><span class="pr">${has ? (wearing ? 'Wearing ✓' : 'Owned') : `${c.price} 🪙`}</span></button>`;
-        })
-        .join('');
-      body = `<div class="split"><div><div id="pv-slot"></div><p class="muted">Hover an item to try it on.</p></div><div class="tiles grow">${cards}</div></div>`;
-    } else {
-      const rods = this.map.stock.rods.map((id) => {
-        const r = byId(RODS, id);
-        const has = eco.ownsRod(this.s, id);
-        const lvl = this.s.level < r.unlockLevel;
-        const price = has ? 'Owned ✓' : lvl ? `🔒 Lv ${r.unlockLevel}` : r.price ? `${r.price} 🪙` : 'Free';
-        const tip = `<b style="color:${this.tierColor(r.tier)}">${r.name}</b><br>${this.tierBadge(r.tier)}<br>${this.rodStats(r)}<br>${has ? 'You own this - equip it in Inventory' : lvl ? `Unlocks at level ${r.unlockLevel}` : r.price ? `Click to buy · ${r.price} 🪙` : 'Free'}`;
-        return this.tile('🎣', r.name, price, r.tier, tip, `buyrod`, id, has || lvl || this.s.coins < r.price);
-      });
-      const baitIcon: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
-      const bait = this.map.stock.bait.map((id) => {
-        const b = byId(BAITS, id);
-        const cost = b.price * eco.BAIT_PACK;
-        const lvl = this.s.level < b.unlockLevel;
-        const tip = `<b style="color:${this.tierColor(b.tier)}">${b.name} ×${eco.BAIT_PACK}</b><br>${this.tierBadge(b.tier)}<br>${this.baitStats(b)}<br>You have ${eco.baitCount(this.s, id)}<br>${lvl ? `Unlocks at level ${b.unlockLevel}` : `Click to buy · ${cost} 🪙`}`;
-        return this.tile(baitIcon[id] ?? '🪱', `${b.name} ×${eco.BAIT_PACK}`, lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost} 🪙`, b.tier, tip, 'buybait', id, lvl || this.s.coins < cost);
-      });
-      body = `<p class="muted">Hover for stats. Border color = tier. Gear goes to your tackle locker - equip it in Inventory (<b>Tab</b>). Bait decides which fish bite; a rod of the fish's tier makes the fight easier.</p><h4>Rods</h4><div class="tiles">${rods.join('')}</div><h4>Bait</h4><div class="tiles">${bait.join('')}</div>`;
-    }
-    return this.shopFrame(tabs, body, here);
-  }
-
-  private shopFrame(tabs: string, body: string, here: boolean): string {
-    return `<h3>${this.map.vendor.name}'s Shop · you have <b>${this.s.coins}</b> 🪙</h3>
-      <nav class="sub">${tabs}</nav>
-      <p class="muted">Click a fish in your hotbar (below) to sell it.</p>
-      ${body}
-      <p><button data-tab="play">Leave shop</button></p>`;
-  }
+  // ---------- Fishdex ----------
 
   private dexHtml(): string {
-    const found = Object.keys(this.s.dex).length;
+    const found = FISH.filter((f) => this.s.dex[f.id]).length;
     const cards = FISH.map((f) => {
       const e = this.s.dex[f.id];
-      if (e) {
-        return `<div class="card"><b style="color:${RARITY_COLOR[f.rarity]}">${f.name}</b><div class="muted">${f.night ? '🌙 Night only · ' : ''}Caught ${e.count} · best ${e.best} cm</div></div>`;
-      }
-      const rodName = RODS.find((r) => r.tier === f.tier)!.name;
+      const moon = f.night ? '<span class="moon" title="Bites at night">🌙</span>' : '';
+      if (e) return `<div class="fish" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.color)}<b>${f.name}</b>${this.badge(f.tier)}<span>Caught ${e.count} · best ${e.best} cm</span></div>`;
+      const rodName = shortRod(RODS.find((r) => r.tier === f.tier)!.name);
       const baitName = BAITS.find((b) => b.tier === f.tier)!.name;
-      const where = f.locations.map((l) => byId(LOCATIONS, l).name).join(', ');
-      return `<div class="card unknown"><b>???</b><div class="muted">${this.tierBadge(f.tier)} · ${where}${f.night ? ' · 🌙 Night only' : ''}<br>Needs: ${rodName}+ and ${baitName}+</div></div>`;
+      return `<div class="fish unknown" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.color, { hidden: true })}<b>???</b>${this.badge(f.tier)}<span>Try a ${rodName} rod with ${baitName}</span></div>`;
     }).join('');
-    return `<p>${found} / ${FISH.length} discovered</p><div class="grid">${cards}</div>`;
+    return `<div class="dex-head"><b>${found} / ${FISH.length}</b> species discovered<div class="meter big"><i style="width:${(found / FISH.length) * 100}%;--c:var(--gold)"></i></div></div><div class="dex">${cards}</div>`;
+  }
+
+  // ---------- Anglers ----------
+
+  private playersHtml(): string {
+    const rows = this.leaders()
+      .map(
+        (p, i) =>
+          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><b>${escapeHtml(p.name)}</b>${p.me ? '<span class="you">you</span>' : ''}<span class="lv">Lv ${p.level}</span></div>`,
+      )
+      .join('');
+    const head = this.net.connected ? `<b>${this.net.players.size + 1}</b> online now` : 'Playing offline - join a server to fish with others.';
+    // All-time ranking by most valuable single catch, the same list as the Top Anglers board in the plaza.
+    const top = this.anglers()
+      .filter((a) => a.value > 0)
+      .slice(0, 10)
+      .map((a, i) => {
+        const f = FISH.find((x) => x.name === a.fish);
+        const me = a.name === this.net.name;
+        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.color, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span></div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
+      })
+      .join('');
+    return `<div class="cols anglers-cols">
+      <div><h4>Online now</h4><p class="list-head">${head}</p><div class="anglers">${rows}</div></div>
+      <div><h4>Top anglers · best single catch</h4><div class="anglers">${top || '<p class="empty">No catches yet - be the first on the board.</p>'}</div></div>
+    </div>`;
+  }
+
+  // ---------- Settings ----------
+
+  private settingsHtml(): string {
+    const keys: [string, string][] = [
+      ['W A S D', 'Walk'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Talk / interact'],
+      ['Hold click', 'Charge a cast - let go in the gold zone for a perfect cast'], ['Click', 'Hook when the ! appears'],
+      ['Hold click', 'Reel - let go when the fish surges'], ['1-5 / Scroll', 'Take an item in hand'], ['G', 'Drop the item in hand'],
+      ['Tab', 'Open your bag'], ['Enter', 'Chat'], ['M', 'Music on / off'], ['Esc', 'Menu / close'],
+    ];
+    const controls = keys.map(([k, v]) => `<div class="key">${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</div><div>${v}</div>`).join('');
+    const reset = this.confirmReset
+      ? `<p>Erase coins, level, gear, fish, Fishdex and cosmetics? Your name, colour and face stay. This can't be undone.</p>${this.btn('Yes, reset my account', 'data-act="resetyes"', 'bad')}${this.btn('Cancel', 'data-act="resetno"', 'plain')}`
+      : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
+    return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
+      <aside class="detail"><h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+  }
+
+  // ---------- Shop ----------
+
+  private shopHtml(): string {
+    const body = this.shopTab === 'cosmetics' ? this.cosmeticsShopHtml() : this.gearShopHtml();
+    return `${body}${this.sellStrip()}`;
+  }
+
+  private gearShopHtml(): string {
+    const s = this.s;
+    this.pick.gear ??= `rod:${this.map.stock.rods.find((id) => !eco.ownsRod(s, id)) ?? this.map.stock.rods[0]}`;
+    const rods = this.map.stock.rods.map((id) => {
+      const r = byId(RODS, id);
+      const has = eco.ownsRod(s, id);
+      const lvl = s.level < r.unlockLevel;
+      const sub = has ? 'Owned' : lvl ? `🔒 Lv ${r.unlockLevel}` : r.price ? `${r.price.toLocaleString()} 🪙` : 'Free';
+      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, tier: r.tier, on: this.pick.gear === `rod:${id}`, check: has, ghost: !has && (lvl || s.coins < r.price), attrs: `data-pick="gear" data-id="rod:${id}"` });
+    }).join('');
+    const baits = this.map.stock.bait.map((id) => {
+      const b = byId(BAITS, id);
+      const cost = b.price * eco.BAIT_PACK;
+      const lvl = s.level < b.unlockLevel;
+      return this.itemTile({ icon: BAIT_ICON[id] ?? '🪱', name: `${b.name} ×${eco.BAIT_PACK}`, sub: lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost.toLocaleString()} 🪙`, tier: b.tier, on: this.pick.gear === `bait:${id}`, ghost: lvl || s.coins < cost, attrs: `data-pick="gear" data-id="bait:${id}"` });
+    }).join('');
+    return `<div class="cols"><div class="main"><h4>Rods</h4><div class="tiles">${rods}</div><h4>Bait · packs of ${eco.BAIT_PACK}</h4><div class="tiles">${baits}</div>
+      <p class="foot">New gear goes to your tackle locker. Equip it from your Bag (<kbd>Tab</kbd>).</p></div>${this.gearDetail()}</div>`;
+  }
+
+  private gearDetail(): string {
+    const s = this.s;
+    const [kind, id] = this.pick.gear!.split(':');
+    if (kind === 'bait') {
+      const b = byId(BAITS, id);
+      const cost = b.price * eco.BAIT_PACK;
+      const lvl = s.level < b.unlockLevel;
+      const action = lvl
+        ? this.btn(`Unlocks at level ${b.unlockLevel}`, '', 'plain', true)
+        : s.coins < cost
+          ? this.btn(`Need ${cost.toLocaleString()} 🪙`, '', 'plain', true)
+          : this.btn(`Buy ${eco.BAIT_PACK} for ${cost.toLocaleString()} 🪙`, `data-act="buybait" data-id="${b.id}"`);
+      return this.detail({
+        icon: BAIT_ICON[b.id] ?? '🪱',
+        name: b.name,
+        tier: b.tier,
+        body: this.meter('Luck', `×${b.luck}`, b.luck / 2, b.tier) + this.meter('Reaches', `Tier ${b.tier}`, b.tier / 5, b.tier) + `<div class="have">You have <b>${eco.baitCount(s, b.id)}</b></div>`,
+        note: `Hooks fish up to ${tierName(b.tier)}. Each cast uses one.`,
+        actions: action,
+      });
+    }
+    const r = byId(RODS, id);
+    const has = eco.ownsRod(s, r.id);
+    const lvl = s.level < r.unlockLevel;
+    const action = has
+      ? this.btn('Owned ✓', '', 'ok', true)
+      : lvl
+        ? this.btn(`Unlocks at level ${r.unlockLevel}`, '', 'plain', true)
+        : s.coins < r.price
+          ? this.btn(`Need ${r.price.toLocaleString()} 🪙`, '', 'plain', true)
+          : this.btn(r.price ? `Buy for ${r.price.toLocaleString()} 🪙` : 'Take it (free)', `data-act="buyrod" data-id="${r.id}"`);
+    return this.detail({
+      icon: rodIcon(r.tier),
+      name: r.name,
+      tier: r.tier,
+      body: this.meter('Cast reach', `${r.castDistance} m`, r.castDistance / 34, r.tier) + this.meter('Luck', `×${r.luck}`, r.luck / 2.5, r.tier) + this.meter('Easier fights', `×${r.control}`, r.control / 2.2, r.tier),
+      note: `Fights with fish up to ${tierName(r.tier)} feel easy.`,
+      actions: action,
+    });
+  }
+
+  private cosmeticsShopHtml(): string {
+    const s = this.s;
+    const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
+    const chosen = cosById(this.pick.cos) ?? COSMETICS.find((x) => !s.owned.includes(x.id)) ?? COSMETICS[0];
+    this.pick.cos = chosen.id;
+    const sections = COS_SLOTS.map((slot) => {
+      const cards = COSMETICS.filter((c) => c.slot === slot)
+        .sort((a, b) => a.price - b.price)
+        .map((c) => {
+          const has = s.owned.includes(c.id);
+          const wearing = s.look[slot] === c.id;
+          const sub = has ? (wearing ? 'Wearing' : 'Owned') : `${c.price.toLocaleString()} 🪙`;
+          return this.itemTile({ icon: icon[slot], name: c.name, sub, tier: c.tier + 1, on: this.pick.cos === c.id, check: has, ghost: !has && s.coins < c.price, attrs: `data-pick="cos" data-id="${c.id}" data-try="${slot}:${c.id}"` });
+        })
+        .join('');
+      return `<h4>${slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`}</h4><div class="tiles">${cards}</div>`;
+    }).join('');
+    const has = s.owned.includes(chosen.id);
+    const wearing = s.look[chosen.slot] === chosen.id;
+    const action = wearing
+      ? this.btn('Take it off', `data-act="equip" data-slot="${chosen.slot}" data-id=""`, 'plain')
+      : has
+        ? this.btn('Wear it', `data-act="equip" data-slot="${chosen.slot}" data-id="${chosen.id}"`, 'ok')
+        : s.coins < chosen.price
+          ? this.btn(`Need ${chosen.price.toLocaleString()} 🪙`, '', 'plain', true)
+          : this.btn(`Buy for ${chosen.price.toLocaleString()} 🪙`, `data-act="buycos" data-id="${chosen.id}"`);
+    const detail = this.detail({
+      top: '<div id="pv-slot"></div>',
+      icon: icon[chosen.slot],
+      name: chosen.name,
+      tier: chosen.tier + 1,
+      badge: `<span class="badge" style="--c:var(--t${Math.min(5, chosen.tier + 1)})">${chosen.slot === 'jewelry' ? 'Jewelry' : chosen.slot[0].toUpperCase() + chosen.slot.slice(1)} · style ${chosen.tier + 1}</span>`,
+      body: '',
+      note: has ? (wearing ? 'You are wearing this.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.',
+      actions: action,
+    });
+    return `<div class="cols"><div class="main">${sections}</div>${detail}</div>`;
+  }
+
+  /** Bottom strip in the shop and at the prize counter: how to sell or turn in fish. */
+  private sellStrip(): string {
+    const fish = this.s.slots.filter((x): x is Extract<SaveData['slots'][number], { k: 'fish' }> => x?.k === 'fish');
+    if (this.tab === 'casino')
+      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> click one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} 🪙 of fish value.</span></div>`;
+    const total = fish.reduce((a, f) => a + eco.sellPrice(this.s, f), 0);
+    const all = fish.length ? this.btn(`Sell all ${fish.length} · ${total.toLocaleString()} 🪙`, 'data-act="sellall"', 'ok') : '';
+    return `<div class="strip"><span>🐟 <b>Sell fish:</b> click one in your hotbar below${fish.length ? '' : ' (you have none right now)'}.</span>${all}</div>`;
   }
 }
