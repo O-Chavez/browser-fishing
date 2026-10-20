@@ -1,22 +1,72 @@
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+  src: url('./assets/fonts/nunito-latin.woff2') format('woff2');
+}
+
+/* Cozy Wood theme: walnut frames, parchment cards and gold accents, matching the town's stalls and signs. */
+:root {
+  --wood-900: #2a1b0f;
+  --wood-800: #3a2717;
+  --wood-700: #4a3220;
+  --wood-600: #6b4a2b;
+  --wood-500: #8a6238;
+  --paper: #f4e7c9;
+  --paper-2: #ead9b3;
+  --paper-3: #fbf3e0;
+  --ink: #3a2716;
+  --ink-muted: #7a6040;
+  --cream: #fff4dc;
+  --cream-muted: #e3cfa6;
+  --gold: #ffc933;
+  --gold-dark: #b8860b;
+  --gold-ink: #3a2410;
+  --ok: #4cd964;
+  --ok-dark: #2e9a46;
+  --bad: #e5533d;
+  --hud-bg: rgba(58, 39, 23, .88);
+  --hud-edge: 0 0 0 3px var(--wood-900);
+  --t1: #b9b9b9;
+  --t2: #4cd964;
+  --t3: #4a90e2;
+  --t4: #b05ce6;
+  --t5: #ffc933;
+}
+
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; color: #fff; background: #000; }
+html, body { margin: 0; height: 100%; overflow: hidden; font-family: Nunito, ui-rounded, system-ui, sans-serif; font-weight: 700; color: var(--cream); background: #000; }
+kbd { text-shadow: none; display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 7px; font: 900 13px Nunito, ui-rounded, system-ui, sans-serif; background: var(--gold); color: var(--gold-ink); box-shadow: 0 3px 0 var(--gold-dark); }
 canvas { display: block; position: fixed; inset: 0; }
 .hidden { display: none !important; }
 
 #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,.8); pointer-events: none; }
 
-#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 1px 3px #000; }
-#hud-top { display: flex; gap: 14px; align-items: center; padding: 10px 16px; background: rgba(0,0,0,.35); }
-.bar { width: 160px; height: 10px; background: rgba(255,255,255,.25); border-radius: 5px; overflow: hidden; }
-#xpbar { height: 100%; width: 0; background: #ffc933; }
-#goal { position: absolute; top: 48px; left: 16px; font-size: 13px; opacity: .85; }
-#toast { position: absolute; top: 30%; width: 100%; text-align: center; font-size: 22px; opacity: 0; transition: opacity .3s; }
+#hud { position: fixed; inset: 0; pointer-events: none; }
+
+/* top left: level badge (XP ring), coins, and chips inside the casino */
+#hud-tl { position: absolute; top: 16px; left: 16px; display: flex; gap: 10px; align-items: center; }
+#lvl { position: relative; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: var(--hud-bg); box-shadow: var(--hud-edge); pointer-events: auto; }
+#lvl svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+#lvl circle { fill: none; stroke-width: 5; }
+#lvl .track { stroke: rgba(255,255,255,.15); }
+#xpring { stroke: var(--gold); stroke-linecap: round; stroke-dasharray: 0 157.08; transition: stroke-dasharray .4s; }
+#lvl b { font-size: 22px; font-weight: 900; line-height: 1; }
+#lvl small { position: absolute; bottom: -8px; font-size: 10px; font-weight: 900; letter-spacing: .08em; padding: 0 6px; border-radius: 6px; background: var(--gold); color: var(--gold-ink); }
+.coin { display: inline-block; width: 26px; height: 26px; border-radius: 50%; flex: none; background: radial-gradient(circle at 35% 35%, #fff3b0, var(--gold) 45%, #c58a12); box-shadow: inset 0 -2px 0 #a8730d; }
+
+#toast { position: absolute; top: 28%; left: 50%; transform: translateX(-50%); max-width: 70vw; padding: 10px 20px; border-radius: 14px; background: var(--hud-bg); box-shadow: var(--hud-edge); text-align: center; font-size: 20px; font-weight: 800; opacity: 0; transition: opacity .3s; }
+#toast:empty { display: none; }
 #toast.show { opacity: 1; }
-#help { position: absolute; bottom: 4px; width: 100%; text-align: center; font-size: 12px; opacity: .75; }
+/* bottom left: the three keys worth remembering; the full list lives in the menu */
+#help { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 14px; font-size: 13px; font-weight: 800; color: var(--cream); opacity: .8; text-shadow: 0 1px 3px #000; }
+#help span { display: flex; align-items: center; gap: 6px; }
 
 
-#catch { position: fixed; left: 3%; bottom: 12%; padding: 24px 36px; background: rgba(10,20,40,.9); border: 3px solid #fff; border-radius: 14px; text-align: center; min-width: 240px; }
-#catch h2 { margin: 6px 0; font-size: 28px; }
+#catch { position: fixed; left: 3%; bottom: 12%; padding: 20px 32px; background: var(--paper); color: var(--ink); border: 4px solid var(--wood-600); outline: 3px solid var(--wood-900); border-radius: 18px; text-align: center; min-width: 260px; }
+#catch h2 { margin: 6px 0; font-size: 28px; font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,.15); }
+#catch .muted { color: var(--ink-muted); opacity: 1; }
 
 #menu { position: fixed; inset: 0; background: rgba(5,15,30,.8); display: flex; align-items: center; justify-content: center; }
 #menu.hidden { display: none; }
@@ -38,30 +88,31 @@ button.active { background: #4a90e2; }
 #alert { position: fixed; left: 50%; top: 34%; transform: translateX(-50%); font-size: 96px; font-weight: 900; color: #ff3b30; text-shadow: 0 0 18px #fff, 0 4px 8px #000; pointer-events: none; animation: pop .25s ease-in-out infinite alternate; }
 @keyframes pop { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.2); } }
 #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,10,25,.45) 100%); }
-#catch .weight { font-size: 40px; font-weight: 800; margin: 4px 0 8px; }
+#catch .weight { font-size: 40px; font-weight: 900; margin: 4px 0 8px; color: var(--gold-dark); }
 #vignette { transition: box-shadow .15s; }
 #vignette.surge { box-shadow: inset 0 0 160px 30px rgba(255, 40, 30, .55); animation: flash .35s ease-in-out infinite alternate; }
 @keyframes flash { from { opacity: .55; } to { opacity: 1; } }
 #gauge.surge { animation: jitter .12s linear infinite; }
 @keyframes jitter { 0% { transform: translate(-1.5px, 0); } 50% { transform: translate(1.5px, 1px); } 100% { transform: translate(0, -1px); } }
 
-#chat { position: absolute; top: 56px; right: 16px; width: min(360px, 40vw); font-size: 14px; display: flex; flex-direction: column; gap: 4px; opacity: .5; transition: opacity .2s; }
+#chat { position: absolute; top: 16px; right: 16px; width: min(360px, 40vw); font-size: 14px; display: flex; flex-direction: column; gap: 4px; opacity: .5; transition: opacity .2s; }
 /* Faded while playing so it doesn't compete with the game; full strength while typing. */
 #chat.typing { opacity: 1; }
 .chat-log { display: flex; flex-direction: column; gap: 2px; }
-.chat-line { padding: 3px 8px; background: rgba(0,0,0,.38); border-radius: 6px; overflow-wrap: anywhere; line-height: 1.3; }
+.chat-line { padding: 4px 10px; background: var(--hud-bg); border-radius: 8px; overflow-wrap: anywhere; line-height: 1.3; }
 .chat-line b { color: #ffd98a; }
 .chat-line.self b { color: #9fd8ff; }
 .chat-line.sys { font-style: italic; opacity: .75; }
 .chat-tag { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(255,255,255,.18); opacity: .8; }
-.chat-input { pointer-events: auto; font: inherit; padding: 6px 9px; color: #fff; background: rgba(10,20,40,.85); border: 2px solid rgba(255,255,255,.7); border-radius: 8px; outline: none; }
+.chat-input { pointer-events: auto; font: inherit; padding: 8px 12px; color: var(--ink); background: var(--paper-3); border: 3px solid var(--wood-600); border-radius: 12px; outline: none; }
+.chat-input::placeholder { color: var(--ink-muted); }
 .chat-input.hidden { display: none; }
-.chat-hint { font-size: 12px; opacity: .55; text-align: right; }
+.chat-hint { font-size: 12px; opacity: .75; text-align: right; text-shadow: 0 1px 3px #000; }
 .chat-hint b { opacity: 1; }
-#resume { position: fixed; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 22px; text-shadow: 0 1px 3px #000; background: rgba(0,0,0,.15); cursor: pointer; }
-#resume b { padding: 1px 8px; margin: 0 6px; background: #ffc933; color: #1b1b1b; border-radius: 6px; text-shadow: none; }
-#statusline { position: absolute; top: 68px; left: 16px; font-size: 13px; opacity: .85; }
-#prompt { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); padding: 10px 18px; background: rgba(10,20,40,.82); border: 2px solid rgba(255,255,255,.7); border-radius: 12px; font-size: 18px; }
+#resume { position: fixed; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; background: rgba(0,0,0,.25); cursor: pointer; }
+#resume::before { content: ''; position: absolute; width: 360px; height: 64px; border-radius: 16px; background: var(--hud-bg); box-shadow: var(--hud-edge); z-index: -1; }
+#resume b { padding: 1px 9px; margin: 0 6px; background: var(--gold); color: var(--gold-ink); border-radius: 7px; box-shadow: 0 3px 0 var(--gold-dark); }
+#prompt { position: absolute; left: 50%; bottom: 140px; transform: translateX(-50%); padding: 10px 18px; background: var(--hud-bg); box-shadow: var(--hud-edge); border-radius: 14px; font-size: 18px; font-weight: 800; white-space: nowrap; }
 #tablehud { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); padding: 10px 18px; min-width: 280px; text-align: center; line-height: 1.5; background: rgba(30,8,24,.82); border: 2px solid #ffd35a; border-radius: 12px; font-size: 17px; pointer-events: none; }
 #tableresult { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); z-index: 30; font-size: 64px; font-weight: 900; letter-spacing: 2px; text-align: center; pointer-events: none; white-space: nowrap; text-shadow: 0 4px 14px #000; animation: resultIn 2.6s ease-out forwards; }
 #tableresult.hidden { display: none; }
@@ -73,22 +124,31 @@ button.active { background: #4a90e2; }
 #tablehud.hidden { display: none; }
 #tablehud .win { color: #7dff9b; }
 #tablehud .lose { color: #ff7d7d; }
-#prompt b { display: inline-block; min-width: 26px; padding: 1px 7px; margin-right: 8px; text-align: center; background: #ffc933; color: #1b1b1b; border-radius: 6px; }
+#prompt b { display: inline-block; min-width: 28px; padding: 1px 8px; margin-right: 8px; text-align: center; font-weight: 900; background: var(--gold); color: var(--gold-ink); border-radius: 8px; box-shadow: 0 3px 0 var(--gold-dark); }
 .controls { margin: 14px 0 0; }
 
-#hotbar { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; gap: 8px; }
-#hotbar .slot { position: relative; width: 84px; height: 62px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 12px; line-height: 1.2; background: rgba(10,20,40,.72); border: 2px solid rgba(255,255,255,.35); border-radius: 8px; }
-#hotbar .slot.use { border-color: #ffc933; }
-#hotbar .slot.held { border-color: #fff; box-shadow: 0 0 12px #4a90e2; transform: translateY(-6px); background: rgba(40,80,140,.8); }
+#hotbar { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; gap: 10px; }
+#hotbar .slot { --ring: var(--wood-600); position: relative; width: 72px; height: 72px; border-radius: 16px; background: var(--hud-bg); box-shadow: 0 0 0 3px var(--ring), 0 6px 14px rgba(0,0,0,.35); display: grid; place-items: center; }
+#hotbar .slot .ic { font-size: 32px; line-height: 1; margin-top: -10px; }
+#hotbar .slot .ic .fishico { width: 44px; height: 28px; display: block; }
+#hotbar .slot .nm { position: absolute; bottom: 5px; left: 2px; right: 2px; text-align: center; font-size: 11px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hotbar .slot .nm.val { color: var(--gold); font-size: 13px; font-weight: 900; }
+#hotbar .slot .q { position: absolute; top: 3px; right: 6px; font-size: 12px; font-weight: 900; }
+#hotbar .slot i { position: absolute; top: -8px; left: -8px; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 900; font-style: normal; background: var(--wood-800); box-shadow: 0 0 0 2px var(--wood-600); color: var(--cream-muted); }
+/* the rod and bait your next cast uses */
+#hotbar .slot.use::after { content: ''; position: absolute; bottom: -8px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+#hotbar .slot.held { --ring: var(--gold); transform: translateY(-10px); box-shadow: 0 0 0 3px var(--ring), 0 0 18px rgba(255,201,51,.55), 0 10px 18px rgba(0,0,0,.35); }
+#hotbar .slot.held i { background: var(--gold); color: var(--gold-ink); box-shadow: none; }
 #hotbar .slot.held.pick { animation: slot-pick .16s ease-out; }
 @media (prefers-reduced-motion: reduce) { #hotbar .slot.held.pick { animation: none; } }
 @keyframes slot-pick {
-  from { transform: translateY(0) scale(.94); box-shadow: 0 0 0 #4a90e2; }
-  60% { transform: translateY(-8px) scale(1.04); }
+  from { transform: translateY(0) scale(.94); }
+  60% { transform: translateY(-12px) scale(1.04); }
 }
-#hotbar .slot.empty { opacity: .45; }
-#hotbar .slot i { position: absolute; top: 2px; left: 6px; font-size: 10px; font-style: normal; opacity: .7; }
-#hotbar .slot em { font-style: normal; font-weight: 700; }
+#hotbar .slot.empty { opacity: .5; }
+#heldname { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); font-size: 16px; font-weight: 900; text-shadow: 0 1px 3px #000, 0 0 10px rgba(0,0,0,.6); opacity: 0; white-space: nowrap; }
+#heldname.show { animation: heldname 1.8s ease-out forwards; }
+@keyframes heldname { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 
 #wheelres { position: absolute; top: 22%; width: 100%; text-align: center; pointer-events: none; opacity: 0; transform: scale(.6); transition: opacity .25s, transform .35s cubic-bezier(.2,1.6,.4,1); text-shadow: 0 3px 12px #000; }
 #wheelres.show { opacity: 1; transform: scale(1); }
@@ -144,9 +204,9 @@ body.shopping #hud { z-index: 30; }
 body.shopping #menu { align-items: flex-start; pointer-events: none; }
 body.shopping .panel { margin-top: 100px; max-height: calc(100vh - 250px); pointer-events: auto; }
 body.shopping #hotbar { pointer-events: auto; }
-#hotbar .slot.sellable { cursor: pointer; border-color: #6dff8f; }
-#hotbar .slot.sellable:hover { background: rgba(40,120,70,.9); }
-#hotbar .slot.sellable:hover::after { content: attr(data-sell); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px; white-space: nowrap; padding: 4px 8px; background: #1b6b3a; border-radius: 6px; font-weight: 700; }
+#hotbar .slot.sellable { cursor: pointer; --ring: var(--ok); }
+#hotbar .slot.sellable:hover { background: rgba(46,154,70,.9); }
+#hotbar .slot.sellable:hover::before { content: attr(data-sell); position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 6px 10px; background: var(--ok-dark); border-radius: 10px; font-weight: 900; font-size: 14px; }
 
 .tier { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border: 1px solid; border-radius: 8px; letter-spacing: .03em; }
 .row.gear { align-items: flex-start; }
@@ -170,7 +230,7 @@ body.shopping .controls { display: none; }
 .tile .pr { opacity: .85; }
 .tile.off { opacity: .45; }
 .tile.own { background: rgba(109,255,143,.12); }
-#tip { position: fixed; z-index: 100; pointer-events: none; max-width: 240px; padding: 8px 10px; background: rgba(5,12,24,.96); border: 1px solid rgba(255,255,255,.3); border-radius: 8px; font-size: 12px; line-height: 1.45; }
+#tip { position: fixed; z-index: 100; pointer-events: none; max-width: 260px; padding: 10px 12px; background: var(--wood-800); color: var(--cream); box-shadow: 0 0 0 2px var(--wood-600), 0 8px 18px rgba(0,0,0,.4); border-radius: 12px; font-size: 13px; line-height: 1.45; }
 #tip.hidden { display: none; }
 
 .danger { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.1); font-size: 13px; opacity: .85; }
@@ -180,20 +240,23 @@ body.shopping .controls { display: none; }
 #banner small { display: block; font-size: 18px; font-weight: 600; opacity: .9; letter-spacing: 0; }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 
-#purse { font-size: 22px; font-weight: 800; color: #ffd23a; background: rgba(0,0,0,.45); border: 1px solid rgba(255,210,58,.5); border-radius: 999px; padding: 2px 14px; text-shadow: 0 1px 3px #000; }
+#purse, #chipbox { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 9px; border-radius: 999px; background: var(--hud-bg); box-shadow: var(--hud-edge); font-size: 22px; font-weight: 900; color: var(--gold); }
 #purse.bump { animation: purseBump .5s ease-out; }
-@keyframes purseBump { 0% { transform: scale(1.25); background: rgba(255,210,58,.5); } 100% { transform: scale(1); } }
+@keyframes purseBump { 0% { transform: scale(1.18); } 100% { transform: scale(1); } }
 
-#spot { position: absolute; top: 90px; left: 16px; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(0,0,0,.4); }
-#spot.prime { color: #8fe08f; }
-#spot.pier { color: #ffd23a; }
-#spot.shore { color: #ff9b6b; }
+/* fishing hints under the level badge, only while a rod is in hand */
+#ctx { position: absolute; top: 90px; left: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+#spot, #nightchip { font-size: 14px; font-weight: 800; padding: 5px 12px; border-radius: 10px; background: var(--hud-bg); box-shadow: 0 0 0 2px var(--wood-900); }
+#spot.prime { color: #9cf0b0; }
+#spot.pier { color: var(--gold); }
+#spot.shore { color: #ffab80; }
 #spot:empty { display: none; }
-#nightchip { position: absolute; top: 120px; left: 16px; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(20,24,70,.65); color: #b9c8ff; }
+#nightchip { color: #c9d4ff; }
 #nightchip:empty { display: none; }
 
 /* casino */
-#chipbox { font-size: 18px; font-weight: 800; color: #ff9ad0; background: rgba(0,0,0,.45); border: 1px solid rgba(255,154,208,.5); border-radius: 999px; padding: 2px 14px; text-shadow: 0 1px 3px #000; }
+#chipbox { color: #ff9ad0; }
+#chipbox .chipicon { font-size: 22px; }
 #chipbox.hidden { display: none; }
 #hotbar .slot.bet { border-color: #ff9ad0; box-shadow: 0 0 12px #ff4f9a; }
 .pc { display: inline-block; min-width: 38px; margin: 4px 6px 0 0; padding: 8px 6px; text-align: center; font-weight: 800; font-size: 18px; color: #111; background: #fff; border-radius: 6px; border: 1px solid #999; }

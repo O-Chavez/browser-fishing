@@ -39,7 +39,7 @@
   - Optionally A/B against a simple 3D face if it fits the theme better and doesn't cost much performance
   - Random face assigned on account creation; pickable in the wardrobe
   - Existing accounts without a face get a random one at login
-- [ ] General visual cleanup
+- [x] General visual cleanup
   - The HUD shows a lot of unnecessary information; tone it down and remove unneeded elements
   - The 3D world is fine as is
 - [ ] Polish the menu systems

@@ -20,6 +20,7 @@ import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
 import { ChatBox } from './chatbox';
+import { fishIcon } from './fishicon';
 import { Player } from './player';
 import {
   animateFish,
@@ -68,6 +69,11 @@ type Phase =
 
 const defaultLookWith = (color: number, face: string): Look => ({ color, face, hat: null, shirt: null, jewelry: null });
 
+/** Item icons shared by the hotbar and the menus. */
+const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
+const ROD_ICON = '🎣';
+/** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
+const shortRod = (name: string) => name.replace(/ Rod$/, '');
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const CAMP_TIPS = [
@@ -161,6 +167,7 @@ export class Game {
   private betSlot = -1;
   private chat!: ChatBox;
   private hotbarHeld = -1;
+  private ctxShown: boolean | null = null;
   private bj: BlackjackView | null = null;
   private casinoMsg = '';
   private table: 'roulette' | 'blackjack' | 'prizes' | null = null;
@@ -1646,8 +1653,17 @@ export class Game {
     el.className = id;
   }
 
+  /** Spot and night hints only matter with a rod in hand, outside the casino. */
+  private updateContext(): void {
+    const fishing = !this.map.casino && this.s.slots[this.s.held]?.k === 'rod';
+    if (fishing === this.ctxShown) return;
+    this.ctxShown = fishing;
+    $('ctx').classList.toggle('hidden', !fishing);
+  }
+
   private tick(dt: number): void {
     this.updateWalking(dt);
+    this.updateContext();
     this.updateSpot();
     this.updateNight();
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
@@ -2037,21 +2053,15 @@ export class Game {
       void purse.offsetWidth;
       purse.classList.add('bump');
     }
-    $('xpbar').style.width =
-      s.level >= MAX_LEVEL
-        ? '100%'
-        : `${(s.xp / xpForNextLevel(s.level)) * 100}%`;
-    $('loc').textContent = this.map.name;
-    const chipsEl = $('chips');
-    chipsEl.textContent = this.chipsText(s.chips);
-    chipsEl.parentElement!.classList.toggle('hidden', s.chips <= 0 && !this.map.casino);
-    const status = [this.map.casino ? 'Casino Cove · turn fish in for chips at the prize counter' : ''];
-    if (this.net.connected) status.push(`${this.net.players.size + 1} online (${this.net.room})`);
-    $('statusline').textContent = status.filter(Boolean).join(' · ');
+    // XP fills the ring around the level badge (circumference 2π·25).
+    const xp = s.level >= MAX_LEVEL ? 1 : Math.min(1, s.xp / xpForNextLevel(s.level));
+    $('xpring').style.strokeDasharray = `${(xp * 157.08).toFixed(1)} 157.08`;
+    $('lvl').title = s.level >= MAX_LEVEL ? `Level ${s.level} (max)` : `Level ${s.level} · ${s.xp} / ${xpForNextLevel(s.level)} XP`;
+    // Chips only matter inside the casino.
+    $('chips').textContent = this.chipsText(s.chips);
+    $('chipbox').classList.toggle('hidden', !this.map.casino);
     this.setGateSign();
-    $('baitinfo').textContent = `${this.bait.name} ×${eco.baitCount(s, s.bait)} · ${this.rod.name}`;
     this.renderHotbar();
-    $('goal').textContent = `Next: ${nextGoal(s.level, s.dex)}`;
   }
 
   private renderMenu(): void {
@@ -2096,30 +2106,51 @@ export class Game {
     const activeBait = eco.activeSlot(s);
     let html = '';
     s.slots.forEach((sl, i) => {
+      // Icon, a short label underneath, and an optional corner badge (stack size or win multiplier).
       let body = '';
       let cls = 'slot';
+      let ring = '';
       if (sl?.k === 'bait') {
-        body = `<span>${byId(BAITS, sl.id).name}</span><em>×${sl.n}${s.locker.bait[sl.id] ? ` +${s.locker.bait[sl.id]} 🧰` : ''}</em>`;
+        body = `<span class="q">×${sl.n}</span><span class="ic">${BAIT_ICON[sl.id] ?? '🪱'}</span><span class="nm">${byId(BAITS, sl.id).name}</span>`;
         if (i === activeBait) cls += ' use';
       } else if (sl?.k === 'rod') {
-        body = `<span>${byId(RODS, sl.id).name}</span><em>Rod</em>`;
+        body = `<span class="ic">${ROD_ICON}</span><span class="nm">${shortRod(byId(RODS, sl.id).name)}</span>`;
         if (sl.id === s.rod) cls += ' use';
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
-        body = `<span style="color:${sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity]}">${sl.shiny ? '✨' : ''}${f.name}</span><em>${eco.fishValue(sl)} 🪙</em>`;
+        ring = sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity];
+        const mult = sl.mult && sl.mult > 1 ? `<span class="q">×${sl.mult}</span>` : '';
+        body = `${mult}<span class="ic">${fishIcon(f.color, { shiny: sl.shiny })}</span><span class="nm val">${eco.fishValue(sl)}</span>`;
+        cls += ' fish';
       } else cls += ' empty';
       if (i === s.held) cls += moved ? ' held pick' : ' held';
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
       if (this.tab === 'casino' && this.menuOpen && i === this.betSlot && sl?.k === 'fish') cls += ' bet';
       if (sellable) cls += ' sellable';
       const tip = sellable ? ` data-sell="Sell · ${eco.sellPrice(this.s, sl)} 🪙"` : '';
-      html += `<div class="${cls}" data-i="${i}"${tip}><i>${i + 1}</i>${body}</div>`;
+      const name = sl?.k === 'fish' ? ` title="${byId(FISH, sl.fishId).name}"` : '';
+      html += `<div class="${cls}" data-i="${i}"${tip}${name}${ring ? ` style="--ring:${ring}"` : ''}><i>${i + 1}</i>${body}</div>`;
     });
     const el = $('hotbar');
     if (el.dataset.h !== html) {
       el.dataset.h = html;
       el.innerHTML = html;
     }
+    if (moved) this.showHeldName();
+  }
+
+  /** Names the item in hand above the hotbar for a moment after switching slots. */
+  private showHeldName(): void {
+    const sl = this.s.slots[this.s.held];
+    const el = $('heldname');
+    if (!sl) return el.classList.remove('show');
+    el.textContent =
+      sl.k === 'fish' ? `${sl.shiny ? '✨ ' : ''}${byId(FISH, sl.fishId).name} · ${eco.fishValue(sl)} 🪙`
+      : sl.k === 'rod' ? byId(RODS, sl.id).name
+      : `${byId(BAITS, sl.id).name} ×${sl.n}`;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
   }
 
   private playersHtml(): string {
@@ -2132,7 +2163,7 @@ export class Game {
     const reset = this.confirmReset
       ? `<div class="danger">Erase all progress (coins, gear, fish, cosmetics)? This cannot be undone.<br><button data-act="resetyes" class="bad">Yes, reset</button> <button data-act="resetno">Cancel</button></div>`
       : `<div class="danger"><button data-act="reset">Reset account</button></div>`;
-    return `<h3>Players ${this.net.connected ? `· ${this.net.room}` : '· offline'}</h3>${rows}${reset}`;
+    return `<h3>Players ${this.net.connected ? `· ${this.net.players.size + 1} online` : '· offline'}</h3>${rows}${reset}`;
   }
 
   private faceIcons: Partial<Record<FaceId, string>> = {};
@@ -2214,7 +2245,6 @@ export class Game {
       const act = equipped ? `data-act="stow" data-id="${hotRod}"` : owned ? `data-act="equiprod" data-id="${r.id}"` : '';
       return this.tile('🎣', r.name, label, r.tier, tip, '', '', !owned, equipped, act);
     }).join('');
-    const baitIcon: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
     const baitRows = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
       const equipped = s.bait === b.id && s.slots.some((x) => x?.k === 'bait' && x.id === b.id);
@@ -2225,9 +2255,9 @@ export class Game {
       const tip = `<b style="color:${this.tierColor(b.tier)}">${b.name}</b><br>${this.tierBadge(b.tier)}<br>${this.baitStats(b)}<br>You have ${n}<br>${note}`;
       const label = equipped ? `×${n} ✓` : lvl ? `🔒 Lv ${b.unlockLevel}` : n > 0 ? `×${n}` : 'In shop';
       const act = equipped ? `data-act="stow" data-id="${slot}"` : usable ? `data-act="equipbait" data-id="${b.id}"` : '';
-      return this.tile(baitIcon[b.id] ?? '🪱', b.name, label, b.tier, tip, '', '', !usable, equipped, act);
+      return this.tile(BAIT_ICON[b.id] ?? '🪱', b.name, label, b.tier, tip, '', '', !usable, equipped, act);
     }).join('');
-    return `<div class="setup"><div><b>${rod.name}</b> + <b>${bait.name}</b> → reach <b style="color:${RARITY_COLOR[TIERS[reach - 1]]}">tier ${reach} · ${tierName(reach)}</b></div><div class="muted">${hint}</div></div>
+    return `<p class="goal">Next: ${nextGoal(this.s.level, this.s.dex)}</p><div class="setup"><div><b>${rod.name}</b> + <b>${bait.name}</b> → reach <b style="color:${RARITY_COLOR[TIERS[reach - 1]]}">tier ${reach} · ${tierName(reach)}</b></div><div class="muted">${hint}</div></div>
       <div class="chips">${chips}</div>
       <p class="muted">Your hotbar holds the rod and bait you use; the rest of your tackle waits in the locker.</p>
       <h4>Rods</h4><div class="tiles">${rods}</div><h4>Bait</h4><div class="tiles">${baitRows}</div>`;
@@ -2278,13 +2308,12 @@ export class Game {
         const tip = `<b style="color:${this.tierColor(r.tier)}">${r.name}</b><br>${this.tierBadge(r.tier)}<br>${this.rodStats(r)}<br>${has ? 'You own this - equip it in Inventory' : lvl ? `Unlocks at level ${r.unlockLevel}` : r.price ? `Click to buy · ${r.price} 🪙` : 'Free'}`;
         return this.tile('🎣', r.name, price, r.tier, tip, `buyrod`, id, has || lvl || this.s.coins < r.price);
       });
-      const baitIcon: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
       const bait = this.map.stock.bait.map((id) => {
         const b = byId(BAITS, id);
         const cost = b.price * eco.BAIT_PACK;
         const lvl = this.s.level < b.unlockLevel;
         const tip = `<b style="color:${this.tierColor(b.tier)}">${b.name} ×${eco.BAIT_PACK}</b><br>${this.tierBadge(b.tier)}<br>${this.baitStats(b)}<br>You have ${eco.baitCount(this.s, id)}<br>${lvl ? `Unlocks at level ${b.unlockLevel}` : `Click to buy · ${cost} 🪙`}`;
-        return this.tile(baitIcon[id] ?? '🪱', `${b.name} ×${eco.BAIT_PACK}`, lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost} 🪙`, b.tier, tip, 'buybait', id, lvl || this.s.coins < cost);
+        return this.tile(BAIT_ICON[id] ?? '🪱', `${b.name} ×${eco.BAIT_PACK}`, lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost} 🪙`, b.tier, tip, 'buybait', id, lvl || this.s.coins < cost);
       });
       body = `<p class="muted">Hover for stats. Border color = tier. Gear goes to your tackle locker - equip it in Inventory (<b>Tab</b>). Bait decides which fish bite; a rod of the fish's tier makes the fight easier.</p><h4>Rods</h4><div class="tiles">${rods.join('')}</div><h4>Bait</h4><div class="tiles">${bait.join('')}</div>`;
     }

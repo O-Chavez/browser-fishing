@@ -13,27 +13,25 @@
   <div id="alert" class="hidden">!</div>
 
   <div id="hud">
-    <div id="hud-top">
-      <div>Lv <b id="level">1</b></div>
-      <div class="bar"><div id="xpbar"></div></div>
-      <div id="purse">🪙 <b id="coins">0</b></div>
-      <div id="chipbox" class="hidden">🎰 <b id="chips">0</b> chips</div>
-      <div id="loc"></div>
-      <div id="baitinfo"></div>
+    <div id="hud-tl">
+      <div id="lvl" title="Level">
+        <svg viewBox="0 0 58 58" aria-hidden="true"><circle class="track" cx="29" cy="29" r="25" /><circle id="xpring" cx="29" cy="29" r="25" /></svg>
+        <b id="level">1</b><small>LV</small>
+      </div>
+      <div id="purse"><span class="coin"></span><b id="coins">0</b></div>
+      <div id="chipbox" class="hidden"><span class="chipicon">🎰</span><b id="chips">0</b></div>
     </div>
-    <div id="goal"></div>
-    <div id="statusline"></div>
     <div id="chat"></div>
-    <div id="spot"></div>
-    <div id="nightchip"></div>
+    <div id="ctx"><div id="spot"></div><div id="nightchip"></div></div>
     <div id="prompt" class="hidden"></div>
     <div id="tablehud" class="hidden"></div>
     <div id="tableresult" class="hidden"></div>
     <div id="toast"></div>
     <div id="tip" class="hidden"></div>
     <div id="wheelres"></div>
+    <div id="heldname"></div>
     <div id="hotbar"></div>
-    <div id="help"><b>WASD</b> walk · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> interact · hold <b>click</b> to charge · release in the gold zone for a <b>perfect cast</b> · click the <b>!</b> to hook · hold to reel, <b>release</b> when the fish surges · <b>1–5</b> / <b>scroll</b> hold item · <b>G</b> drop · <b>Tab</b> inventory · <b>M</b> music · <b>Esc</b> menu</div>
+    <div id="help"><span><kbd>Tab</kbd>Inventory</span><span><kbd>Enter</kbd>Chat</span><span><kbd>Esc</kbd>Menu</span></div>
   </div>
 
   <div id="catch" class="hidden"></div>
