@@ -163,6 +163,7 @@ async function pondChecks(): Promise<void> {
   await page.click('#menu .close');
   await sleep(100);
   check('menus: the close button closes the window', await page.evaluate(() => document.getElementById('menu')!.classList.contains('hidden')));
+  check('menus: the HUD comes back after leaving the shop', await page.evaluate(() => getComputedStyle(document.getElementById('hud-tl')!).display !== 'none'));
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
 
   // Players tab lists levels, not coins.
