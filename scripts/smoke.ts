@@ -140,6 +140,13 @@ async function pondChecks(): Promise<void> {
   check('pond: talking to the vendor opens the shop', shop, `prompt "${label}"`);
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
 
+  // Players tab lists levels, not coins.
+  await page.evaluate(() => window.__game.openMenu('players'));
+  await sleep(200);
+  const me = await page.evaluate(() => ({ row: document.querySelector('#tab .row.me')?.textContent ?? '', level: (window.__game.s as any).level as number }));
+  await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
+  check('players tab: shows your level, not coins', me.row.includes(`Lv ${me.level}`) && !me.row.includes('🪙'), `"${me.row}"`);
+
   // Wardrobe preview: running while shown, stopped when the menu closes, running again on reopen.
   await page.evaluate(() => window.__game.openMenu('inventory'));
   await page.click('[data-act="invtab"][data-id="wardrobe"]');
