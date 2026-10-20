@@ -2139,7 +2139,7 @@ export class Game {
     const activeBait = eco.activeSlot(s);
     let html = '';
     s.slots.forEach((sl, i) => {
-      // Icon, a short label underneath, and an optional corner badge (stack size or win multiplier).
+      // Icon, a short label underneath, and a corner badge for bait stack size.
       let body = '';
       let cls = 'slot';
       let ring = '';
@@ -2152,8 +2152,8 @@ export class Game {
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
         ring = sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity];
-        const mult = sl.mult && sl.mult > 1 ? `<span class="q">×${sl.mult}</span>` : '';
-        body = `${mult}<span class="ic">${fishIcon(f.id, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
+        // Just the total value: a wheel or table multiplier is already folded into it.
+        body = `<span class="ic">${fishIcon(f.id, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
         cls += ' fish';
       } else cls += ' empty';
       if (i === s.held) cls += moved ? ' held pick' : ' held';
