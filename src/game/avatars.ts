@@ -169,6 +169,7 @@ class Avatar {
     this.yaw += d * k;
     // Camera yaw 0 looks along -z, the model's front is +z.
     this.group.rotation.y = this.yaw + Math.PI;
+    this.char.tick(t);
     this.setAct(p.act ?? null);
     if (this.bubble) {
       const left = this.bubble.until - performance.now();

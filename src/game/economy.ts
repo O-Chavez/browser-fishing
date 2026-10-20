@@ -1,5 +1,5 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
-import { COS_SLOTS, cosById, isFace, type CosSlot } from '../data/cosmetics';
+import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { applyXp, catchXp, eligibleFish, fishingSpot, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import { BAIT_STACK, type SaveData, type Slot } from './state';
@@ -247,10 +247,20 @@ export function buyPerk(s: SaveData, id: string): boolean {
   return true;
 }
 
-export function buyCosmetic(s: SaveData, id: string): boolean {
+/**
+ * Buys a cosmetic at the counter the player stands at (`at`). Stall items cost coins and are sold
+ * only at the stall; casino items cost chips and are sold only at the prize counter.
+ */
+export function buyCosmetic(s: SaveData, id: string, at: CosShop = 'stall'): boolean {
   const c = cosById(id);
-  if (!c || s.owned.includes(id) || s.coins < c.price) return false;
-  s.coins -= c.price;
+  if (!c || c.shop !== at || s.owned.includes(id)) return false;
+  if (c.shop === 'casino') {
+    if (s.chips < c.price) return false;
+    s.chips = Math.round((s.chips - c.price) * 10) / 10;
+  } else {
+    if (s.coins < c.price) return false;
+    s.coins -= c.price;
+  }
   s.owned.push(id);
   return true;
 }

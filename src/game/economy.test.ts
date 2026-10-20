@@ -3,7 +3,7 @@ import * as eco from './economy';
 import { SLOT_COUNT, migrate, newSave, type SaveData } from './state';
 import { FISH } from '../data/content';
 import { Drops } from './drops';
-import { isFace } from '../data/cosmetics';
+import { COSMETICS, COS_SLOTS, cosById, isFace } from '../data/cosmetics';
 
 const fishSlot = () => ({ k: 'fish' as const, fishId: FISH[0].id, size: 20 });
 
@@ -219,5 +219,38 @@ describe('charms & perks summary', () => {
     expect(list.map((p) => p.id)).toEqual(['charm2', 'gloves', 'vest', 'lure']);
     expect(list[0].effect).toBe('Fish worth +10%');
     expect(list[3].effect).toBe('2 shiny casts left');
+  });
+});
+
+describe('cosmetics shops', () => {
+  it('keeps every tier in every slot, with casino items at each counter', () => {
+    for (const slot of COS_SLOTS) {
+      const stall = COSMETICS.filter((c) => c.slot === slot && c.shop === 'stall');
+      expect(stall.some((c) => c.tier === 0)).toBe(true);
+      expect(stall.some((c) => c.tier === 5)).toBe(true);
+      expect(COSMETICS.some((c) => c.slot === slot && c.shop === 'casino')).toBe(true);
+    }
+    expect(new Set(COSMETICS.map((c) => c.id)).size).toBe(COSMETICS.length);
+    // Old saves keep their items: these ids must never disappear.
+    for (const id of ['cap', 'straw', 'bucket', 'captain', 'horned', 'crown', 'tee', 'striped', 'vest', 'hawaiian', 'coat', 'cloak', 'shell', 'chain', 'pendant', 'pearl', 'amulet', 'diamond'])
+      expect(cosById(id)?.shop).toBe('stall');
+  });
+
+  it('stall items cost coins at the stall; casino items cost chips at the prize counter', () => {
+    const s = newSave();
+    s.coins = 1_000_000;
+    s.chips = 0;
+    expect(eco.buyCosmetic(s, 'visor', 'stall')).toBe(false);
+    expect(eco.buyCosmetic(s, 'visor', 'casino')).toBe(false);
+    expect(s.coins).toBe(1_000_000);
+    s.chips = 35.5;
+    expect(eco.buyCosmetic(s, 'cap', 'casino')).toBe(false);
+    expect(eco.buyCosmetic(s, 'visor', 'casino')).toBe(true);
+    expect(s.chips).toBe(5.5);
+    expect(s.coins).toBe(1_000_000);
+    expect(eco.buyCosmetic(s, 'visor', 'casino')).toBe(false);
+    expect(eco.buyCosmetic(s, 'cap', 'stall')).toBe(true);
+    expect(s.coins).toBe(1_000_000 - cosById('cap')!.price);
+    expect(s.owned).toEqual(['visor', 'cap']);
   });
 });

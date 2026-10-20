@@ -157,9 +157,12 @@ export class Room {
       case 'sell':
         changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, Math.floor(Number(msg.i))));
         break;
-      case 'buycos':
-        changed = this.atVendor(m) && eco.buyCosmetic(s, str(msg.id));
+      case 'buycos': {
+        // The counter decides the currency: coins at the stall, chips at the casino prize counter.
+        const at = this.atVendor(m) ? 'stall' : this.atCasino(m, 'prizes') ? 'casino' : null;
+        changed = !!at && eco.buyCosmetic(s, str(msg.id), at);
         break;
+      }
       case 'equip':
         changed = eco.equipCosmetic(s, msg.slot, msg.id === null ? null : str(msg.id));
         break;

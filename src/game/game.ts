@@ -22,6 +22,7 @@ import { WheelStepper } from './wheelstep';
 import { ChatBox } from './chatbox';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
+import { cosIcon } from './cosicon';
 import { FISH_BLURB, TIER_THEME } from '../data/fishlook';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { shortCoins } from './format';
@@ -57,7 +58,7 @@ import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, MULT_CAP, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { chipsFor, type BlackjackView, type Card } from './casino';
 import { load, newSave, save, type SaveData } from './state';
-import { BODY_COLORS, COSMETICS, COS_SLOTS, FACES, cosById, isFace, type CosSlot, type FaceId, type Look } from '../data/cosmetics';
+import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
 import { World } from './world';
@@ -162,7 +163,9 @@ export class Game {
   private tab = 'inventory';
   private shopTab: 'cosmetics' | 'gear' = 'gear';
   /** The item selected in each menu's tile grid, shown in its details panel. */
-  private pick: Partial<Record<'bag' | 'gear' | 'cos' | 'perk', string>> = {};
+  private pick: Partial<Record<'bag' | 'gear' | 'cos' | 'ccos' | 'perk', string>> = {};
+  /** Prize counter tab: perks or the casino-only cosmetics. */
+  private prizeTab: 'perks' | 'cosmetics' = 'perks';
   private rigLook = '';
   private preview: CharacterPreview | null = null;
   private joining = false;
@@ -631,10 +634,11 @@ export class Game {
   private onMenuClick(el: HTMLElement): void {
     const btn = el.closest('button') as HTMLButtonElement | null;
     if (!btn || btn.disabled) return;
-    const { tab, shop, pick, act, id } = btn.dataset;
+    const { tab, shop, prize, pick, act, id } = btn.dataset;
     if (act === 'close') return this.closeMenu();
     if (tab) this.tab = tab;
     else if (shop) this.shopTab = shop as 'cosmetics' | 'gear';
+    else if (prize) this.prizeTab = prize as 'perks' | 'cosmetics';
     else if (pick) this.pick[pick as keyof typeof this.pick] = id;
     else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
     else if (act === 'music') audio.toggleMusic();
@@ -806,13 +810,21 @@ export class Game {
 
   private buyCosmetic(id: string): void {
     const c = cosById(id);
-    if (!c) return;
+    if (!c || this.s.owned.includes(id)) return;
+    if (c.shop === 'casino') {
+      // Chips live on the server: ask it, and the state reply updates the counter.
+      if (this.tab !== 'casino') return this.toast('Sold only at the casino Prize Counter.');
+      if (this.s.chips < c.price) return this.toast(`Not enough chips (${c.price}).`);
+      if (!this.net.connected) return this.toast('The casino needs a server connection.');
+      this.net.send({ t: 'buycos', id });
+      this.toast(`Bought ${c.name} - wear it from the Wardrobe (Tab)`);
+      return;
+    }
     if (!this.atVendor) return this.toast(`Walk to ${this.map.vendor.name}'s stall to buy.`);
-    if (this.s.owned.includes(id)) return;
     if (this.s.coins < c.price) return this.toast(`Not enough coins (${c.price} 🪙).`);
-    eco.buyCosmetic(this.s, id);
+    eco.buyCosmetic(this.s, id, 'stall');
     this.net.send({ t: 'buycos', id });
-    this.toast(`Bought ${c.name} - wear it from your Inventory (Tab)`);
+    this.toast(`Bought ${c.name} - wear it from the Wardrobe (Tab)`);
     this.persist();
     this.refreshHud();
   }
@@ -1077,6 +1089,7 @@ export class Game {
   }
 
   private casinoHtml(): string {
+    if (this.prizeTab === 'cosmetics') return `${this.cosShopHtml('casino')}${this.sellStrip()}`;
     const s = this.s;
     // Perks have no tier; colour them by price so the rarer unlocks stand out.
     const tierOf = (chips: number) => (chips <= 20 ? 2 : chips <= 50 ? 3 : chips <= 100 ? 4 : 5);
@@ -2274,7 +2287,9 @@ export class Game {
       `<button class="tab${on ? ' on' : ''}" ${attr}="${id}"${label ? '' : ' title="Settings"'}><span>${icon}</span>${label}</button>`;
     if (this.tab === 'shop')
       return tab('gear', '🎣', 'Gear', this.shopTab === 'gear', 'data-shop') + tab('cosmetics', '👕', 'Cosmetics', this.shopTab === 'cosmetics', 'data-shop');
-    if (this.tab === 'casino' || this.tab === 'peek') return '';
+    if (this.tab === 'casino')
+      return tab('perks', '🍀', 'Unlocks', this.prizeTab === 'perks', 'data-prize') + tab('cosmetics', '🎩', 'High Roller', this.prizeTab === 'cosmetics', 'data-prize');
+    if (this.tab === 'peek') return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
@@ -2290,16 +2305,21 @@ export class Game {
 
   /** What the wardrobe/shop preview wears: your look, plus the cosmetic picked in the shop. */
   private previewLook(): Look {
-    const c = this.tab === 'shop' && this.shopTab === 'cosmetics' ? cosById(this.pick.cos) : undefined;
+    const c =
+      this.tab === 'shop' && this.shopTab === 'cosmetics'
+        ? cosById(this.pick.cos)
+        : this.tab === 'casino' && this.prizeTab === 'cosmetics'
+          ? cosById(this.pick.ccos)
+          : undefined;
     return c ? { ...this.s.look, [c.slot]: c.id } : this.s.look;
   }
 
   // ---------- shared pieces ----------
 
   /** A square item tile; clicking it selects the item (`data-pick`) unless `attrs` says otherwise. */
-  private itemTile(o: { icon: string; name: string; sub: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string }): string {
+  private itemTile(o: { icon: string; name: string; sub: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string; color?: string; cls?: string }): string {
     const t = Math.max(1, Math.min(5, o.tier));
-    return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}" style="--c:var(--t${t})" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span><span class="st">${o.sub}</span></button>`;
+    return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}${o.cls ?? ''}" style="--c:${o.color ?? `var(--t${t})`}" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span><span class="st">${o.sub}</span></button>`;
   }
 
   private badge(tier: number): string {
@@ -2312,9 +2332,9 @@ export class Game {
   }
 
   /** The details panel on the right: big icon, name, stats, one plain sentence, and the main action. */
-  private detail(o: { icon: string; name: string; tier: number; badge?: string; body: string; note: string; actions: string; top?: string }): string {
+  private detail(o: { icon: string; name: string; tier: number; badge?: string; body: string; note: string; actions: string; top?: string; color?: string; cls?: string }): string {
     const t = Math.max(1, Math.min(5, o.tier));
-    return `<aside class="detail">${o.top ?? ''}<div class="hero"><span class="ic" style="--c:var(--t${t})">${o.icon}</span><div><b>${o.name}</b>${o.badge ?? this.badge(o.tier)}</div></div>${o.body}<p>${o.note}</p><div class="actions">${o.actions}</div></aside>`;
+    return `<aside class="detail${o.cls ?? ''}">${o.top ?? ''}<div class="hero"><span class="ic" style="--c:${o.color ?? `var(--t${t})`}">${o.icon}</span><div><b>${o.name}</b>${o.badge ?? this.badge(o.tier)}</div></div>${o.body}<p>${o.note}</p><div class="actions">${o.actions}</div></aside>`;
   }
 
   private btn(label: string, attrs: string, kind: 'gold' | 'ok' | 'plain' | 'bad' = 'gold', disabled = false): string {
@@ -2435,16 +2455,16 @@ export class Game {
   }
 
   private wardrobeHtml(): string {
-    const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
     const sections = COS_SLOTS.map((slot) => {
       const worn = this.s.look[slot];
       const cards = COSMETICS.filter((c) => c.slot === slot && this.s.owned.includes(c.id))
+        .sort((a, b) => a.tier - b.tier)
         .map((c) => {
           const on = worn === c.id;
-          return this.itemTile({ icon: icon[slot], name: c.name, sub: on ? 'Wearing' : 'Wear', tier: c.tier + 1, on, check: on, attrs: `data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}"`, tip: on ? 'Click to take off' : 'Click to wear' });
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub: on ? 'Wearing' : COS_RARITY[c.tier], tier: c.tier + 1, on, check: on, attrs: `data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}"`, tip: on ? 'Click to take off' : 'Click to wear' });
         })
         .join('');
-      const title = slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`;
+      const title = this.slotTitle(slot);
       return `<h4>${title}</h4><div class="tiles">${cards || `<p class="empty">Nothing yet - ${this.map.vendor.name}'s stall sells ${title.toLowerCase()}.</p>`}</div>`;
     }).join('');
     return `<div class="cols wardrobe"><div class="side"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><h4>Colour</h4><div class="swatches">${this.swatchHtml()}</div></div>
@@ -2461,7 +2481,7 @@ export class Game {
     return `<div class="peek"><img src="${casinoPreview}" alt="Inside Casino Cove">
       <div class="peek-text"><h3>Bet your best fish, win big</h3>
         <p>Inside the Gilded Perch Casino you can put a fish on the roulette wheel or a hand of blackjack to multiply its value, then trade your winners for chips at the Prize Counter.</p>
-        <p>Chips buy unlocks you can't get anywhere else: Lucky Charms, Quick-Reel Gloves, the Night Owl Lantern, a Tackle Vest and Shiny Lures.</p>
+        <p>Chips buy unlocks you can't get anywhere else: Lucky Charms, Quick-Reel Gloves, the Night Owl Lantern, a Tackle Vest, Shiny Lures and a rack of high-roller outfits.</p>
         ${status}</div></div>`;
   }
 
@@ -2599,21 +2619,44 @@ export class Game {
   }
 
   private cosmeticsShopHtml(): string {
+    return this.cosShopHtml('stall');
+  }
+
+  private slotTitle(slot: CosSlot): string {
+    return slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`;
+  }
+
+  /** Icon, rarity colour and tile classes shared by every cosmetic tile and detail panel. */
+  private cosLook(c: Cosmetic): { icon: string; color: string; cls: string } {
+    const cls = `${c.tier >= 5 ? ' legend' : c.tier === 4 ? ' mythic' : ''}${c.shop === 'casino' ? ' casino-item' : ''}`;
+    return { icon: cosIcon(c.id), color: COS_RARITY_COLOR[c.tier], cls };
+  }
+
+  private cosPrice(c: Cosmetic): string {
+    return c.shop === 'casino' ? `${c.price.toLocaleString()} chips` : `${c.price.toLocaleString()} 🪙`;
+  }
+
+  /** The cosmetics for sale at one counter: Marlow's stall (coins) or the casino prize counter (chips). */
+  private cosShopHtml(shop: CosShop): string {
     const s = this.s;
-    const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
-    const chosen = cosById(this.pick.cos) ?? COSMETICS.find((x) => !s.owned.includes(x.id)) ?? COSMETICS[0];
-    this.pick.cos = chosen.id;
+    const key = shop === 'casino' ? 'ccos' : 'cos';
+    const items = COSMETICS.filter((c) => c.shop === shop);
+    const money = shop === 'casino' ? s.chips : s.coins;
+    const picked = cosById(this.pick[key]);
+    const chosen = picked?.shop === shop ? picked : (items.find((x) => !s.owned.includes(x.id)) ?? items[0]);
+    this.pick[key] = chosen.id;
     const sections = COS_SLOTS.map((slot) => {
-      const cards = COSMETICS.filter((c) => c.slot === slot)
+      const cards = items
+        .filter((c) => c.slot === slot)
         .sort((a, b) => a.price - b.price)
         .map((c) => {
           const has = s.owned.includes(c.id);
           const wearing = s.look[slot] === c.id;
-          const sub = has ? (wearing ? 'Wearing' : 'Owned') : `${c.price.toLocaleString()} 🪙`;
-          return this.itemTile({ icon: icon[slot], name: c.name, sub, tier: c.tier + 1, on: this.pick.cos === c.id, check: has, ghost: !has && s.coins < c.price, attrs: `data-pick="cos" data-id="${c.id}" data-try="${slot}:${c.id}"` });
+          const sub = has ? (wearing ? 'Wearing' : 'Owned') : this.cosPrice(c);
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, on: chosen.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
         })
         .join('');
-      return `<h4>${slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`}</h4><div class="tiles">${cards}</div>`;
+      return cards ? `<h4>${this.slotTitle(slot)}</h4><div class="tiles">${cards}</div>` : '';
     }).join('');
     const has = s.owned.includes(chosen.id);
     const wearing = s.look[chosen.slot] === chosen.id;
@@ -2621,20 +2664,26 @@ export class Game {
       ? this.btn('Take it off', `data-act="equip" data-slot="${chosen.slot}" data-id=""`, 'plain')
       : has
         ? this.btn('Wear it', `data-act="equip" data-slot="${chosen.slot}" data-id="${chosen.id}"`, 'ok')
-        : s.coins < chosen.price
-          ? this.btn(`Need ${chosen.price.toLocaleString()} 🪙`, '', 'plain', true)
-          : this.btn(`Buy for ${chosen.price.toLocaleString()} 🪙`, `data-act="buycos" data-id="${chosen.id}"`);
+        : money < chosen.price
+          ? this.btn(`Need ${this.cosPrice(chosen)}`, '', 'plain', true)
+          : this.btn(`Buy for ${this.cosPrice(chosen)}`, `data-act="buycos" data-id="${chosen.id}"`);
+    const look = this.cosLook(chosen);
+    const slotName = chosen.slot === 'jewelry' ? 'Jewelry' : chosen.slot[0].toUpperCase() + chosen.slot.slice(1);
+    const where = shop === 'casino' ? ' · Casino exclusive' : '';
     const detail = this.detail({
       top: '<div id="pv-slot"></div>',
-      icon: icon[chosen.slot],
+      icon: look.icon,
       name: chosen.name,
       tier: chosen.tier + 1,
-      badge: `<span class="badge" style="--c:var(--t${Math.min(5, chosen.tier + 1)})">${chosen.slot === 'jewelry' ? 'Jewelry' : chosen.slot[0].toUpperCase() + chosen.slot.slice(1)} · style ${chosen.tier + 1}</span>`,
+      color: look.color,
+      cls: look.cls,
+      badge: `<span class="badge" style="--c:${look.color}">${slotName} · ${COS_RARITY[chosen.tier]}${where}</span>`,
       body: '',
-      note: has ? (wearing ? 'You are wearing this.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.',
+      note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.'}`,
       actions: action,
     });
-    return `<div class="cols"><div class="main">${sections}</div>${detail}</div>`;
+    const intro = shop === 'casino' ? '<p class="cos-intro">High-roller outfits sold only here, for chips. Nobody at the pond can sell you these.</p>' : '';
+    return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
   }
 
   /** Bottom strip in the shop and at the prize counter: how to sell or turn in fish. */

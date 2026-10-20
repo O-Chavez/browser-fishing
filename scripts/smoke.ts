@@ -43,7 +43,7 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fishing-smoke-'));
 const fish = (i: number) => ({ k: 'fish' as const, fishId: FISH[i % FISH.length].id, size: 40 + i * 5 });
 // The last slot holds a top-tier fish: anything worth under 1 chip is refused at the tray.
 const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, size: 60 };
-const save = { ...newSave(), level: 20, coins: 5000, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
+const save = { ...newSave(), level: 20, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
 fs.writeFileSync(
   path.join(dataDir, 'accounts.json'),
   JSON.stringify({ smoke: { name: 'Smoke', hash: createHash('sha256').update(TOKEN).digest('hex'), save } }),
@@ -418,6 +418,33 @@ async function casinoChecks(): Promise<void> {
     return { before: c0, after: read() };
   });
   check('casino: turning a fish in at the tray gives chips', chips.after > chips.before, `${chips.before} -> ${chips.after}`);
+
+  // Casino-only cosmetics: bought with chips at the prize counter, then worn.
+  await page.evaluate(async () => {
+    const { MAPS } = await import('/src/data/maps.ts');
+    const p = MAPS.find((x: any) => x.id === 'casino').casino.prizes;
+    window.__game.teleport(p.x, p.z - 2);
+  });
+  await sleep(700);
+  await page.evaluate(() => window.__game.openMenu('casino'));
+  await page.click('[data-prize="cosmetics"]');
+  await page.click('[data-pick="ccos"][data-id="visor"]');
+  await sleep(150);
+  const chips0 = await page.evaluate(() => window.__game.s.chips);
+  await page.click('#tab .detail [data-act="buycos"]');
+  const bought = await page.evaluate(async () => {
+    const s = window.__game.s;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 3000 && !s.owned.includes('visor')) await new Promise((r) => setTimeout(r, 50));
+    return { owned: s.owned.includes('visor'), chips: s.chips, coins: s.coins };
+  });
+  check('casino: High Roller tab sells cosmetics for chips', bought.owned && bought.chips === chips0 - 30 && bought.coins === 5000, JSON.stringify({ chips0, ...bought }));
+  await page.click('[data-act="equip"][data-id="visor"]');
+  await sleep(800);
+  const worn = await page.evaluate(() => window.__game.s.look.hat);
+  check('casino: a casino cosmetic can be worn right away', worn === 'visor', `hat ${worn}`);
+  await page.screenshot({ path: `${SHOTS}/casino-cosmetics.png` });
+  await page.evaluate(() => window.__game.closeMenu());
 
   // Leave through the front door: real server travel back to the pond.
   const exit = await page.evaluate(async () => {
