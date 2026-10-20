@@ -221,7 +221,7 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 
 ### 14.2 Map shop
 - One vendor per map. **Sell** fish (price by species rarity and weight, as today) and **buy** rods, bait and map-specific gear. Stock improves per map.
-- The hotbar is the entire inventory: 5 slots, each holding one rod, one fish, or a stack of up to 20 bait of one type. Each map's stall sells a fixed stock (Starter Pond: worm bait and the free Twig Rod; set per map in `stock`). Goods are bought by looking at them on the stall and pressing E; fish are sold by holding them near the vendor and pressing E. You cannot cast while a fish is in hand or when no slot is free for the catch, so sell or drop fish before the bar fills. Dropped items last 30 seconds in the world, visible to the whole room (anyone can pick them up).
+- The hotbar is the entire inventory: 5 slots, each holding one rod, one fish, or a stack of up to 99 bait of one type (more waits in the tackle locker and refills the stack). Each map's stall sells a fixed stock (Starter Pond: worm bait and the free Twig Rod; set per map in `stock`). Goods are bought by looking at them on the stall and pressing E; fish are sold by holding them near the vendor and pressing E. You cannot cast while a fish is in hand or when no slot is free for the catch, so sell or drop fish before the bar fills. Dropped items last 30 seconds in the world, visible to the whole room (anyone can pick them up).
 
 ### 14.3 Progression gate
 - Each map's gate opens per player once they reach the destination map's `minLevel` (the casino uses `CASINO_LEVEL`, 15). The server checks the level on travel.

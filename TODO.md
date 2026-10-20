@@ -64,7 +64,7 @@
   - A UI hint appears when the player is in range and able to click to trade fish in for chips
 - [x] Inventory/wardrobe shows equipped charms and their total buffs
   - List the equipped charms and the summed buffs they give
-- [ ] Smaller bait purchase popup, and reconsider the 20-bait cap
+- [x] Smaller bait purchase popup, and reconsider the 20-bait cap
   - The shop's purchase popup is too large and blocks the view; it should just say the amount purchased
   - Oscar is fine with holding more than 20 bait unless there's a reason for the limit (`BAIT_STACK` in `src/game/state.ts:11`, covered by `economy.test.ts`)
 - [x] UI sometimes disappears until Escape/Tab is toggled
