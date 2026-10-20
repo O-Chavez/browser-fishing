@@ -3,8 +3,8 @@
 ## Checklist
 
 - [ ] Improve performance
-  - Being handled by a separate agent on `perf/quick-wins`
-  - Done = a tangible difference is noticed when playing
+  - Merged to `main` (2026-10-19): 23-29% faster rendering in every benchmark scene, original lighting kept. Results in `bench-results/ab-2a42083-vs-13dbd1f.json`
+  - Done = a tangible difference is noticed when playing (not yet confirmed in play)
 - [ ] Global chat in the top right
   - Non-intrusive, with a clear hint on how to use it ("Press Enter to chat")
   - Everyone on the server; filterable by world (pond vs casino) with Tab while in chat mode, if needed
@@ -48,4 +48,6 @@
 
 <!-- Add new ideas here. Move them into the checklist when you decide to do them. -->
 
--
+- Fake "light pools" (cheap glowing decals) under lamps and above casino chandeliers, so fewer real point lights are needed. Cutting real lights from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling
+- Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
+- Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs

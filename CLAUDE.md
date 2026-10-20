@@ -16,3 +16,5 @@ Planned work lives in `TODO.md`.
 - `npm run build` — type-check and build
 - `npm test` — run tests (Vitest)
 - `npm run bench` / `npm run bench:compare` — render benchmark; run before and after performance changes and compare
+- `npm run bench:ab -- <before> <after>` — alternating A/B benchmark of two commits (~10 min); use this to prove a performance change, since single runs drift
+- `npm run smoke` — end-to-end smoke test in headless Chrome with its own server (~1.5 min); run before merging gameplay or scene changes
