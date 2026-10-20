@@ -13,7 +13,8 @@
     "dev:all": "tsx server/index.ts & vite",
     "bench": "node scripts/bench.mjs",
     "bench:compare": "node scripts/bench-compare.mjs",
-    "bench:ab": "node scripts/bench-ab.mjs"
+    "bench:ab": "node scripts/bench-ab.mjs",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "pg": "^8.23.1",

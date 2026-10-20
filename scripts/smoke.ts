@@ -1,0 +1,455 @@
+// End-to-end smoke test: plays the game in headless Chrome and checks the flows most likely to
+// break silently (merged scenery, the wardrobe preview, map travel, the casino tables).
+//
+//   npm run smoke
+//
+// Starts its own game server on a throwaway data folder (your saves are never touched), seeds a
+// level-20 test account that starts in the casino, and writes screenshots to .bench/smoke/.
+// Exits non-zero if any check fails or the page logs an error.
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import puppeteer, { type Page } from 'puppeteer-core';
+import { createServer } from 'vite';
+import { FISH } from '../src/data/content';
+import { newSave } from '../src/game/state';
+import { SERVER_PORT } from '../src/net/protocol';
+
+const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const VITE_PORT = 5288;
+const SHOTS = path.resolve('.bench/smoke');
+const TOKEN = 'smoke-test-token-0123456789abcdef';
+
+type Result = { name: string; ok: boolean; detail: string };
+const results: Result[] = [];
+const errors: string[] = [];
+const check = (name: string, ok: boolean, detail = ''): void => {
+  results.push({ name, ok, detail });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+};
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- server with a seeded account ----------
+
+if (await portInUse(SERVER_PORT)) {
+  console.error(`Port ${SERVER_PORT} is in use. Stop your local game server first; the smoke test runs its own.`);
+  process.exit(2);
+}
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fishing-smoke-'));
+const fish = (i: number) => ({ k: 'fish' as const, fishId: FISH[i % FISH.length].id, size: 40 + i * 5 });
+// The last slot holds a top-tier fish: anything worth under 1 chip is refused at the tray.
+const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, size: 60 };
+const save = { ...newSave(), level: 20, coins: 5000, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
+fs.writeFileSync(
+  path.join(dataDir, 'accounts.json'),
+  JSON.stringify({ smoke: { name: 'Smoke', hash: createHash('sha256').update(TOKEN).digest('hex'), save } }),
+);
+fs.mkdirSync(SHOTS, { recursive: true });
+
+const server = spawn('npx', ['tsx', 'server/index.ts'], {
+  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '' },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+await waitForLine(server, /fishing server on port/);
+const vite = await createServer({ server: { port: VITE_PORT, strictPort: true }, logLevel: 'error' });
+await vite.listen();
+const browser = await puppeteer.launch({
+  executablePath: CHROME,
+  headless: true,
+  args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'],
+  defaultViewport: { width: 1280, height: 720 },
+});
+
+try {
+  await pondChecks();
+  await casinoChecks();
+} catch (e) {
+  check('smoke test ran to the end', false, String(e));
+} finally {
+  await browser.close();
+  await vite.close();
+  server.kill();
+  fs.rmSync(dataDir, { recursive: true, force: true });
+}
+
+check('no page errors', errors.length === 0, errors.slice(0, 5).join(' | '));
+const failed = results.filter((r) => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} checks passed. Screenshots in ${path.relative(process.cwd(), SHOTS)}/`);
+process.exit(failed.length ? 1 : 0);
+
+// ---------- pond (offline) ----------
+
+async function pondChecks(): Promise<void> {
+  const page = await openPage(`http://localhost:${VITE_PORT}/`);
+  await page.click('#join-offline');
+  await page.evaluate(() => window.__game.activate());
+  await sleep(800);
+
+  let r = await page.evaluate(() => window.__smoke.attachedReport('hub'));
+  check('pond: hub animated parts still in the scene', r.missing.length === 0, r.missing.join(', ') || `${r.checked} checked`);
+  r = await page.evaluate(() => window.__smoke.attachedReport('town'));
+  check('pond: town animated parts still in the scene', r.missing.length === 0, r.missing.join(', ') || `${r.checked} checked`);
+
+  // Night: lamps, windows and torches must still be on meshes that are drawn.
+  await page.evaluate(() => { window.__game.day(0.7); window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.15); });
+  await sleep(600);
+  const night = await page.evaluate(() => {
+    const w = window.__game.world as any;
+    const used = window.__smoke.materialsInScene();
+    return {
+      hubLamps: w.hub.lampLights.some((l: any) => l.intensity > 1),
+      hubLampMats: w.hub.lampMats.every((m: any) => used.has(m) && m.emissiveIntensity > 1),
+      townLamps: w.town.lights.some((l: any) => l.intensity > 1),
+      townLampMats: w.town.lamps.every((m: any) => used.has(m)),
+      windows: used.has(w.town.windowMat),
+    };
+  });
+  check('pond night: hub lamps lit and their bulbs drawn', night.hubLamps && night.hubLampMats);
+  check('pond night: town lamps lit, lanterns and windows drawn', night.townLamps && night.townLampMats && night.windows);
+  await page.screenshot({ path: `${SHOTS}/pond-plaza-night.png` });
+
+  const anim = await page.evaluate(async () => {
+    const w = window.__game.world as any;
+    const hang0 = w.hub.hanging[0].rotation.z;
+    const flame0 = w.hub.flames[0].scale.y;
+    const smoke0 = w.town.smoke[0]?.m.position.y;
+    await new Promise((r) => setTimeout(r, 500));
+    return { hanging: w.hub.hanging[0].rotation.z !== hang0, flames: w.hub.flames[0].scale.y !== flame0, smoke: w.town.smoke[0]?.m.position.y !== smoke0 };
+  });
+  check('pond: hanging fish, campfire flames and chimney smoke animate', anim.hanging && anim.flames && anim.smoke, JSON.stringify(anim));
+
+  // Shopkeeper turns to face you (stand off to his side, so "facing you" isn't straight ahead).
+  await page.evaluate(() => {
+    window.__game.day(0.1);
+    const h = (window.__game.world as any).hub;
+    window.__game.teleport(h.vendorSpot.x + Math.cos(h.npcYaw) * 2, h.vendorSpot.z - Math.sin(h.npcYaw) * 2);
+  });
+  await sleep(1200);
+  const head = await page.evaluate(() => (window.__game.world as any).hub.head.rotation.y);
+  check('pond: shopkeeper head turns toward the player', Math.abs(head) > 0.05, `head yaw ${head.toFixed(3)}`);
+  // Talking to him opens the shop.
+  await page.evaluate(() => { const v = (window.__game.world as any).hub.vendorSpot; window.__game.teleport(v.x, v.z); });
+  await sleep(500);
+  const label = await page.evaluate(() => window.__game.player().near);
+  await page.evaluate(() => window.__game.interact());
+  await sleep(300);
+  const shop = await page.evaluate(() => !document.getElementById('menu')!.classList.contains('hidden') && document.body.classList.contains('shopping'));
+  check('pond: talking to the vendor opens the shop', shop, `prompt "${label}"`);
+  await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
+
+  // Wardrobe preview: running while shown, stopped when the menu closes, running again on reopen.
+  await page.evaluate(() => window.__game.openMenu('inventory'));
+  await page.click('[data-act="invtab"][data-id="wardrobe"]');
+  await sleep(300);
+  const open1 = { loops: await loops(page), inSlot: await previewInSlot(page) };
+  await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
+  await sleep(300);
+  const closed = await loops(page);
+  await page.evaluate(() => window.__game.openMenu('inventory'));
+  await sleep(300);
+  const open2 = { loops: await loops(page), inSlot: await previewInSlot(page) };
+  await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
+  check('wardrobe: preview runs while shown', open1.loops === 2 && open1.inSlot, JSON.stringify(open1));
+  check('wardrobe: preview stops when the menu closes', closed === 1, `${closed} render loops`);
+  check('wardrobe: preview runs again when reopened', open2.loops === 2 && open2.inSlot, JSON.stringify(open2));
+
+  // Lucky Wheel with a fish in hand (offline, rolled locally).
+  await page.evaluate((f) => { (window.__game.s as any).slots[2] = f; }, fish(3));
+  await page.keyboard.press('3');
+  await page.evaluate(() => { const s = (window.__game.world as any).hub.wheelSpot; window.__game.teleport(s.x + 1.2, s.z + 1.2); });
+  await sleep(500);
+  const wheel = await page.evaluate(async () => {
+    const hub = (window.__game.world as any).hub;
+    const label = window.__game.player().near;
+    const r0 = hub.disc.rotation.z;
+    window.__game.interact();
+    await new Promise((r) => setTimeout(r, 1200));
+    return { label, spun: hub.disc.rotation.z !== r0 };
+  });
+  check('pond: Lucky Wheel spins with a fish in hand', wheel.spun, `prompt "${wheel.label}"`);
+  await sleep(4000);
+
+  // Drop a fish and pick it back up.
+  await page.evaluate((f) => { (window.__game.s as any).slots[3] = f; }, fish(4));
+  await page.evaluate(() => window.__game.teleport(0, 20));
+  await sleep(300);
+  await page.keyboard.press('4');
+  const dropCount = () => page.evaluate(() => window.__smoke.dropsShown());
+  const d0 = await dropCount();
+  await page.keyboard.press('g');
+  await sleep(400);
+  const d1 = await dropCount();
+  const pickLabel = await page.evaluate(() => window.__game.player().near);
+  await page.evaluate(() => window.__game.interact());
+  await sleep(400);
+  const d2 = await dropCount();
+  const back = await page.evaluate(() => (window.__game.s as any).slots.some((x: any) => x?.k === 'fish'));
+  check('pond: dropping a fish shows it on the ground', d1 === d0 + 1, `${d0} -> ${d1}`);
+  check('pond: picking it up removes it and returns the fish', d2 === d0 && back, `prompt "${pickLabel}", ${d1} -> ${d2}`);
+
+  // Fishing: cast off the end of the pier and play the catch out.
+  await page.keyboard.press('1');
+  await page.evaluate(() => { window.__game.teleport(0, -5); window.__game.look(0, -0.1); });
+  await sleep(500);
+  const fishing = await page.evaluate(async () => {
+    const g = window.__game;
+    const seen = new Set<string>();
+    g.press();
+    await new Promise((r) => setTimeout(r, 400));
+    g.release();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 45000) {
+      const st = g.state();
+      seen.add(st.phase);
+      if (st.phase === 'waiting') g.skipWait();
+      else if (st.phase === 'bite') g.press();
+      else if (st.phase === 'reeling') g.hold((st.tension ?? 0) < 0.6);
+      else if (st.phase === 'result') { g.press(); break; }
+      else if (st.phase === 'idle' && seen.has('reeling')) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    g.hold(false);
+    return [...seen];
+  });
+  check('pond: cast, bite, reel and land a fish', fishing.includes('reeling') && (fishing.includes('result') || fishing.includes('idle')), fishing.join(' > '));
+  await page.close();
+}
+
+// ---------- casino (online, seeded account) ----------
+
+async function casinoChecks(): Promise<void> {
+  const ctx = await browser.createBrowserContext();
+  const page = await openPage(`http://localhost:${VITE_PORT}/?name=Smoke&room=smoke`, ctx, TOKEN);
+  await page.waitForFunction(() => (window.__game.world as any).hall, { timeout: 15000 });
+  await page.evaluate(() => { window.__game.activate(); window.__game.day(0.1); });
+  await sleep(1000);
+
+  const r = await page.evaluate(() => window.__smoke.attachedReport('hall'));
+  check('casino: tables, wheel, cards and clickable pieces still in the scene', r.missing.length === 0, r.missing.join(', ') || `${r.checked} checked`);
+  const glow = await page.evaluate(() => {
+    const used = window.__smoke.materialsInScene();
+    return (window.__game.world as any).hall.glow.every((g: any) => used.has(g.m));
+  });
+  check('casino: neon and bulb materials still drawn (pulse works)', glow);
+  const wheel = await page.evaluate(async () => {
+    const h = (window.__game.world as any).hall;
+    const r0 = h.wheel.rotation.y;
+    await new Promise((r) => setTimeout(r, 300));
+    return h.wheel.rotation.y !== r0;
+  });
+  check('casino: roulette wheel idles (rotates)', wheel);
+  await page.screenshot({ path: `${SHOTS}/casino.png` });
+
+  // Roulette: hold a fish, aim at RED, click.
+  await page.keyboard.press('3');
+  await aimAt(page, 'rbet', 'red');
+  const roul = await page.evaluate(async () => {
+    const g = window.__game;
+    const h = (g.world as any).hall;
+    g.press();
+    g.release();
+    const t0 = performance.now();
+    let spun = false;
+    while (performance.now() - t0 < 3000 && !spun) { spun = !!h.anim; await new Promise((r) => setTimeout(r, 50)); }
+    await new Promise((r) => setTimeout(r, 5500));
+    return { spun, slot: JSON.stringify((g.s as any).slots[2]) };
+  });
+  check('casino: roulette bet spins the wheel', roul.spun, `slot after: ${roul.slot}`);
+
+  // Blackjack: deal, see cards and buttons, stand.
+  await page.keyboard.press('4');
+  await aimAt(page, 'bj', 'deal');
+  const bj = await page.evaluate(async () => {
+    const g = window.__game;
+    const h = (g.world as any).hall;
+    g.press();
+    g.release();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 4000 && h.cards.children.length === 0) await new Promise((r) => setTimeout(r, 50));
+    const vis = Object.fromEntries(Object.entries(h.bjButtons).map(([k, b]: [string, any]) => [k, b.visible]));
+    return { cards: h.cards.children.length, cardsAttached: window.__smoke.attached(h.cards), vis };
+  });
+  await page.screenshot({ path: `${SHOTS}/casino-blackjack.png` });
+  const live = bj.vis.hit && bj.vis.stand;
+  check('casino: blackjack deal shows cards on the felt', bj.cards >= 3 && bj.cardsAttached, `${bj.cards} cards`);
+  check('casino: blackjack shows hit/stand (or the hand ended at once)', live || bj.vis.deal, JSON.stringify(bj.vis));
+  if (live) {
+    await aimAt(page, 'bj', 'stand');
+    const done = await page.evaluate(async () => {
+      const g = window.__game;
+      const h = (g.world as any).hall;
+      g.press();
+      g.release();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 4000 && !h.bjButtons.deal.visible) await new Promise((r) => setTimeout(r, 50));
+      return h.bjButtons.deal.visible;
+    });
+    check('casino: standing ends the hand (DEAL comes back)', done);
+  }
+
+  // Cash a fish in at the chip tray.
+  await page.keyboard.press('5');
+  await aimAt(page, 'cash', 'cash');
+  const chips = await page.evaluate(async () => {
+    const g = window.__game;
+    const read = () => Number(document.getElementById('chips')?.textContent?.replace(/[^\d.]/g, '') || 0);
+    const c0 = read();
+    g.press();
+    g.release();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 3000 && read() === c0) await new Promise((r) => setTimeout(r, 50));
+    return { before: c0, after: read() };
+  });
+  check('casino: turning a fish in at the tray gives chips', chips.after > chips.before, `${chips.before} -> ${chips.after}`);
+
+  // Leave through the front door: real server travel back to the pond.
+  const exit = await page.evaluate(async () => {
+    const { MAPS } = await import('/src/data/maps.ts');
+    const m = MAPS.find((x: any) => x.id === 'casino');
+    window.__game.teleport(m.gate.x, m.gate.z + 1.2);
+    await new Promise((r) => setTimeout(r, 600));
+    const label = window.__game.player().near;
+    window.__game.interact();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 6000 && !(window.__game.world as any).hub) await new Promise((r) => setTimeout(r, 50));
+    return { label, atPond: !!(window.__game.world as any).hub };
+  });
+  check('travel: casino exit takes you to the pond', exit.atPond, `prompt "${exit.label}"`);
+  if (exit.atPond) {
+    await sleep(800);
+    const hub = await page.evaluate(() => window.__smoke.attachedReport('hub'));
+    check('travel: hub intact after arriving', hub.missing.length === 0, hub.missing.join(', '));
+    await page.screenshot({ path: `${SHOTS}/pond-after-travel.png` });
+  }
+  await ctx.close();
+}
+
+// ---------- helpers ----------
+
+async function openPage(url: string, ctx = browser.defaultBrowserContext(), token?: string): Promise<Page> {
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => {
+    // The offline page can't reach a server on purpose; anything else is a real error.
+    if (m.type() === 'error' && !/WebSocket|ERR_CONNECTION_REFUSED|404/.test(m.text())) errors.push(`console: ${m.text()}`);
+  });
+  // tsx keeps function names by wrapping them in __name(); functions sent to the page need it too.
+  await page.evaluateOnNewDocument('globalThis.__name = (f) => f');
+  await page.evaluateOnNewDocument((token) => {
+    if (token) localStorage.setItem('fishing-token', token);
+    const raf = window.requestAnimationFrame.bind(window);
+    (window as any).__rafSeen = new Set();
+    window.requestAnimationFrame = (cb) => raf((t) => { (window as any).__rafSeen.add(cb); cb(t); });
+  }, token ?? '');
+  await page.goto(url, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__game);
+  await page.evaluate(() => {
+    const w = window.__game.world as any;
+    const inScene = (o: any) => { for (let p = o; p; p = p.parent) if (p === w.scene) return true; return false; };
+    // Every object the game animates or toggles after the scene is built, per owner.
+    const parts: Record<string, () => [string, any][]> = {
+      hub: () => {
+        const h = w.hub;
+        return [['npc', h.npc], ['npc head', h.head], ['wheel disc', h.disc], ['gate barrier', h.barrier], ['campfire light', h.fireLight],
+          ...h.hanging.map((o: any, i: number) => [`hanging fish ${i}`, o]), ...h.flames.map((o: any, i: number) => [`flame ${i}`, o]),
+          ...h.torches.map((o: any, i: number) => [`torch ${i}`, o]), ...h.lampLights.map((o: any, i: number) => [`lamp light ${i}`, o])];
+      },
+      town: () => {
+        const t = w.town;
+        return [...t.heads.flatMap((h: any, i: number) => [[`npc ${i} head`, h.head], [`npc ${i} body`, h.body]]),
+          ...[...t.bottleMeshes.entries()].map(([id, o]: [string, any]) => [`bottle ${id}`, o]),
+          ...t.smoke.map((s: any, i: number) => [`smoke ${i}`, s.m]),
+          ...t.fires.flatMap((f: any, i: number) => [[`fire ${i} light`, f.light], ...f.flames.map((o: any, k: number) => [`fire ${i} flame ${k}`, o])]),
+          ...t.lights.map((o: any, i: number) => [`lamp light ${i}`, o])];
+      },
+      hall: () => {
+        const h = w.hall;
+        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh],
+          ...h.picks.map((o: any) => [`clickable ${o.userData.tag.k}:${o.userData.tag.id}`, o])];
+      },
+    };
+    (window as any).__smoke = {
+      attached: inScene,
+      // Each part must be in the scene and still draw something itself: merging can strip the
+      // meshes out of an animated group and leave it empty, which then animates nothing.
+      attachedReport: (owner: string) => {
+        const list = parts[owner]();
+        const draws = (o: any) => { let n = 0; o.traverse((c: any) => { if (c.isMesh || c.isSprite) n++; }); return n > 0; };
+        return { checked: list.length, missing: list.filter(([, o]) => !o || !inScene(o) || (!o.isLight && o !== w.hall?.cards && !draws(o))).map(([n]) => n) };
+      },
+      materialsInScene: () => {
+        const s = new Set();
+        w.scene.traverse((o: any) => { if (o.material) [].concat(o.material).forEach((m) => s.add(m)); });
+        return s;
+      },
+      // Each item on the ground has a 6 m open light beam (see DropsView); count those.
+      dropsShown: () => {
+        let n = 0;
+        w.scene.traverse((o: any) => { const p = o.geometry?.parameters; if (o.isMesh && o.geometry.type === 'CylinderGeometry' && p.height === 6 && p.openEnded) n++; });
+        return n;
+      },
+    };
+  });
+  return page;
+}
+
+async function loops(page: Page): Promise<number> {
+  return page.evaluate(() => new Promise<number>((res) => { (window as any).__rafSeen.clear(); setTimeout(() => res((window as any).__rafSeen.size), 1000); }));
+}
+
+async function previewInSlot(page: Page): Promise<boolean> {
+  return page.evaluate(() => document.querySelector('canvas.preview')?.parentElement?.id === 'pv-slot');
+}
+
+/** Stand in front of a casino table piece and look straight at it, so the game's own aiming picks it. */
+async function aimAt(page: Page, k: string, id: string): Promise<void> {
+  await page.evaluate(({ k, id }) => {
+    const g = window.__game;
+    const h = (g.world as any).hall;
+    const p = h.picks.find((o: any) => o.userData.tag.k === k && o.userData.tag.id === id);
+    h.group.updateMatrixWorld(true);
+    const t = p.getWorldPosition(p.position.clone());
+    // The piece's table faces along its local +z.
+    let table = p.parent;
+    while (table.parent !== h.group) table = table.parent;
+    const f = table.rotation.y;
+    g.teleport(t.x + Math.sin(f) * 2.0, t.z + Math.cos(f) * 2.0);
+  }, { k, id });
+  await sleep(700); // let the server see the new position
+  await page.evaluate(({ k, id }) => {
+    const g = window.__game;
+    const h = (g.world as any).hall;
+    const p = h.picks.find((o: any) => o.userData.tag.k === k && o.userData.tag.id === id);
+    const t = p.getWorldPosition(p.position.clone());
+    const me = g.player();
+    g.look(Math.atan2(me.x - t.x, me.z - t.z), Math.atan2(t.y - me.y, Math.hypot(t.x - me.x, t.z - me.z)));
+  }, { k, id });
+  await sleep(300);
+}
+
+function waitForLine(proc: ChildProcess, re: RegExp): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('game server did not start')), 20000);
+    const on = (b: Buffer) => { if (re.test(b.toString())) { clearTimeout(timer); resolve(); } };
+    proc.stdout!.on('data', on);
+    proc.stderr!.on('data', (b) => process.stderr.write(b));
+    proc.on('exit', (c) => reject(new Error(`game server exited (${c})`)));
+  });
+}
+
+function portInUse(port: number): Promise<boolean> {
+  return new Promise((res) => {
+    const s = net.createServer().once('error', () => res(true)).once('listening', () => s.close(() => res(false)));
+    s.listen(port);
+  });
+}
+
+declare global {
+  interface Window {
+    __game: any;
+    __smoke: any;
+  }
+}
