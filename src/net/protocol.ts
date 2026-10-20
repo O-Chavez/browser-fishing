@@ -58,7 +58,9 @@ export type ClientMsg =
   | { t: 'bj'; a: 'deal' | 'hit' | 'stand' | 'double'; i?: number }
   /** Turn the fish in slot i in at the prize shop for chips. */
   | { t: 'cashout'; i: number }
-  | { t: 'buyperk'; id: string };
+  | { t: 'buyperk'; id: string }
+  /** A global chat line. */
+  | { t: 'chat'; text: string };
 
 export type ServerMsg =
   | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[] }
@@ -81,7 +83,9 @@ export type ServerMsg =
   /** Coins per player id, for the leaderboard. */
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
-  | { t: 'hall'; rows: HallRow[] };
+  | { t: 'hall'; rows: HallRow[] }
+  /** A chat line from anyone on the server; `room` and `id` let same-room clients show a bubble. */
+  | { t: 'chat'; room: string; id: number; name: string; map: string; text: string };
 
 export interface HallRow { name: string; level: number; best: BestCatch }
 

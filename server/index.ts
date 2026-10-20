@@ -6,6 +6,7 @@ import { WebSocketServer } from 'ws';
 import { MAPS } from '../src/data/maps';
 import { SERVER_PORT, type ClientMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
+import { ChatGate } from './chat';
 import { Room } from './room';
 import { createStorage } from './storage';
 
@@ -13,6 +14,9 @@ const storage = createStorage(process.env, fileURLToPath(new URL('./', import.me
 const data = await storage.load();
 const accounts = new AccountStore(data.accounts);
 const rooms = new Map<string, Room>();
+// Chat is server-wide: one set of limits, and every line goes to every room.
+const chatGate = new ChatGate();
+setInterval(() => chatGate.prune(), 60_000);
 console.log(`saves: ${storage.kind} (${Object.keys(data.accounts).length} accounts loaded)`);
 if (process.env.RENDER && !process.env.DATABASE_URL) {
   console.warn('WARNING: running on Render without DATABASE_URL - progress will be lost on every deploy. Set it in the web service Environment tab.');
@@ -50,6 +54,8 @@ function room(name: string): Room {
   if (!r) {
     r = new Room(name, MAPS, persist);
     r.hall = () => accounts.hall();
+    r.chatGate = chatGate;
+    r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }
   return r;

@@ -8,6 +8,17 @@ import { animateFish, buildFish, type FishModel } from './fishmodel';
 const NOSE = new THREE.Vector3(0, 0, -1);
 const UP = new THREE.Vector3(0, 1, 0);
 const HANG = 0.45;
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+/** Chat bubbles: how long they stay, how long they take to fade, and how much text they show. */
+const BUBBLE_MS = 6000;
+const BUBBLE_FADE_MS = 1000;
+const BUBBLE_CHARS = 40;
+/** Bubbles show only to players nearby, fading out between these distances (metres). */
+const BUBBLE_NEAR = 15;
+const BUBBLE_FAR = 20;
+/** ...and fade away when you stand on top of the speaker, so they don't cover your view. */
+const BUBBLE_HIDE_IN = 1.2;
+const BUBBLE_FULL_AT = 2.5;
 
 class Avatar {
   group = new THREE.Group();
@@ -22,6 +33,7 @@ class Avatar {
   private tipPos = new THREE.Vector3();
   private rod: THREE.Mesh;
   private char: Character;
+  private bubble: { sprite: THREE.Sprite; until: number } | null = null;
 
   constructor(
     info: PlayerInfo,
@@ -70,6 +82,49 @@ class Avatar {
     return s;
   }
 
+  /** Shows a short speech bubble above the head; a new line replaces the old one. */
+  say(text: string): void {
+    this.clearBubble();
+    const shown = text.length > BUBBLE_CHARS ? `${text.slice(0, BUBBLE_CHARS - 1).trimEnd()}…` : text;
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d')!;
+    const font = '600 30px system-ui, sans-serif';
+    g.font = font;
+    const w = Math.ceil(g.measureText(shown).width) + 40;
+    c.width = w;
+    c.height = 72;
+    g.font = font;
+    g.fillStyle = 'rgba(255,255,255,0.92)';
+    g.beginPath();
+    g.roundRect(2, 2, w - 4, 52, 18);
+    g.moveTo(w / 2 - 10, 54);
+    g.lineTo(w / 2, 68);
+    g.lineTo(w / 2 + 10, 54);
+    g.fill();
+    g.fillStyle = '#1b2433';
+    g.textAlign = 'center';
+    g.fillText(shown, w / 2, 39);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    // A little smaller than the nameplate's 256 px = 1.4 m, sitting just above it.
+    const px = (1.4 / 256) * 0.8;
+    sprite.scale.set(w * px, 72 * px, 1);
+    sprite.position.y = 2.62;
+    sprite.renderOrder = 11;
+    this.group.add(sprite);
+    this.bubble = { sprite, until: performance.now() + BUBBLE_MS };
+  }
+
+  private clearBubble(): void {
+    if (!this.bubble) return;
+    const m = this.bubble.sprite.material;
+    m.map?.dispose();
+    m.dispose();
+    this.group.remove(this.bubble.sprite);
+    this.bubble = null;
+  }
+
   setLook(look: PlayerInfo['look']): void {
     this.char.set(look);
   }
@@ -101,7 +156,7 @@ class Avatar {
     }
   }
 
-  update(dt: number, t: number, p: PlayerInfo): void {
+  update(dt: number, t: number, p: PlayerInfo, viewX: number, viewZ: number): void {
     this.target.set(p.x, standHeight(p.x, p.z), p.z);
     if (this.fresh) {
       this.group.position.copy(this.target);
@@ -115,6 +170,18 @@ class Avatar {
     // Camera yaw 0 looks along -z, the model's front is +z.
     this.group.rotation.y = this.yaw + Math.PI;
     this.setAct(p.act ?? null);
+    if (this.bubble) {
+      const left = this.bubble.until - performance.now();
+      if (left <= 0) this.clearBubble();
+      else {
+        const d = Math.hypot(this.group.position.x - viewX, this.group.position.z - viewZ);
+        const near = clamp01((d - BUBBLE_HIDE_IN) / (BUBBLE_FULL_AT - BUBBLE_HIDE_IN));
+        const far = clamp01((BUBBLE_FAR - d) / (BUBBLE_FAR - BUBBLE_NEAR));
+        const o = Math.min(left / BUBBLE_FADE_MS, near, far, 1);
+        this.bubble.sprite.material.opacity = o;
+        this.bubble.sprite.visible = o > 0.01;
+      }
+    }
 
     this.group.updateMatrixWorld(true);
     this.tip.getWorldPosition(this.tipPos);
@@ -142,6 +209,7 @@ class Avatar {
 
   dispose(): void {
     this.setAct(null);
+    this.clearBubble();
     this.scene.remove(this.group, this.bobber, this.line);
   }
 }
@@ -174,10 +242,16 @@ export class Avatars {
     }
   }
 
-  update(dt: number, t: number, players: Map<number, PlayerInfo>): void {
+  say(id: number, text: string): void {
+    const a = this.list.get(id);
+    if (a?.group.visible) a.say(text);
+  }
+
+  /** `viewX`/`viewZ` is the local player, for fading chat bubbles by distance. */
+  update(dt: number, t: number, players: Map<number, PlayerInfo>, viewX: number, viewZ: number): void {
     for (const [id, a] of this.list) {
       const p = players.get(id);
-      if (p && a.group.visible) a.update(dt, t, p);
+      if (p && a.group.visible) a.update(dt, t, p, viewX, viewZ);
     }
   }
 }

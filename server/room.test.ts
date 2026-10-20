@@ -341,3 +341,33 @@ describe('cosmetics, selling by slot and the board', () => {
     expect(last(b.c, 'board').coins[a.id]).toBe(a.acct.save.coins);
   });
 });
+
+describe('chat', () => {
+  it('sends accepted lines to the room, censored, and tells only the sender to slow down', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'chat', text: '  hi  shit ' });
+    expect(last(b.c, 'chat')).toMatchObject({ room: 'r', id: a.id, name: 'Ann', map: 'pond', text: 'hi ****' });
+    room.handle(a.id, { t: 'chat', text: 'two' });
+    room.handle(a.id, { t: 'chat', text: 'three' });
+    b.c.log.length = 0;
+    room.handle(a.id, { t: 'chat', text: 'four' });
+    expect(b.c.log.some((m) => m.t === 'chat')).toBe(false);
+    expect(last(a.c, 'notice').msg).toContain('Slow down');
+  });
+
+  it('works mid-spin, and the server can route lines to every room', () => {
+    const { room, join, store } = setup();
+    const a = join('Ann');
+    (room as any).members.get(a.id).spin = { at: Infinity, run: () => {} };
+    const other = new Room('other', MAPS);
+    const res = store.auth('Cat', 'token-token-token-Cat');
+    if (!res.ok) throw new Error(res.msg);
+    const c = conn();
+    other.join(c, res.account, 'casino');
+    room.say = (msg) => [room, other].forEach((r) => r.broadcast(msg));
+    room.handle(a.id, { t: 'chat', text: 'hello casino' });
+    expect(last(c, 'chat')).toMatchObject({ room: 'r', name: 'Ann', text: 'hello casino' });
+  });
+});

@@ -5,7 +5,7 @@
 - [x] Improve performance
   - Merged to `main` (2026-10-19): 23-29% faster rendering in every benchmark scene, original lighting kept. Results in `bench-results/ab-2a42083-vs-13dbd1f.json`
   - Done = a tangible difference is noticed when playing (confirmed by Oscar, 2026-10-19)
-- [ ] Global chat in the top right
+- [x] Global chat in the top right
   - Non-intrusive, with a clear hint on how to use it ("Press Enter to chat")
   - Everyone on the server; filterable by world (pond vs casino) with Tab while in chat mode, if needed
   - No history on join: players only see messages sent after they log in (like OSRS)
@@ -31,6 +31,8 @@
   - Remove all references and elements: `src/game/fund.ts` + `fund.test.ts`, the HUD/menus (`game.ts`, `index.html`, `style.css`), world props (`town.ts`, `hub.ts`), the `fund` net message (`protocol.ts`, `net.ts`, `server/room.ts`), `goal` fields in `maps.ts`, the save `fund` field (`state.ts`, `accounts.ts`, `server/index.ts`), tests, and `GAME_DESIGN.md`
   - Watch out: the server gate (`server/room.ts:262`) currently checks only the fund, and the level check happens only on the client (`game.ts:887`). Swap in a server-side `CASINO_LEVEL` check, or the casino ends up open to everyone server-side
   - Make sure old saves and stored fund data still load cleanly after the field is removed
+- [ ] Remove the bench blocking the path in front of the well in the town square
+  - Well benches are placed by `Town.benches()` (`src/game/town.ts:163`). Remove only the one in front of the well and keep the others
 - [ ] Faces on player models
   - Simple, happy, fun faces
   - Painted texture on the head sphere, on the side the player is looking
