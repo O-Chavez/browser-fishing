@@ -16,10 +16,11 @@ import puppeteer, { type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { FISH } from '../src/data/content';
 import { newSave } from '../src/game/state';
-import { SERVER_PORT } from '../src/net/protocol';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const VITE_PORT = 5288;
+// Its own game server port, so a local `npm run dev:all` can keep running; the client is pointed at it below.
+const SMOKE_SERVER_PORT = 8788;
 const SHOTS = path.resolve('.bench/smoke');
 const TOKEN = 'smoke-test-token-0123456789abcdef';
 
@@ -34,8 +35,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- server with a seeded account ----------
 
-if (await portInUse(SERVER_PORT)) {
-  console.error(`Port ${SERVER_PORT} is in use. Stop your local game server first; the smoke test runs its own.`);
+if (await portInUse(SMOKE_SERVER_PORT)) {
+  console.error(`Port ${SMOKE_SERVER_PORT} is in use (a previous smoke run still going?).`);
   process.exit(2);
 }
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fishing-smoke-'));
@@ -50,10 +51,11 @@ fs.writeFileSync(
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
-  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '' },
+  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 await waitForLine(server, /fishing server on port/);
+process.env.VITE_SERVER_URL = `ws://localhost:${SMOKE_SERVER_PORT}`;
 const vite = await createServer({ server: { port: VITE_PORT, strictPort: true }, logLevel: 'error' });
 await vite.listen();
 const browser = await puppeteer.launch({
@@ -66,6 +68,7 @@ const browser = await puppeteer.launch({
 try {
   await pondChecks();
   await casinoChecks();
+  await chatChecks();
 } catch (e) {
   check('smoke test ran to the end', false, String(e));
 } finally {
@@ -367,6 +370,71 @@ async function casinoChecks(): Promise<void> {
     await page.screenshot({ path: `${SHOTS}/pond-after-travel.png` });
   }
   await ctx.close();
+}
+
+// Global chat: a line reaches a player in the same room (log + bubble) and one in another room (log only).
+async function chatChecks(): Promise<void> {
+  const join = async (name: string, room: string) => {
+    const ctx = await browser.createBrowserContext();
+    const page = await openPage(`http://localhost:${VITE_PORT}/?name=${name}&room=${room}`, ctx, `${name}-token-0123456789abcdef`);
+    await page.waitForFunction(() => window.__game.online(), { timeout: 15000 });
+    await page.evaluate(() => window.__game.activate());
+    return { ctx, page };
+  };
+  const a = await join('Ann', 'chat');
+  const b = await join('Bob', 'chat');
+  const c = await join('Cat', 'elsewhere');
+  // Stand Ann a few metres in front of Bob so the screenshot shows her bubble.
+  await a.page.evaluate(() => window.__game.teleport(0, -2.5));
+  await b.page.evaluate(() => { window.__game.teleport(0, 2); window.__game.look(0, -0.05); });
+  await sleep(800);
+  await a.page.keyboard.press('Enter');
+  const typing = await a.page.evaluate(() => document.activeElement?.classList.contains('chat-input') ?? false);
+  await a.page.keyboard.type('hello from the pier');
+  await a.page.keyboard.press('Enter');
+  await sleep(600);
+  const logOf = (p: Page) => p.evaluate(() => document.querySelector('#chat .chat-log')?.textContent ?? '');
+  const [la, lb, lc] = [await logOf(a.page), await logOf(b.page), await logOf(c.page)];
+  // Bubbles are the only sprites drawn at renderOrder 11.
+  const bubble = await b.page.evaluate(() => {
+    let found = false;
+    (window.__game.world as any).scene.traverseVisible((o: any) => { if (o.isSprite && o.renderOrder === 11) found = true; });
+    return found;
+  });
+  await b.page.screenshot({ path: `${SHOTS}/chat.png` });
+  check('chat: Enter opens the chat input', typing);
+  check('chat: line shows for the sender and others in the room', la.includes('hello from the pier') && lb.includes('Ann: hello from the pier'), `"${lb}"`);
+  check('chat: line reaches players in other rooms', lc.includes('hello from the pier'), `"${lc}"`);
+  check('chat: speaker gets a bubble for players nearby', bubble);
+
+  // Bubbles fade out far away and when standing right on the speaker; they're clear in between.
+  const bubbleShown = async (x: number, z: number) => {
+    await b.page.evaluate((x, z) => window.__game.teleport(x, z), x, z);
+    await sleep(150);
+    return b.page.evaluate(() => {
+      let o = -1;
+      (window.__game.world as any).scene.traverse((s: any) => { if (s.isSprite && s.renderOrder === 11) o = s.visible ? s.material.opacity : 0; });
+      return o;
+    });
+  };
+  const mid = await bubbleShown(0, 2);
+  const far = await bubbleShown(0, 25);
+  const onTop = await bubbleShown(0.3, -2.5);
+  check('chat: bubble hidden when far away or standing on the speaker', mid > 0.9 && far === 0 && onTop === 0, JSON.stringify({ mid, far, onTop }));
+
+  // Esc while typing releases the mouse in a real browser: that cancels the chat without pausing.
+  await a.page.evaluate(() => { (window.__game as any).activate(); });
+  await a.page.keyboard.press('Enter');
+  await a.page.keyboard.type('never sent');
+  await a.page.evaluate(() => document.dispatchEvent(new Event('pointerlockchange')));
+  await sleep(200);
+  const esc = await a.page.evaluate(() => ({
+    chat: !document.querySelector('.chat-input')!.classList.contains('hidden'),
+    menu: !document.getElementById('menu')!.classList.contains('hidden'),
+    resume: !document.getElementById('resume')!.classList.contains('hidden'),
+  }));
+  check('chat: losing the mouse while typing cancels chat without the pause menu', !esc.chat && !esc.menu && esc.resume, JSON.stringify(esc));
+  for (const p of [a, b, c]) await p.ctx.close();
 }
 
 // ---------- helpers ----------

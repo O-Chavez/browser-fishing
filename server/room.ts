@@ -9,6 +9,7 @@ import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino'
 import * as cas from '../src/game/casino';
 import { newSave } from '../src/game/state';
 import type { Account } from './accounts';
+import { ChatGate } from './chat';
 
 export interface Conn {
   send(msg: ServerMsg): void;
@@ -47,6 +48,10 @@ export class Room {
   private lastHall = '';
   /** Supplies the all-accounts leaderboard (set by the server). */
   hall: () => HallRow[] = () => [];
+  /** Chat rules; the server shares one gate between rooms so limits follow the account. */
+  chatGate: ChatGate;
+  /** Delivers an accepted chat line; the server points this at every room. */
+  say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
   constructor(
     readonly name: string,
@@ -56,6 +61,7 @@ export class Room {
     private rng: () => number = Math.random,
   ) {
     this.drops = new Drops(now);
+    this.chatGate = new ChatGate(now);
     this.maps = Object.fromEntries(maps.map((m) => [m.id, m]));
   }
 
@@ -98,6 +104,8 @@ export class Room {
   handle(id: number, msg: ClientMsg): void {
     const m = this.members.get(id);
     if (!m) return;
+    // Chat works mid-spin and mid-hand, so it is handled before those locks.
+    if (msg.t === 'chat') return this.chat(m, msg.text);
     this.settle(m);
     const s = m.acct.save;
     let changed = false;
@@ -264,6 +272,15 @@ export class Room {
     return true;
   }
 
+  private chat(m: Member, text: unknown): void {
+    const res = this.chatGate.check(m.info.name, text);
+    if (!res.ok) {
+      if (res.msg) m.conn.send({ t: 'notice', msg: res.msg });
+      return;
+    }
+    this.say({ t: 'chat', room: this.name, id: m.info.id, name: m.info.name, map: m.info.map, text: res.text });
+  }
+
   private deny(m: Member, msg: string): false {
     m.conn.send({ t: 'notice', msg });
     return false;
@@ -406,7 +423,8 @@ export class Room {
     this.broadcast({ t: 'snap', p });
   }
 
-  private broadcast(msg: ServerMsg): void {
+  /** Sends a message to everyone in this room. */
+  broadcast(msg: ServerMsg): void {
     for (const m of this.members.values()) m.conn.send(msg);
   }
 }

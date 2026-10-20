@@ -17,6 +17,7 @@ export interface NetEvents {
   onCastFail(msg: string): void;
   onError(msg: string): void;
   onNotice(msg: string): void;
+  onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onClose(): void;
   /** The socket closed before the server accepted the join. */
   onFailed(): void;
@@ -103,6 +104,9 @@ export class NetClient {
         break;
       case 'notice':
         this.events.onNotice(m.msg);
+        break;
+      case 'chat':
+        this.events.onChat(m);
         break;
       case 'error':
         this.events.onError(m.msg);

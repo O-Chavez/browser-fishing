@@ -19,6 +19,7 @@ import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
+import { ChatBox } from './chatbox';
 import { Player } from './player';
 import {
   animateFish,
@@ -157,6 +158,7 @@ export class Game {
   private spin = false;
   private casinoMode: 'roulette' | 'blackjack' | 'prizes' = 'roulette';
   private betSlot = -1;
+  private chat!: ChatBox;
   private hotbarHeld = -1;
   private bj: BlackjackView | null = null;
   private casinoMsg = '';
@@ -200,6 +202,11 @@ export class Game {
         if (this.menuOpen && this.tab === 'casino') this.renderMenu();
       },
       onNotice: (msg) => this.toast(msg),
+      onChat: (m) => {
+        const self = m.room === this.net.room && m.id === this.net.id;
+        this.chat.add({ name: m.name, map: m.map, text: m.text, self });
+        if (!self && m.room === this.net.room && m.map === this.map.id) this.avatars.say(m.id, m.text);
+      },
       onDrops: (list) => {
         this.serverDrops = list;
         this.dropsView.sync(list, this.map.id);
@@ -236,6 +243,16 @@ export class Game {
       },
     });
     this.applyLocation();
+    this.chat = new ChatBox($('chat'), {
+      send: (text) => this.net.send({ t: 'chat', text }),
+      map: () => this.map.id,
+      mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
+    });
+    $('resume').addEventListener('click', () => {
+      // Chrome refuses a re-lock for a moment after Esc; the overlay stays up until a later click works.
+      const req = this.world.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+      req?.catch?.(() => {});
+    });
     this.bind();
     this.bindJoin(name, !!urlName);
     this.refreshHud();
@@ -379,6 +396,7 @@ export class Game {
         else this.keys.delete(code);
       },
       teleport: (x: number, z: number) => this.player.teleport(x, z),
+      online: () => this.net.connected,
       perf: () => {
         const w = this.world;
         let lights = 0, meshes = 0, casters = 0, tris = 0;
@@ -466,6 +484,16 @@ export class Game {
       if (!(e.relatedTarget as HTMLElement | null)?.closest?.('[data-tip]')) $('tip').classList.add('hidden');
     });
     document.addEventListener('pointerlockchange', () => {
+      $('resume').classList.add('hidden');
+      // Esc while typing: the browser always releases the mouse, but that should only cancel the
+      // chat, not pause the game. A click picks the mouse back up.
+      if (!this.locked && this.chat.active) {
+        this.chat.close();
+        this.holding = false;
+        this.keys.clear();
+        $('resume').classList.remove('hidden');
+        return;
+      }
       this.setMenu(!this.locked);
       if (!this.locked) {
         this.holding = false;
@@ -485,7 +513,7 @@ export class Game {
       );
     });
     document.addEventListener('mousedown', (e) => {
-      if (!this.active || e.button !== 0 || this.dbgLock) return;
+      if (!this.active || e.button !== 0 || this.dbgLock || this.chat.isOpen) return;
       this.holding = true;
       this.onPress();
     });
@@ -504,6 +532,11 @@ export class Game {
       this.takeSlot((this.s.held + step + n) % n);
     }, { passive: true });
     document.addEventListener('keydown', (e) => {
+      if (this.active && (e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat) {
+        if (!this.net.connected) return this.toast('Chat needs a server connection.');
+        this.keys.clear();
+        return this.chat.open();
+      }
       if (this.active && e.code.startsWith('Key')) {
         this.keys.add(e.code);
         if (e.code === 'KeyE' && !e.repeat && this.phase === 'idle') this.interact();
@@ -514,6 +547,11 @@ export class Game {
         if (this.menuOpen) this.closeMenu();
         else if (this.active) this.openMenu('inventory');
         return;
+      }
+      if (e.code === 'Escape' && !e.repeat && !$('resume').classList.contains('hidden')) {
+        $('resume').classList.add('hidden');
+        this.setMenu(true);
+        return this.renderMenu();
       }
       if (e.code === 'Escape' && this.menuOpen && !e.repeat) return this.closeMenu();
       if (e.repeat || this.menuOpen || !this.active) return;
@@ -1588,7 +1626,7 @@ export class Game {
     this.updateSpot();
     this.updateNight();
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
-    this.avatars.update(dt, this.world.time, this.net.players);
+    this.avatars.update(dt, this.world.time, this.net.players, this.player.x, this.player.z);
     if (!this.net.connected && this.localDrops.expire()) this.dropsView.sync(this.localDrops.all(), this.map.id);
     this.dropsView.update(this.world.time);
     this.updateCarry();
