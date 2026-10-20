@@ -22,18 +22,20 @@ import { WheelStepper } from './wheelstep';
 import { ChatBox } from './chatbox';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
-import { FISH_BLURB, TIER_THEME } from '../data/fishlook';
+import { cosIcon } from './cosicon';
+import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { shortCoins } from './format';
 import { Player } from './player';
 import {
   animateFish,
   buildFish,
-  fishScale,
   faceDirection,
+  hangFacing,
   setFishOpacity,
   type FishModel,
 } from './fishmodel';
+import { carryScale, hangLen, hangPitch, heldScale, waterScale } from './fishscale';
 import type { LeaderRow } from './hub';
 import { buildTin } from './itemmodels';
 import {
@@ -41,6 +43,7 @@ import {
   fishWeight,
   formatWeight,
   nextGoal,
+  welcomeText,
   sellValue,
   difficultyLabel,
   reelDifficulty,
@@ -56,7 +59,7 @@ import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, MULT_CAP, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { chipsFor, type BlackjackView, type Card } from './casino';
 import { load, newSave, save, type SaveData } from './state';
-import { BODY_COLORS, COSMETICS, COS_SLOTS, FACES, cosById, isFace, type CosSlot, type FaceId, type Look } from '../data/cosmetics';
+import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
 import { World } from './world';
@@ -78,8 +81,6 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
-/** Fish in the water (hooked, shadow) are shown a bit smaller than when held up as a catch. */
-const WATER_SCALE = 0.7;
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const CAMP_TIPS = [
@@ -94,9 +95,6 @@ const CAMP_TIPS = [
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const GRAVITY = 9.8;
-const HANG_LEN = 1.0;
-const FISH_NOSE = new THREE.Vector3(0, 0, -1);
-const HANG_PITCH = 0.85;
 
 export class Game {
   private s: SaveData = load();
@@ -153,7 +151,7 @@ export class Game {
   private localDrops = new Drops();
   private serverDrops: Drop[] = [];
   private keys = new Set<string>();
-  private menuOpen = true;
+  private menuOpen = false;
   private keepTab = false;
   private atVendor = false;
   private near: { label: string; act: () => void } | null = null;
@@ -161,10 +159,14 @@ export class Game {
   private tab = 'inventory';
   private shopTab: 'cosmetics' | 'gear' = 'gear';
   /** The item selected in each menu's tile grid, shown in its details panel. */
-  private pick: Partial<Record<'bag' | 'gear' | 'cos' | 'perk', string>> = {};
+  private pick: Partial<Record<'bag' | 'gear' | 'cos' | 'ccos' | 'perk', string>> = {};
+  /** Prize counter tab: perks or the casino-only cosmetics. */
+  private prizeTab: 'perks' | 'cosmetics' = 'perks';
   private rigLook = '';
   private preview: CharacterPreview | null = null;
   private joining = false;
+  /** A ?name= link joins without the card; the welcome banner waits for the first save (or the failure). */
+  private pendingWelcome = false;
   private joinColor = BODY_COLORS[4];
   private toastTimer = 0;
   private confirmReset = false;
@@ -198,6 +200,7 @@ export class Game {
         const moved = !!save.location && save.location !== this.s.location;
         Object.assign(this.s, save);
         if (this.joining) this.finishJoin();
+        else if (this.pendingWelcome) this.welcome();
         if (moved) this.applyLocation();
         this.setGateSign();
         this.refreshHud();
@@ -233,6 +236,7 @@ export class Game {
       },
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
+        else if (this.pendingWelcome) this.welcome();
       },
       onPlayers: () => {
         this.world.hub?.setLeaders(this.anglers());
@@ -251,7 +255,11 @@ export class Game {
       onCastFail: (msg) => {
         if (this.phase === 'flying' || this.phase === 'swing') this.reset(msg);
       },
-      onError: (msg) => (this.joining ? this.joinMessage(msg) : this.toast(`Offline mode: ${msg}`)),
+      onError: (msg) => {
+        if (this.joining) return this.joinMessage(msg);
+        this.toast(`Offline mode: ${msg}`);
+        if (this.pendingWelcome) this.welcome();
+      },
       onClose: () => {
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
@@ -315,10 +323,13 @@ export class Game {
       $('join').classList.add('hidden');
       this.preview?.stop();
       this.refreshHud();
+      this.welcome(($('join-name') as HTMLInputElement).value.trim().slice(0, 16));
     });
     if (direct) {
       // ?name= links (and tests) skip the screen and keep the account's saved look.
       this.net.name = urlName!;
+      this.pendingWelcome = true;
+      this.showResume('', 'to start fishing');
       this.net.connect(this.map.id);
       return;
     }
@@ -383,6 +394,36 @@ export class Game {
     $('join').classList.add('hidden');
     this.preview?.stop();
     this.world.hub?.setLeaders(this.anglers());
+    this.welcome();
+  }
+
+  /**
+   * After joining: no window, just the scene with a welcome banner and a "click to start" overlay.
+   * The click that captures the mouse dismisses the banner; otherwise it fades by itself.
+   */
+  private welcome(name = this.net.name): void {
+    this.pendingWelcome = false;
+    this.setMenu(false);
+    const { title, line } = welcomeText(name, this.s);
+    const el = $('banner');
+    el.classList.add('welcome');
+    el.style.color = '';
+    el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>`;
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => this.dismissWelcome(), 4200);
+    if (!this.locked && !this.forceActive) this.showResume('', 'to start fishing');
+  }
+
+  private dismissWelcome(): void {
+    const el = $('banner');
+    if (!el.classList.contains('welcome')) return;
+    clearTimeout(this.bannerTimer);
+    el.classList.add('hidden');
+    el.classList.remove('welcome');
   }
 
   private get rod() {
@@ -405,6 +446,9 @@ export class Game {
       activate: () => {
         this.forceActive = true;
         this.setMenu(false);
+        // Stands in for the click that captures the mouse.
+        $('resume').classList.add('hidden');
+        this.dismissWelcome();
         audio.start();
       },
       key: (code: string, down: boolean) => {
@@ -477,6 +521,20 @@ export class Game {
       skipWait: () => {
         this.elapsed = this.waitTotal - 0.01;
       },
+      /** Lands a given fish straight away (dev only), to check how each tier looks when caught. */
+      land: (id: string, size: number, shiny = false) => {
+        if (this.phase !== 'idle' && this.phase !== 'result') return;
+        if (this.phase === 'result') this.dismissCatch();
+        this.hooked = byId(FISH, id);
+        this.hookedSize = size;
+        this.hookedShiny = shiny;
+        this.fish = buildFish(this.hooked.color, false, shiny, this.hooked.tier, id);
+        this.fish.group.scale.setScalar(waterScale(size, this.hooked.tier));
+        const f = this.world.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
+        this.fish.group.position.copy(this.world.camera.position).addScaledVector(f, 6).setY(-0.3);
+        this.world.scene.add(this.fish.group);
+        this.startLanding();
+      },
       world: this.world,
     };
   }
@@ -502,6 +560,7 @@ export class Game {
     });
     document.addEventListener('pointerlockchange', () => {
       $('resume').classList.add('hidden');
+      if (this.locked) this.dismissWelcome();
       // Esc while typing: the browser always releases the mouse, but that should only cancel the
       // chat, not pause the game. A click picks the mouse back up.
       if (!this.locked && this.chat.active) {
@@ -585,10 +644,11 @@ export class Game {
   private onMenuClick(el: HTMLElement): void {
     const btn = el.closest('button') as HTMLButtonElement | null;
     if (!btn || btn.disabled) return;
-    const { tab, shop, pick, act, id } = btn.dataset;
+    const { tab, shop, prize, pick, act, id } = btn.dataset;
     if (act === 'close') return this.closeMenu();
     if (tab) this.tab = tab;
     else if (shop) this.shopTab = shop as 'cosmetics' | 'gear';
+    else if (prize) this.prizeTab = prize as 'perks' | 'cosmetics';
     else if (pick) this.pick[pick as keyof typeof this.pick] = id;
     else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
     else if (act === 'music') audio.toggleMusic();
@@ -760,13 +820,21 @@ export class Game {
 
   private buyCosmetic(id: string): void {
     const c = cosById(id);
-    if (!c) return;
+    if (!c || this.s.owned.includes(id)) return;
+    if (c.shop === 'casino') {
+      // Chips live on the server: ask it, and the state reply updates the counter.
+      if (this.tab !== 'casino') return this.toast('Sold only at the casino Prize Counter.');
+      if (this.s.chips < c.price) return this.toast(`Not enough chips (${c.price}).`);
+      if (!this.net.connected) return this.toast('The casino needs a server connection.');
+      this.net.send({ t: 'buycos', id });
+      this.toast(`Bought ${c.name} - wear it from the Wardrobe (Tab)`);
+      return;
+    }
     if (!this.atVendor) return this.toast(`Walk to ${this.map.vendor.name}'s stall to buy.`);
-    if (this.s.owned.includes(id)) return;
     if (this.s.coins < c.price) return this.toast(`Not enough coins (${c.price} 🪙).`);
-    eco.buyCosmetic(this.s, id);
+    eco.buyCosmetic(this.s, id, 'stall');
     this.net.send({ t: 'buycos', id });
-    this.toast(`Bought ${c.name} - wear it from your Inventory (Tab)`);
+    this.toast(`Bought ${c.name} - wear it from the Wardrobe (Tab)`);
     this.persist();
     this.refreshHud();
   }
@@ -875,9 +943,9 @@ export class Game {
   }
 
   /** The overlay shown while the game is running but the mouse isn't captured; hidden on capture. */
-  private showResume(prefix = ''): void {
+  private showResume(prefix = '', action = 'to keep playing'): void {
     const el = $('resume');
-    el.innerHTML = `${prefix}<b>Click</b> to keep playing`;
+    el.innerHTML = `${prefix}<b>Click</b> ${action}`;
     el.classList.remove('hidden');
   }
 
@@ -1031,6 +1099,7 @@ export class Game {
   }
 
   private casinoHtml(): string {
+    if (this.prizeTab === 'cosmetics') return `${this.cosShopHtml('casino')}${this.sellStrip()}`;
     const s = this.s;
     // Perks have no tier; colour them by price so the rarer unlocks stand out.
     const tierOf = (chips: number) => (chips <= 20 ? 2 : chips <= 50 ? 3 : chips <= 100 ? 4 : 5);
@@ -1383,7 +1452,7 @@ export class Game {
     this.approachAngle = Math.random() * Math.PI * 2;
     if (this.hooked) {
       this.shadow = buildFish(this.hooked.color, true, this.hookedShiny, this.hooked.tier, this.hooked.id);
-      this.shadow.group.scale.setScalar(fishScale(this.hookedSize) * WATER_SCALE);
+      this.shadow.group.scale.setScalar(waterScale(this.hookedSize, this.hooked.tier));
       this.shadow.group.visible = false;
       w.scene.add(this.shadow.group);
     }
@@ -1414,6 +1483,7 @@ export class Game {
   private topTierBanner(fish: { tier: number }, verb: string, shiny: boolean): void {
     if (fish.tier !== this.bait.tier) return;
     const el = $('banner');
+    el.classList.remove('welcome');
     const name = tierName(fish.tier);
     el.style.color = this.tierColor(fish.tier);
     el.innerHTML = `${shiny ? '✨ Shiny ' : ''}${name} fish ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
@@ -1435,7 +1505,7 @@ export class Game {
     this.lastSurges = 0;
     this.leapT = -1;
     this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, this.hooked!.id);
-    this.fish.group.scale.setScalar(fishScale(this.hookedSize) * WATER_SCALE);
+    this.fish.group.scale.setScalar(waterScale(this.hookedSize, this.hooked!.tier));
     w.scene.add(this.fish.group);
     w.rig.kick('pitch', 7);
     w.fovKick = 4;
@@ -1454,7 +1524,7 @@ export class Game {
     w.fx.ripple(this.landFrom, 3.5);
     audio.splash(1);
     w.rig.pose({
-      pitch: HANG_PITCH,
+      pitch: hangPitch(this.heldScale()),
       yaw: 0,
       bendP: 0.5,
       bendY: 0,
@@ -1466,20 +1536,28 @@ export class Game {
     $('alert').classList.add('hidden');
   }
 
-  /** Pendulum: the fish's mouth hangs from the rod tip on an inextensible line. */
+  /**
+   * Pendulum: the fish hangs by its mouth from the rod tip on an inextensible line. `bob` is the
+   * fish's middle, so the line and the fish swing together as one stiff pendulum (a long fish on a
+   * short line would otherwise whip its body around).
+   */
   private stepBob(dt: number): void {
     const tip = this.world.rig.tip.getWorldPosition(this.tipPos);
     const n = 4;
     const h = Math.min(dt, 0.05) / n;
+    const sc = this.held ? this.held.group.scale.x : 1;
+    const reach = hangLen(sc) + 0.5 * sc;
+    // Heavier fish settle sooner.
+    const damp = 0.35 + 0.15 * Math.max(0, sc - 1.5);
     for (let i = 0; i < n; i++) {
       this.bobVel.y -= 9.8 * h;
-      this.bobVel.multiplyScalar(1 - 0.35 * h);
+      this.bobVel.multiplyScalar(1 - damp * h);
       this.bob.addScaledVector(this.bobVel, h);
       const d = this.swingDir.subVectors(this.bob, tip);
       const len = d.length();
-      if (len > HANG_LEN) {
+      if (len > reach) {
         d.multiplyScalar(1 / len);
-        this.bob.copy(tip).addScaledVector(d, HANG_LEN);
+        this.bob.copy(tip).addScaledVector(d, reach);
         const radial = this.bobVel.dot(d);
         if (radial > 0) this.bobVel.addScaledVector(d, -radial);
       }
@@ -1493,12 +1571,14 @@ export class Game {
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch' });
     this.world.hub?.setLeaders(this.anglers());
-    this.hangPoint(this.bob, 0, 0);
-    this.bobVel.set(0.5, 0, -0.2);
+    const sc = this.heldScale();
+    this.hangPoint(this.bob, 0, 0).y -= 0.5 * sc;
+    this.bobVel.set(0.5, 0, -0.2).multiplyScalar(Math.min(1, 1.6 / sc));
 
     const el = $('catch');
     el.style.borderColor = RARITY_COLOR[fish.rarity];
     el.style.boxShadow = fish.tier >= 3 ? `0 0 ${12 + fish.tier * 10}px ${RARITY_COLOR[fish.rarity]}` : '';
+    el.style.setProperty('--glow', RARITY_COLOR[fish.rarity]);
     el.dataset.tier = String(fish.tier);
     const shiny = this.hookedShiny;
     el.innerHTML = `<div class="muted">${shiny ? '<b style="color:#ffd23a">✨ SHINY! ✨</b> ' : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
@@ -1510,14 +1590,19 @@ export class Game {
       <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
+    // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
     audio.jingle(shiny ? 'legendary' : fish.rarity);
     this.topTierBanner(fish, 'caught', shiny);
+    this.catchMoment(fish, shiny);
 
     this.held = this.fish;
     this.fish = null;
     this.endCast('result');
     this.world.rig.pose({
-      pitch: HANG_PITCH,
+      pitch: hangPitch(this.heldScale()),
       yaw: 0,
       bendP: 0.45,
       bendY: 0,
@@ -1525,6 +1610,22 @@ export class Game {
       c: 8,
     });
     this.world.line.line.visible = true;
+  }
+
+  /** Jewel and spirit fish (and shinies) land with a burst of sparkles and a little camera kick. */
+  private catchMoment(fish: Fish, shiny: boolean): void {
+    if (fish.tier < 4 && !shiny) return;
+    const w = this.world;
+    const g = this.fish?.group;
+    if (!g) return;
+    const top = fish.tier >= 5;
+    const center = g.getWorldPosition(new THREE.Vector3());
+    const color = new THREE.Color(shiny ? 0xffd23a : FISH_LOOK[fish.id]?.accent ?? fish.color);
+    w.fx.burst(center, color, top ? 140 : 70, top ? 1.3 : 1, 0.25 * g.scale.x);
+    if (top) w.fx.burst(center, new THREE.Color(0xffffff), 40, 0.7, 0.4 * g.scale.x);
+    w.addShake(top ? 0.9 : 0.5);
+    w.fovKick = top ? -7 : -4;
+    w.rig.kick('pitch', top ? 3 : 1.5);
   }
 
   /** Shows the held item in place of the rod: a fish model or a bait jar. The rod only shows while rod in hand or fishing. */
@@ -1547,13 +1648,17 @@ export class Game {
     let model: FishModel | null = null;
     let obj: THREE.Object3D;
     if (it.k === 'fish') {
-      model = buildFish(byId(FISH, it.fishId).color, false, it.shiny, byId(FISH, it.fishId).tier, it.fishId);
-      // Carried while walking: still grows by tier, but capped so a legend doesn't block the view.
-      model.group.scale.setScalar(Math.min(0.24, fishScale(it.size) * 0.13));
+      const f = byId(FISH, it.fishId);
+      model = buildFish(f.color, false, it.shiny, f.tier, it.fishId);
+      // Carried while walking: grows by size and tier, but eased toward a cap and pushed further
+      // out and down as it grows, so a legend reads as huge without blocking the view.
+      const sc = carryScale(it.size, f.tier);
+      const out = Math.max(0, sc - 0.2);
+      model.group.scale.setScalar(sc);
       model.group.rotation.set(0.3, 1.1, 0.35);
       obj = new THREE.Group();
       obj.add(model.group);
-      obj.position.set(0.17, -0.2, -0.42);
+      obj.position.set(0.17 + out * 0.6, -0.2 - out * 0.7, -0.42 - out * 1.2);
     } else {
       obj = buildTin(it.id);
       obj.scale.setScalar(0.2);
@@ -1571,7 +1676,7 @@ export class Game {
   }
 
   private heldScale(): number {
-    return Math.min(2.8, fishScale(this.hookedSize));
+    return heldScale(this.hookedSize, this.hooked?.tier ?? 1);
   }
 
   /** Mouth position of a fish dangling from the rod tip, with a gentle pendulum swing. */
@@ -1583,7 +1688,7 @@ export class Game {
     this.world.rig.tip.getWorldPosition(out);
     out.x += Math.sin(t * 1.7) * 0.07 * swing;
     out.z += Math.cos(t * 1.3) * 0.04 * swing;
-    out.y -= HANG_LEN;
+    out.y -= hangLen(this.heldScale());
     return out;
   }
 
@@ -1789,10 +1894,11 @@ export class Game {
           this.stepBob(dt);
           const tip = this.tipPos;
           const up = this.swingDir.subVectors(tip, this.bob).normalize();
-          g.quaternion.setFromUnitVectors(FISH_NOSE, up);
-          g.position.copy(this.bob).addScaledVector(up, -0.5 * g.scale.x);
+          hangFacing(g, up, this.world.camera.getWorldPosition(this.hang).sub(this.bob));
+          g.position.copy(this.bob);
+          const mouth = this.hang.copy(this.bob).addScaledVector(up, 0.5 * g.scale.x);
           animateFish(this.held, t, 6, 0.25);
-          this.world.line.update(tip, this.bob, 0.01, 0, t);
+          this.world.line.update(tip, mouth, 0.01, 0, t);
         }
         break;
     }
@@ -1931,12 +2037,14 @@ export class Game {
     g.position.lerpVectors(this.landFrom, target, e);
     g.position.y += Math.sin(u * Math.PI) * 1.2;
     g.scale.setScalar(
-      THREE.MathUtils.lerp(fishScale(this.hookedSize) * WATER_SCALE, sc, e),
+      THREE.MathUtils.lerp(waterScale(this.hookedSize, this.hooked!.tier), sc, e),
     );
     g.rotation.order = 'YXZ';
+    // Ends nose-up with a flank toward the camera, where the result view takes over.
+    const face = w.yaw - Math.PI / 2 - 2;
     g.rotation.set(
       (Math.PI / 2) * e,
-      (1 - e) * 2,
+      2 + Math.atan2(Math.sin(face), Math.cos(face)) * e,
       Math.sin(u * Math.PI * 3) * 0.5 * (1 - e),
     );
     animateFish(this.fish!, w.time, 22, 0.6);
@@ -2227,7 +2335,9 @@ export class Game {
       `<button class="tab${on ? ' on' : ''}" ${attr}="${id}"${label ? '' : ' title="Settings"'}><span>${icon}</span>${label}</button>`;
     if (this.tab === 'shop')
       return tab('gear', '🎣', 'Gear', this.shopTab === 'gear', 'data-shop') + tab('cosmetics', '👕', 'Cosmetics', this.shopTab === 'cosmetics', 'data-shop');
-    if (this.tab === 'casino' || this.tab === 'peek') return '';
+    if (this.tab === 'casino')
+      return tab('perks', '🍀', 'Unlocks', this.prizeTab === 'perks', 'data-prize') + tab('cosmetics', '🎩', 'High Roller', this.prizeTab === 'cosmetics', 'data-prize');
+    if (this.tab === 'peek') return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
@@ -2243,16 +2353,21 @@ export class Game {
 
   /** What the wardrobe/shop preview wears: your look, plus the cosmetic picked in the shop. */
   private previewLook(): Look {
-    const c = this.tab === 'shop' && this.shopTab === 'cosmetics' ? cosById(this.pick.cos) : undefined;
+    const c =
+      this.tab === 'shop' && this.shopTab === 'cosmetics'
+        ? cosById(this.pick.cos)
+        : this.tab === 'casino' && this.prizeTab === 'cosmetics'
+          ? cosById(this.pick.ccos)
+          : undefined;
     return c ? { ...this.s.look, [c.slot]: c.id } : this.s.look;
   }
 
   // ---------- shared pieces ----------
 
   /** A square item tile; clicking it selects the item (`data-pick`) unless `attrs` says otherwise. */
-  private itemTile(o: { icon: string; name: string; sub: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string }): string {
+  private itemTile(o: { icon: string; name: string; sub: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string; color?: string; cls?: string }): string {
     const t = Math.max(1, Math.min(5, o.tier));
-    return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}" style="--c:var(--t${t})" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span><span class="st">${o.sub}</span></button>`;
+    return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}${o.cls ?? ''}" style="--c:${o.color ?? `var(--t${t})`}" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span><span class="st">${o.sub}</span></button>`;
   }
 
   private badge(tier: number): string {
@@ -2265,9 +2380,9 @@ export class Game {
   }
 
   /** The details panel on the right: big icon, name, stats, one plain sentence, and the main action. */
-  private detail(o: { icon: string; name: string; tier: number; badge?: string; body: string; note: string; actions: string; top?: string }): string {
+  private detail(o: { icon: string; name: string; tier: number; badge?: string; body: string; note: string; actions: string; top?: string; color?: string; cls?: string }): string {
     const t = Math.max(1, Math.min(5, o.tier));
-    return `<aside class="detail">${o.top ?? ''}<div class="hero"><span class="ic" style="--c:var(--t${t})">${o.icon}</span><div><b>${o.name}</b>${o.badge ?? this.badge(o.tier)}</div></div>${o.body}<p>${o.note}</p><div class="actions">${o.actions}</div></aside>`;
+    return `<aside class="detail${o.cls ?? ''}">${o.top ?? ''}<div class="hero"><span class="ic" style="--c:${o.color ?? `var(--t${t})`}">${o.icon}</span><div><b>${o.name}</b>${o.badge ?? this.badge(o.tier)}</div></div>${o.body}<p>${o.note}</p><div class="actions">${o.actions}</div></aside>`;
   }
 
   private btn(label: string, attrs: string, kind: 'gold' | 'ok' | 'plain' | 'bad' = 'gold', disabled = false): string {
@@ -2388,16 +2503,16 @@ export class Game {
   }
 
   private wardrobeHtml(): string {
-    const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
     const sections = COS_SLOTS.map((slot) => {
       const worn = this.s.look[slot];
       const cards = COSMETICS.filter((c) => c.slot === slot && this.s.owned.includes(c.id))
+        .sort((a, b) => a.tier - b.tier)
         .map((c) => {
           const on = worn === c.id;
-          return this.itemTile({ icon: icon[slot], name: c.name, sub: on ? 'Wearing' : 'Wear', tier: c.tier + 1, on, check: on, attrs: `data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}"`, tip: on ? 'Click to take off' : 'Click to wear' });
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub: on ? 'Wearing' : COS_RARITY[c.tier], tier: c.tier + 1, on, check: on, attrs: `data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}"`, tip: on ? 'Click to take off' : 'Click to wear' });
         })
         .join('');
-      const title = slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`;
+      const title = this.slotTitle(slot);
       return `<h4>${title}</h4><div class="tiles">${cards || `<p class="empty">Nothing yet - ${this.map.vendor.name}'s stall sells ${title.toLowerCase()}.</p>`}</div>`;
     }).join('');
     return `<div class="cols wardrobe"><div class="side"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><h4>Colour</h4><div class="swatches">${this.swatchHtml()}</div></div>
@@ -2414,7 +2529,7 @@ export class Game {
     return `<div class="peek"><img src="${casinoPreview}" alt="Inside Casino Cove">
       <div class="peek-text"><h3>Bet your best fish, win big</h3>
         <p>Inside the Gilded Perch Casino you can put a fish on the roulette wheel or a hand of blackjack to multiply its value, then trade your winners for chips at the Prize Counter.</p>
-        <p>Chips buy unlocks you can't get anywhere else: Lucky Charms, Quick-Reel Gloves, the Night Owl Lantern, a Tackle Vest and Shiny Lures.</p>
+        <p>Chips buy unlocks you can't get anywhere else: Lucky Charms, Quick-Reel Gloves, the Night Owl Lantern, a Tackle Vest, Shiny Lures and a rack of high-roller outfits.</p>
         ${status}</div></div>`;
   }
 
@@ -2552,21 +2667,44 @@ export class Game {
   }
 
   private cosmeticsShopHtml(): string {
+    return this.cosShopHtml('stall');
+  }
+
+  private slotTitle(slot: CosSlot): string {
+    return slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`;
+  }
+
+  /** Icon, rarity colour and tile classes shared by every cosmetic tile and detail panel. */
+  private cosLook(c: Cosmetic): { icon: string; color: string; cls: string } {
+    const cls = `${c.tier >= 5 ? ' legend' : c.tier === 4 ? ' mythic' : ''}${c.shop === 'casino' ? ' casino-item' : ''}`;
+    return { icon: cosIcon(c.id), color: COS_RARITY_COLOR[c.tier], cls };
+  }
+
+  private cosPrice(c: Cosmetic): string {
+    return c.shop === 'casino' ? `${c.price.toLocaleString()} chips` : `${c.price.toLocaleString()} 🪙`;
+  }
+
+  /** The cosmetics for sale at one counter: Marlow's stall (coins) or the casino prize counter (chips). */
+  private cosShopHtml(shop: CosShop): string {
     const s = this.s;
-    const icon = { hat: '🎩', shirt: '👕', jewelry: '📿' } as const;
-    const chosen = cosById(this.pick.cos) ?? COSMETICS.find((x) => !s.owned.includes(x.id)) ?? COSMETICS[0];
-    this.pick.cos = chosen.id;
+    const key = shop === 'casino' ? 'ccos' : 'cos';
+    const items = COSMETICS.filter((c) => c.shop === shop);
+    const money = shop === 'casino' ? s.chips : s.coins;
+    const picked = cosById(this.pick[key]);
+    const chosen = picked?.shop === shop ? picked : (items.find((x) => !s.owned.includes(x.id)) ?? items[0]);
+    this.pick[key] = chosen.id;
     const sections = COS_SLOTS.map((slot) => {
-      const cards = COSMETICS.filter((c) => c.slot === slot)
+      const cards = items
+        .filter((c) => c.slot === slot)
         .sort((a, b) => a.price - b.price)
         .map((c) => {
           const has = s.owned.includes(c.id);
           const wearing = s.look[slot] === c.id;
-          const sub = has ? (wearing ? 'Wearing' : 'Owned') : `${c.price.toLocaleString()} 🪙`;
-          return this.itemTile({ icon: icon[slot], name: c.name, sub, tier: c.tier + 1, on: this.pick.cos === c.id, check: has, ghost: !has && s.coins < c.price, attrs: `data-pick="cos" data-id="${c.id}" data-try="${slot}:${c.id}"` });
+          const sub = has ? (wearing ? 'Wearing' : 'Owned') : this.cosPrice(c);
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, on: chosen.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
         })
         .join('');
-      return `<h4>${slot === 'jewelry' ? 'Jewelry' : `${slot[0].toUpperCase()}${slot.slice(1)}s`}</h4><div class="tiles">${cards}</div>`;
+      return cards ? `<h4>${this.slotTitle(slot)}</h4><div class="tiles">${cards}</div>` : '';
     }).join('');
     const has = s.owned.includes(chosen.id);
     const wearing = s.look[chosen.slot] === chosen.id;
@@ -2574,20 +2712,26 @@ export class Game {
       ? this.btn('Take it off', `data-act="equip" data-slot="${chosen.slot}" data-id=""`, 'plain')
       : has
         ? this.btn('Wear it', `data-act="equip" data-slot="${chosen.slot}" data-id="${chosen.id}"`, 'ok')
-        : s.coins < chosen.price
-          ? this.btn(`Need ${chosen.price.toLocaleString()} 🪙`, '', 'plain', true)
-          : this.btn(`Buy for ${chosen.price.toLocaleString()} 🪙`, `data-act="buycos" data-id="${chosen.id}"`);
+        : money < chosen.price
+          ? this.btn(`Need ${this.cosPrice(chosen)}`, '', 'plain', true)
+          : this.btn(`Buy for ${this.cosPrice(chosen)}`, `data-act="buycos" data-id="${chosen.id}"`);
+    const look = this.cosLook(chosen);
+    const slotName = chosen.slot === 'jewelry' ? 'Jewelry' : chosen.slot[0].toUpperCase() + chosen.slot.slice(1);
+    const where = shop === 'casino' ? ' · Casino exclusive' : '';
     const detail = this.detail({
       top: '<div id="pv-slot"></div>',
-      icon: icon[chosen.slot],
+      icon: look.icon,
       name: chosen.name,
       tier: chosen.tier + 1,
-      badge: `<span class="badge" style="--c:var(--t${Math.min(5, chosen.tier + 1)})">${chosen.slot === 'jewelry' ? 'Jewelry' : chosen.slot[0].toUpperCase() + chosen.slot.slice(1)} · style ${chosen.tier + 1}</span>`,
+      color: look.color,
+      cls: look.cls,
+      badge: `<span class="badge" style="--c:${look.color}">${slotName} · ${COS_RARITY[chosen.tier]}${where}</span>`,
       body: '',
-      note: has ? (wearing ? 'You are wearing this.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.',
+      note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.'}`,
       actions: action,
     });
-    return `<div class="cols"><div class="main">${sections}</div>${detail}</div>`;
+    const intro = shop === 'casino' ? '<p class="cos-intro">High-roller outfits sold only here, for chips. Nobody at the pond can sell you these.</p>' : '';
+    return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
   }
 
   /** Bottom strip in the shop and at the prize counter: how to sell or turn in fish. */

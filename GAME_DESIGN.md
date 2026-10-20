@@ -271,7 +271,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 - **Join screen:** pick a name and body color (live 3D preview). Saved locally; `?name=` skips it.
 - **Leaderboard:** the menu's Anglers tab lists everyone online with their face and level, highest first; a "Top Anglers" board stands in the plaza.
 - **Faces:** 8 free painted faces (`FACES` in `src/data/cosmetics.ts`, drawn by `src/game/faces.ts`): smile, grin, wink, cat, joy, cheeky, toothy and sleepy. Each is one shared texture on the head sphere, facing where the player looks. New accounts and saves from before faces get a random one; players change it in the Wardrobe's Face section, and can drag the preview to turn their character. NPCs wear the same faces, one each, set by `face` on their `NpcDef` (and `vendor.face` for Marlow).
-- **Cosmetics:** hats, shirts, jewelry (6 each, tiers 0–5; higher price = flashier, top tiers glow). Bought at Marlow's shop menu (Cosmetics/Gear tabs), equipped in the Wardrobe (Tab; also the plaza mirror). Visible to all players.
+- **Cosmetics:** hats, shirts, jewelry, tiers 0–5 (see section 33). Marlow's stall sells 6 per slot for coins (Cosmetics/Gear tabs); the casino Prize Counter sells 2 more per slot for chips only. Equipped in the Wardrobe (Tab; also the plaza and casino mirrors). Visible to all players.
 - **Selling:** with the shop menu open, hover a hotbar fish to see its price and click to sell.
 - **Hub:** T-shaped dock with side piers, rowboat, barrel and rope; plaza gains a campfire with benches, leaderboard board, mirror and extra lamps.
 - **Persistence:** see section 17.
@@ -293,7 +293,7 @@ Each map hub has a Lucky Wheel. Hold a fish near it and press E to gamble that f
 
 - **Banner:** when the hooked or caught fish is the same tier as your equipped bait (your best catchable tier), a large "<Tier> fish hooked!/caught!" banner shows in that tier's color.
 - **Harder reels:** high difficulty means shorter rests, stronger and longer surges, tighter tension coupling and a faster line snap. Tuning lives in `src/game/reel.ts`.
-- **Cosmetic prices:** entry items cost 100-400 coins; the top items (crown 75,000, cloak 60,000, diamond pendant 120,000) are stretch goals worth roughly 25-40 top-tier catches.
+- **Cosmetic prices:** entry items cost 100-400 coins; the top items (Lake King's Crown 75,000, Aurora Mantle 60,000, Starfall Diamond 120,000) are stretch goals worth roughly 25-40 top-tier catches. Casino outfits cost 30-450 chips.
 
 ## 20. Perfect cast (skill shot)
 
@@ -355,7 +355,7 @@ Night is the shortest part of the day, so it is the best time to fish. When the 
 
 ## 28. Tier visuals
 
-T1–T3 share a classic fish shape. T4 fish are larger with a glow halo, orbiting sparks, side fins and back spines. T5 fish are large serpentine creatures with a glowing mane, wing-fins, crown, orbiting rings and a per-species effect (veil, flames, colour-cycling ribbons, star sparkles).
+Superseded by the fish rework: see §32 (Looks, Catch moment).
 
 ## 29. Casino
 
@@ -379,7 +379,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 - **Blackjack:** hit, stand and double. The dealer stands on 17. A win pays 1:1 and a natural pays 3:2 on the multiplier.
 
 ### Chips
-- A separate currency in the account save. Chips are earned only by turning fish in at the prize shop and are spent only on casino unlocks. Coins keep buying rods, bait and cosmetics.
+- A separate currency in the account save. Chips are earned only by turning fish in at the prize shop and are spent only on casino unlocks and casino-only cosmetics. Coins keep buying rods, bait and the stall's cosmetics.
 - One config holds the fish-to-chip rate and unlock prices so the grind can be tuned.
 
 ### Casino unlocks (bought with chips)
@@ -390,7 +390,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 | Quick-Reel Gloves | shorter reel time | permanent |
 | Shiny Lure | N charges, each guarantees a shiny catch | consumable, re-bought |
 | Night Owl Lantern | better night-fish luck | permanent |
-| Cosmetics | casino-only outfits and trophies | permanent |
+| Cosmetics | casino-only outfits (High Roller tab, see section 33) | permanent |
 
 ### Build order
 1. Casino map, gate and travel.
@@ -422,14 +422,23 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 
 - **Look:** walnut frames, parchment cards and gold accents, matching the town's stalls and signs, in the bundled Nunito font (`src/assets/fonts`). Colours are CSS variables at the top of `src/style.css` (`--wood-*`, `--paper*`, `--gold`, tier colours `--t1`-`--t5`). The casino counter uses the same pieces in burgundy and gold.
 - **HUD:** level badge with an XP ring and a coin counter (chips only in the casino) top left; spot and night hints only with a rod in hand; chat top right; hotbar with icons (fish drawn in their species colour by `src/game/fishicon.ts`), and the item's name pops up when switching slots; a short Tab / Enter / Esc reminder bottom left.
-- **Menu window:** one frame for everything. Header: who it belongs to (you, Marlow's Stall or the Prize Counter), tabs, and Esc ✕. Player tabs: Bag (setup, rods, bait), Wardrobe (preview, colour, face, owned cosmetics), Fishdex, Anglers, ⚙ Settings (controls, music, reset). Shop tabs: Gear, Cosmetics.
+- **Menu window:** one frame for everything. Header: who it belongs to (you, Marlow's Stall or the Prize Counter), tabs, and Esc ✕. Player tabs: Bag (setup, rods, bait), Wardrobe (preview, colour, face, owned cosmetics), Fishdex, Anglers, ⚙ Settings (controls, music, reset). Shop tabs: Gear, Cosmetics. Prize Counter tabs: Unlocks, High Roller (casino cosmetics).
 - **Tiles and details:** items are tiles with their tier colour along the bottom edge. Clicking one selects it and shows it in the details panel on the right (stats, one plain sentence, and the main action: Equip, Buy, Wear). The Wardrobe applies clicks straight away since nothing is spent.
 - **Selling:** the shop and prize counter sit higher so the hotbar stays visible; a strip at the bottom explains clicking a fish to sell (or turn in), with "Sell all" in the shop.
 
 ## 32. Fish and tiers
 
 - **Tier themes:** 1 Shallows (small everyday fish), 2 Sport fish (the classics), 3 Lake giants (big predators and pond royalty), 4 Jewel fish (gem colours: Pearl Sturgeon, Ruby Arowana, Sapphire Dorado, Moonstone Salmon), 5 Spirit fish (mythic versions of familiar fish: Ghost Carp, Phoenix Trout, Aurora Pike, Starweaver Eel). Ids never change, so renames keep saves intact.
-- **Bigger every tier:** sizes climb without overlap at the top (tier 1 is 5-40 cm, tier 5 is 130-320 cm), and one curve, `fishScale` in `src/game/fishmodel.ts`, sizes every view of a fish (water, landing, held, carried, dropped, other players) so a legend really looks like a trophy. Saves from before the rework have their records and carried fish pulled into the new ranges.
-- **Looks:** each species has a silhouette, fins, colours and markings in `src/data/fishlook.ts`; the 3D model (`fishmodel.ts`) and 2D icon (`fishicon.ts`) are both drawn from it. The tier adds the finish: matte, then satin, then a glossy clear coat with bigger fins, then a jewel sheen with a coloured rim glow and sparkles, then a spirit aura with a signature flourish (veils, flames, colour-cycling ribbons, stars).
+- **Bigger every tier:** sizes climb without overlap at the top (tier 1 is 5-40 cm, tier 5 is 130-320 cm), and one curve, `fishScale` in `src/game/fishscale.ts`, sizes every view of a fish (water, landing, held, carried, dropped, other players) so a legend really looks like a trophy. A tier boost on top (×1, ×1, ×1.08, ×1.2, ×1.35) makes jewels and spirits read bigger than their length alone. Each view eases toward its own soft cap instead of a hard one, so a bigger fish always looks bigger: the dangling catch (cap 3.3) hangs on a shorter line from a raised rod so it clears the dock, the carried fish (cap 0.3) moves further out and down as it grows, and other players' catches (cap 1.5) hang closer to their rod tip so they stay off the ground. Tests check that every view's smallest and biggest fish grow strictly with tier. Saves from before the rework have their records and carried fish pulled into the new ranges.
+- **Looks:** each species has a silhouette, fins, colours and markings in `src/data/fishlook.ts`; the 3D model (`fishmodel.ts`) and 2D icon (`fishicon.ts`) are both drawn from it. The tier adds the finish: matte, then satin, then a glossy clear coat with an iridescent shimmer and bigger fins and tail (3), then a jewel sheen with a coloured rim glow, a soft halo, faceted gems along the flanks and on the brow, glowing gem-coloured eyes and sparkles (4), then a spirit aura with a bigger halo, shining eyes, a floating crown of light, a wider ring of sparkles and a signature flourish (veils, flames, colour-cycling ribbons, stars) (5). A dangling catch turns a flank toward the camera so all of this is on show. The 2D icons follow: a gloss streak from tier 3, a coloured glow, gem row, gem iris and sparkles on jewels, and a crown plus the spirit's flames or ribbons on spirits.
+- **Catch moment:** landing a jewel, spirit or shiny fish bursts coloured sparkles around it (`FX.burst`), kicks the camera and rod, and the catch card pops in; jewel and spirit cards also pulse a glow in the tier colour, sweep a shine across and float the icon (bigger on spirits). All client-side.
 - **Odds:** fish below your gear tier bite at ×0.3 per tier below (`OUTGROWN`), and legendaries have a base weight of 0.6, so with top gear roughly 1 catch in 5 is tier 1-2 and 1 in 6 is legendary. Upgrades take a similar number of catches each (about 45, 54, 72). Every tier is still worth strictly more than the one below at any size (tested).
 - **Fishdex:** grouped by tier under its theme name, with a one-line description per species (`FISH_BLURB`); undiscovered fish show their silhouette, size range and the gear to try. The catch card shows the icon, description, tier theme and a 🌙 for night fish.
+
+## 33. Cosmetics look
+
+- **Themes:** Marlow's stall sells lakeside angler gear (Fisher Cap, Straw Sun Hat, Fly-Tier Bucket Hat, Captain's Hat, Heron Plume Hat, Lake King's Crown; Camp Tee, Sailor Stripes, Angler Vest, Lily Pad Shirt, Harbor Peacoat, Aurora Mantle; Shell Necklace, Hook Charm Chain, Golden Fish Pendant, Pearl Strand, Sapphire Amulet, Starfall Diamond). The casino sells high-roller glam in felt green, gold, neon pink and red/black: Dealer's Visor (T2, 30 chips), High Roller Top Hat (T4, 150), Croupier's Waistcoat (T2, 40), Jackpot Tuxedo (T4, 200), Lucky Dice Chain (T3, 75) and the Jackpot Medallion (T5, 450). Ids never change, so renames keep saves intact.
+- **Shop rule:** each item has a `shop` (`stall` or `casino`). The server sells an item only at its own counter: stall items for coins next to Marlow, casino items for chips at the Prize Counter (`buyCosmetic` in `economy.ts`, checked in `server/room.ts`).
+- **Rarity:** tier 0 Plain (grey), 1 Fine (green), 2 Rare (blue), 3 Epic (purple), 4 Mythic (orange), 5 Legendary (gold). Finishes climb with the tier: matte cloth, then satin, brass and gold trims, glowing gems, and for legendaries breathing glow trims plus stars that circle the wearer.
+- **UI:** every item has its own drawn icon (`src/game/cosicon.ts`). Mythic tiles have a warm glow; legendary tiles are gold, shimmer and twinkle; casino items carry a small pink chip in the corner. The details panel shows the rarity, a one-line blurb and a live try-on preview.
+- **Models** (`src/game/character.ts`): low-poly primitives on the capsule body, built once per item and cloned for every wearer (geometry and materials are shared, small parts merged into one mesh). No lights are added; glows are emissive materials.

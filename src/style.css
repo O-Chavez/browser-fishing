@@ -165,6 +165,8 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 
 #banner { position: fixed; top: 16%; left: 50%; transform: translateX(-50%); font-size: 44px; font-weight: 900; letter-spacing: 1px; text-align: center; pointer-events: none; text-shadow: 0 2px 12px rgba(0,0,0,.8), 0 0 28px currentColor; animation: bannerIn 3.2s ease-out forwards; z-index: 30; white-space: nowrap; }
 #banner small { display: block; font-size: 18px; font-weight: 600; opacity: .9; letter-spacing: 0; }
+#banner.welcome { color: var(--gold); animation-duration: 4.2s; }
+#banner.welcome small { margin-top: 6px; color: var(--cream); }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 
 #purse, #chipbox { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 9px; border-radius: 999px; background: var(--hud-bg); box-shadow: var(--hud-edge); font-size: 22px; font-weight: 900; color: var(--gold); }
@@ -253,6 +255,23 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 .tile.ghost.sel { opacity: .85; }
 .tile .eq { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; color: #fff; background: var(--ok); }
 
+/* cosmetics: drawn icons; mythic tiles glow warm, legendary tiles shimmer gold; casino items wear felt and a chip tag */
+.cosico { display: block; width: 1.25em; height: 1.25em; overflow: visible; }
+.tile.mythic { background: radial-gradient(circle at 50% 38%, #ffe2c4, var(--paper-3) 70%); }
+.tile.legend { overflow: hidden; background: radial-gradient(circle at 50% 36%, #fff3c0, #f3dc9a 55%, #e9c977); box-shadow: inset 0 -4px 0 var(--c), 0 0 0 2px #c99a3c, 0 0 14px rgba(255,201,51,.55); }
+.tile.legend::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 44%, rgba(255,255,255,.5) 50%, transparent 56%); background-size: 300% 100%; background-repeat: no-repeat; animation: cos-shine 3.2s ease-in-out infinite; }
+.tile.legend.sel { box-shadow: inset 0 -4px 0 var(--c), 0 0 0 3px var(--gold), 0 0 18px rgba(255,201,51,.8); }
+.tile.legend .cosico { animation: cos-twinkle 2.4s ease-in-out infinite; }
+.tile.casino-item::before { content: ''; position: absolute; top: 7px; left: 7px; width: 14px; height: 14px; border-radius: 50%; background: #ff4f9a; box-shadow: inset 0 0 0 2px #ff4f9a, inset 0 0 0 3.5px #ffe9a8, 0 0 0 1.5px #2a0a12; }
+.tile.casino-item:not(.legend):not(.mythic) { background: linear-gradient(180deg, #e6efe2, var(--paper-3) 60%); }
+.detail.legend .hero .ic { background: radial-gradient(circle at 50% 36%, #fff3c0, #e9c977); box-shadow: inset 0 -4px 0 var(--c), 0 0 16px rgba(255,201,51,.6); }
+.detail.mythic .hero .ic { background: radial-gradient(circle at 50% 38%, #ffe2c4, var(--paper-3) 75%); }
+.detail .hero .ic .cosico { width: 50px; height: 50px; }
+.cos-intro { margin: 0 0 10px; font-size: 14px; font-weight: 800; color: var(--ink-muted); }
+@keyframes cos-shine { 0% { background-position: 0% 0; } 60%, 100% { background-position: 100% 0; } }
+@keyframes cos-twinkle { 0%, 100% { filter: drop-shadow(0 0 0 rgba(255,210,58,0)); } 50% { filter: drop-shadow(0 0 5px rgba(255,210,58,.95)); } }
+@media (prefers-reduced-motion: reduce) { .tile.legend::after, .tile.legend .cosico { animation: none; } }
+
 /* charms & perks summary in the Bag: one row of effect chips */
 .perks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .perk { display: flex; align-items: center; gap: 6px; padding: 4px 12px 4px 8px; border-radius: 999px; background: var(--paper-3); box-shadow: inset 0 -3px 0 var(--gold); }
@@ -267,6 +286,8 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 .detail h4 { margin: 4px 0 0; }
 .detail .have { font-size: 14px; font-weight: 800; }
 .detail #pv-slot canvas.preview { width: 100%; height: 220px; }
+/* On short screens the counter windows are shorter, so shrink the try-on preview to keep Buy above the sell strip. */
+@media (max-height: 820px) { .sheet.tab-shop .detail #pv-slot canvas.preview, .sheet.tab-casino .detail #pv-slot canvas.preview { height: 140px; object-fit: contain; } }
 .badge { display: inline-block; font-size: 11px; font-weight: 900; padding: 2px 8px; border-radius: 6px; color: #fff; background: var(--c); }
 .stat { font-size: 14px; font-weight: 800; }
 .srow { display: flex; justify-content: space-between; margin-bottom: 4px; }
@@ -312,6 +333,21 @@ canvas.preview.dragging { cursor: grabbing; }
 .dex-tier small { margin-left: auto; font-size: 13px; color: var(--ink-muted); }
 #catch .catch-ico .fishico { width: 96px; height: 60px; }
 #catch .blurb { margin: 0 0 6px; font-size: 14px; font-weight: 700; font-style: italic; color: var(--ink-muted); max-width: 300px; }
+/* Catch card: pops in, and jewel (4) and spirit (5) catches glow, shimmer and float their icon. */
+#catch { animation: catchIn .35s cubic-bezier(.2, 1.4, .4, 1) both; overflow: hidden; }
+#catch[data-tier="4"] { animation: catchIn .5s cubic-bezier(.2, 1.6, .4, 1) both, catchGlow 1.4s ease-in-out .5s infinite alternate; }
+#catch[data-tier="5"] { animation: catchIn .6s cubic-bezier(.2, 1.8, .35, 1) both, catchGlow 1s ease-in-out .6s infinite alternate; }
+#catch[data-tier="5"] { background: radial-gradient(ellipse at 50% 18%, color-mix(in srgb, var(--glow) 22%, var(--paper)) 0%, var(--paper) 60%); }
+#catch[data-tier="4"]::after, #catch[data-tier="5"]::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-120%); animation: catchShine 2.6s ease-in-out .4s infinite; }
+#catch[data-tier="5"]::after { animation-duration: 1.8s; }
+#catch .catch-ico { position: relative; }
+#catch[data-tier="3"] .catch-ico, #catch[data-tier="4"] .catch-ico, #catch[data-tier="5"] .catch-ico { background: radial-gradient(ellipse at center, color-mix(in srgb, var(--glow) 35%, transparent) 0%, transparent 65%); }
+#catch[data-tier="4"] .catch-ico .fishico, #catch[data-tier="5"] .catch-ico .fishico { animation: icoFloat 2.2s ease-in-out infinite alternate; }
+#catch[data-tier="5"] .catch-ico .fishico { width: 120px; height: 75px; }
+@keyframes catchIn { 0% { opacity: 0; transform: translateY(30px) scale(.6); } 100% { opacity: 1; transform: none; } }
+@keyframes catchGlow { from { box-shadow: 0 0 18px var(--glow); } to { box-shadow: 0 0 60px 6px var(--glow); } }
+@keyframes catchShine { 0% { transform: translateX(-120%); } 45%, 100% { transform: translateX(120%); } }
+@keyframes icoFloat { from { transform: translateY(2px) rotate(-2deg); } to { transform: translateY(-3px) rotate(2deg); } }
 
 /* Anglers */
 .list-head { margin: 0 0 12px; font-size: 15px; font-weight: 800; color: var(--ink-muted); }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAPS } from '../src/data/maps';
 import { FISH } from '../src/data/content';
 import { CASINO_LEVEL } from '../src/data/casino';
+import { cosById } from '../src/data/cosmetics';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { Room } from './room';
@@ -122,5 +123,29 @@ describe('casino tables', () => {
     room.handle(p.id, { t: 'buyperk', id: 'gloves' });
     expect(p.acct.save.perks).toContain('gloves');
     expect(p.acct.save.chips).toBeLessThan(chips);
+  });
+
+  it('sells casino cosmetics for chips only, and only at the prize counter', () => {
+    const { room, p } = seat('Eve');
+    p.acct.save.chips = 1000;
+    p.acct.save.coins = 1_000_000;
+    // Away from the counter nothing sells.
+    room.handle(p.id, { t: 'buycos', id: 'tophat' });
+    expect(p.acct.save.owned).toEqual([]);
+    goTo(room, p.id, casino.casino!.prizes);
+    // Stall items are not sold at the casino, even with coins to spare.
+    room.handle(p.id, { t: 'buycos', id: 'crown' });
+    expect(p.acct.save.owned).toEqual([]);
+    room.handle(p.id, { t: 'buycos', id: 'tophat' });
+    expect(p.acct.save.owned).toEqual(['tophat']);
+    expect(p.acct.save.chips).toBe(1000 - cosById('tophat')!.price);
+    expect(p.acct.save.coins).toBe(1_000_000);
+    // Not enough chips: coins never pay for casino items.
+    p.acct.save.chips = 10;
+    room.handle(p.id, { t: 'buycos', id: 'jackpot' });
+    expect(p.acct.save.owned).toEqual(['tophat']);
+    expect(p.acct.save.chips).toBe(10);
+    room.handle(p.id, { t: 'equip', slot: 'hat', id: 'tophat' });
+    expect(p.acct.save.look.hat).toBe('tophat');
   });
 });
