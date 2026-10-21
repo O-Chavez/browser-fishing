@@ -230,6 +230,10 @@ export class Game {
         if (!self && m.room === this.net.room && m.map === this.map.id) this.avatars.say(m.id, m.text);
       },
       onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
+      onDev: (lines, time) => {
+        for (const text of lines) this.chat.add({ name: '', map: '', text, self: false, system: true });
+        if (time !== undefined) this.world.dayOverride = time;
+      },
       onDrops: (list) => {
         this.serverDrops = list;
         this.dropsView.sync(list, this.map.id);
@@ -272,7 +276,13 @@ export class Game {
     });
     this.applyLocation();
     this.chat = new ChatBox($('chat'), {
-      send: (text) => this.net.send({ t: 'chat', text }),
+      send: (text) => {
+        if (!text.startsWith('/')) return this.net.send({ t: 'chat', text });
+        // Slash commands go to the dev console, never to chat; only you see them, password hidden.
+        const shown = text.replace(/^(\/login\s+\S+\s+).*/, '$1••••');
+        this.chat.add({ name: '', map: '', text: `> ${shown}`, self: true, system: true });
+        this.net.send({ t: 'cmd', text });
+      },
       map: () => this.map.id,
       mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
     });

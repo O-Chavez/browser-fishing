@@ -19,6 +19,8 @@ export interface NetEvents {
   onNotice(msg: string): void;
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
+  /** Dev console replies; `time` is set when a command changed the day/night override. */
+  onDev(lines: string[], time: number | null | undefined): void;
   onClose(): void;
   /** The socket closed before the server accepted the join. */
   onFailed(): void;
@@ -111,6 +113,9 @@ export class NetClient {
         break;
       case 'sys':
         this.events.onSys(m.text);
+        break;
+      case 'dev':
+        this.events.onDev(m.lines, m.time);
         break;
       case 'error':
         this.events.onError(m.msg);

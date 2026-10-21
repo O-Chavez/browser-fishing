@@ -7,6 +7,7 @@ import { MAPS } from '../src/data/maps';
 import { SERVER_PORT, type ClientMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { ChatGate } from './chat';
+import { DevGate } from './dev';
 import { Room } from './room';
 import { createStorage } from './storage';
 
@@ -16,6 +17,9 @@ const accounts = new AccountStore(data.accounts);
 const rooms = new Map<string, Room>();
 // Chat is server-wide: one set of limits, and every line goes to every room.
 const chatGate = new ChatGate();
+// Dev console credentials; with either unset the console stays off.
+const devGate = new DevGate({ user: process.env.DEV_USER, pass: process.env.DEV_PASS });
+if (devGate.enabled) console.log('dev console: enabled');
 setInterval(() => chatGate.prune(), 60_000);
 console.log(`saves: ${storage.kind} (${Object.keys(data.accounts).length} accounts loaded)`);
 if (process.env.RENDER && !process.env.DATABASE_URL) {
@@ -55,6 +59,7 @@ function room(name: string): Room {
     r = new Room(name, MAPS, persist);
     r.hall = () => accounts.hall();
     r.chatGate = chatGate;
+    r.devGate = devGate;
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }

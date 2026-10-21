@@ -2,7 +2,7 @@ import { FISH, byId } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
-import { isNight } from '../src/game/daynight';
+import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
 import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
@@ -11,6 +11,7 @@ import { newSave } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
+import { DevGate, runDev } from './dev';
 
 export interface Conn {
   send(msg: ServerMsg): void;
@@ -33,6 +34,10 @@ interface Member {
   spin: { at: number; run: () => void } | null;
   /** A blackjack hand in progress. */
   bj: cas.Blackjack | null;
+  /** Logged in to the dev console (this connection only). */
+  dev?: boolean;
+  /** Dev console time override, as a day fraction. */
+  dayFrac?: number | null;
 }
 
 const VENDOR_RANGE = 5;
@@ -51,6 +56,8 @@ export class Room {
   hall: () => HallRow[] = () => [];
   /** Chat rules; the server shares one gate between rooms so limits follow the account. */
   chatGate: ChatGate;
+  /** Dev console login; off unless the server sets credentials. */
+  devGate = new DevGate();
   /** Last dig per account, for the worm patch cooldown. */
   private dugAt = new Map<Account, number>();
   /** Delivers chat lines and notices; the server points this at every room. */
@@ -111,6 +118,7 @@ export class Room {
     if (!m) return;
     // Chat works mid-spin and mid-hand, so it is handled before those locks.
     if (msg.t === 'chat') return this.chat(m, msg.text);
+    if (msg.t === 'cmd') return this.command(m, msg.text);
     this.settle(m);
     const s = m.acct.save;
     let changed = false;
@@ -281,11 +289,7 @@ export class Room {
     const forward = !from.casino && from.next?.id === dest.id;
     if (!forward && !back) return false;
     if (forward && s.level < (dest.minLevel ?? 1)) return this.deny(m, `${dest.name} needs level ${dest.minLevel}.`);
-    s.location = dest.id;
-    m.info.map = dest.id;
-    m.info.x = dest.spawn.x;
-    m.info.z = dest.spawn.z;
-    this.broadcast({ t: 'moved', id: m.info.id, map: dest.id });
+    this.teleport(m, dest.id);
     return true;
   }
 
@@ -296,6 +300,50 @@ export class Room {
       return;
     }
     this.say({ t: 'chat', room: this.name, id: m.info.id, name: m.info.name, map: m.info.map, text: res.text });
+  }
+
+  /** Dev console: `/login user pass` unlocks the other commands for this connection. */
+  private command(m: Member, text: unknown): void {
+    if (typeof text !== 'string' || !text.startsWith('/')) return;
+    const [cmd = '', ...args] = text.slice(1, 200).trim().split(/\s+/);
+    const reply = (lines: string[], extra: { time?: number | null } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
+    if (cmd === 'login') {
+      const bad = this.devGate.login(m.acct.name, args[0] ?? '', args[1] ?? '');
+      console.log(`[dev] ${m.acct.name} login ${bad ? 'failed' : 'ok'}`);
+      if (bad) return reply([bad]);
+      m.dev = true;
+      return reply(['Dev console unlocked. /help lists the commands.']);
+    }
+    if (!m.dev) return reply(['Unknown command. (Dev console: /login <user> <password>)']);
+    if (cmd === 'logout') {
+      m.dev = false;
+      return reply(['Logged out of the dev console.']);
+    }
+    console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
+    if (m.spin || m.bj) return reply(['Finish the spin or hand first.']);
+    let time: number | null | undefined;
+    const res = runDev({
+      save: m.acct.save,
+      maps: this.maps,
+      teleport: (map) => this.teleport(m, map),
+      setTime: (f) => { m.dayFrac = time = f; },
+      clearDig: () => this.dugAt.delete(m.acct),
+    }, cmd.toLowerCase(), args);
+    reply(res.lines, time === undefined ? {} : { time });
+    if (!res.changed) return;
+    this.syncCarry(m);
+    this.onChange();
+    m.conn.send({ t: 'state', save: m.acct.save });
+  }
+
+  private teleport(m: Member, map: string): void {
+    const dest = this.maps[map];
+    m.pending = null;
+    m.acct.save.location = dest.id;
+    m.info.map = dest.id;
+    m.info.x = dest.spawn.x;
+    m.info.z = dest.spawn.z;
+    this.broadcast({ t: 'moved', id: m.info.id, map: dest.id });
   }
 
   private deny(m: Member, msg: string): false {
@@ -369,7 +417,7 @@ export class Room {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });
       return false;
     }
-    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), isNight(this.now() / 1000));
+    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
     m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, readyAt: this.now() + roll.wait * 1000 + MIN_FIGHT_MS } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
