@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import puppeteer, { type Page } from 'puppeteer-core';
+import puppeteer, { type KeyInput, type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { COSMETICS } from '../src/data/cosmetics';
 import { ROULETTE_MS } from '../src/data/casino';
@@ -206,7 +206,7 @@ function edit(cuts: Cut[]) {
     const a = Math.max(0, m + from);
     return { a, b: Math.min(take.length, Math.max(a + 0.5, m + to)) };
   });
-  const graph = cuts.map((c, i) => `[${i}:v]trim=${spans[i].a.toFixed(3)}:${spans[i].b.toFixed(3)},setpts=PTS-STARTPTS,fps=30,format=yuv420p[v${i}]`);
+  const graph = cuts.map((_, i) => `[${i}:v]trim=${spans[i].a.toFixed(3)}:${spans[i].b.toFixed(3)},setpts=PTS-STARTPTS,fps=30,format=yuv420p[v${i}]`);
   let last = 'v0';
   let t = spans[0].b - spans[0].a;
   for (let i = 1; i < cuts.length; i++) {
@@ -328,7 +328,7 @@ try {
       await game(table, `G.teleport(-8.6, 39.7);`);
       await sleep(1500);
     }
-    await table.keyboard.press(`Digit${(attempt % 4) + 2}`);
+    await table.keyboard.press(`Digit${(attempt % 4) + 2}` as KeyInput);
     await game(table, `G.look(${wheel.yaw}, ${wheel.pitch + 0.05});`);
     await sleep(1200);
     spin = await record(table, 'casino', 8500, async (mark) => {
