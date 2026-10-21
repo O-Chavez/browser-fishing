@@ -108,5 +108,7 @@
 - `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
 - The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
 - The pond's Lucky Wheel doubles a fish with no cap, while the casino tables stop at `MULT_CAP` (×16). Decide whether the wheel should share the cap
+- Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)
+- Shoreline rocks, flower pots and log piles have no colliders, so players walk through them. Decide whether that's intended
 - Dev console `/tips` command to clear the new-player tips list for testing (needs both the tips and dev console branches merged)
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs

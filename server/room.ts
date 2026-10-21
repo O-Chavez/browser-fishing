@@ -408,6 +408,10 @@ export class Room {
 
   private cast(m: Member, x: number, z: number, perfect = false): boolean {
     const map = this.maps[m.info.map];
+    if (map.casino) {
+      m.conn.send({ t: 'castfail', msg: 'No fishing in the casino.' });
+      return false;
+    }
     const can = finite(x, z) ? eco.canCast(m.acct.save) : 'nobait';
     if (can !== 'ok' || !eco.spendBait(m.acct.save)) {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });

@@ -35,10 +35,10 @@ function wheelTexture(): THREE.CanvasTexture {
   return t;
 }
 
-/** The casino floor: a roulette table with a spinning wheel, a blackjack table and the prize counter. */
 /** Tables sit lower than real ones so the wheel, cards and buttons read from eye height. */
 const TABLE_DROP = 0.3;
 
+/** The casino floor: a roulette table with a spinning wheel, a blackjack table and the prize counter. */
 export class CasinoHall {
   readonly group = new THREE.Group();
   readonly colliders: Circle[] = [];
@@ -422,15 +422,15 @@ export class CasinoHall {
     this.anim = { from: cur, to: final + turns * Math.PI * 2, t0: performance.now(), ms };
   }
 
-  update(t: number, night: number): void {
+  update(t: number, dt: number): void {
     if (this.anim) {
       const k = Math.min(1, (performance.now() - this.anim.t0) / this.anim.ms);
       const e = 1 - Math.pow(1 - k, 3);
       this.wheel.rotation.y = this.anim.from + (this.anim.to - this.anim.from) * e;
       if (k >= 1) this.anim = null;
-    } else this.wheel.rotation.y += 0.002;
+    } else this.wheel.rotation.y += 0.12 * dt;
     const pulse = 0.65 + 0.35 * Math.sin(t * 3);
-    const n = Math.round(night * pulse * 10) / 10;
+    const n = Math.round(pulse * 10) / 10;
     if (n !== this.neon) {
       this.neon = n;
       for (const { m, c } of this.glow) m.color.copy(c).multiplyScalar(0.55 + 0.45 * n);

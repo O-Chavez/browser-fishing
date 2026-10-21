@@ -68,9 +68,21 @@ describe('casino travel', () => {
 
   it('joins on the saved map, falling back to the pond', () => {
     const { join } = setup();
-    expect(join('Ann', 'casino').c.log.find((m) => m.t === 'welcome')).toBeTruthy();
+    const a = join('Ann', 'casino');
     const b = join('Bob', 'nowhere');
     expect(b.acct.save.location).toBe('pond');
+    // Bob's welcome lists Ann on the map the server put her on.
+    const welcome = b.c.log.find((m) => m.t === 'welcome') as Extract<ServerMsg, { t: 'welcome' }>;
+    expect(welcome.players.find((p) => p.id === a.id)?.map).toBe('casino');
+  });
+
+  it('refuses to cast inside the casino', () => {
+    const { room, join } = setup();
+    const a = join('Ann', 'casino');
+    const bait = a.acct.save.slots[1];
+    room.handle(a.id, { t: 'cast', x: 0, z: 40 });
+    expect(a.c.log.some((m) => m.t === 'castok')).toBe(false);
+    expect(a.acct.save.slots[1]).toEqual(bait);
   });
 
   it('ignores map ids that name Object prototype members', () => {

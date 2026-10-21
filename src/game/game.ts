@@ -778,7 +778,7 @@ export class Game {
   private startSpin(win: boolean, ms: number): void {
     const it = this.s.slots[this.s.held];
     if (it?.k !== 'fish' || this.spin) return;
-    const value = eco.fishValue(it);
+    const value = Math.round(eco.fishValue(it));
     const name = byId(FISH, it.fishId).name;
     this.spin = true;
     this.world.hub?.spinWheel(win, ms);
@@ -993,6 +993,8 @@ export class Game {
     this.player.teleport(this.map.spawn.x, this.map.spawn.z);
     this.world.yaw = this.map.spawn.yaw;
     this.avatars.sync(this.net.players, this.net.id, this.map.id);
+    // A new hub starts with an empty board, and the server only resends it when someone's stats change.
+    this.world.hub?.setLeaders(this.anglers());
   }
 
   // ---------- walking & interaction ----------
@@ -1068,7 +1070,7 @@ export class Game {
       const win = r.factor > 0;
       this.casinoMsg = win
         ? `<b class="win">${r.color.toUpperCase()}! You win</b> ${name} is now worth ${Math.round(after)} 🪙`
-        : `<b class="lose">${r.color.toUpperCase()}.</b> ${name} (${before} 🪙) is gone`;
+        : `<b class="lose">${r.color.toUpperCase()}.</b> ${name} (${Math.round(before)} 🪙) is gone`;
       this.showResult(win ? 'win' : 'lose', win ? `${r.color.toUpperCase()}! YOU WIN` : `${r.color.toUpperCase()}. YOU LOSE`, win ? `${name} is now worth ${Math.round(after)} 🪙` : `${name} is gone`);
       if (win) audio.jingle('epic');
       else audio.snap();
@@ -1184,7 +1186,7 @@ export class Game {
     }
     lines.push(
       fish
-        ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${eco.fishValue(fish)} 🪙${rich ? ' <span class="lose">(too rich for the table, turn it in)</span>' : ''}`
+        ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${Math.round(eco.fishValue(fish))} 🪙${rich ? ' <span class="lose">(too rich for the table, turn it in)</span>' : ''}`
         : 'Hold a fish (1-5) to bet it.',
     );
     const g = this.bj;
@@ -1277,7 +1279,7 @@ export class Game {
 
     const hub = w.hub;
     const { x, z } = this.player;
-    // Lower d wins: aimed stall goods, then selling, then picking up, then everything else by distance.
+    // Lower d wins: the wheel, then selling, then picking up, then everything else by distance.
     const spots: { d: number; label: string; act: () => void }[] = [];
 
     for (const d of this.curDrops()) {
@@ -1335,7 +1337,7 @@ export class Game {
         const wh = this.s.slots[this.s.held];
         spots.push(
           wh?.k === 'fish'
-            ? { d: -40, label: `Spin the wheel with ${byId(FISH, wh.fishId).name} · 2× or nothing (${eco.fishValue(wh)} 🪙)`, act: () => this.gamble() }
+            ? { d: -40, label: `Spin the wheel with ${byId(FISH, wh.fishId).name} · 2× or nothing (${Math.round(eco.fishValue(wh))} 🪙)`, act: () => this.gamble() }
             : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast('Hold a fish (1-5), then press E to spin.') },
         );
       }
@@ -2336,7 +2338,7 @@ export class Game {
     const el = $('heldname');
     if (!sl) return el.classList.remove('show');
     el.textContent =
-      sl.k === 'fish' ? `${sl.shiny ? '✨ ' : ''}${byId(FISH, sl.fishId).name} · ${eco.fishValue(sl)} 🪙`
+      sl.k === 'fish' ? `${sl.shiny ? '✨ ' : ''}${byId(FISH, sl.fishId).name} · ${Math.round(eco.fishValue(sl))} 🪙`
       : sl.k === 'rod' ? byId(RODS, sl.id).name
       : `${byId(BAITS, sl.id).name} ×${sl.n}`;
     el.classList.remove('show');

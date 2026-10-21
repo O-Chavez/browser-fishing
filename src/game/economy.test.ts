@@ -147,6 +147,8 @@ describe('carry slots', () => {
     expect(s.look.color).toBe(0x123456);
     expect(migrate({ ...newSave(), look: { ...newSave().look, face: 'cat' } }).look.face).toBe('cat');
     expect(isFace(migrate({ ...newSave(), look: { ...newSave().look, face: 'bogus' } }).look.face)).toBe(true);
+    // A colour lost to JSON (NaN is stored as null) falls back to the default, not black.
+    expect(migrate({ ...newSave(), look: { ...newSave().look, color: null as never } }).look.color).toBe(newSave().look.color);
   });
 
   it('pulls records and carried fish from before the size rework into the new ranges', () => {

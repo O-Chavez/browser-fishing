@@ -15,6 +15,7 @@ import path from 'node:path';
 import puppeteer, { type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { FISH } from '../src/data/content';
+import { MAPS } from '../src/data/maps';
 import { newSave } from '../src/game/state';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -420,11 +421,9 @@ async function casinoChecks(): Promise<void> {
   check('casino: turning a fish in at the tray gives chips', chips.after > chips.before, `${chips.before} -> ${chips.after}`);
 
   // Casino-only cosmetics: bought with chips at the prize counter, then worn.
-  await page.evaluate(async () => {
-    const { MAPS } = await import('/src/data/maps.ts');
-    const p = MAPS.find((x: any) => x.id === 'casino').casino.prizes;
-    window.__game.teleport(p.x, p.z - 2);
-  });
+  const casinoMap = MAPS.find((x) => x.id === 'casino')!;
+  const prizes = casinoMap.casino!.prizes;
+  await page.evaluate((p) => window.__game.teleport(p.x, p.z - 2), { x: prizes.x, z: prizes.z });
   await sleep(700);
   await page.evaluate(() => window.__game.openMenu('casino'));
   await page.click('[data-prize="cosmetics"]');
@@ -447,17 +446,15 @@ async function casinoChecks(): Promise<void> {
   await page.evaluate(() => window.__game.closeMenu());
 
   // Leave through the front door: real server travel back to the pond.
-  const exit = await page.evaluate(async () => {
-    const { MAPS } = await import('/src/data/maps.ts');
-    const m = MAPS.find((x: any) => x.id === 'casino');
-    window.__game.teleport(m.gate.x, m.gate.z + 1.2);
+  const exit = await page.evaluate(async (gate) => {
+    window.__game.teleport(gate.x, gate.z + 1.2);
     await new Promise((r) => setTimeout(r, 600));
     const label = window.__game.player().near;
     window.__game.interact();
     const t0 = performance.now();
     while (performance.now() - t0 < 6000 && !(window.__game.world as any).hub) await new Promise((r) => setTimeout(r, 50));
     return { label, atPond: !!(window.__game.world as any).hub };
-  });
+  }, { x: casinoMap.gate.x, z: casinoMap.gate.z });
   check('travel: casino exit takes you to the pond', exit.atPond, `prompt "${exit.label}"`);
   if (exit.atPond) {
     await sleep(800);

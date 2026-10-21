@@ -346,8 +346,8 @@ export class Town {
       g.add(f);
     }
     this.at(g, s.x, s.z, s.facing);
-    this.solid(s.x - 1.1, s.z, 0.4);
-    this.solid(s.x + 1.1, s.z, 0.4);
+    // Along the rack, turned with it like the rack itself.
+    for (const lx of [-1.1, 1.1]) this.solid(s.x + lx * Math.cos(s.facing), s.z - lx * Math.sin(s.facing), 0.4);
   }
 
   private buildBoat(s: Spot): void {

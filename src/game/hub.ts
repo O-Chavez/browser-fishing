@@ -72,7 +72,6 @@ export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#
 
 const WHEEL_WEDGES = 8;
 
-/** The town hub: vendor stall with its keeper and the gate to the next map. */
 export interface LeaderRow {
   name: string;
   level: number;
@@ -83,6 +82,7 @@ export interface LeaderRow {
   shiny?: boolean;
 }
 
+/** The town hub: vendor stall with its keeper and the gate to the next map. */
 export class Hub {
   readonly group = new THREE.Group();
   /** World-space spots the player can interact with. */
@@ -105,7 +105,7 @@ export class Hub {
   private lastTick = 0;
   /** Fires as the pointer crosses a wedge while spinning. */
   onWheelTick: () => void = () => {};
-  /** Goods on the stall: look at one and press E to buy. */
+  /** Colliders that never change; the gate's are kept apart because they open. */
   private fixed: Circle[] = [];
   private gateBlock: Circle[] = [];
   private locked = true;
@@ -601,7 +601,8 @@ export class Hub {
   }
 
   /** Opens or seals the gate for the local player; redraws only when something changed. */
-  setGate(open: boolean, nextName: string | null = this.map.next?.name ?? null): void {
+  setGate(open: boolean): void {
+    const nextName = this.map.next?.name ?? null;
     const key = `${open}|${nextName}`;
     if (key === this.gateKey) return;
     this.gateKey = key;

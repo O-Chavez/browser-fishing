@@ -373,7 +373,6 @@ canvas.preview.dragging { cursor: grabbing; }
 .danger-h { margin-top: 14px !important; color: var(--bad) !important; }
 
 /* shop and prize counter: sit higher so the hotbar stays visible and clickable for selling */
-#hud { z-index: 1; }
 body.shopping #hud { z-index: 30; }
 body.shopping #menu { align-items: flex-start; padding-top: 24px; pointer-events: none; }
 body.shopping #menu > .win { height: calc(100vh - 170px); max-height: 640px; pointer-events: auto; }
