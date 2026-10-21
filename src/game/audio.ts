@@ -163,6 +163,8 @@ class AudioFX {
     let next = ctx.currentTime + 0.4;
     let bar = 0;
     const schedule = () => {
+      // A throttled background tab can leave `next` in the past; don't play the missed bars all at once.
+      next = Math.max(next, ctx.currentTime + 0.1);
       while (next < ctx.currentTime + 6) {
         const c = chords[bar % chords.length];
         pattern.forEach((k, i) => {

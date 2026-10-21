@@ -99,8 +99,9 @@ export const defaultLook = (): Look => ({ color: DEFAULT_COLOR, face: 'smile', h
 /** Clamps untrusted look data from a client or an old save. */
 export function cleanLook(raw: Partial<Look> | undefined, owned: readonly string[]): Look {
   const out = defaultLook();
-  const col = Number(raw?.color);
-  if (Number.isInteger(col) && col >= 0 && col <= 0xffffff) out.color = col;
+  // typeof first: Number(null) is 0, which would turn a broken colour black.
+  const col = raw?.color;
+  if (typeof col === 'number' && Number.isInteger(col) && col >= 0 && col <= 0xffffff) out.color = col;
   if (isFace(raw?.face)) out.face = raw.face;
   for (const slot of COS_SLOTS) {
     const id = raw?.[slot];

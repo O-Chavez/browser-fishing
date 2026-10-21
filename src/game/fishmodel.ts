@@ -149,12 +149,13 @@ function paintSkin(look: FishLook, id: string, glow: boolean): HTMLCanvasElement
   for (const m of look.marks ?? []) {
     const color = hex(m.color);
     const glowing = m.k === 'glowdots' || m.k === 'stars';
-    if (glow !== glowing && !(glow && m.k === 'stars')) continue;
+    if (glow !== glowing) continue;
     switch (m.k) {
       case 'stripe': {
         const w = (m.width ?? 0.08) * TEX_W * 0.5;
         g.fillStyle = color;
-        for (const u of [0, 0.5, 1]) g.fillRect(X(u) - w / 2 + (u === 1 ? TEX_W : 0) - (u === 1 ? TEX_W : 0), Y(0.92), w, Y(0.12) - Y(0.92));
+        // The u = 0 flank sits on the texture seam, so its stripe is drawn at both edges.
+        for (const x of [X(0.5) - w / 2, -w / 2, TEX_W - w / 2]) g.fillRect(x, Y(0.92), w, Y(0.12) - Y(0.92));
         break;
       }
       case 'bars':

@@ -105,7 +105,6 @@ export class World {
   town: Town | null = null;
   hall: CasinoHall | null = null;
   private indoor = false;
-  private nightNow = 0;
   private trees: Circle[] = [];
   yaw = 0;
   pitch = -0.12;
@@ -321,7 +320,6 @@ export class World {
     const n = nightness(f);
     if (this.indoor) {
       this.night = n;
-      this.nightNow = 1;
       this.hemi.intensity = 2.6;
       this.hemi.color.set(0xffe6c8);
       this.hemi.groundColor.set(0x5a3038);
@@ -355,7 +353,6 @@ export class World {
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
-    this.nightNow = n;
 
     const fl = this.flies;
     if (fl) {
@@ -383,6 +380,8 @@ export class World {
     this.decor = new THREE.Group();
     this.scene.add(this.decor);
     this.sky.visible = this.stars.visible = this.clouds.visible = !this.indoor;
+    // Indoors the sun is off; without this its shadow map still renders every few frames.
+    this.sun.castShadow = !this.indoor;
     this.trees = [];
 
     if (this.indoor) {
@@ -500,9 +499,8 @@ export class World {
   }
 
   private buildForest(loc: Location, map: MapDef): void {
-    const rnd = mulberry(loc.id === 'lake' ? 7 : 3);
+    const rnd = mulberry(3);
     const clear = map.pad.r + 6;
-    this.trees = [];
     const N = 300;
     const up = new THREE.Vector3(0, 1, 0);
     const trunkGeo = new THREE.CylinderGeometry(0.25, 0.4, 3, 5).translate(
@@ -853,7 +851,7 @@ export class World {
       .add(this.sun.target.position);
     this.hub?.update(t, this.eye.x, this.eye.z);
     this.town?.update(t, this.eye.x, this.eye.z);
-    this.hall?.update(t, this.nightNow);
+    this.hall?.update(t, dt);
     this.lightPool.update(dt, this.eye);
     this.camera.rotation.set(
       this.pitch +
