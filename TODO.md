@@ -96,6 +96,7 @@
   - A browser-tab icon (favicon + apple-touch icon) that fits the game's look
 - [ ] Fill out readme for the project.
   - Highlight technologies uses, game features/progression/etc
+- [ ] Add messaging that the game is meant for desktop play (prevents mobile players from getting frustrated)
 
 ## Ideas
 
