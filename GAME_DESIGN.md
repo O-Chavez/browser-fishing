@@ -442,3 +442,16 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 - **Rarity:** tier 0 Plain (grey), 1 Fine (green), 2 Rare (blue), 3 Epic (purple), 4 Mythic (orange), 5 Legendary (gold). Finishes climb with the tier: matte cloth, then satin, brass and gold trims, glowing gems, and for legendaries breathing glow trims plus stars that circle the wearer.
 - **UI:** every item has its own drawn icon (`src/game/cosicon.ts`). Mythic tiles have a warm glow; legendary tiles are gold, shimmer and twinkle; casino items carry a small pink chip in the corner. The details panel shows the rarity, a one-line blurb and a live try-on preview.
 - **Models** (`src/game/character.ts`): low-poly primitives on the capsule body, built once per item and cloned for every wearer (geometry and materials are shared, small parts merged into one mesh). No lights are added; glows are emissive materials.
+
+## 34. New-player tips
+
+One-time tips walk a new player through the core loop, each shown at the moment it matters in a gold-edged box above the hotbar (separate from action toasts, so those can't replace it):
+
+- **start** (first time play begins): hold click to cast, click on the "!" to hook.
+- **reel** (first hooked fish): hold to reel, ease off when it surges.
+- **catch** (first catch card put away): sell it at the vendor's stall with E.
+- **sold** (first sale): the next bait up, with its unlock level or price.
+- **bait** (first better bait bought): better bait draws bigger fish.
+- **tier** (first fish above tier 1): keep upgrading; the casino opens at Lv 15.
+
+The ids seen are kept in the save (`tips`), so each shows once per account. Saves from before the tips start with every tip seen, unless the player hadn't caught anything yet. An account reset shows them again.

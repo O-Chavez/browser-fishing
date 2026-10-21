@@ -8,6 +8,7 @@ import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/proto
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
 import { newSave } from '../src/game/state';
+import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 
@@ -176,6 +177,9 @@ export class Room {
         break;
       case 'face':
         changed = eco.setFace(s, msg.id);
+        break;
+      case 'tip':
+        changed = markTip(s, msg.id);
         break;
       case 'reset':
         if (m.spin) return;

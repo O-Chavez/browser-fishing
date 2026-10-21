@@ -1,7 +1,8 @@
 import { BAITS, FISH, RODS, byId, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
-import { sellValue } from './progression';
+import { isFreshSave, sellValue } from './progression';
+import { TIP_IDS, isTip } from './tips';
 
 export interface DexEntry { count: number; best: number }
 
@@ -46,6 +47,8 @@ export interface SaveData {
   perks: string[];
   /** Shiny Lure casts left. */
   lure: number;
+  /** New-player tips already shown (see `TIP_IDS`). */
+  tips: string[];
 }
 
 export interface BestCatch {
@@ -76,6 +79,7 @@ export const newSave = (): SaveData => ({
   chips: 0,
   perks: [],
   lure: 0,
+  tips: [],
 });
 
 /** Upgrades older save layouts (bait counts, bag, owned rods, 4 slots) to the 5-slot hotbar. */
@@ -117,6 +121,8 @@ export function migrate(raw: object): SaveData {
   if (!Array.isArray(out.perks)) out.perks = [];
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
+  // Saves from before the tips only get them if they haven't started playing yet.
+  out.tips = Array.isArray(data.tips) ? data.tips.filter(isTip) : isFreshSave(out) ? [] : [...TIP_IDS];
   const size = slotCount(out);
   while (out.slots.length < size) out.slots.push(null);
   out.slots = out.slots.slice(0, size);

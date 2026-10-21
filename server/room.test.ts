@@ -61,6 +61,16 @@ describe('Room economy', () => {
     expect(a.acct.save.coins).toBe(before + eco.BOTTLE_COINS);
   });
 
+  it('remembers which new-player tips were shown, ignoring unknown ones', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'tip', id: 'start' });
+    room.handle(a.id, { t: 'tip', id: 'start' });
+    room.handle(a.id, { t: 'tip', id: 'bogus' });
+    expect(a.acct.save.tips).toEqual(['start']);
+    expect(last(a.c, 'state').save.tips).toEqual(['start']);
+  });
+
   it('lets broke players with no bait dig worms at the patch, with a cooldown', () => {
     const { room, join, advance } = setup();
     const a = join('Ann');
