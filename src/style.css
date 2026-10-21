@@ -427,3 +427,11 @@ button.primary:disabled { opacity: .6; }
 button.linklike { margin-top: 10px; font-size: 14px; font-weight: 800; color: var(--ink-muted); text-decoration: underline; }
 /* the menu opens behind the join screen on first load; keep it out of sight until then */
 body:has(#join:not(.hidden)) #menu { visibility: hidden; }
+
+/* desktop-only notice: phones and tablets (no mouse to hover with) see it over everything */
+#desktop-only { display: none; position: fixed; inset: 0; z-index: 60; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 14, 22, .92); }
+@media (pointer: coarse) and (hover: none) { #desktop-only { display: flex; } }
+#desktop-only .panel { width: min(420px, 100%); padding: 24px 22px 20px; border-radius: 22px; text-align: center; color: var(--ink); background: var(--paper); box-shadow: 0 0 0 6px var(--wood-600), 0 0 0 9px var(--wood-900), 0 24px 60px rgba(0,0,0,.55); }
+#desktop-only img { width: 72px; height: 72px; border-radius: 18px; }
+#desktop-only h2 { margin: 10px 0 8px; font-size: 24px; font-weight: 900; line-height: 1.15; }
+#desktop-only p { margin: 0 0 10px; font-size: 16px; line-height: 1.45; color: var(--ink-muted); }
