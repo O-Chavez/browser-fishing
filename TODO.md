@@ -91,7 +91,7 @@
 - [ ] In-game dev console for debugging/testing
   - Locked behind a username/password, with the check done on the server (not just the client) so regular players can't unlock it; ideally slash commands typed into the existing chat (`src/game/chatbox.ts`), e.g. give money/bait/fish, set level, teleport, set time of day
   - Larger item: propose a plan (auth approach, command list, where commands run) before editing
-- [ ] Proper HTML/SEO metadata and a favicon
+- [x] Proper HTML/SEO metadata and a favicon
   - `index.html` currently has only charset, viewport and title: add description, Open Graph/Twitter card tags (with a preview image), theme color, canonical URL, and `robots.txt`/sitemap if useful
   - A browser-tab icon (favicon + apple-touch icon) that fits the game's look
 

@@ -72,6 +72,11 @@ const TYPES: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.jpg': 'image/jpeg',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml',
+  '.webmanifest': 'application/manifest+json',
 };
 // Serves the built client (npm run build) from the same port as the game socket.
 const http = createServer((req, res) => {
