@@ -33,6 +33,7 @@ class Avatar {
   private tipPos = new THREE.Vector3();
   private rod: THREE.Mesh;
   private char: Character;
+  private plate: THREE.Sprite;
   private bubble: { sprite: THREE.Sprite; until: number } | null = null;
 
   constructor(
@@ -47,7 +48,8 @@ class Avatar {
     this.rod.position.set(-0.3, 1.2, 0.55);
     this.rod.rotation.x = 0.9;
     this.tip.position.set(-0.3, 1.2 + 0.8 * Math.cos(0.9), 0.55 + 0.8 * Math.sin(0.9));
-    this.group.add(this.char.group, this.rod, this.tip, this.nameplate(info.name));
+    this.plate = this.nameplate(info.name);
+    this.group.add(this.char.group, this.rod, this.tip, this.plate);
     this.group.visible = false;
 
     this.bobber = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat(0xe8442f));
@@ -212,6 +214,11 @@ class Avatar {
     this.setAct(null);
     this.clearBubble();
     this.scene.remove(this.group, this.bobber, this.line);
+    // Free what this avatar owns; the face texture and outfit pieces are shared, so they stay.
+    this.plate.material.map?.dispose();
+    this.plate.material.dispose();
+    for (const o of [this.rod, this.bobber, this.line]) o.geometry.dispose();
+    this.char.dispose();
   }
 }
 

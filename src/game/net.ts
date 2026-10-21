@@ -47,7 +47,7 @@ export class NetClient {
     private events: NetEvents,
   ) {}
 
-  connect(map: string): void {
+  connect(): void {
     // Deployed builds point at the hosted game server via VITE_SERVER_URL (e.g. wss://fishing.onrender.com).
     const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.replace(/\/$/, '');
     const host = location.hostname || 'localhost';
@@ -62,7 +62,7 @@ export class NetClient {
       return;
     }
     this.ws = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, map, color: this.color }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, color: this.color }));
     ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
     ws.onclose = () => {
       const was = this.connected;

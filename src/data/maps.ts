@@ -213,7 +213,7 @@ MAPS.push({
       },
       {
         name: 'Croupier Vale', face: 'toothy', x: -9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0xc4262e,
-        lines: ['Red, black, or green. The wheel does not care who you are.', 'Hold a fish, click it in your hotbar, and place your bet.'],
+        lines: ['Red, black, or green. The wheel does not care who you are.', 'Hold a fish in your hand, then click red, black or green on the table.'],
       },
       {
         name: 'Dealer Rue', face: 'cat', x: 9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0x2a6fc4,
@@ -226,9 +226,3 @@ MAPS.push({
     flowers: [],
   },
 });
-
-export const mapById = (id: string): MapDef => {
-  const m = MAPS.find((x) => x.id === id);
-  if (!m) throw new Error(`Unknown map: ${id}`);
-  return m;
-};

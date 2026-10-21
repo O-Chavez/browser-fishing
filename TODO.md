@@ -105,6 +105,8 @@
 - Fake "light pools" (cheap glowing decals) under lamps and above casino chandeliers, so fewer real point lights are needed. Cutting real lights from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
 - `npm run bench` is broken on main: it clicks a wardrobe tab selector that no longer exists (needs `openMenu('wardrobe')`). The bench scenes also have no high-tier fish, so they can't measure the fish tier effects
-- `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. There are two today: `server/room.ts` (`info.act` can be undefined in the snapshot) and `server/room.test.ts` (an `equip` message without `slot`)
+- `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
+- The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
+- The pond's Lucky Wheel doubles a fish with no cap, while the casino tables stop at `MULT_CAP` (×16). Decide whether the wheel should share the cap
 - Dev console `/tips` command to clear the new-player tips list for testing (needs both the tips and dev console branches merged)
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs

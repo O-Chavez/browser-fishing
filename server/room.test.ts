@@ -24,7 +24,7 @@ const setup = () => {
     const res = store.auth(name, 'token-token-token-' + name);
     if (!res.ok) throw new Error(res.msg);
     const c = conn();
-    const id = room.join(c, res.account, 'pond');
+    const id = room.join(c, res.account);
     return { c, id, acct: res.account };
   };
   const atShop = (p: { id: number }) => {
@@ -167,7 +167,7 @@ describe('Room economy', () => {
     a.acct.save.slots[1] = null;
     room.handle(a.id, { t: 'cast', x: 0, z: -10 });
     expect(last(a.c, 'castfail')).toBeTruthy();
-    room.handle(a.id, { t: 'equip', id: 'graphite' });
+    room.handle(a.id, { t: 'equiprod', id: 'graphite' });
     expect(a.acct.save.rod).toBe('twig');
   });
 
@@ -311,7 +311,7 @@ describe('shinies & fishing spots', () => {
     expect(last(a.c, 'castok').perfect).toBe(true);
   });
   it('carries a shiny through cast, catch and sale for 5x value', () => {
-    const { room, join, atShop, advance, setRoll } = setup() as ReturnType<typeof setup>;
+    const { room, join, advance, setRoll } = setup() as ReturnType<typeof setup>;
     const a = join('Ann');
     setRoll(0.001);
     room.handle(a.id, { t: 'cast', x: 0, z: 10 });
@@ -409,8 +409,9 @@ describe('chat', () => {
     const other = new Room('other', MAPS);
     const res = store.auth('Cat', 'token-token-token-Cat');
     if (!res.ok) throw new Error(res.msg);
+    res.account.save.location = 'casino';
     const c = conn();
-    other.join(c, res.account, 'casino');
+    other.join(c, res.account);
     room.say = (msg) => [room, other].forEach((r) => r.broadcast(msg));
     room.handle(a.id, { t: 'chat', text: 'hello casino' });
     expect(last(c, 'chat')).toMatchObject({ room: 'r', name: 'Ann', text: 'hello casino' });
@@ -432,6 +433,18 @@ describe('faces', () => {
   });
 });
 
+describe('player list', () => {
+  it("gives a new joiner everyone's current level, not the level they joined with", () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    a.acct.save.level = 7;
+    room.snapshot();
+    const b = join('Bob');
+    const welcome = b.c.log.find((m) => m.t === 'welcome') as Extract<ServerMsg, { t: 'welcome' }>;
+    expect(welcome.players.find((p) => p.id === a.id)?.level).toBe(7);
+  });
+});
+
 describe('join notices', () => {
   it('tells everyone else on the server, but not the player who joined', () => {
     const { room, join, store } = setup();
@@ -440,7 +453,7 @@ describe('join notices', () => {
     const res = store.auth('Cat', 'token-token-token-Cat');
     if (!res.ok) throw new Error(res.msg);
     const c = conn();
-    other.join(c, res.account, 'pond');
+    other.join(c, res.account);
     const a = join('Ann');
     expect(last(c, 'sys')).toEqual({ t: 'sys', text: 'Ann has joined' });
     expect(a.c.log.some((m) => m.t === 'sys')).toBe(false);

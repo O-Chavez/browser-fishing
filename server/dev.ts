@@ -130,7 +130,7 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
         t.setTime(null);
         return say('Time follows the clock again.');
       }
-      if (!(k in TIMES)) return say('Usage: /time day|dusk|night|dawn|auto');
+      if (!Object.hasOwn(TIMES, k)) return say('Usage: /time day|dusk|night|dawn|auto');
       t.setTime(TIMES[k]);
       return say(`Time set to ${k} (only for you).`);
     }
