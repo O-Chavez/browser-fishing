@@ -17,11 +17,12 @@ const setup = () => {
   let roll = 0.5;
   const store = new AccountStore();
   const room = new Room('r', MAPS, () => {}, () => now, () => roll);
-  const join = (name: string) => {
+  const join = (name: string, location = 'pond') => {
     const res = store.auth(name, 'token-token-token-' + name);
     if (!res.ok) throw new Error(res.msg);
+    res.account.save.location = location;
     const c = conn();
-    const id = room.join(c, res.account, 'pond');
+    const id = room.join(c, res.account);
     return { c, id, acct: res.account };
   };
   return { room, join, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
@@ -52,16 +53,45 @@ describe('casino travel', () => {
     room.handle(a.id, { t: 'travel', to: 'pond' });
     expect(a.acct.save.location).toBe('pond');
   });
+
+  it("can't be skipped by a client claiming to be in the casino", () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    a.acct.save.slots[2] = { k: 'fish', fishId: dear.id, size: dear.maxSize };
+    // Older clients sent { t: 'map' }; the server no longer takes the map from the client.
+    room.handle(a.id, { t: 'map', map: 'casino' } as never);
+    goTo(room, a.id, casino.casino!.prizes);
+    room.handle(a.id, { t: 'cashout', i: 2 });
+    expect(a.acct.save.chips).toBe(0);
+    expect(a.acct.save.slots[2]).not.toBeNull();
+  });
+
+  it('joins on the saved map, falling back to the pond', () => {
+    const { join } = setup();
+    expect(join('Ann', 'casino').c.log.find((m) => m.t === 'welcome')).toBeTruthy();
+    const b = join('Bob', 'nowhere');
+    expect(b.acct.save.location).toBe('pond');
+  });
+
+  it('ignores map ids that name Object prototype members', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    goTo(room, a.id, pond.gate);
+    for (const to of ['constructor', 'toString', '__proto__']) {
+      expect(() => room.handle(a.id, { t: 'travel', to })).not.toThrow();
+      expect(() => room.handle(a.id, { t: 'map', map: to } as never)).not.toThrow();
+    }
+    expect(() => room.handle(a.id, { t: 'travel', to: 'pond' })).not.toThrow();
+    expect(a.acct.save.location).toBe('pond');
+  });
 });
 
 describe('casino tables', () => {
   const seat = (name: string) => {
     const ctx = setup();
-    const p = ctx.join(name);
-    p.acct.save.location = 'casino';
+    const p = ctx.join(name, 'casino');
     p.acct.save.slots[2] = { k: 'fish', fishId: dear.id, size: dear.maxSize };
     p.acct.save.held = 2;
-    ctx.room.handle(p.id, { t: 'map', map: 'casino' });
     return { ...ctx, p };
   };
 

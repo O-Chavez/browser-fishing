@@ -11,7 +11,7 @@ import {
   type Fish,
 } from '../data/content';
 import { audio } from './audio';
-import { MAPS, mapById, type MapDef } from '../data/maps';
+import { MAPS, type MapDef } from '../data/maps';
 import { isWater } from './env';
 import { Avatars } from './avatars';
 import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
@@ -58,7 +58,7 @@ import {
 import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, MULT_CAP, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
-import { chipsFor, type BlackjackView, type Card } from './casino';
+import { chipsFor, type BlackjackView } from './casino';
 import { load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
@@ -176,7 +176,6 @@ export class Game {
   private confirmReset = false;
   private bannerTimer = 0;
   private spin = false;
-  private casinoMode: 'roulette' | 'blackjack' | 'prizes' = 'roulette';
   private betSlot = -1;
   private chat!: ChatBox;
   private hotbarHeld = -1;
@@ -344,7 +343,7 @@ export class Game {
       this.net.name = urlName!;
       this.pendingWelcome = true;
       this.showResume('', 'to start fishing');
-      this.net.connect(this.map.id);
+      this.net.connect();
       return;
     }
     $('join').classList.remove('hidden');
@@ -387,7 +386,7 @@ export class Game {
     this.net.color = this.joinColor;
     this.joinMessage('Connecting…', false);
     $('join-go').toggleAttribute('disabled', true);
-    this.net.connect(this.map.id);
+    this.net.connect();
   }
 
   private joinMessage(msg: string, failed = true): void {
@@ -561,7 +560,7 @@ export class Game {
     $('hotbar').addEventListener('click', (e) => {
       const i = Number((e.target as HTMLElement).closest<HTMLElement>('.slot.sellable')?.dataset.i);
       if (!Number.isInteger(i)) return;
-      if (this.tab === 'casino') this.pickBet(i);
+      if (this.tab === 'casino') this.cashOut(i);
       else this.sellSlot(i);
     });
     $('menu').addEventListener('mouseover', (e) => {
@@ -993,7 +992,6 @@ export class Game {
     this.player = new Player(this.map.radius);
     this.player.teleport(this.map.spawn.x, this.map.spawn.z);
     this.world.yaw = this.map.spawn.yaw;
-    this.net.send({ t: 'map', map: this.map.id });
     this.avatars.sync(this.net.players, this.net.id, this.map.id);
   }
 
@@ -1032,12 +1030,9 @@ export class Game {
     this.net.send({ t: 'travel', to: dest.id });
   }
 
-  private openCasino(mode: 'roulette' | 'blackjack' | 'prizes'): void {
-    if (!this.net.connected) return this.toast('The tables need a server connection.');
-    this.casinoMode = mode;
-    this.casinoMsg = '';
-    if (this.bj?.done) this.bj = null;
-    if (this.s.slots[this.betSlot]?.k !== 'fish') this.betSlot = this.s.slots.findIndex((x) => x?.k === 'fish');
+  /** The prize counter menu: perks and casino cosmetics. The tables are played in the 3D hall. */
+  private openPrizes(): void {
+    if (!this.net.connected) return this.toast('The casino needs a server connection.');
     this.openMenu('casino');
   }
 
@@ -1046,15 +1041,10 @@ export class Game {
     this.net.send(msg);
   }
 
-  private pickBet(i: number): void {
+  /** Prize counter open: clicking a fish in the hotbar turns it in for chips. */
+  private cashOut(i: number): void {
     if (this.spin || (this.bj && !this.bj.done)) return;
-    if (this.casinoMode === 'prizes') {
-      this.casinoSend({ t: 'cashout', i });
-      return;
-    }
-    this.betSlot = i;
-    this.casinoMsg = '';
-    this.renderMenu();
+    this.casinoSend({ t: 'cashout', i });
   }
 
   private rouletteBet(bet: RouletteBet): void {
@@ -1108,13 +1098,6 @@ export class Game {
     } else this.casinoSend({ t: 'bj', a });
   }
 
-  private cardHtml(c: Card | null): string {
-    if (!c) return '<span class="pc back">?</span>';
-    const rank = c.r === 1 ? 'A' : c.r === 11 ? 'J' : c.r === 12 ? 'Q' : c.r === 13 ? 'K' : String(c.r);
-    const suit = ['♠', '♥', '♦', '♣'][c.s];
-    return `<span class="pc${c.s === 1 || c.s === 2 ? ' red' : ''}">${rank}${suit}</span>`;
-  }
-
   private chipsText(n: number): string {
     return String(Math.round(n * 10) / 10);
   }
@@ -1150,7 +1133,7 @@ export class Game {
       note: p.desc,
       actions: action,
     });
-    return `<div class="cols"><div class="main"><h4>Casino unlocks</h4><div class="tiles">${tiles}</div><p class="casino-msg">${this.casinoMsg}</p></div>${detail}</div>${this.sellStrip()}`;
+    return `<div class="cols"><div class="main"><h4>Casino unlocks</h4><div class="tiles">${tiles}</div></div>${detail}</div>${this.sellStrip()}`;
   }
 
   /** Which table (if any) the player is standing at; while there, clicks hit the 3D bet patches and buttons. */
@@ -1233,7 +1216,7 @@ export class Game {
     if (!this.table) return this.toast('No fishing in the casino. Head out the front door.');
     const a = this.aim;
     if (this.table === 'prizes') {
-      if (a?.k === 'shop') this.openCasino('prizes');
+      if (a?.k === 'shop') this.openPrizes();
       else if (a?.k === 'cash') {
         if (this.s.slots[this.s.held]?.k !== 'fish') return this.toast('Hold a fish (1-5) to turn it in.');
         this.casinoSend({ t: 'cashout', i: this.s.held });
@@ -1326,10 +1309,7 @@ export class Game {
     this.updateTable(walking);
     if (c) {
       const at = (sp: { x: number; z: number }) => Math.hypot(sp.x - x, sp.z - z);
-      const table = (sp: { x: number; z: number }, mode: 'roulette' | 'blackjack' | 'prizes', label: string) => {
-        if (at(sp) <= CASINO_RANGE - 0.4) spots.push({ d: at(sp) - 25, label, act: () => this.openCasino(mode) });
-      };
-      table(c.prizes, 'prizes', 'Prize counter · turn fish in for chips, buy perks');
+      if (at(c.prizes) <= CASINO_RANGE - 0.4) spots.push({ d: at(c.prizes) - 25, label: 'Prize counter · turn fish in for chips, buy perks', act: () => this.openPrizes() });
       spots.push(
         { d: at(c.mirror), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
         { d: at(this.map.gate) - 0.5, label: `Exit to ${this.map.next?.name ?? 'the pond'}`, act: () => this.useGate() },
@@ -1998,7 +1978,6 @@ export class Game {
       if (r.surgePower > 0.75 && Math.random() < 0.6) this.leapT = 0;
     }
 
-    const forward = new THREE.Vector3(-Math.sin(w.yaw), 0, -Math.cos(w.yaw));
     const right = new THREE.Vector3(Math.cos(w.yaw), 0, -Math.sin(w.yaw));
     const base = new THREE.Vector3(w.eye.x, 0, w.eye.z);
     const toTarget = this.target.clone().sub(base);
@@ -2008,7 +1987,6 @@ export class Game {
       .clone()
       .addScaledVector(toTarget.normalize(), dist)
       .addScaledVector(right, r.lateral * dist * 0.4);
-    void forward;
     b.set(
       fp.x,
       w.surface(fp.x, fp.z) + 0.01 + Math.sin(t * 9) * 0.02 * r.pull,
@@ -2268,7 +2246,6 @@ export class Game {
   }
 
   private renderMenu(): void {
-    if (this.tab === 'play') this.tab = 'inventory';
     const vendor = this.tab === 'shop' || this.tab === 'casino';
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
     $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
@@ -2340,7 +2317,6 @@ export class Game {
       } else cls += ' empty';
       if (i === s.held) cls += moved ? ' held pick' : ' held';
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
-      if (this.tab === 'casino' && this.menuOpen && i === this.betSlot && sl?.k === 'fish') cls += ' bet';
       if (sellable) cls += ' sellable';
       const tip = sellable ? ` data-sell="Sell · ${eco.sellPrice(this.s, sl)} 🪙"` : '';
       const name = sl?.k === 'fish' ? ` title="${byId(FISH, sl.fishId).name}"` : '';

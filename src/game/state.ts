@@ -158,7 +158,3 @@ export function load(): SaveData {
 export function save(data: SaveData): void {
   localStorage.setItem(KEY, JSON.stringify(data));
 }
-
-export function reset(): void {
-  localStorage.removeItem(KEY);
-}

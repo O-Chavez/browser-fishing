@@ -565,6 +565,12 @@ export class Character {
     }
   }
 
+  /** Frees the body and head geometry; materials and outfit pieces are left for reuse (see `disposeTree`). */
+  dispose(): void {
+    this.body.geometry.dispose();
+    this.head.geometry.dispose();
+  }
+
   /** Animates legendary pieces (time in seconds): stars circle and glows breathe. */
   tick(t: number): void {
     pulse(t);

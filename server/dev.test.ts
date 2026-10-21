@@ -38,7 +38,7 @@ describe('dev commands in a room', () => {
       const res = store.auth(name, 'token-token-token-' + name);
       if (!res.ok) throw new Error(res.msg);
       const log: ServerMsg[] = [];
-      const id = room.join({ send: (m) => log.push(m) }, res.account, 'pond');
+      const id = room.join({ send: (m) => log.push(m) }, res.account);
       return { id, log, save: res.account.save };
     };
     const devLines = (log: ServerMsg[]) => log.flatMap((m) => (m.t === 'dev' ? m.lines : []));

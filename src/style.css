@@ -192,13 +192,6 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #chipbox { color: #ff9ad0; }
 #chipbox .chipicon { font-size: 22px; }
 #chipbox.hidden { display: none; }
-#hotbar .slot.bet { border-color: #ff9ad0; box-shadow: 0 0 12px #ff4f9a; }
-.pc { display: inline-block; min-width: 38px; margin: 4px 6px 0 0; padding: 8px 6px; text-align: center; font-weight: 800; font-size: 18px; color: #111; background: #fff; border-radius: 6px; border: 1px solid #999; }
-.pc.red { color: #c4262e; }
-.pc.back { background: #324a8a; color: #fff; }
-.casino-msg { min-height: 1.4em; }
-.casino-msg .win { color: #6dff8f; }
-.casino-msg .lose { color: #ff7b7b; }
 #spot.hidden { display: none; }
 
 /* ---------- menus: one wood-framed window for the bag, shop, casino counter and join screen ---------- */
@@ -391,9 +384,6 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 .sheet.tab-shop > .cols, .sheet.tab-casino > .cols { flex: none; }
 .strip { position: sticky; bottom: -18px; margin: auto -20px -18px; padding: 12px 20px; display: flex; align-items: center; gap: 14px; justify-content: space-between; background: var(--paper-2); border-top: 2px solid rgba(58,39,22,.12); font-size: 14px; font-weight: 800; }
 .strip .btn { flex: none; }
-.casino-msg { min-height: 1.4em; margin: 8px 0 0; font-weight: 800; }
-.casino-msg .win { color: var(--ok-dark); }
-.casino-msg .lose { color: var(--bad); }
 
 /* casino skin: the same window in burgundy and gold */
 #menu.casino .win { background: linear-gradient(180deg, #5a1a2c, #3d0f1c); box-shadow: 0 0 0 6px #b8862f, 0 0 0 9px #2a0a12, 0 24px 60px rgba(0,0,0,.55); }

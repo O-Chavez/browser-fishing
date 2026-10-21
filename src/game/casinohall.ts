@@ -3,7 +3,7 @@ import { ROULETTE_PAY, ROULETTE_POCKETS, type RouletteBet } from '../data/casino
 import type { MapDef, Spot } from '../data/maps';
 import { pocketColor, type BlackjackView, type Card } from './casino';
 import { groundHeight } from './env';
-import { DARK, WOOD, cyl, mat, rbox, textPlane } from './hub';
+import { DARK, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
 import { buildRoom, neonSign } from './casinoroom';
 import { mergeStatic } from './merge';

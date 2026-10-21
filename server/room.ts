@@ -72,17 +72,21 @@ export class Room {
   ) {
     this.drops = new Drops(now);
     this.chatGate = new ChatGate(now);
-    this.maps = Object.fromEntries(maps.map((m) => [m.id, m]));
+    // No prototype, so a client-sent id like "constructor" finds nothing instead of an Object method.
+    this.maps = Object.assign(Object.create(null), Object.fromEntries(maps.map((m) => [m.id, m])));
   }
 
   get size(): number {
     return this.members.size;
   }
 
-  join(conn: Conn, acct: Account, map: string, color?: number): number {
+  /** The player starts where their save says; only `travel` (behind the level gate) moves them between maps. */
+  join(conn: Conn, acct: Account, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
     const id = this.nextId++;
-    const info: PlayerInfo = { id, name: acct.name, map: this.maps[map] ? map : Object.keys(this.maps)[0], x: 0, z: 0, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null };
+    const map = this.maps[acct.save.location] ?? Object.values(this.maps)[0];
+    acct.save.location = map.id;
+    const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null };
     const m: Member = { info, conn, acct, pending: null, spin: null, bj: null };
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
@@ -128,13 +132,6 @@ export class Room {
       case 'pos':
         if (finite(msg.x, msg.z, msg.yaw)) Object.assign(m.info, { x: msg.x, z: msg.z, yaw: msg.yaw });
         return;
-      case 'map':
-        if (this.maps[msg.map]) {
-          m.info.map = msg.map;
-          this.broadcast({ t: 'moved', id, map: msg.map });
-        }
-        return;
-        break;
       case 'slot':
         changed = eco.selectSlot(s, Math.floor(Number(msg.i)));
         break;
@@ -190,7 +187,6 @@ export class Room {
         changed = markTip(s, msg.id);
         break;
       case 'reset':
-        if (m.spin) return;
         m.pending = null;
         this.resetAccount(m);
         changed = true;
@@ -352,7 +348,7 @@ export class Room {
   }
 
   private roulette(m: Member, bet: RouletteBet, i: number): void {
-    if (!this.atCasino(m, 'roulette') || !(bet in { red: 1, black: 1, green: 1 })) return;
+    if (!this.atCasino(m, 'roulette') || !['red', 'black', 'green'].includes(bet)) return;
     const bad = cas.betError(m.acct.save, i);
     if (bad) return m.conn.send({ t: 'notice', msg: bad });
     const r = cas.spinRoulette(bet, this.rng);
@@ -471,7 +467,7 @@ export class Room {
   private setAct(m: Member, act: PlayerInfo['act'] | null): void {
     if (act) m.info.act = act;
     else delete m.info.act;
-    this.broadcast({ t: 'act', id: m.info.id, act });
+    this.broadcast({ t: 'act', id: m.info.id, act: act ?? null });
   }
 
   snapshot(): void {
@@ -482,7 +478,8 @@ export class Room {
     const key = JSON.stringify([coins, stats]);
     if (key !== this.lastBoard) {
       this.lastBoard = key;
-      for (const m of this.members.values()) m.info.coins = m.acct.save.coins;
+      // Kept on the player info too, so the list sent to a new joiner isn't stale.
+      for (const m of this.members.values()) Object.assign(m.info, { coins: m.acct.save.coins }, stats[m.info.id]);
       this.broadcast({ t: 'board', coins, stats });
     }
     const rows = this.hall();

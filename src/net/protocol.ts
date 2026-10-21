@@ -25,9 +25,8 @@ export type Activity =
   | { a: 'carry'; fish: string; size: number; shiny?: boolean };
 
 export type ClientMsg =
-  | { t: 'join'; name: string; token: string; map: string; color?: number }
+  | { t: 'join'; name: string; token: string; color?: number }
   | { t: 'pos'; x: number; z: number; yaw: number }
-  | { t: 'map'; map: string }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar, or a hotbar rod/bait stack back to the locker. */

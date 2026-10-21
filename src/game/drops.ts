@@ -52,17 +52,4 @@ export class Drops {
     this.list = this.list.filter((d) => d.expires > t);
     return this.list.length !== n;
   }
-
-  nearest(map: string, x: number, z: number, range = PICKUP_RANGE): Drop | undefined {
-    let best: Drop | undefined;
-    let bd = range;
-    for (const d of this.list) {
-      const dist = Math.hypot(d.x - x, d.z - z);
-      if (d.map === map && dist <= bd) {
-        best = d;
-        bd = dist;
-      }
-    }
-    return best;
-  }
 }

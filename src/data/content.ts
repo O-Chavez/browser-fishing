@@ -3,7 +3,6 @@ export type BaitType = 'worm' | 'fly' | 'minnow' | 'lure' | 'pearl';
 
 /** Fish, rods and bait all sit on tiers 1-5; a fish needs a rod AND bait of at least its tier. */
 export const TIERS: Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
-export const MAX_TIER = TIERS.length;
 export const tierName = (tier: number): string => {
   const r = TIERS[tier - 1];
   return r[0].toUpperCase() + r.slice(1);

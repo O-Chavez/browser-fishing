@@ -1,7 +1,7 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
-import { applyXp, catchXp, eligibleFish, fishingSpot, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
+import { applyXp, catchXp, eligibleFish, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import { BAIT_STACK, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
