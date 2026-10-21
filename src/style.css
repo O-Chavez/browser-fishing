@@ -204,7 +204,7 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 
 #menu { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(8, 14, 22, .5); backdrop-filter: blur(3px); }
 #menu.hidden { display: none; }
-.win { width: min(1040px, 94vw); height: min(660px, 88vh); display: flex; flex-direction: column; border-radius: 22px; background: linear-gradient(180deg, var(--wood-700), var(--wood-800)); box-shadow: 0 0 0 6px var(--wood-600), 0 0 0 9px var(--wood-900), 0 24px 60px rgba(0,0,0,.55); overflow: hidden; }
+#menu > .win { width: min(1040px, 94vw); height: min(660px, 88vh); display: flex; flex-direction: column; border-radius: 22px; background: linear-gradient(180deg, var(--wood-700), var(--wood-800)); box-shadow: 0 0 0 6px var(--wood-600), 0 0 0 9px var(--wood-900), 0 24px 60px rgba(0,0,0,.55); overflow: hidden; }
 .win-bar { display: flex; align-items: flex-end; gap: 16px; padding: 14px 18px 0; }
 .who { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 10px; padding-bottom: 12px; }
 .who > div { min-width: 0; }
@@ -378,7 +378,7 @@ canvas.preview.dragging { cursor: grabbing; }
 #hud { z-index: 1; }
 body.shopping #hud { z-index: 30; }
 body.shopping #menu { align-items: flex-start; padding-top: 24px; pointer-events: none; }
-body.shopping .win { height: calc(100vh - 170px); max-height: 640px; pointer-events: auto; }
+body.shopping #menu > .win { height: calc(100vh - 170px); max-height: 640px; pointer-events: auto; }
 body.shopping #hotbar { pointer-events: auto; }
 /* the window header already shows coins or chips; keep the HUD from drawing over it */
 body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #help { display: none; }
