@@ -209,6 +209,46 @@ describe('message bottles', () => {
   });
 });
 
+describe('worm digging', () => {
+  const broke = (): SaveData => {
+    const s = newSave();
+    s.slots[1] = null;
+    s.coins = 3;
+    return s;
+  };
+
+  it('is only for players with no bait at all who cannot afford a worm pack', () => {
+    expect(eco.canDig(newSave())).toBe(false);
+    const s = broke();
+    expect(eco.canDig(s)).toBe(true);
+    s.coins = 10;
+    expect(eco.canDig(s)).toBe(false);
+    s.coins = 0;
+    s.locker.bait.fly = 1;
+    expect(eco.canDig(s)).toBe(false);
+  });
+
+  it('gives a pack of worms ready to cast', () => {
+    const s = broke();
+    s.bait = 'fly';
+    expect(eco.digWorms(s)).toBe(eco.DIG_WORMS);
+    expect(eco.baitCount(s, 'worm')).toBe(eco.DIG_WORMS);
+    expect(s.bait).toBe('worm');
+    expect(eco.canCast(s)).toBe('ok');
+    expect(eco.digWorms(s)).toBe(0);
+  });
+
+  it('keeps dug worms in the locker when the hotbar is full', () => {
+    const s = broke();
+    s.slots[1] = { k: 'fish', fishId: FISH[0].id, size: 10 };
+    s.slots[2] = { k: 'fish', fishId: FISH[0].id, size: 10 };
+    s.slots[3] = { k: 'fish', fishId: FISH[0].id, size: 10 };
+    s.slots[4] = { k: 'fish', fishId: FISH[0].id, size: 10 };
+    expect(eco.digWorms(s)).toBe(eco.DIG_WORMS);
+    expect(s.locker.bait.worm).toBe(eco.DIG_WORMS);
+  });
+});
+
 describe('charms & perks summary', () => {
   it('lists only working perks, with the best Lucky Charm replacing the lower ones', () => {
     const s = newSave();

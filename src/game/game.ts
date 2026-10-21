@@ -1240,6 +1240,22 @@ export class Game {
     this.refreshHud();
   }
 
+  private dugAt = -Infinity;
+
+  private digWorms(): void {
+    // Online, the server owns the cooldown and explains any refusal; this only covers offline play.
+    if (!this.net.connected && performance.now() - this.dugAt < eco.DIG_COOLDOWN_MS) return this.toast(eco.DIG_WAIT);
+    const n = eco.digWorms(this.s);
+    if (n <= 0) return;
+    this.dugAt = performance.now();
+    this.net.send({ t: 'dig' });
+    const ready = this.s.slots.some((sl) => sl?.k === 'bait');
+    this.toast(ready ? `🪱 You dig up ${n} worms. Hold your rod and cast!` : `🪱 You dig up ${n} worms. Free a hotbar slot, then equip them from your Bag (Tab).`, 4);
+    audio.splash(0.3);
+    this.persist();
+    this.refreshHud();
+  }
+
   private interact(): void {
     this.near?.act();
   }
@@ -1275,6 +1291,13 @@ export class Game {
         if (this.s.bottles.includes(b.id)) continue;
         const db = Math.hypot(b.pos.x - x, b.pos.z - z);
         if (db < 2.6) spots.push({ d: db - 20, label: 'Open the message in a bottle', act: () => this.openBottle(b.id, b.note) });
+      }
+      const ws = town.wormSpot;
+      const diggable = !!ws && eco.canDig(this.s);
+      town.setDiggable(diggable);
+      if (ws && diggable) {
+        const dw = Math.hypot(ws.x - x, ws.z - z);
+        if (dw < eco.DIG_RANGE) spots.push({ d: dw - 20, label: 'Dig for worms · free bait', act: () => this.digWorms() });
       }
     }
 
@@ -1364,6 +1387,7 @@ export class Game {
         if (this.spin) return;
         if (this.map.casino) return this.tableClick();
         const can = eco.canCast(this.s);
+        if (can === 'nobait' && eco.canDig(this.s)) return this.toast(eco.DIG_HINT, 5);
         if (can !== 'ok') return this.toast(eco.CAST_MESSAGES[can]);
       }
         this.phase = 'charging';
@@ -2398,7 +2422,8 @@ export class Game {
     const have = eco.baitCount(s, s.bait);
     const reach = bait.tier;
     let hint: string;
-    if (have <= 0) hint = 'No bait in your hotbar - equip some below.';
+    if (eco.canDig(s)) hint = eco.DIG_HINT;
+    else if (have <= 0) hint = 'No bait in your hotbar - equip some below.';
     else if (rod.tier < bait.tier) hint = `Your rod is lower tier than your bait, so those fish fight hard. Upgrade your rod.`;
     else if (bait.tier < rod.tier) hint = `Your bait is holding you back - better bait reaches rarer fish.`;
     else if (reach < 5) hint = `${BAITS.find((b) => b.tier === reach + 1)!.name} bait unlocks ${tierName(reach + 1)} fish.`;
@@ -2622,7 +2647,7 @@ export class Game {
       return this.itemTile({ icon: BAIT_ICON[id] ?? '🪱', name: `${b.name} ×${eco.BAIT_PACK}`, sub: lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost.toLocaleString()} 🪙`, tier: b.tier, on: this.pick.gear === `bait:${id}`, ghost: lvl || s.coins < cost, attrs: `data-pick="gear" data-id="bait:${id}"` });
     }).join('');
     return `<div class="cols"><div class="main"><h4>Rods</h4><div class="tiles">${rods}</div><h4>Bait · packs of ${eco.BAIT_PACK}</h4><div class="tiles">${baits}</div>
-      <p class="foot">New gear goes to your tackle locker. Equip it from your Bag (<kbd>Tab</kbd>).</p></div>${this.gearDetail()}</div>`;
+      <p class="foot">New gear goes to your tackle locker. Equip it from your Bag (<kbd>Tab</kbd>).</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
   }
 
   private gearDetail(): string {

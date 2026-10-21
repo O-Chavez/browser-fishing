@@ -61,6 +61,34 @@ describe('Room economy', () => {
     expect(a.acct.save.coins).toBe(before + eco.BOTTLE_COINS);
   });
 
+  it('lets broke players with no bait dig worms at the patch, with a cooldown', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    const w = MAPS[0].worms!;
+    const s = a.acct.save;
+    const dig = () => room.handle(a.id, { t: 'dig' });
+    room.handle(a.id, { t: 'pos', x: w.x, z: w.z, yaw: 0 });
+    dig();
+    expect(eco.baitCount(s, 'worm')).toBe(15);
+    s.slots[1] = null;
+    s.coins = 0;
+    room.handle(a.id, { t: 'pos', x: w.x + 10, z: w.z, yaw: 0 });
+    dig();
+    expect(eco.baitCount(s, 'worm')).toBe(0);
+    room.handle(a.id, { t: 'pos', x: w.x, z: w.z, yaw: 0 });
+    dig();
+    expect(eco.baitCount(s, 'worm')).toBe(eco.DIG_WORMS);
+    // Drop the worms and try again: refused until the cooldown passes.
+    room.handle(a.id, { t: 'slot', i: s.slots.findIndex((x) => x?.k === 'bait') });
+    room.handle(a.id, { t: 'drop' });
+    expect(eco.baitCount(s, 'worm')).toBe(0);
+    dig();
+    expect(eco.baitCount(s, 'worm')).toBe(0);
+    advance(eco.DIG_COOLDOWN_MS);
+    dig();
+    expect(eco.baitCount(s, 'worm')).toBe(eco.DIG_WORMS);
+  });
+
   it('only sells and buys at the vendor', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');

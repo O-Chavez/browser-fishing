@@ -37,6 +37,8 @@ export type ClientMsg =
   /** Sell the fish in hand, or in hotbar slot i. */
   | { t: 'sell'; i?: number }
   | { t: 'bottle'; id: string }
+  /** Dig up free worms at the map's beach patch (only when out of bait and coins). */
+  | { t: 'dig' }
   | { t: 'buycos'; id: string }
   | { t: 'equip'; slot: CosSlot; id: string | null }
   | { t: 'color'; color: number }
