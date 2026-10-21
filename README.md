@@ -4,7 +4,9 @@
 
 **[▶ Play now in your browser](https://browser-fishing-1.onrender.com/)**: no download, no sign-up, just pick a name and cast.
 
-![Two players in hats chatting on the end of the pier at sunset, one with a speech bubble above their head](docs/images/dock.jpg)
+![Gameplay: friends fishing off the pier at sunset, landing a legendary Aurora Pike, showing off outfits in the town square, and winning at roulette in the casino](docs/images/gameplay.gif)
+
+[Watch in HD (MP4)](docs/images/gameplay.mp4)
 
 Grab a rod and head down to the pier. In this cozy multiplayer fishing game, everyone shares one lakeside town. You can hang out with your friends, cast side by side as the sun goes down, and trade stories about the one that got away. Start with a twig rod and a can of worms, and work your way up to hunting mythic Spirit Fish under the stars. When you're feeling lucky, bet your best catch at the casino.
 
@@ -29,6 +31,8 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 ![Inside the casino](src/assets/images/casino-preview.jpg)
 
 **👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, and race for a spot on the **Top Anglers** leaderboard.
+
+![Two players in hats chatting on the end of the pier at sunset, one with a speech bubble above their head](docs/images/dock.jpg)
 
 **🎩 Make it yours.** Choose a face and a colour, and dress up in 25 hats, shirts and pieces of jewellery from the town stall and the casino prize counter.
 
@@ -116,5 +120,6 @@ Then open the URL Vite prints (usually http://localhost:5173).
 | `npm run smoke` | End-to-end smoke test in headless Chrome |
 | `npm run bench` | Render benchmark |
 | `npm run screenshots` | Regenerate the README screenshots in `docs/images/` |
+| `npm run trailer` | Re-record the README gameplay clip (`docs/images/gameplay.mp4` and `.gif`); needs ffmpeg |
 
 Environment variables (all optional locally): `PORT`, `DATABASE_URL` (use Postgres instead of JSON files), `DATA_DIR` (where the JSON saves go).
