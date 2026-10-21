@@ -77,6 +77,9 @@
   - Higher tiers of fish should be more extreme/special (visually and in size)
 - [x] Add an in game element by the casino teleport that add a popup with a screenshot of the inside of the casino
   - This is nice to show newer players whats waiting for them.
+- [ ] Make the wardrobe/cosmetics shop player preview proportionally sized
+  - The spinning character preview is too small; size it in proportion to the menu panel instead of fixed pixels
+  - Sizes are hard-coded in `src/style.css` (`canvas.preview` 240×300 at line 308, `#pv-slot` 220px/140px at lines 288-290); the canvas comes from `CharacterPreview` in `src/game/character.ts:600`. Check its render resolution follows the new size so it doesn't blur
 - [x] Safety net for players with no bait and no money: dig for worms on the beach
   - Only players with no bait anywhere (hotbar + locker) who can't afford a worm pack can dig; everyone else never sees a prompt, marker or hint
   - A small, plain dirt mound on the sand left of the pier, visible from the dock. When the player can dig, their own client shows wriggling worms and a bobbing marker over it
