@@ -585,6 +585,9 @@ const DRAG_TURN = 0.012;
  * One shared WebGL canvas showing a slowly spinning character; moved into whichever menu tab
  * needs it. Click and drag to turn it by hand.
  */
+/** The box the preview keeps in view: hem to the tallest hat, and wide enough for a spinning cloak. */
+const FRAME = { y: 1.2, h: 2.2, w: 1.4 };
+
 export class CharacterPreview {
   readonly canvas = document.createElement('canvas');
   private renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
@@ -599,9 +602,9 @@ export class CharacterPreview {
   constructor(look: Look) {
     this.canvas.className = 'preview';
     this.renderer.setPixelRatio(Math.min(2, devicePixelRatio));
-    this.renderer.setSize(240, 300, false);
-    this.cam.position.set(0, 1.25, 5.2);
-    this.cam.lookAt(0, 1.0, 0);
+    this.fit();
+    // The menu's CSS sets the canvas size; follow it so the render stays sharp and unstretched.
+    new ResizeObserver(() => this.fit()).observe(this.canvas);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x556677, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(2, 4, 3);
@@ -625,6 +628,19 @@ export class CharacterPreview {
     };
     this.canvas.addEventListener('pointerup', end);
     this.canvas.addEventListener('pointercancel', end);
+  }
+
+  /** Matches the render to the canvas's on-screen size and moves the camera so a dressed character fills it. */
+  private fit(): void {
+    const w = this.canvas.clientWidth || 240;
+    const h = this.canvas.clientHeight || 300;
+    this.renderer.setSize(w, h, false);
+    this.cam.aspect = w / h;
+    const tan = Math.tan(THREE.MathUtils.degToRad(this.cam.fov / 2));
+    const dist = Math.max(FRAME.h / (2 * tan), FRAME.w / (2 * tan * this.cam.aspect));
+    this.cam.position.set(0, FRAME.y + dist * 0.05, dist);
+    this.cam.lookAt(0, FRAME.y, 0);
+    this.cam.updateProjectionMatrix();
   }
 
   set(look: Look): void {
