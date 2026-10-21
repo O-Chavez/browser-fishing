@@ -63,7 +63,9 @@ export type ClientMsg =
   | { t: 'cashout'; i: number }
   | { t: 'buyperk'; id: string }
   /** A global chat line. */
-  | { t: 'chat'; text: string };
+  | { t: 'chat'; text: string }
+  /** A dev console slash command (never broadcast). */
+  | { t: 'cmd'; text: string };
 
 export type ServerMsg =
   | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[] }
@@ -90,7 +92,9 @@ export type ServerMsg =
   /** A chat line from anyone on the server; `room` and `id` let same-room clients show a bubble. */
   | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
   /** A server-wide notice for the chat window ("Ann has joined"). */
-  | { t: 'sys'; text: string };
+  | { t: 'sys'; text: string }
+  /** Dev console replies, for the player who typed the command only; `time` overrides their day/night. */
+  | { t: 'dev'; lines: string[]; time?: number | null };
 
 export interface HallRow { name: string; level: number; best: BestCatch }
 

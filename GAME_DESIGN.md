@@ -442,3 +442,10 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 - **Rarity:** tier 0 Plain (grey), 1 Fine (green), 2 Rare (blue), 3 Epic (purple), 4 Mythic (orange), 5 Legendary (gold). Finishes climb with the tier: matte cloth, then satin, brass and gold trims, glowing gems, and for legendaries breathing glow trims plus stars that circle the wearer.
 - **UI:** every item has its own drawn icon (`src/game/cosicon.ts`). Mythic tiles have a warm glow; legendary tiles are gold, shimmer and twinkle; casino items carry a small pink chip in the corner. The details panel shows the rarity, a one-line blurb and a live try-on preview.
 - **Models** (`src/game/character.ts`): low-poly primitives on the capsule body, built once per item and cloned for every wearer (geometry and materials are shared, small parts merged into one mesh). No lights are added; glows are emissive materials.
+
+## 34. Dev console
+
+Slash commands typed into the chat box go to the server as `cmd` messages, never to chat; replies come back only to the player who typed them (`dev` messages, shown as system lines).
+
+- **Login:** `/login <user> <password>`, checked on the server against the `DEV_USER` and `DEV_PASS` environment variables. With either unset the console is off. A login lasts for that connection only; `/logout` ends it. Five failed logins lock that account out for 15 minutes, and 30 failures across all accounts lock everyone out for 15 minutes. The password is masked in the local echo and never logged; the server logs each command.
+- **Commands** (`server/dev.ts`): `/help`, `/coins N`, `/chips N`, `/level N`, `/bait <id> [N]`, `/rod <id>`, `/fish <id> [cm] [shiny]`, `/tp <map>`, `/time day|dusk|night|dawn|auto` (only for you, including the server's night bite odds), `/dig` (clears the worm patch cooldown). Commands change the real save. A bad id lists the valid ones.

@@ -88,7 +88,7 @@
 - [ ] New-player guidance through the core loop
   - Contextual tips that walk a new player through catch first fish → sell it at the shop → buy better bait → catch better fish, triggered by milestones (first spawn, first catch, first sale, first bait purchase) rather than a wall of text
   - Should feel natural in the existing UI (hint lines, Old Salty, the welcome screen), show once per account, and stay out of the way. Taste-driven: propose options before coding
-- [ ] In-game dev console for debugging/testing
+- [x] In-game dev console for debugging/testing
   - Locked behind a username/password, with the check done on the server (not just the client) so regular players can't unlock it; ideally slash commands typed into the existing chat (`src/game/chatbox.ts`), e.g. give money/bait/fish, set level, teleport, set time of day
   - Larger item: propose a plan (auth approach, command list, where commands run) before editing
 - [ ] Proper HTML/SEO metadata and a favicon
@@ -102,4 +102,6 @@
 - Fake "light pools" (cheap glowing decals) under lamps and above casino chandeliers, so fewer real point lights are needed. Cutting real lights from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
 - `npm run bench` is broken on main: it clicks a wardrobe tab selector that no longer exists (needs `openMenu('wardrobe')`). The bench scenes also have no high-tier fish, so they can't measure the fish tier effects
+- `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. There are two today: `server/room.ts` (`info.act` can be undefined in the snapshot) and `server/room.test.ts` (an `equip` message without `slot`)
+- Dev console `/tips` command to clear the new-player tips list for testing (needs both the tips and dev console branches merged)
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs
