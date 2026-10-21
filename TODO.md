@@ -85,6 +85,15 @@
   - A small, plain dirt mound on the sand left of the pier, visible from the dock. When the player can dig, their own client shows wriggling worms and a bobbing marker over it
   - E digs up one pack of worms (5), auto-equipped. Server checks distance and eligibility, plus a 30 s per-account cooldown so drop-and-redig can't farm worms
   - Hints point to the spot when eligible: the out-of-bait cast message, the inventory hint, the shop, and a line from Old Salty
+- [ ] New-player guidance through the core loop
+  - Contextual tips that walk a new player through catch first fish → sell it at the shop → buy better bait → catch better fish, triggered by milestones (first spawn, first catch, first sale, first bait purchase) rather than a wall of text
+  - Should feel natural in the existing UI (hint lines, Old Salty, the welcome screen), show once per account, and stay out of the way. Taste-driven: propose options before coding
+- [ ] In-game dev console for debugging/testing
+  - Locked behind a username/password, with the check done on the server (not just the client) so regular players can't unlock it; ideally slash commands typed into the existing chat (`src/game/chatbox.ts`), e.g. give money/bait/fish, set level, teleport, set time of day
+  - Larger item: propose a plan (auth approach, command list, where commands run) before editing
+- [ ] Proper HTML/SEO metadata and a favicon
+  - `index.html` currently has only charset, viewport and title: add description, Open Graph/Twitter card tags (with a preview image), theme color, canonical URL, and `robots.txt`/sitemap if useful
+  - A browser-tab icon (favicon + apple-touch icon) that fits the game's look
 
 ## Ideas
 
