@@ -25,6 +25,7 @@ import { rodIcon } from './rodicon';
 import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
 import casinoPreview from '../assets/images/casino-preview.jpg';
+import { markTip, tipText, type TipId } from './tips';
 import { shortCoins } from './format';
 import { Player } from './player';
 import {
@@ -169,6 +170,9 @@ export class Game {
   private pendingWelcome = false;
   private joinColor = BODY_COLORS[4];
   private toastTimer = 0;
+  private guideTimer = 0;
+  /** Tier of the fish on the catch card, for the tip shown when it's put away. */
+  private caughtTier = 0;
   private confirmReset = false;
   private bannerTimer = 0;
   private spin = false;
@@ -449,6 +453,7 @@ export class Game {
         // Stands in for the click that captures the mouse.
         $('resume').classList.add('hidden');
         this.dismissWelcome();
+        this.guide('start');
         audio.start();
       },
       key: (code: string, down: boolean) => {
@@ -560,7 +565,10 @@ export class Game {
     });
     document.addEventListener('pointerlockchange', () => {
       $('resume').classList.add('hidden');
-      if (this.locked) this.dismissWelcome();
+      if (this.locked) {
+        this.dismissWelcome();
+        this.guide('start');
+      }
       // Esc while typing: the browser always releases the mouse, but that should only cancel the
       // chat, not pause the game. A click picks the mouse back up.
       if (!this.locked && this.chat.active) {
@@ -727,6 +735,7 @@ export class Game {
       if (!eco.buyBait(s, id)) return this.toast('Your locker is full of that bait.');
       this.net.send({ t: 'buybait', id });
       this.toast(`Bought ${eco.BAIT_PACK} ${b.name}`);
+      if (b.tier > 1) this.guide('bait');
     }
     this.persist();
     this.refreshHud();
@@ -794,6 +803,7 @@ export class Game {
     eco.sellHeld(this.s);
     this.net.send({ t: 'sell' });
     this.toast(`Sold ${byId(FISH, it.fishId).name} for ${value} 🪙`);
+    this.guide('sold');
     this.persist();
     this.refreshHud();
   }
@@ -812,6 +822,7 @@ export class Game {
     eco.sellSlot(this.s, i);
     this.net.send({ t: 'sell', i });
     this.toast(`Sold ${byId(FISH, it.fishId).name} for ${value} 🪙`);
+    this.guide('sold');
     audio.jingle('common');
     this.persist();
     this.refreshHud();
@@ -1526,6 +1537,7 @@ export class Game {
     const hard = reelDifficulty(this.hooked!, { ...this.rod, control: eco.reelControl(this.s, this.rod.control) }, this.hookedShiny);
     this.reel = new Reel(hard, eco.reelControl(this.s, this.rod.control));
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
+    this.guide('reel');
     this.lastSurges = 0;
     this.leapT = -1;
     this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, this.hooked!.id);
@@ -1594,6 +1606,7 @@ export class Game {
     const { stored, first, record, gained, leveledUp, level } = eco.applyCatch(this.s, fish, size, this.hookedShiny);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch' });
+    this.caughtTier = fish.tier;
     this.world.hub?.setLeaders(this.anglers());
     const sc = this.heldScale();
     this.hangPoint(this.bob, 0, 0).y -= 0.5 * sc;
@@ -1726,6 +1739,10 @@ export class Game {
     this.world.line.line.visible = false;
     this.phase = 'idle';
     this.setIdlePose();
+    // Tips wait for the catch card to be put away, so they don't land on top of it.
+    if (this.caughtTier >= 2) this.guide('tier');
+    else if (this.caughtTier && !this.s.tips.includes('sold') && this.s.slots.some((sl) => sl?.k === 'fish')) this.guide('catch');
+    this.caughtTier = 0;
   }
 
   private removeShadow(): void {
@@ -2087,6 +2104,18 @@ export class Game {
   }
 
   // ---------- UI ----------
+
+  /** Shows a new-player tip once per account; the server keeps the list so it follows the account. */
+  private guide(id: TipId): void {
+    if (!markTip(this.s, id)) return;
+    this.net.send({ t: 'tip', id });
+    this.persist();
+    const el = $('guide');
+    el.innerHTML = `<span>${tipText(id, this.s, this.map.vendor.name)}</span>`;
+    el.classList.add('show');
+    clearTimeout(this.guideTimer);
+    this.guideTimer = window.setTimeout(() => el.classList.remove('show'), 9000);
+  }
 
   private toast(msg: string, secs = 2): void {
     const t = $('toast');
