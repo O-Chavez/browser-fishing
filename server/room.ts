@@ -50,6 +50,8 @@ export class Room {
   hall: () => HallRow[] = () => [];
   /** Chat rules; the server shares one gate between rooms so limits follow the account. */
   chatGate: ChatGate;
+  /** Last dig per account, for the worm patch cooldown. */
+  private dugAt = new Map<Account, number>();
   /** Delivers chat lines and notices; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -154,6 +156,9 @@ export class Room {
         changed = !!b && Math.hypot(m.info.x - b.x, m.info.z - b.z) <= 4 && eco.collectBottle(s, b.id, town!.bottles.map((x) => x.id)) > 0;
         break;
       }
+      case 'dig':
+        changed = this.dig(m);
+        break;
       case 'sell':
         changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, Math.floor(Number(msg.i))));
         break;
@@ -336,6 +341,16 @@ export class Room {
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: m.acct.save });
+  }
+
+  private dig(m: Member): boolean {
+    const w = this.maps[m.info.map]?.worms;
+    if (!w || Math.hypot(m.info.x - w.x, m.info.z - w.z) > eco.DIG_RANGE + 1) return this.deny(m, 'Get closer to the worm patch to dig.');
+    const last = this.dugAt.get(m.acct);
+    if (last !== undefined && this.now() - last < eco.DIG_COOLDOWN_MS) return this.deny(m, eco.DIG_WAIT);
+    if (eco.digWorms(m.acct.save) <= 0) return this.deny(m, 'Only anglers with no bait and no coins to buy some can dig here.');
+    this.dugAt.set(m.acct, this.now());
+    return true;
   }
 
   private atVendor(m: Member): boolean {

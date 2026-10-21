@@ -77,6 +77,11 @@
   - Higher tiers of fish should be more extreme/special (visually and in size)
 - [x] Add an in game element by the casino teleport that add a popup with a screenshot of the inside of the casino
   - This is nice to show newer players whats waiting for them.
+- [x] Safety net for players with no bait and no money: dig for worms on the beach
+  - Only players with no bait anywhere (hotbar + locker) who can't afford a worm pack can dig; everyone else never sees a prompt, marker or hint
+  - A small, plain dirt mound on the sand left of the pier, visible from the dock. When the player can dig, their own client shows wriggling worms and a bobbing marker over it
+  - E digs up one pack of worms (5), auto-equipped. Server checks distance and eligibility, plus a 30 s per-account cooldown so drop-and-redig can't farm worms
+  - Hints point to the spot when eligible: the out-of-bait cast message, the inventory hint, the shop, and a line from Old Salty
 
 ## Ideas
 

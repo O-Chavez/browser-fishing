@@ -65,6 +65,8 @@ export interface MapDef {
   /** Dressing mirror; E opens the wardrobe. */
   mirror: Spot;
   campfire: Spot;
+  /** Beach patch where broke players with no bait can dig up worms. */
+  worms?: { x: number; z: number };
   /** What this map's shop menu sells (ids from `RODS` and `BAITS`). */
   stock: { rods: string[]; bait: string[] };
   next: { id: string; name: string } | null;
@@ -99,6 +101,7 @@ export const MAPS: MapDef[] = [
     leaderboard: { x: 10.5, z: 30, facing: faceToward(10.5, 30, 2, 27) },
     mirror: { x: -8.5, z: 40, facing: faceToward(-8.5, 40, 0, 32) },
     campfire: { x: -15, z: 24, facing: 0 },
+    worms: { x: -8.5, z: 10.5 },
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
@@ -119,6 +122,7 @@ export const MAPS: MapDef[] = [
             'The far end of the pier is where the big ones bite. Stand out on the T and see.',
             "Nothing wrong with the shore, but the fish there are lazy and small. The pier's the thing.",
             'A gold-zone cast pulls better fish toward your bait. Practice your timing.',
+            'Run dry of bait and coin? Dig in the soft sand on the beach left of the pier. Worms aplenty.',
           ],
           nightLines: ['Fireflies on the water... best time of day. The quiet ones always bite after dark.'],
         },
@@ -187,6 +191,7 @@ MAPS.push({
   pad: { x: 0, z: 43, r: 80, h: 0 },
   radius: 400,
   gate: { x: 0, z: 27.4, facing: 0 },
+  worms: undefined,
   casino: {
     hall: { x: 0, z: 43, w: 34, d: 34 },
     roulette: { x: -9, z: 43, facing: toward(-9, 43) },

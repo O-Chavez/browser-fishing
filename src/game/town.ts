@@ -55,6 +55,9 @@ export class Town {
   readonly npcs: TownNpc[] = [];
   readonly bottles: TownBottle[] = [];
   private bottleMeshes = new Map<string, THREE.Object3D>();
+  /** Beach worm patch: where it is, and the worms + marker shown only to players who can dig. */
+  readonly wormSpot: THREE.Vector3 | null = null;
+  private wormCue: { group: THREE.Group; worms: THREE.Object3D[]; marker: THREE.Object3D } | null = null;
   private windowMat = new THREE.MeshBasicMaterial({ color: 0x6d7f8c });
   private smoke: { m: THREE.Mesh; base: THREE.Vector3; ph: number }[] = [];
   private heads: { head: THREE.Object3D; body: THREE.Object3D; pos: THREE.Vector3; yaw: number }[] = [];
@@ -80,6 +83,7 @@ export class Town {
     this.buildBottles();
     this.buildCozy();
     mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.bottleMeshes.values()]);
+    if (map.worms) this.buildWormPatch(map.worms.x, map.worms.z);
   }
 
   private at(obj: THREE.Object3D, x: number, z: number, facing = 0, y?: number): void {
@@ -575,6 +579,57 @@ export class Town {
     }
   }
 
+  /** A low mound of damp sand with a trowel stuck in it; the worms and marker appear only when digging is allowed. */
+  private buildWormPatch(x: number, z: number): void {
+    const patch = new THREE.Group();
+    const mound = ball(0.75, 0x8a6a48, 1, 0.22, 0.85);
+    mound.receiveShadow = true;
+    patch.add(mound);
+    for (const [dx, dz, r] of [[-0.45, 0.35, 0.22], [0.5, -0.3, 0.18], [0.15, 0.5, 0.15]]) {
+      const lump = ball(r, 0x7a5c3d, 1, 0.5, 1);
+      lump.position.set(dx, 0.04, dz);
+      patch.add(lump);
+    }
+    const trowel = new THREE.Group();
+    const handle = cyl(0.035, 0.035, 0.3, WOOD, 8);
+    handle.position.y = 0.32;
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.26, 4), mat(0x9aa3ad));
+    blade.rotation.x = Math.PI;
+    blade.position.y = 0.08;
+    trowel.add(handle, blade);
+    trowel.position.set(0.35, 0.05, 0.2);
+    trowel.rotation.set(0.25, 0.6, -0.3);
+    patch.add(trowel);
+
+    const cue = new THREE.Group();
+    const worms: THREE.Object3D[] = [];
+    for (let i = 0; i < 4; i++) {
+      const w = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.2, 3, 6), mat(0xe58a8a));
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      w.position.set(Math.cos(a) * 0.3, 0.17, Math.sin(a) * 0.25);
+      w.rotation.set(Math.PI / 2, 0, a);
+      cue.add(w);
+      worms.push(w);
+    }
+    const marker = new THREE.Mesh(
+      new THREE.ConeGeometry(0.3, 0.6, 4),
+      new THREE.MeshBasicMaterial({ color: 0xffd34d }),
+    );
+    marker.rotation.x = Math.PI;
+    cue.add(marker);
+    cue.visible = false;
+    patch.add(cue);
+
+    this.at(patch, x, z, 0.4, groundHeight(x, z) - 0.04);
+    this.wormCue = { group: cue, worms, marker };
+    (this as { wormSpot: THREE.Vector3 | null }).wormSpot = new THREE.Vector3(x, 0, z);
+  }
+
+  /** Shows the wriggling worms and the bobbing marker over the patch. */
+  setDiggable(on: boolean): void {
+    if (this.wormCue) this.wormCue.group.visible = on;
+  }
+
   /** Shows only the bottles that haven't been found yet. */
   setFound(ids: string[]): void {
     const key = ids.join(',');
@@ -619,6 +674,12 @@ export class Town {
         h.head.rotation.y += (THREE.MathUtils.clamp(a, -1, 1) - h.head.rotation.y) * 0.1;
       } else h.head.rotation.y *= 0.95;
       h.body.position.y = Math.sin(t * 1.5 + h.pos.x) * 0.01;
+    }
+    const cue = this.wormCue;
+    if (cue?.group.visible) {
+      cue.marker.position.y = 2.2 + Math.sin(t * 3) * 0.2;
+      cue.marker.rotation.y = t * 1.5;
+      cue.worms.forEach((w, i) => (w.rotation.y = Math.sin(t * 6 + i * 1.7) * 0.6));
     }
     for (const [, m] of this.bottleMeshes) {
       if (!m.visible) continue;

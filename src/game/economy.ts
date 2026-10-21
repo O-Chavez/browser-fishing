@@ -410,3 +410,25 @@ export function collectBottle(s: SaveData, id: string, all: string[]): number {
   s.coins += gain;
   return gain;
 }
+
+/** Worms dug from the beach patch: one stall pack, free. */
+export const DIG_WORMS = BAIT_PACK;
+export const DIG_RANGE = 2.6;
+/** Between digs, so dropping worms and digging again can't farm them. */
+export const DIG_COOLDOWN_MS = 30_000;
+export const DIG_WAIT = 'The worms need a moment to come back up. Try again shortly.';
+export const DIG_HINT = 'Out of bait and coins? Dig for free worms on the beach left of the pier.';
+
+/** The safety net: only players with no bait at all who can't afford a worm pack may dig. */
+export function canDig(s: SaveData): boolean {
+  const worm = byId(BAITS, 'worm');
+  return BAITS.every((b) => baitCount(s, b.id) === 0) && s.coins < worm.price * BAIT_PACK;
+}
+
+/** Digs up a pack of worms and puts them on the hotbar if there is room; returns the worms gained. */
+export function digWorms(s: SaveData): number {
+  if (!canDig(s)) return 0;
+  addLocker(s, 'worm', DIG_WORMS);
+  equipBait(s, 'worm');
+  return DIG_WORMS;
+}
