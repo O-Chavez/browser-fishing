@@ -15,7 +15,8 @@
     "bench:compare": "node scripts/bench-compare.mjs",
     "bench:ab": "node scripts/bench-ab.mjs",
     "smoke": "tsx scripts/smoke.ts",
-    "screenshots": "tsx scripts/screenshots.ts"
+    "screenshots": "tsx scripts/screenshots.ts",
+    "trailer": "tsx scripts/trailer.ts"
   },
   "dependencies": {
     "pg": "^8.23.1",
