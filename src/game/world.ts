@@ -1105,7 +1105,7 @@ export class World {
       .multiplyScalar(80)
       .add(this.sun.target.position);
     this.hub?.update(t, this.eye.x, this.eye.z);
-    this.town?.update(t, this.eye.x, this.eye.z);
+    this.town?.update(t, dt, this.eye.x, this.eye.z);
     this.hall?.update(t, dt);
     // After every owner has set its lights' intensity this frame: the pool fades them on top of it.
     this.lightPool.update(dt, this.eye);

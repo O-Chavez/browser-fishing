@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import type { MapDef, NpcDef, Spot } from '../data/maps';
-import { groundHeight } from './env';
+import { groundHeight, standHeight } from './env';
 import { DARK, WOOD, ball, cyl, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
+import { NpcWalker } from './npcwalk';
 import { glowTag } from './nightglow';
 import { boxUV, shingleTexture, sidingTexture, stoneTexture } from './textures';
 import { faceHead } from './faces';
@@ -42,6 +43,7 @@ export interface TownNpc {
   def: NpcDef;
   pos: THREE.Vector3;
   next: number;
+  walker?: NpcWalker;
 }
 
 export interface TownBottle {
@@ -62,7 +64,15 @@ export class Town {
   private wormCue: { group: THREE.Group; worms: THREE.Object3D[]; marker: THREE.Object3D } | null = null;
   private windowMat = new THREE.MeshBasicMaterial({ color: 0x6d7f8c });
   private smoke: { m: THREE.Mesh; base: THREE.Vector3; ph: number }[] = [];
-  private heads: { head: THREE.Object3D; body: THREE.Object3D; pos: THREE.Vector3; yaw: number }[] = [];
+  private heads: {
+    head: THREE.Object3D;
+    body: THREE.Object3D;
+    arms: THREE.Object3D[];
+    pos: THREE.Vector3;
+    yaw: number;
+    model: THREE.Object3D;
+    walker?: NpcWalker;
+  }[] = [];
   private cobble = cobbleTexture();
   /** Textured materials shared by colour, so mergeStatic can still bake same-coloured parts together. */
   private paintedMats = new Map<string, THREE.MeshLambertMaterial>();
@@ -351,18 +361,24 @@ export class Town {
       head.add(hair);
     }
     body.add(torso, head);
-    for (const sx of [-1, 1]) {
+    // Each arm hangs from a shoulder pivot, so walking can swing it.
+    const arms = [-1, 1].map((sx) => {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(sx * (0.36 - 0.3 * Math.sin(0.12)), 1.05 + 0.3 * Math.cos(0.12), 0.05);
+      shoulder.rotation.z = sx * 0.12;
       const arm = cyl(0.07, 0.07, 0.6, def.coat, 8);
-      arm.position.set(sx * 0.36, 1.05, 0.05);
-      arm.rotation.z = sx * 0.12;
-      body.add(arm);
-    }
+      arm.position.y = -0.3;
+      shoulder.add(arm);
+      body.add(shoulder);
+      return shoulder;
+    });
     p.add(body);
     // Townsfolk don't block: they stand on the main street to and from the casino gate.
     this.at(p, def.x, def.z, def.facing);
     const pos = p.position.clone();
-    this.npcs.push({ def, pos, next: 0 });
-    this.heads.push({ head, body, pos, yaw: def.facing });
+    const walker = def.walk && new NpcWalker({ ...def, walk: def.walk });
+    this.npcs.push({ def, pos, next: 0, walker });
+    this.heads.push({ head, body, arms, pos, yaw: def.facing, model: p, walker });
   }
 
   private buildRack(s: Spot): void {
@@ -693,10 +709,11 @@ export class Town {
     const lines = night && npc.def.nightLines ? [...npc.def.nightLines, ...npc.def.lines] : npc.def.lines;
     const line = lines[npc.next % lines.length];
     npc.next++;
+    npc.walker?.listen();
     return `${npc.def.name}: "${line}"`;
   }
 
-  update(t: number, px: number, pz: number): void {
+  update(t: number, dt: number, px: number, pz: number): void {
     for (const f of this.fires) {
       f.light.intensity = (4 + 8 * this.night) * (0.85 + 0.15 * Math.sin(t * 9 + f.ph) + 0.08 * Math.sin(t * 23 + f.ph));
       f.flames.forEach((c, i) => c.scale.set(1, 0.85 + 0.25 * Math.sin(t * 8 + i * 2 + f.ph), 1));
@@ -708,6 +725,13 @@ export class Town {
       (s.m.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - k);
     }
     for (const h of this.heads) {
+      const w = h.walker;
+      if (w) {
+        w.update(dt, px, pz);
+        h.pos.set(w.x, standHeight(w.x, w.z), w.z);
+        h.model.position.copy(h.pos);
+        h.model.rotation.y = h.yaw = w.yaw;
+      }
       const dx = px - h.pos.x;
       const dz = pz - h.pos.z;
       if (Math.hypot(dx, dz) < 7) {
@@ -715,7 +739,13 @@ export class Town {
         a = Math.atan2(Math.sin(a), Math.cos(a));
         h.head.rotation.y += (THREE.MathUtils.clamp(a, -1, 1) - h.head.rotation.y) * 0.1;
       } else h.head.rotation.y *= 0.95;
-      h.body.position.y = Math.sin(t * 1.5 + h.pos.x) * 0.01;
+      // Idle breathing, blending into a walking bob, sway and arm swing.
+      const m = w?.moving ?? 0;
+      const s = Math.sin(w?.phase ?? 0);
+      h.body.position.y = Math.sin(t * 1.5 + h.pos.x) * 0.01 * (1 - m) + Math.abs(s) * 0.05 * m;
+      h.body.rotation.z = s * 0.05 * m;
+      h.arms[0].rotation.x = s * 0.5 * m;
+      h.arms[1].rotation.x = -s * 0.5 * m;
     }
     const cue = this.wormCue;
     if (cue?.group.visible) {

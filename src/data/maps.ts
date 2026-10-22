@@ -29,6 +29,27 @@ export interface NpcDef extends Spot {
   hat?: number;
   /** Painted face, from `FACES` (defaults to a smile). */
   face?: FaceId;
+  /** A loop they stroll around; without one they stand still. */
+  walk?: NpcWalk;
+}
+
+/** A stop on an NPC's walk: they pause there `wait` seconds, turned toward `face` if given. */
+export interface NpcStop {
+  x: number;
+  z: number;
+  wait?: number;
+  face?: number;
+}
+
+/**
+ * Starts and ends at the NPC's own spot, where they pause `wait` seconds facing `facing`, and visits
+ * `stops` in order in between. Legs run straight, so each one must stay clear of water and props.
+ */
+export interface NpcWalk {
+  /** Metres per second. */
+  speed: number;
+  wait: number;
+  stops: NpcStop[];
 }
 
 export interface BottleDef { id: string; x: number; z: number; note: string }
@@ -122,6 +143,15 @@ export const MAPS: MapDef[] = [
       npcs: [
         {
           name: 'Old Salty', face: 'sleepy', x: 4.2, z: 15, facing: faceToward(4.2, 15, 0, 18), coat: 0x3d5a80, hat: 0xd9b84a,
+          walk: {
+            speed: 0.9,
+            wait: 6,
+            stops: [
+              { x: 0, z: 9 },
+              { x: 0, z: -5, wait: 8, face: Math.PI },
+              { x: 0, z: 9 },
+            ],
+          },
           lines: [
             'The far end of the pier is where the big ones bite. Stand out on the T and see.',
             "Nothing wrong with the shore, but the fish there are lazy and small. The pier's the thing.",
@@ -132,6 +162,25 @@ export const MAPS: MapDef[] = [
         },
         {
           name: 'Pip', face: 'tongue', x: 2.6, z: 33.5, facing: faceToward(2.6, 33.5, 0, 32), coat: 0xc2543d,
+          // Laps the well, then runs down to the fish racks where the first bottle hides.
+          walk: {
+            speed: 2.2,
+            wait: 3,
+            stops: [
+              { x: 0, z: 34.3 },
+              { x: -1.63, z: 33.63 },
+              { x: -2.3, z: 32.0 },
+              { x: -1.63, z: 30.37 },
+              { x: 0, z: 29.7 },
+              { x: 0, z: 24 },
+              { x: 1.2, z: 17 },
+              { x: 9.3, z: 15.6, wait: 4, face: faceToward(9.3, 15.6, 12, 16) },
+              { x: 1.2, z: 17 },
+              { x: 0, z: 24 },
+              { x: 0, z: 29.7 },
+              { x: 2.9, z: 31.1 },
+            ],
+          },
           lines: [
             'Psst! I found a message in a bottle behind the fish racks. There are more hidden around town!',
             'Better bait lets you hook rarer fish. A better rod makes the fight easier.',
@@ -140,6 +189,15 @@ export const MAPS: MapDef[] = [
         },
         {
           name: 'Granny Wren', face: 'smile', x: -10.5, z: 44.5, facing: faceToward(-10.5, 44.5, -6, 40), coat: 0x7a4a8a, hat: 0xeeeeee,
+          walk: {
+            speed: 0.7,
+            wait: 8,
+            stops: [
+              { x: -9.5, z: 41.5 },
+              { x: -5.4, z: 41.2, wait: 5, face: Math.PI / 2 },
+              { x: -7, z: 46.3, wait: 3 },
+            ],
+          },
           lines: [
             "I've seen this town change. Folks used to leave notes in bottles for luck. They wash up in odd corners.",
             'Sit by the campfire down the shore when you tire. Cozy there.',
@@ -149,6 +207,8 @@ export const MAPS: MapDef[] = [
         },
         {
           name: 'Captain Reed', face: 'grin', x: 4, z: 53.5, facing: faceToward(4, 53.5, 0, 56), coat: 0x2f4f4f, hat: 0x2b2b2b,
+          // Paces in front of the gate he keeps.
+          walk: { speed: 1.1, wait: 5, stops: [{ x: -4, z: 53.5, wait: 5, face: faceToward(-4, 53.5, 0, 56) }] },
           lines: [
             `Beyond the gate lies Casino Cove. They only let in seasoned anglers: level ${CASINO_LEVEL} and up.`,
             'Keep fishing and keep levelling. The gate opens for anyone who has earned it.',
@@ -214,6 +274,7 @@ MAPS.push({
     npcs: [
       {
         name: 'Madame Fortuna', face: 'wink', x: 0, z: 58.1, facing: Math.PI, coat: 0x7a1f3f, hat: 0xf2d16b,
+        walk: { speed: 0.6, wait: 5, stops: [{ x: -1.2, z: 58.1, wait: 4, face: Math.PI }, { x: 1.2, z: 58.1, wait: 4, face: Math.PI }] },
         lines: [
           'Turn your catch in for chips, darling. Bet it first if you are feeling lucky.',
           'A fish that wins is worth more, a fish that loses is gone.',
@@ -222,10 +283,12 @@ MAPS.push({
       },
       {
         name: 'Croupier Vale', face: 'toothy', x: -9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0xc4262e,
+        walk: { speed: 0.6, wait: 6, stops: [{ x: -9.9, z: 45.2, wait: 4, face: Math.PI }, { x: -8.1, z: 45.2, wait: 4, face: Math.PI }] },
         lines: ['Red, black, or green. The wheel does not care who you are.', 'Hold a fish in your hand, then click red, black or green on the table.'],
       },
       {
         name: 'Dealer Rue', face: 'cat', x: 9, z: 45.2, facing: Math.PI, coat: 0x1b1b24, hat: 0x2a6fc4,
+        walk: { speed: 0.6, wait: 7, stops: [{ x: 9.9, z: 45.2, wait: 4, face: Math.PI }, { x: 8.1, z: 45.2, wait: 4, face: Math.PI }] },
         lines: ['I stand on seventeen. Always.', 'Double down and a winning fish is worth four times as much.'],
       },
     ],
