@@ -181,6 +181,8 @@ async function record(p: Page, name: string, ms: number, action: (mark: (label: 
   await Promise.all([action((label) => (at[label] = Date.now() / 1000)), sleep(ms)]);
   await cdp.send('Page.stopScreencast');
   await cdp.detach();
+  // Frames can arrive out of order, and the concat demuxer rejects negative durations.
+  frames.sort((a, b) => a.ts - b.ts);
   // Frames arrive unevenly; the concat demuxer holds each one until the next, then fps=30 resamples.
   const list = frames.map((f, i) => `file '${f.file}'\nduration ${((frames[i + 1]?.ts ?? f.ts + 1 / 30) - f.ts).toFixed(4)}`);
   fs.writeFileSync(path.join(dir, 'list.txt'), `${list.join('\n')}\nfile '${frames.at(-1)!.file}'\n`);
