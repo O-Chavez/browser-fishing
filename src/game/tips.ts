@@ -1,5 +1,5 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS } from '../data/content';
+import { BAITS, RODS, type Rod } from '../data/content';
 import { BAIT_PACK } from './economy';
 import type { SaveData } from './state';
 
@@ -51,4 +51,24 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
     case 'tier':
       return `A new tier of fish! Keep upgrading your bait and rod to reach rarer ones. Casino Cove opens at <b>Lv ${CASINO_LEVEL}</b>.`;
   }
+}
+
+/** Fights longer than this count as tough. Medium fights take about 18 s, hard ones 30-40 s. */
+export const TOUGH_FIGHT_SECS = 30;
+
+/** How a fight went badly enough to suggest a better rod. */
+export type FightEnd = 'snapped' | 'escaped' | 'tough';
+
+/** The next rod up from the best one the player owns, if it's unlocked and not bought yet; null otherwise. */
+export function rodUpgrade(s: Pick<SaveData, 'level' | 'slots' | 'locker'>): Rod | null {
+  const owned = (id: string) => s.locker.rods.includes(id) || s.slots.some((sl) => sl?.k === 'rod' && sl.id === id);
+  const best = Math.max(1, ...RODS.filter((r) => owned(r.id)).map((r) => r.tier));
+  const next = RODS.find((r) => r.tier === best + 1);
+  return next && s.level >= next.unlockLevel ? next : null;
+}
+
+/** Rod upgrade hint as HTML, like `tipText`. */
+export function rodHintText(end: FightEnd, rod: Rod, vendor: string): string {
+  const lead = end === 'snapped' ? 'Line snapped?' : end === 'escaped' ? 'Fish got away?' : 'Tough fight!';
+  return `${lead} A better rod makes fish easier to reel in: the <b>${rod.name}</b> is at ${vendor}'s stall (${rod.price.toLocaleString('en-US')} 🪙).`;
 }
