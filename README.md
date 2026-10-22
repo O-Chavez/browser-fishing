@@ -41,7 +41,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 **🗺️ A town worth exploring.** Chat with Old Salty, Granny Wren and the other locals, try your luck on the lucky wheel, and track down the seven messages in bottles hidden around the map.
 
 ### Features at a glance
-- Free to play, right in your browser, on any desktop
+- Free to play, right in your browser, on any desktop (early touch controls for phones and tablets)
 - Online multiplayer with global chat
 - 20 fish species across 5 tiers, plus rare shiny variants
 - 5 rods, 5 baits and 50 levels of progression
@@ -66,6 +66,8 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 | Enter | Chat |
 | M | Music on/off |
 | Esc | Menu / close |
+
+**On a phone or tablet (early test):** tap "Try touch controls" on the desktop notice and play in landscape. Push the left thumbstick to walk (past the rim to run), drag anywhere else to look, and hold the big button to cast and reel. Tap the prompt to talk, a hotbar slot to switch, and the casino tables to bet.
 
 ## Tech stack
 

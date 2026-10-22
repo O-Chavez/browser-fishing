@@ -425,3 +425,45 @@ body:has(#join:not(.hidden)) #menu { visibility: hidden; }
 #desktop-only img { width: 72px; height: 72px; border-radius: 18px; }
 #desktop-only h2 { margin: 10px 0 8px; font-size: 24px; font-weight: 900; line-height: 1.15; }
 #desktop-only p { margin: 0 0 10px; font-size: 16px; line-height: 1.45; color: var(--ink-muted); }
+
+/* ---------- touch mode (body.touch; see TouchControls) ----------
+   Sizes are in the 1400px-wide touch layout, which a phone in landscape shows at about 0.6x. */
+body.touch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+body.touch input { -webkit-user-select: text; user-select: text; font-size: 22px; }
+#touch { position: fixed; inset: 0; z-index: 1; touch-action: none; }
+#touch.hidden { display: none; }
+#touch .t-view { position: absolute; inset: 0; }
+body.touch #hud { z-index: 2; }
+body.touch #help, body.touch #crosshair { display: none; }
+body.touch #chat { top: 108px; }
+body.touch #prompt { pointer-events: auto; bottom: 128px; padding: 14px 24px; box-shadow: 0 0 0 4px var(--gold), 0 8px 18px rgba(0,0,0,.35); }
+body.touch #hotbar { pointer-events: auto; }
+body.touch #catch { z-index: 3; pointer-events: auto; }
+body.touch[data-phase="reeling"] #hotbar, body.touch[data-phase="reeling"] #heldname { display: none; }
+body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
+.t-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 12px; }
+.t-btn { width: 76px; height: 76px; border: 0; border-radius: 20px; display: grid; place-items: center; font-size: 36px; background: var(--hud-bg); box-shadow: var(--hud-edge); }
+.t-stick { position: absolute; width: 200px; height: 200px; margin: -100px 0 0 -100px; border-radius: 50%; background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 3px rgba(255,255,255,.45); display: none; pointer-events: none; }
+.t-stick.on { display: block; }
+.t-knob { position: absolute; left: 58px; top: 58px; width: 84px; height: 84px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.t-action { position: absolute; right: 70px; bottom: 44px; width: 156px; height: 156px; border: 0; border-radius: 50%; display: grid; place-content: center; justify-items: center; gap: 2px; font: 900 19px Nunito, ui-rounded, system-ui, sans-serif; letter-spacing: .06em; color: var(--gold-ink); background: var(--gold); box-shadow: 0 8px 0 var(--gold-dark), 0 14px 28px rgba(0,0,0,.35); }
+.t-action .ic { font-size: 52px; line-height: 1; }
+.t-action.down { transform: translateY(5px); box-shadow: 0 3px 0 var(--gold-dark), 0 8px 18px rgba(0,0,0,.35); }
+.t-action.quiet { background: var(--hud-bg); color: var(--cream-muted); box-shadow: 0 0 0 4px var(--wood-600), 0 10px 22px rgba(0,0,0,.3); }
+.t-action.hook { animation: hookFlash .3s ease-in-out infinite alternate; }
+.t-action.danger { color: #fff; background: var(--bad); box-shadow: 0 8px 0 #9c2b1b, 0 0 0 10px rgba(229,83,61,.35); }
+@keyframes hookFlash { to { transform: scale(1.1); box-shadow: 0 8px 0 var(--gold-dark), 0 0 0 16px rgba(255,201,51,.45); } }
+.t-jump { position: absolute; right: 262px; bottom: 54px; width: 96px; height: 96px; border: 0; border-radius: 50%; font: 900 17px Nunito, ui-rounded, system-ui, sans-serif; letter-spacing: .05em; color: var(--cream); background: var(--hud-bg); box-shadow: 0 0 0 4px var(--wood-600); }
+#fps { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 6px 12px; border: 0; border-radius: 10px; font: 800 16px ui-monospace, Menlo, monospace; color: #fff; background: rgba(0,0,0,.55); }
+#fps:empty { display: none; }
+#rotate { display: none; position: fixed; inset: 0; z-index: 70; align-items: center; justify-content: center; text-align: center; background: rgba(8, 14, 22, .96); font-size: 64px; font-weight: 900; line-height: 1.2; }
+#rotate b { display: block; font-size: 180px; color: var(--gold); }
+#rotate small { display: block; margin-top: 16px; font-size: 40px; font-weight: 700; color: var(--cream-muted); }
+@media (orientation: portrait) { body.touch #rotate { display: flex; } }
+@media (prefers-reduced-motion: reduce) { .t-action.hook { animation: none; } }
+body.touch #chat .chat-hint { display: none; }
+/* The prompt is tapped, not keyed: swap its E badge for a finger. */
+body.touch #prompt b { font-size: 0; }
+body.touch #prompt b::after { content: '👆'; font-size: 20px; }
+/* Tips sit at the left, clear of the reel ring's centre text and the hotbar. */
+body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width: 470px; transform: none; }

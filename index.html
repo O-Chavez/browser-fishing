@@ -99,15 +99,17 @@
   </div>
 
   <script type="module" src="/src/main.ts"></script>
-  <!-- Shown by CSS on touch-only devices (phones, tablets); "Try anyway" hides it for this tab. -->
+  <!-- Shown by CSS on touch-only devices (phones, tablets); "Try touch controls" hides it for this tab. -->
   <div id="desktop-only">
     <div class="panel">
       <img src="/apple-touch-icon.png" alt="" />
       <h2>Lakeside is made for desktop</h2>
-      <p>Fishing here takes a keyboard and mouse: WASD to walk, the mouse to look around and cast. On a phone or tablet the controls won't work.</p>
-      <p>Open this page on a computer to play.</p>
-      <button id="desktop-anyway" class="linklike">Try anyway</button>
+      <p>Fishing here is built for a keyboard and mouse. Touch controls are an early test, so expect rough edges.</p>
+      <p>For the full game, open this page on a computer.</p>
+      <button id="desktop-anyway" class="linklike">Try touch controls (early test)</button>
     </div>
   </div>
+  <!-- Touch mode on an upright phone: the game plays in landscape. -->
+  <div id="rotate"><div><b>↻</b>Turn your phone sideways<small>Lakeside plays in landscape</small></div></div>
 </body>
 </html>

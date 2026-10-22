@@ -246,9 +246,9 @@ export class CasinoHall {
     }
   }
 
-  /** The bet patch or button under the crosshair, if any. */
-  pick(camera: THREE.Camera, maxDist = 4.2): { k: string; id: string } | null {
-    this.ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+  /** The bet patch or button under the crosshair (or under `at`, a tap in normalized screen coords), if any. */
+  pick(camera: THREE.Camera, maxDist = 4.2, at = new THREE.Vector2(0, 0)): { k: string; id: string } | null {
+    this.ray.setFromCamera(at, camera);
     this.ray.far = maxDist;
     // Test against the resting pose so the hover lift can't change what is hit (that caused flicker).
     if (this.hover) {

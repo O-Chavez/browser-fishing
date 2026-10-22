@@ -105,6 +105,8 @@ export class World {
   town: Town | null = null;
   hall: CasinoHall | null = null;
   private indoor = false;
+  private lite = false;
+  private pixelCap = 1.25;
   private trees: Circle[] = [];
   yaw = 0;
   pitch = -0.12;
@@ -194,6 +196,27 @@ export class World {
     this.bobber.visible = false;
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  /**
+   * Caps render pixels per CSS pixel. Touch mode lays the page out wider than the screen and lets the
+   * browser scale it down, so it renders at 1x of that wider layout instead of the desktop 1.25.
+   */
+  setPixelCap(cap: number): void {
+    this.pixelCap = cap;
+    this.applyQuality();
+  }
+
+  /** Lighter graphics for weaker devices: no sun shadows and 25% fewer pixels in each direction. */
+  setLite(on: boolean): void {
+    this.lite = on;
+    this.applyQuality();
+  }
+
+  private applyQuality(): void {
+    this.sun.castShadow = !this.indoor && !this.lite;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.pixelCap) * (this.lite ? 0.75 : 1));
+    this.resize();
   }
 
   private resize(): void {
@@ -381,7 +404,7 @@ export class World {
     this.scene.add(this.decor);
     this.sky.visible = this.stars.visible = this.clouds.visible = !this.indoor;
     // Indoors the sun is off; without this its shadow map still renders every few frames.
-    this.sun.castShadow = !this.indoor;
+    this.sun.castShadow = !this.indoor && !this.lite;
     this.trees = [];
 
     if (this.indoor) {
