@@ -26,7 +26,7 @@ import { rodIcon } from './rodicon';
 import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
 import casinoPreview from '../assets/images/casino-preview.jpg';
-import { markTip, tipText, type TipId } from './tips';
+import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
 import { shortCoins } from './format';
 import { Player } from './player';
 import {
@@ -183,6 +183,9 @@ export class Game {
   private guideTimer = 0;
   /** Tier of the fish on the catch card, for the tip shown when it's put away. */
   private caughtTier = 0;
+  /** The rod upgrade hint shows at most once a session. */
+  private rodHinted = false;
+  private toughCatch = false;
   private confirmReset = false;
   /** Settings > Account: the open password form or logout confirmation, and its last message. */
   private acctForm: 'pass' | 'logout' | null = null;
@@ -1958,9 +1961,12 @@ export class Game {
     this.phase = 'idle';
     this.setIdlePose();
     // Tips wait for the catch card to be put away, so they don't land on top of it.
-    if (this.caughtTier >= 2) this.guide('tier');
-    else if (this.caughtTier && !this.s.tips.includes('sold') && this.s.slots.some((sl) => sl?.k === 'fish')) this.guide('catch');
+    let tipped = false;
+    if (this.caughtTier >= 2) tipped = this.guide('tier');
+    else if (this.caughtTier && !this.s.tips.includes('sold') && this.s.slots.some((sl) => sl?.k === 'fish')) tipped = this.guide('catch');
+    if (this.toughCatch && !tipped) this.rodHint('tough');
     this.caughtTier = 0;
+    this.toughCatch = false;
   }
 
   private removeShadow(): void {
@@ -2282,13 +2288,19 @@ export class Game {
     }
     audio.setCreak(load);
 
-    if (r.status === 'caught') this.startLanding();
-    else if (r.status === 'snapped') {
+    if (r.status === 'caught') {
+      this.toughCatch = r.elapsed > TOUGH_FIGHT_SECS;
+      this.startLanding();
+    } else if (r.status === 'snapped') {
       audio.snap();
       w.rig.kick('pitch', -4);
       w.addShake(1.2);
       this.reset('The line snapped!');
-    } else if (r.status === 'escaped') this.reset('The fish slipped off.');
+      this.rodHint('snapped');
+    } else if (r.status === 'escaped') {
+      this.reset('The fish slipped off.');
+      this.rodHint('escaped');
+    }
   }
 
   private tickLanding(dt: number): void {
@@ -2332,12 +2344,25 @@ export class Game {
   // ---------- UI ----------
 
   /** Shows a new-player tip once per account; the server keeps the list so it follows the account. */
-  private guide(id: TipId): void {
-    if (!markTip(this.s, id)) return;
+  private guide(id: TipId): boolean {
+    if (!markTip(this.s, id)) return false;
     this.net.send({ t: 'tip', id });
     this.persist();
+    this.showGuide(tipText(id, this.s, this.map.vendor.name, !!this.touch));
+    return true;
+  }
+
+  /** After a lost fish or a tough fight, points at the next rod up. Only once a session, so it doesn't nag. */
+  private rodHint(end: FightEnd): void {
+    const rod = this.rodHinted ? null : rodUpgrade(this.s);
+    if (!rod) return;
+    this.rodHinted = true;
+    this.showGuide(rodHintText(end, rod, this.map.vendor.name));
+  }
+
+  private showGuide(html: string): void {
     const el = $('guide');
-    el.innerHTML = `<span>${tipText(id, this.s, this.map.vendor.name, !!this.touch)}</span>`;
+    el.innerHTML = `<span>${html}</span>`;
     el.classList.add('show');
     clearTimeout(this.guideTimer);
     this.guideTimer = window.setTimeout(() => el.classList.remove('show'), 9000);

@@ -457,6 +457,8 @@ One-time tips walk a new player through the core loop, each shown at the moment 
 
 The ids seen are kept in the save (`tips`), so each shows once per account. Saves from before the tips start with every tip seen, unless the player hadn't caught anything yet. An account reset shows them again.
 
+**Rod upgrade hint:** when a line snaps, a fish slips off, or a catch takes more than 30 s to reel in (`TOUGH_FIGHT_SECS`; medium fights take about 18 s), the same box names the next rod up and its price: "A better rod makes fish easier to reel in". Only when that rod is unlocked and the player doesn't own it or anything better, and at most once per session (not saved), so it doesn't nag. After a tough catch it waits for the catch card to be put away, and skips if a new-player tip shows then.
+
 ## 35. Dev console
 
 Slash commands typed into the chat box go to the server as `cmd` messages, never to chat; replies come back only to the player who typed them (`dev` messages, shown as system lines).

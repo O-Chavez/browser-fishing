@@ -41,6 +41,11 @@ export class Reel {
     this.nextSurge = 0.9 + rng() * 0.8;
   }
 
+  /** Seconds since the fight started. */
+  get elapsed(): number {
+    return this.t;
+  }
+
   /** Fish is actively yanking: let go. */
   get surging(): boolean {
     return this.surgeDir !== 0 && this.pull > 0.25;
