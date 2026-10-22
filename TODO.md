@@ -108,6 +108,9 @@
 - [ ] NPCs wander around so the world feels more alive
   - Town NPCs (`NpcDef` in `src/data/maps.ts`, built by `Town.buildNpc()` in `src/game/town.ts:294`) walk fixed routes or wander randomly inside set areas, with a walk animation, pauses and turning toward nearby players; vendors at their stalls (`src/game/hub.ts`) stay put
   - "Talk to" range (`game.ts:1406`) must follow the NPC's live position; keep them walk-through and off water/props. Client-only is fine unless players need to see NPCs in the same spot
+- [ ] Remove the casino multiplier cap
+  - No limit on how much a gambled fish can be worth: drop `MULT_CAP` (×16, `src/data/casino.ts:6`) and its checks in `src/game/casino.ts:15,28` and `src/game/game.ts:1063,1166,1232` ("too rich for the table"), plus the test in `casino.test.ts` and the cap line in `GAME_DESIGN.md:374`
+  - Check that huge values still display, save and sell correctly (number formatting, nothing past `Number.MAX_SAFE_INTEGER`). This also settles the Lucky Wheel cap idea: neither is capped
 - [ ] Sketch out a possible route to making the game mobile friendly
   - [ ] How feasable?
   - [ ] What would need to change?
@@ -121,7 +124,6 @@
 - `npm run bench` is broken on main: it clicks a wardrobe tab selector that no longer exists (needs `openMenu('wardrobe')`). The bench scenes also have no high-tier fish, so they can't measure the fish tier effects
 - `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
 - The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
-- The pond's Lucky Wheel doubles a fish with no cap, while the casino tables stop at `MULT_CAP` (×16). Decide whether the wheel should share the cap
 - Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)
 - Shoreline rocks, flower pots and log piles have no colliders, so players walk through them. Decide whether that's intended
 - Dev console `/tips` command to clear the new-player tips list for testing (needs both the tips and dev console branches merged)
