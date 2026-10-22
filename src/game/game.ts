@@ -275,6 +275,7 @@ export class Game {
         if (f && act?.a === 'hold' && (act.shiny || (f.rarity !== 'common' && f.rarity !== 'uncommon')) && p.map === this.map.id)
           this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${sellValue(f, act.size, act.shiny)} 🪙)!`);
       },
+      onJump: (id) => this.avatars.jump(id),
       onCast: (roll) => {
         this.roll = roll;
       },
@@ -719,9 +720,14 @@ export class Game {
       const i = digit ? Number(digit[1]) - 1 : -1;
       if (i >= 0 && i < this.s.slots.length && this.phase === 'idle') this.takeSlot(i);
       else if (e.code === 'KeyG' && this.phase === 'idle') this.dropHeld();
-      else if (e.code === 'Space' && this.active && this.phase === 'idle') { e.preventDefault(); this.player.jump(); }
+      else if (e.code === 'Space' && this.active && this.phase === 'idle') { e.preventDefault(); this.jump(); }
       else if (e.code === 'KeyM' && !e.repeat) this.toast(audio.toggleMusic() ? '🎵 Music on' : '🔇 Music off');
     });
+  }
+
+  /** Jumps, and lets the other players on the map see it. */
+  private jump(): void {
+    if (this.player.jump()) this.net.send({ t: 'jump' });
   }
 
   /** Mouse look and touch drags both turn the camera; pitch stops short of straight up or down. */
@@ -788,7 +794,7 @@ export class Game {
       },
       release: () => this.pointerUp(),
       jump: () => {
-        if (this.active && this.phase === 'idle') this.player.jump();
+        if (this.active && this.phase === 'idle') this.jump();
       },
       bag: () => this.openMenu('inventory'),
       chat: () => this.openChat(),

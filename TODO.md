@@ -138,9 +138,10 @@
 - [ ] Hotbar slot bounce, and scroll-wheel slot switching that feels extremely clean
   - A slight bounce when a slot is selected (number key, click or scroll), so it's easy to tell which slot was just picked. Today there's only a 0.16 s `slot-pick` animation on `.slot.held.pick` (`src/style.css:141-144`)
   - Scroll switching is still janky after the earlier "Make scroll-wheel slot switching smooth" fix: `WheelStepper` (`src/game/wheelstep.ts`, used at `src/game/game.ts:676`). Check both a mouse wheel and a trackpad; each notch/gesture should move exactly one slot, with no skipped, doubled or laggy steps
-- [ ] Other players can see each other jump
+- [x] Other players can see each other jump
   - Jumps are local only today: `Player.jump()` (`src/game/player.ts:31`) lifts the player, but the `pos` message (`src/net/protocol.ts:30`, sent from `src/game/net.ts:99`, relayed in `server/room.ts:155`) carries only `x`, `z`, `yaw`, so remote players stay on the ground
   - Send the jump (a height in `pos`, or a one-off jump event that remotes play back with the same arc) and show it on other players' models, smoothly and without extra network spam
+  - Done (2026-10-21): a one-off `jump` message (client to server, then `{ t: 'jump', id }` to the others on the same map; the server drops jumps closer than 450 ms). Avatars replay the arc with `jumpLift` (`src/game/player.ts`, the same physics as the local jump) on top of their smoothed ground height. Unit tests for the arc and the relay, and a two-browser smoke check (Bob sees Ann rise ~0.96 m and land)
 - [x] Make player and dealer blackjacks clear: the win/loss banner never shows when a hand ends on the deal
   - A natural on the deal (player or dealer) skips the big result banner: `onBlackjack` (`src/game/game.ts:229`) only shows it when the previous view was live, and `blackjackAct` (`game.ts:1281`) clears `this.bj` before dealing. Instant dealer blackjacks with no banner may add to the "rigged" feeling
   - Show the banner for these hands and make it obvious who had blackjack (e.g. "Dealer blackjack" / "Blackjack!"), with the dealer's cards revealed

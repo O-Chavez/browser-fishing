@@ -44,9 +44,13 @@ interface Member {
   dayFrac?: number | null;
   /** Position changed since the last snap. */
   moved?: boolean;
+  /** When this player last jumped, to rate-limit jump relays. */
+  jumpAt?: number;
 }
 
 const VENDOR_RANGE = 5;
+/** A jump lasts about 0.6 s and can't be repeated mid-air, so faster ones are dropped. */
+const JUMP_GAP_MS = 450;
 const MIN_FIGHT_MS = 1500;
 export const SPIN_MS = 3800;
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
@@ -146,6 +150,8 @@ export class Room {
     // Chat works mid-spin and mid-hand, so it is handled before those locks.
     if (msg.t === 'chat') return this.chat(m, msg.text);
     if (msg.t === 'cmd') return this.command(m, msg.text);
+    // Jumps show mid-spin and mid-hand too.
+    if (msg.t === 'jump') return this.jump(m);
     this.settle(m);
     const s = m.acct.save;
     let changed = false;
@@ -562,6 +568,15 @@ export class Room {
       this.lastHall = hk;
       this.broadcast({ t: 'hall', rows });
     }
+  }
+
+  /** Tells everyone else on the player's map that they jumped. */
+  private jump(m: Member): void {
+    const now = this.now();
+    if (m.jumpAt !== undefined && now - m.jumpAt < JUMP_GAP_MS) return;
+    m.jumpAt = now;
+    const here = [...this.members.values()].filter((o) => o !== m && o.info.map === m.info.map);
+    if (here.length) this.sendAll(here, { t: 'jump', id: m.info.id });
   }
 
   /** Sends the players who moved since the last tick to everyone on their map. */

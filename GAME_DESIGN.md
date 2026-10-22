@@ -232,7 +232,7 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 ### 14.4 Multiplayer (first version: shared world)
 - Players on the same map see each other walking, casting and holding a catch (simple avatars with nameplates), plus bobbers and lines.
 - **Authoritative server** (Node + WebSocket, e.g. `ws` or Colyseus) owns: player positions (client-predicted, server-validated), inventory, coins, level, fish rolls and sales. The client only requests actions, which stops cheating and keeps the economy consistent.
-- Network model: 10–20 Hz position snapshots with client-side interpolation; discrete events for cast, bite, catch and sell.
+- Network model: 10–20 Hz position snapshots with client-side interpolation; discrete events for cast, bite, catch, sell and jump (remote players replay the jump arc locally).
 - Accounts: simple name + token for v2, with a database (SQLite) for saves. Server-side saves replace localStorage.
 - Rooms: one room per map instance with a player cap (about 16); players are routed into a room when they travel.
 - Social extras (later): chat, shared leaderboards (biggest fish per species).

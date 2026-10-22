@@ -28,6 +28,8 @@ export type ClientMsg =
   /** `pass` logs in on a browser the account doesn't know yet (the server asked with `need: 'password'`). */
   | { t: 'join'; name: string; token: string; color?: number; pass?: string }
   | { t: 'pos'; x: number; z: number; yaw: number }
+  /** The player jumped; others on the map replay the arc. */
+  | { t: 'jump' }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar, or a hotbar rod/bait stack back to the locker. */
@@ -94,6 +96,8 @@ export type ServerMsg =
   | { t: 'snap'; p: [number, number, number, number][] }
   | { t: 'moved'; id: number; map: string }
   | { t: 'act'; id: number; act: Activity | null }
+  /** Player `id` jumped (sent to the others on their map). */
+  | { t: 'jump'; id: number }
   | { t: 'look'; id: number; look: Look }
   /** Coins per player id, for the leaderboard. */
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
