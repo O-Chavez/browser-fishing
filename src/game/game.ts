@@ -180,6 +180,13 @@ export class Game {
   /** Tier of the fish on the catch card, for the tip shown when it's put away. */
   private caughtTier = 0;
   private confirmReset = false;
+  /** Settings > Account: the open password form or logout confirmation, and its last message. */
+  private acctForm: 'pass' | 'logout' | null = null;
+  private acctMsg = '';
+  private focusPass = false;
+  private loggingOut = false;
+  /** Why the server dropped us, shown with the "playing offline" toast. */
+  private offlineWhy: string | undefined;
   private bannerTimer = 0;
   private spin = false;
   private betSlot = -1;
@@ -273,15 +280,33 @@ export class Game {
       onCastFail: (msg) => {
         if (this.phase === 'flying' || this.phase === 'swing') this.reset(msg);
       },
-      onError: (msg) => {
-        if (this.joining) return this.joinMessage(msg);
+      onError: (msg, need) => {
+        if (this.joining) {
+          if (need === 'password') this.askPassword();
+          return this.joinMessage(msg);
+        }
+        if (!this.pendingWelcome) return void (this.offlineWhy = msg.replace(/\.$/, ''));
         this.toast(`Offline mode: ${msg}`);
-        if (this.pendingWelcome) this.welcome();
+        this.welcome();
+      },
+      onAccount: (msg) => {
+        this.acctMsg = msg ?? '';
+        if (!msg) {
+          this.acctForm = null;
+          this.toast('🔒 Password saved. Log in anywhere with your name and password.');
+        }
+        if (this.menuOpen && this.tab === 'settings') this.renderMenu();
       },
       onClose: () => {
+        if (this.loggingOut) {
+          // A fresh token, so the next account made in this browser isn't tied to the old one.
+          for (const k of ['fishing-auto', 'fishing-token', 'fishing-name']) localStorage.removeItem(k);
+          return location.reload();
+        }
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
-        this.toast('Disconnected - playing offline.');
+        this.toast(`${this.offlineWhy ?? 'Disconnected'} - playing offline.`);
+        this.offlineWhy = undefined;
       },
     });
     this.applyLocation();
@@ -289,7 +314,7 @@ export class Game {
       send: (text) => {
         if (!text.startsWith('/')) return this.net.send({ t: 'chat', text });
         // Slash commands (feedback and the dev console) go to the server, never to chat; only you see them, password hidden.
-        const shown = text.replace(/^(\/login\s+\S+\s+).*/, '$1••••');
+        const shown = text.replace(/^(\/login\s+\S+\s+).*/, '$1••••').replace(/^(\/resetpass\s+.+\s)\S+$/, '$1••••');
         this.chat.add({ name: '', map: '', text: `> ${shown}`, self: true, system: true });
         this.net.send({ t: 'cmd', text });
       },
@@ -340,6 +365,9 @@ export class Game {
     });
     $('join-go').addEventListener('click', () => this.submitJoin());
     input.addEventListener('keydown', (e) => e.key === 'Enter' && this.submitJoin());
+    $('join-pass').addEventListener('keydown', (e) => e.key === 'Enter' && this.submitJoin());
+    // The password prompt belongs to the name the server asked about.
+    input.addEventListener('input', () => $('join-pass-row').classList.add('hidden'));
     $('join-offline').addEventListener('click', () => {
       this.joining = false;
       this.s.look.color = this.joinColor;
@@ -386,9 +414,22 @@ export class Game {
     if (this.joining) return;
     const name = ($('join-name') as HTMLInputElement).value.replace(/[^\w \-]/g, '').trim().slice(0, 16);
     if (name.length < 2) return this.joinMessage('Pick a name of 2-16 letters, numbers, spaces or dashes.');
+    const asked = !$('join-pass-row').classList.contains('hidden');
+    const pass = ($('join-pass') as HTMLInputElement).value;
+    if (asked && !pass) return this.joinMessage('Enter your password.');
     localStorage.setItem('fishing-name', name);
     localStorage.setItem('fishing-color', String(this.joinColor));
+    this.net.pass = asked ? pass : undefined;
     this.joinStart(name);
+  }
+
+  /** The name has a password and this browser isn't one of its devices yet. */
+  private askPassword(): void {
+    $('join-pass-row').classList.remove('hidden');
+    const el = $('join-pass') as HTMLInputElement;
+    el.value = '';
+    // After joinMessage has re-enabled the form.
+    requestAnimationFrame(() => el.focus());
   }
 
   private joinStart(name: string): void {
@@ -414,6 +455,8 @@ export class Game {
   private finishJoin(): void {
     this.joining = false;
     localStorage.setItem('fishing-auto', '1');
+    ($('join-pass') as HTMLInputElement).value = '';
+    $('join-pass-row').classList.add('hidden');
     $('join-switch').classList.add('hidden');
     $('join').classList.add('hidden');
     this.preview?.stop();
@@ -432,7 +475,9 @@ export class Game {
     const el = $('banner');
     el.classList.add('welcome');
     el.style.color = '';
-    el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>`;
+    // Returning players who could lose their account with this browser get a nudge to protect it.
+    const nudge = this.net.connected && !this.net.hasPass && this.s.level >= 3 ? '<small>🔒 Set a password in ⚙️ Settings to play on other devices</small>' : '';
+    el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>${nudge}`;
     el.classList.remove('hidden');
     el.style.animation = 'none';
     void el.offsetWidth;
@@ -568,6 +613,9 @@ export class Game {
     $('menu').addEventListener('click', (e) =>
       this.onMenuClick(e.target as HTMLElement),
     );
+    $('menu').addEventListener('keydown', (e) => {
+      if ((e.target as HTMLElement).id === 'acct-pass' && e.key === 'Enter') this.savePass();
+    });
     $('hotbar').addEventListener('click', (e) => {
       const slot = (e.target as HTMLElement).closest<HTMLElement>('.slot');
       const i = Number(slot?.dataset.i);
@@ -797,6 +845,16 @@ export class Game {
     else if (act === 'reset') this.confirmReset = true;
     else if (act === 'resetno') this.confirmReset = false;
     else if (act === 'resetyes') this.resetAccount();
+    else if (act === 'pass' || act === 'logout') {
+      this.acctForm = act;
+      this.acctMsg = '';
+      this.focusPass = act === 'pass';
+    } else if (act === 'acctno') this.acctForm = null;
+    else if (act === 'passsave') return this.savePass();
+    else if (act === 'logoutyes') {
+      this.loggingOut = true;
+      this.net.send({ t: 'forget' });
+    }
     else if (act === 'buyrod' || act === 'buybait') this.buy(act === 'buyrod' ? 'rod' : 'bait', id!);
     this.persist();
     this.refreshHud();
@@ -980,6 +1038,16 @@ export class Game {
     if (!eco.equipCosmetic(this.s, slot, id)) return;
     this.net.send({ t: 'equip', slot, id });
     this.persist();
+  }
+
+  private savePass(): void {
+    const pass = ($('acct-pass') as HTMLInputElement | null)?.value ?? '';
+    if (pass.length < 6) this.acctMsg = 'Use at least 6 characters.';
+    else {
+      this.acctMsg = '';
+      this.net.send({ t: 'setpass', pass });
+    }
+    this.renderMenu();
   }
 
   private resetAccount(): void {
@@ -2391,9 +2459,20 @@ export class Game {
       case 'wardrobe':
         el.innerHTML = this.wardrobeHtml();
         break;
-      case 'settings':
+      case 'settings': {
+        // Menu re-renders (a state update arriving) must not wipe a half-typed password.
+        const old = document.getElementById('acct-pass') as HTMLInputElement | null;
+        const typed = old?.value ?? '';
+        const focused = !!old && document.activeElement === old;
         el.innerHTML = this.settingsHtml();
+        const pass = document.getElementById('acct-pass') as HTMLInputElement | null;
+        if (pass) {
+          pass.value = typed;
+          if (focused || this.focusPass) pass.focus();
+        }
+        this.focusPass = false;
         break;
+      }
       case 'shop':
         el.innerHTML = this.shopHtml();
         break;
@@ -2762,7 +2841,23 @@ export class Game {
       ? `<p>Erase coins, level, gear, fish, Fishdex and cosmetics? Your name, colour and face stay. This can't be undone.</p>${this.btn('Yes, reset my account', 'data-act="resetyes"', 'bad')}${this.btn('Cancel', 'data-act="resetno"', 'plain')}`
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
-      <aside class="detail"><h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+  }
+
+  private accountHtml(): string {
+    if (!this.net.connected) return '<p>Join the server to set a password for your account.</p>';
+    const msg = this.acctMsg ? `<p class="acct-msg">${escapeHtml(this.acctMsg)}</p>` : '';
+    if (this.acctForm === 'pass') {
+      // The hidden username lets password managers save the pair.
+      return `<input type="text" autocomplete="username" value="${escapeHtml(this.net.name)}" hidden>
+        <input id="acct-pass" type="password" maxlength="128" autocomplete="new-password" placeholder="New password (6+ characters)">${msg}
+        <p>${this.net.hasPass ? 'Every other device is logged out and needs the new password.' : 'Log in on any device with your name and this password.'}</p>
+        ${this.btn('Save password', 'data-act="passsave"', 'ok')}${this.btn('Cancel', 'data-act="acctno"', 'plain')}`;
+    }
+    if (this.acctForm === 'logout')
+      return `<p>Log out on this browser? You'll need your password to come back here.</p>${this.btn('Yes, log out', 'data-act="logoutyes"', 'bad')}${this.btn('Cancel', 'data-act="acctno"', 'plain')}`;
+    if (!this.net.hasPass) return `<p>Set a password to play as ${escapeHtml(this.net.name)} on other devices and browsers.</p>${msg}${this.btn('Set a password…', 'data-act="pass"', 'plain')}`;
+    return `<p>🔒 Password set. Log in on another device with your name and password.</p>${msg}${this.btn('Change password…', 'data-act="pass"', 'plain')}${this.btn('Log out of this device…', 'data-act="logout"', 'plain')}`;
   }
 
   // ---------- Shop ----------

@@ -4,6 +4,7 @@ import type { MapDef } from '../src/data/maps';
 import * as eco from '../src/game/economy';
 import { MAX_LEVEL } from '../src/game/progression';
 import type { SaveData } from '../src/game/state';
+import { Lockout } from './lockout';
 
 const MAX_FAILS = 5;
 const LOCK_MS = 15 * 60_000;
@@ -18,13 +19,14 @@ const same = (a: string, b: string) => timingSafeEqual(digest(a), digest(b));
  * off. Failed logins lock that account out for a while, and too many overall lock everyone out.
  */
 export class DevGate {
-  private fails = new Map<string, { n: number; at: number }>();
-  private globalFails: number[] = [];
+  private lock: Lockout;
 
   constructor(
     private creds: { user?: string; pass?: string } = {},
-    private now: () => number = Date.now,
-  ) {}
+    now: () => number = Date.now,
+  ) {
+    this.lock = new Lockout(MAX_FAILS, MAX_FAILS_GLOBAL, LOCK_MS, now);
+  }
 
   get enabled(): boolean {
     return !!this.creds.user && !!this.creds.pass;
@@ -32,17 +34,12 @@ export class DevGate {
 
   login(who: string, user: string, pass: string): string | null {
     if (!this.enabled) return 'The dev console is off on this server.';
-    const t = this.now();
-    this.globalFails = this.globalFails.filter((at) => t - at < LOCK_MS);
-    const f = this.fails.get(who);
-    if (f && t - f.at >= LOCK_MS) this.fails.delete(who);
-    if ((this.fails.get(who)?.n ?? 0) >= MAX_FAILS || this.globalFails.length >= MAX_FAILS_GLOBAL) return 'Too many failed logins. Try again later.';
+    if (this.lock.blocked(who)) return 'Too many failed logins. Try again later.';
     if (same(user, this.creds.user!) && same(pass, this.creds.pass!)) {
-      this.fails.delete(who);
+      this.lock.clear(who);
       return null;
     }
-    this.fails.set(who, { n: (this.fails.get(who)?.n ?? 0) + 1, at: t });
-    this.globalFails.push(t);
+    this.lock.fail(who);
     return 'Wrong username or password.';
   }
 }
@@ -63,7 +60,7 @@ export const HELP = [
   '/coins N · /chips N · /level N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /time day|dusk|night|dawn|auto',
-  '/dig (reset worm cooldown) · /logout',
+  '/dig (reset worm cooldown) · /resetpass <name> <new password> · /logout',
 ];
 
 const int = (v: string | undefined, lo: number, hi: number): number | null => {

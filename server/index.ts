@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MAPS } from '../src/data/maps';
 import { SERVER_PORT, type ClientMsg } from '../src/net/protocol';
-import { AccountStore } from './accounts';
+import { AccountStore, type Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate } from './dev';
 import { JoinFeed, NOT_FORUM, postWebhook } from './discord';
@@ -19,6 +19,8 @@ const accounts = new AccountStore(data.accounts);
 const rooms = new Map<string, Room>();
 /** Open sockets per room, joined or not, so a room is only dropped when nobody can still join it. */
 const sockets = new Map<Room, number>();
+/** Ends the live session of each logged-in account, so a newer login can take over. */
+const sessions = new Map<Account, () => void>();
 // Chat is server-wide: one set of limits, and every line goes to every room.
 const chatGate = new ChatGate();
 // Dev console credentials; with either unset the console stays off.
@@ -92,6 +94,7 @@ function room(name: string): Room {
     r.devGate = devGate;
     r.feedbackGate = feedbackGate;
     r.report = (rep) => void sendFeedback(rep);
+    r.resetPass = (name, pass) => accounts.resetPass(name, pass);
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }
@@ -147,8 +150,47 @@ wss.on('connection', (ws, req) => {
   const r = room((url.searchParams.get('room') ?? 'lobby').replace(/[^\w-]/g, '').slice(0, 24) || 'lobby');
   sockets.set(r, (sockets.get(r) ?? 0) + 1);
   let id = 0;
-  let name = '';
+  let acct: Account | null = null;
+  let token = '';
+  /** A password is being checked or hashed; more join/setpass messages are ignored until it's done. */
+  let busy = false;
   const send = (m: unknown, json?: string) => ws.readyState === ws.OPEN && ws.send(json ?? JSON.stringify(m));
+  const endSession = () => {
+    if (!id) return;
+    r.leave(id);
+    id = 0;
+    if (acct) joinFeed?.left(acct.name);
+    if (acct && sessions.get(acct) === kick) sessions.delete(acct);
+    acct = null;
+  };
+  const kick = () => {
+    send({ t: 'error', msg: 'You logged in somewhere else.' });
+    endSession();
+    ws.close();
+  };
+  const join = async (msg: Extract<ClientMsg, { t: 'join' }>) => {
+    const res = msg.pass === undefined ? accounts.auth(msg.name, msg.token) : await accounts.login(msg.name, msg.token, msg.pass);
+    if (ws.readyState !== ws.OPEN) return;
+    if (!res.ok) {
+      send({ t: 'error', msg: res.msg, ...(res.need ? { need: res.need } : {}) });
+      return ws.close();
+    }
+    // Newest login wins: a tab left open elsewhere is disconnected.
+    sessions.get(res.account)?.();
+    acct = res.account;
+    token = msg.token;
+    id = r.join({ send, ua: req.headers['user-agent'] }, acct, msg.color);
+    sessions.set(acct, kick);
+    joinFeed?.join({ name: acct.name, isNew: res.created, level: acct.save.level, map: acct.save.location });
+  };
+  const setPass = async (a: Account, pass: unknown) => {
+    const bad = await accounts.setPass(a, token, pass);
+    send({ t: 'account', hasPass: !!a.pw, ...(bad ? { msg: bad } : {}) });
+  };
+  const run = (task: Promise<void>) => {
+    busy = true;
+    task.catch((e) => console.error('account task failed', e)).finally(() => (busy = false));
+  };
   ws.on('message', (data) => {
     let msg: ClientMsg;
     try {
@@ -158,20 +200,19 @@ wss.on('connection', (ws, req) => {
     }
     // Valid JSON can still be null or a bare value; reading `.t` off those would crash the server.
     if (!msg || typeof msg !== 'object') return;
-    if (id) return r.handle(id, msg);
-    if (msg.t !== 'join') return;
-    const res = accounts.auth(msg.name, msg.token);
-    if (!res.ok) {
-      send({ t: 'error', msg: res.msg });
-      return ws.close();
+    if (id && acct) {
+      if (msg.t === 'setpass') return busy || run(setPass(acct, msg.pass));
+      if (msg.t === 'forget') {
+        if (!accounts.forget(acct, token)) return send({ t: 'account', hasPass: false, msg: 'Set a password first.' });
+        endSession();
+        return ws.close();
+      }
+      return r.handle(id, msg);
     }
-    id = r.join({ send, ua: req.headers['user-agent'] }, res.account, msg.color);
-    name = res.account.name;
-    joinFeed?.join({ name, isNew: res.created, level: res.account.save.level, map: res.account.save.location });
+    if (msg.t === 'join' && !busy) run(join(msg));
   });
   ws.on('close', () => {
-    if (id) r.leave(id);
-    if (name) joinFeed?.left(name);
+    endSession();
     // Any ?room= name creates a room; drop it once no socket uses it so they don't pile up.
     const left = (sockets.get(r) ?? 1) - 1;
     if (left > 0) sockets.set(r, left);

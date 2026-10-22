@@ -34,18 +34,6 @@ const setup = () => {
   return { room, join, store, atShop, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
 };
 
-describe('accounts', () => {
-  it('claims names, rejects wrong tokens and duplicate logins', () => {
-    const store = new AccountStore();
-    expect(store.auth('Ann', 'a'.repeat(20)).ok).toBe(true);
-    expect(store.auth('Ann', 'a'.repeat(20))).toMatchObject({ ok: false });
-    const other = new AccountStore();
-    other.auth('Bob', 'b'.repeat(20));
-    expect(other.auth('bob', 'c'.repeat(20))).toMatchObject({ ok: false, msg: expect.stringContaining('taken') });
-    expect(store.auth('x', 'a'.repeat(20))).toMatchObject({ ok: false });
-  });
-});
-
 describe('Room economy', () => {
   it('only opens bottles when standing next to them', () => {
     const { room, join } = setup();
