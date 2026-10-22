@@ -152,6 +152,9 @@
 - [ ] Tip jar so players who enjoy the game can tip Oscar
   - A plain external link (Ko-fi recommended: no cut on one-off tips, can pay out to PayPal, and doesn't show a legal name the way PayPal.me can; GitHub Sponsors in the README too if the repo is public). Suggest $3-5 rather than $1, since fixed fees take about half of a $1 tip. Hard rule: a tip gives nothing in game (no coins, chips, perks or head start), because selling anything that feeds the casino is real money for gambling currency
   - Non-intrusive placement: a small line on the welcome-back screen (`welcomeText`, `src/game/progression.ts:163`), the ⚙️ settings tab (`settingsHtml`, `src/game/game.ts:2858`) and the README; maybe one prompt at a milestone like the first Spirit Fish, never mid-fight or repeated. Taste-driven: propose options first. Optional: a Ko-fi webhook posting tips to Discord, like the join pings (`server/discord.ts`)
+- [ ] Blackjack wins and losses play the same sounds as roulette
+  - Roulette plays `audio.jingle('epic')` on a win and `audio.snap()` on a loss (`src/game/game.ts:1265-1266`, same as the Lucky Wheel at `game.ts:982`), but the blackjack result in `onBlackjack` (`game.ts:229`) plays nothing. Decide what a push sounds like (maybe a softer jingle, or nothing)
+  - Should also cover hands that end on the deal, which skip the result banner today; overlaps the "Make player and dealer blackjacks clear" item (branch `blackjack-natural-banner`), so do it after that merges or together with it
 
 ## Ideas
 
