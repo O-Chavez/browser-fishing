@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FISH_LOOK, SHAPES, envelope, type DorsalKind, type FishLook, type Shape, type TailKind } from '../data/fishlook';
+import { WATER_ORDER } from './env';
 
 /** A glow material whose colour cycles through the rainbow (the aurora pike). */
 type Hue = { m: THREE.Material & { color: THREE.Color }; off: number };
@@ -400,6 +401,13 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
     }
     group.add(orbit);
   }
+
+  // Additive glows (rims, halos, sparkles, eye shine, spirit flourishes) don't write depth, so the
+  // water would paint over them wherever it lies behind the fish on screen.
+  group.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    if (m && !Array.isArray(m) && m.blending === THREE.AdditiveBlending && !m.depthWrite) o.renderOrder = WATER_ORDER + 1;
+  });
 
   const outer = new THREE.Group();
   outer.add(group);

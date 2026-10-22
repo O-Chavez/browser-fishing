@@ -14,6 +14,7 @@ import {
   padWeight,
   setPad,
   smooth,
+  WATER_ORDER,
   waveHeight,
 } from './env';
 import { Hub } from './hub';
@@ -444,7 +445,7 @@ export class World {
         depthWrite: false,
       }),
     );
-    water.renderOrder = 3;
+    water.renderOrder = WATER_ORDER;
     water.frustumCulled = false;
     this.decor.add(water);
 

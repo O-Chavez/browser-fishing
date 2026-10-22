@@ -1,5 +1,7 @@
 export const EYE_HEIGHT = 1.7;
 export const DOCK_TOP = 0.7;
+/** Draw order of the see-through water; glows that skip the depth buffer draw after it, or it paints over them. */
+export const WATER_ORDER = 3;
 
 /** Flattened build area (the town hub) blended into the terrain. */
 export interface Pad { x: number; z: number; r: number; h: number }
