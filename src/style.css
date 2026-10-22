@@ -409,8 +409,10 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 #join .grow { flex: 1; min-width: 0; }
 #join-preview canvas.preview { width: 240px; height: 300px; }
 #join label { display: block; margin: 10px 0 6px; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
-#join-name { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
-#join-name:focus { border-color: var(--gold-dark); }
+#join-name, #join-pass, #acct-pass { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
+#join-name:focus, #join-pass:focus, #acct-pass:focus { border-color: var(--gold-dark); }
+#acct-pass { font-size: 15px; padding: 8px 10px; }
+.detail p.acct-msg { color: var(--bad); }
 .joinmsg { min-height: 22px; color: var(--bad); font-size: 14px; }
 button.primary { display: block; width: 100%; padding: 12px; border-radius: 14px; font-size: 18px; font-weight: 900; background: var(--ok); color: #fff; box-shadow: 0 4px 0 var(--ok-dark); }
 button.primary:disabled { opacity: .6; }

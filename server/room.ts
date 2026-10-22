@@ -78,6 +78,8 @@ export class Room {
   feedbackGate: FeedbackGate;
   /** Delivers a player's feedback report (the server posts it to Discord). */
   report: (r: FeedbackReport) => void = () => {};
+  /** Dev console `/resetpass`; the server points this at the account store. */
+  resetPass: (name: string, pass: string) => Promise<string> = async () => 'No account store.';
   /** Delivers chat lines and notices; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -107,6 +109,7 @@ export class Room {
     acct.save.location = map.id;
     const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null };
     const m: Member = { info, conn, acct, pending: null, spin: null, bj: null };
+    acct.online = true;
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
     conn.send({
@@ -115,6 +118,7 @@ export class Room {
       room: this.name,
       save: acct.save,
       players: [...this.members.values()].map((o) => o.info),
+      hasPass: !!acct.pw,
     });
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
@@ -347,6 +351,14 @@ export class Room {
     if (cmd === 'logout') {
       m.dev = false;
       return reply(['Logged out of the dev console.']);
+    }
+    if (cmd === 'resetpass') {
+      // The last word is the password, so names with spaces work; it never reaches the log.
+      if (args.length < 2) return reply(['Usage: /resetpass <name> <new password>']);
+      const who = args.slice(0, -1).join(' ');
+      console.log(`[dev] ${m.acct.name}: /resetpass ${who}`);
+      void this.resetPass(who, args[args.length - 1]).then((line) => reply([line]));
+      return;
     }
     console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
     if (m.spin || m.bj) return reply(['Finish the spin or hand first.']);

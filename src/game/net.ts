@@ -15,7 +15,10 @@ export interface NetEvents {
   onAct(p: PlayerInfo, act: Activity | null): void;
   onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }): void;
   onCastFail(msg: string): void;
-  onError(msg: string): void;
+  /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
+  onError(msg: string, need?: 'password'): void;
+  /** The server answered a password change; `msg` is set if it was refused. */
+  onAccount(msg?: string): void;
   onNotice(msg: string): void;
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
@@ -39,6 +42,10 @@ export class NetClient {
   coins = new Map<number, number>();
   hall: HallRow[] = [];
   color: number | undefined;
+  /** Sent with the next join only, to log in on a browser the account doesn't know yet. */
+  pass: string | undefined;
+  /** The account has a password (so it can log in on other devices). */
+  hasPass = false;
 
   constructor(
     public name: string,
@@ -62,7 +69,10 @@ export class NetClient {
       return;
     }
     this.ws = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, color: this.color }));
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, color: this.color, pass: this.pass }));
+      this.pass = undefined;
+    };
     ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
     ws.onclose = () => {
       const was = this.connected;
@@ -95,6 +105,7 @@ export class NetClient {
         this.connected = true;
         this.id = m.id;
         this.room = m.room;
+        this.hasPass = m.hasPass;
         m.players.forEach((p) => this.players.set(p.id, p));
         this.setSave(m.save);
         this.events.onPlayers();
@@ -118,7 +129,11 @@ export class NetClient {
         this.events.onDev(m.lines, m.time);
         break;
       case 'error':
-        this.events.onError(m.msg);
+        this.events.onError(m.msg, m.need);
+        break;
+      case 'account':
+        this.hasPass = m.hasPass;
+        this.events.onAccount(m.msg);
         break;
       case 'castok':
         this.events.onCast(m);

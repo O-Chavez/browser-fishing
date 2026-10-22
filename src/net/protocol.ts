@@ -25,7 +25,8 @@ export type Activity =
   | { a: 'carry'; fish: string; size: number; shiny?: boolean };
 
 export type ClientMsg =
-  | { t: 'join'; name: string; token: string; color?: number }
+  /** `pass` logs in on a browser the account doesn't know yet (the server asked with `need: 'password'`). */
+  | { t: 'join'; name: string; token: string; color?: number; pass?: string }
   | { t: 'pos'; x: number; z: number; yaw: number }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
@@ -66,11 +67,18 @@ export type ClientMsg =
   /** A global chat line. */
   | { t: 'chat'; text: string }
   /** A slash command: /bug, /idea, /feedback or the dev console (never broadcast). */
-  | { t: 'cmd'; text: string };
+  | { t: 'cmd'; text: string }
+  /** Set or change the account password; every other browser is signed out. */
+  | { t: 'setpass'; pass: string }
+  /** Log out: this browser stops logging in by itself. Only for accounts with a password. */
+  | { t: 'forget' };
 
 export type ServerMsg =
-  | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[] }
-  | { t: 'error'; msg: string }
+  | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean }
+  /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
+  | { t: 'error'; msg: string; need?: 'password' }
+  /** Reply to `setpass`: `msg` is set if it was refused. */
+  | { t: 'account'; hasPass: boolean; msg?: string }
   /** A plain message for the player (a refused bet, a locked gate). */
   | { t: 'notice'; msg: string }
   | { t: 'state'; save: SaveData }
