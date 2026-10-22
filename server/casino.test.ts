@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAPS } from '../src/data/maps';
+import { MAPS, arrivalSpot } from '../src/data/maps';
 import { FISH } from '../src/data/content';
 import { CASINO_LEVEL } from '../src/data/casino';
 import { cosById } from '../src/data/cosmetics';
@@ -52,6 +52,28 @@ describe('casino travel', () => {
     goTo(room, a.id, casino.gate);
     room.handle(a.id, { t: 'travel', to: 'pond' });
     expect(a.acct.save.location).toBe('pond');
+  });
+
+  it('brings players back from the casino at the pond gate, not the dock', () => {
+    const { room, join } = setup();
+    const a = join('Ann', 'casino');
+    const b = join('Bob', 'casino');
+    for (const p of [a, b]) {
+      goTo(room, p.id, casino.gate);
+      room.handle(p.id, { t: 'travel', to: 'pond' });
+    }
+    // Bob's arrival snap carries where the server put Ann.
+    const snap = b.c.log.findLast((m) => m.t === 'snap') as Extract<ServerMsg, { t: 'snap' }>;
+    const at = pond.gateArrival!;
+    expect(snap.p).toContainEqual([a.id, at.x, at.z, 0]);
+    expect(Math.hypot(at.x - pond.spawn.x, at.z - pond.spawn.z)).toBeGreaterThan(20);
+  });
+
+  it('uses the spawn for logins and every other arrival', () => {
+    expect(arrivalSpot(pond)).toBe(pond.spawn);
+    expect(arrivalSpot(pond, 'pond')).toBe(pond.spawn);
+    expect(arrivalSpot(pond, 'casino')).toBe(pond.gateArrival);
+    expect(arrivalSpot(casino, 'pond')).toBe(casino.spawn);
   });
 
   it("can't be skipped by a client claiming to be in the casino", () => {

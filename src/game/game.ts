@@ -11,7 +11,7 @@ import {
   type Fish,
 } from '../data/content';
 import { audio } from './audio';
-import { MAPS, type MapDef } from '../data/maps';
+import { MAPS, arrivalSpot, type MapDef } from '../data/maps';
 import { isWater, standHeight } from './env';
 import { Avatars } from './avatars';
 import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
@@ -223,11 +223,12 @@ export class Game {
     if (!token) localStorage.setItem('fishing-token', (token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('')));
     this.net = new NetClient(name, token, q.get('room') || 'lobby', {
       onState: (save) => {
-        const moved = !!save.location && save.location !== this.s.location;
+        const from = this.s.location;
+        const moved = !!save.location && save.location !== from;
         Object.assign(this.s, save);
         if (this.joining) this.finishJoin();
         else if (this.pendingWelcome) this.welcome();
-        if (moved) this.applyLocation();
+        if (moved) this.applyLocation(from);
         this.setGateSign();
         this.refreshHud();
         if (this.menuOpen) this.renderMenu();
@@ -1203,15 +1204,17 @@ export class Game {
     this.world.hub?.setGate(this.gateOpen);
   }
 
-  private applyLocation(): void {
+  /** Builds the current map and places the player: at the gate when coming back from `from`, else at the spawn. */
+  private applyLocation(from?: string): void {
     this.map = MAPS.find((m) => m.id === this.s.location) ?? MAPS[0];
     this.s.location = this.map.id;
     this.world.setLocation(byId(LOCATIONS, this.map.locationId), this.map);
     this.setGateSign();
     this.bj = null;
     this.player = new Player(this.map.radius);
-    this.player.teleport(this.map.spawn.x, this.map.spawn.z);
-    this.world.yaw = this.map.spawn.yaw;
+    const at = arrivalSpot(this.map, from);
+    this.player.teleport(at.x, at.z);
+    this.world.yaw = at.yaw;
     this.avatars.sync(this.net.players, this.net.id, this.map.id);
     // A new hub starts with an empty board, and the server only resends it when someone's stats change.
     this.world.hub?.setLeaders(this.anglers());

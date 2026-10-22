@@ -55,6 +55,8 @@ export interface MapDef {
   /** Where new players appear. */
   /** Camera yaw 0 looks along -z, toward the water at the end of the dock. */
   spawn: { x: number; z: number; yaw: number };
+  /** Where players coming back through the gate from `next` appear, instead of `spawn`. */
+  gateArrival?: { x: number; z: number; yaw: number };
   /** Flat build area for the hub. */
   pad: { x: number; z: number; r: number; h: number };
   vendor: { name: string; shop: Spot; npc: Spot; face?: FaceId };
@@ -97,6 +99,8 @@ export const MAPS: MapDef[] = [
       npc: { x: 6.9, z: 21, facing: -Math.PI / 2 },
     },
     gate: { x: 0, z: 56, facing: Math.PI },
+    // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
+    gateArrival: { x: 0, z: 50.5, yaw: 0 },
     wheel: { x: -6, z: 18.5, facing: Math.PI / 2 },
     leaderboard: { x: 10.5, z: 30, facing: faceToward(10.5, 30, 2, 27) },
     mirror: { x: -8.5, z: 40, facing: faceToward(-8.5, 40, 0, 32) },
@@ -178,6 +182,10 @@ export const MAPS: MapDef[] = [
 
 const pond = MAPS[0];
 
+/** Where a player lands on `dest` when coming from map `from`: back through the gate, or at the spawn. */
+export const arrivalSpot = (dest: MapDef, from?: string): { x: number; z: number; yaw: number } =>
+  (from && dest.next?.id === from && dest.gateArrival) || dest.spawn;
+
 /** The endgame: an indoor casino with its own floor plan; the front door leads back to the pond. */
 const toward = (x: number, z: number): number => faceToward(x, z, x, 30);
 MAPS.push({
@@ -191,6 +199,7 @@ MAPS.push({
   pad: { x: 0, z: 43, r: 80, h: 0 },
   radius: 400,
   gate: { x: 0, z: 27.4, facing: 0 },
+  gateArrival: undefined,
   worms: undefined,
   casino: {
     hall: { x: 0, z: 43, w: 34, d: 34 },
