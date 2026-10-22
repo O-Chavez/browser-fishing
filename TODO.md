@@ -194,6 +194,10 @@
   - E.g. a player who started a throwaway account on one device wants to switch to their main account there. Today "Log out of this device" only appears once a password is set (`acctForm` in `src/game/game.ts:2971-2974`) and the server refuses `forget` without one (`server/index.ts:252`), so the only way to switch is clearing site data
   - Add a "Log in as a different account" option in ⚙️ Settings > Account for every account, leading to the join screen (name + password). For a password-free account, warn clearly that it can't be got back after logging out (or offer to set a password first)
 
+- [ ] Make it obvious when you're playing offline, with a way to reconnect
+  - Today a dropped connection or "play offline" only shows a one-off toast ("Disconnected - playing offline.", `src/game/game.ts:324`; also `game.ts:305`), plus a line in the players panel (`game.ts:2917`), so it's easy to miss that progress isn't reaching the server
+  - Show a small persistent badge/banner while offline, e.g. "Offline - refresh to connect" (or a "Reconnect" button that reloads/rejoins). Taste-driven: propose options first
+
 ## Ideas
 
 <!-- Add new ideas here. Move them into the checklist when you decide to do them. -->
