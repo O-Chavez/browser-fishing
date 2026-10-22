@@ -240,6 +240,10 @@ export class Game {
         if (v?.done) {
           const { kind, title, sub } = blackjackVerdict(v);
           this.showResult(kind, title, sub);
+          // Same sounds as the roulette table; a push keeps the fish, so it gets the short sale jingle.
+          if (kind === 'win') audio.jingle('epic');
+          else if (kind === 'lose') audio.snap();
+          else audio.jingle('common');
         }
         this.world.hall?.setBlackjack(v);
         if (this.menuOpen && this.tab === 'casino') this.renderMenu();

@@ -378,6 +378,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 ### Tables
 - **Roulette:** red, black or green. Red and black double the fish, green pays more. Slots are weighted so the house keeps about a 3% edge. One spin is shared by every player at the table.
 - **Blackjack:** hit, stand and double. The dealer stands on 17. A win doubles the fish (×2) and a natural triples it (×3). Doubling down costs coins equal to the fish's value: a win makes the fish ×4, a push refunds the coins, and a loss takes the coins with the fish. Without the coins the server refuses the double.
+- **Result sounds:** every table and the Lucky Wheel share them: a win plays the big jingle, a loss the line-snap sound. A blackjack push plays the short jingle from selling a fish, since the fish is kept. Hands that end on the deal play theirs too.
 
 ### Chips
 - A separate currency in the account save. Chips are earned only by turning fish in at the prize shop and are spent only on casino unlocks and casino-only cosmetics. Coins keep buying rods, bait and the stall's cosmetics.

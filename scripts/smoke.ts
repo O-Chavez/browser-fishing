@@ -397,6 +397,15 @@ async function casinoChecks(): Promise<void> {
   // Blackjack: deal, see cards and buttons, stand.
   await page.keyboard.press('4');
   await aimAt(page, 'bj', 'deal');
+  // Record the result sounds, to check a finished hand plays the one for its outcome.
+  await page.evaluate(async () => {
+    const { audio } = await import('/src/game/audio.ts');
+    const w = window as any;
+    w.__sounds = [];
+    const jingle = audio.jingle.bind(audio), snap = audio.snap.bind(audio);
+    audio.jingle = (r: any) => { w.__sounds.push(`jingle:${r}`); jingle(r); };
+    audio.snap = () => { w.__sounds.push('snap'); snap(); };
+  });
   const bj = await page.evaluate(async () => {
     const g = window.__game;
     const h = (g.world as any).hall;
@@ -433,6 +442,9 @@ async function casinoChecks(): Promise<void> {
     check('casino: doubling down ends the hand (DEAL comes back)', dbl.done);
     check('casino: a doubled hand settles coins and fish (win = fish x4, coins stay spent)', dbl.done && settled, `${outcome}, ${JSON.stringify(dbl)}`);
   }
+  const sound = await page.evaluate(() => ({ kind: document.getElementById('tableresult')!.className, sounds: (window as any).__sounds as string[] }));
+  const want = { win: 'jingle:epic', lose: 'snap', push: 'jingle:common' }[sound.kind.split(' ')[0]];
+  check('casino: a finished blackjack hand plays its result sound', !!want && sound.sounds.length === 1 && sound.sounds[0] === want, JSON.stringify(sound));
 
   // Cash a fish in at the chip tray.
   await page.keyboard.press('5');
