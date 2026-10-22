@@ -26,6 +26,8 @@ import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
 
 import { dayFraction, nightness, twilight } from './daynight';
+import { groundTexture, plankTexture, speckleTexture } from './textures';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.38, -0.85).normalize();
 
@@ -145,6 +147,10 @@ export class World {
     uFogNear: { value: 30 },
     uFogFar: { value: 280 },
   };
+  /** Grass tufts and flowers: thousands of tiny instances, hidden in lite graphics. */
+  private clutter: THREE.Object3D[] = [];
+  /** Hazy mountain materials, recoloured with the sky each frame. */
+  private mtMats: { mat: THREE.MeshBasicMaterial; base: THREE.Color; haze: number }[] = [];
   private skyU = {
     uHorizon: this.waterU.uSkyH,
     uTop: this.waterU.uSkyT,
@@ -216,8 +222,13 @@ export class World {
 
   private applyQuality(): void {
     this.sun.castShadow = !this.indoor && !this.lite;
+    this.applyClutter();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.pixelCap) * (this.lite ? 0.75 : 1));
     this.resize();
+  }
+
+  private applyClutter(): void {
+    for (const o of this.clutter) o.visible = !this.lite;
   }
 
   private resize(): void {
@@ -377,6 +388,7 @@ export class World {
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
+    for (const m of this.mtMats) m.mat.color.copy(m.base).multiplyScalar(1 - 0.82 * n).lerp(u.uSkyH.value, m.haze);
 
     const fl = this.flies;
     if (fl) {
@@ -407,6 +419,8 @@ export class World {
     // Indoors the sun is off; without this its shadow map still renders every few frames.
     this.sun.castShadow = !this.indoor && !this.lite;
     this.trees = [];
+    this.mtMats = [];
+    this.clutter = [];
 
     if (this.indoor) {
       const dark = new THREE.Color(0x120810);
@@ -460,13 +474,14 @@ export class World {
     this.buildForest(loc, map);
     this.buildDock();
     this.buildFireflies();
-    this.buildMountains(loc);
+    this.buildMountains();
     this.hub = new Hub(map);
     this.hub.onWheelTick = () => audio.tick(0.07);
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);
     this.hall = null;
+    this.buildClutter(loc, map);
     this.lightPool.collect(this.decor);
   }
 
@@ -517,7 +532,11 @@ export class World {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, lambert(0xffffff, { vertexColors: true }));
+    // Painted ground texture in world space, one tile per 3.2 m, multiplied over the vertex colours
+    const uv: number[] = [];
+    for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] / 3.2, pos[i + 2] / 3.2);
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    const mesh = new THREE.Mesh(geo, lambert(0xffffff, { vertexColors: true, map: groundTexture() }));
     mesh.receiveShadow = true;
     this.decor.add(mesh);
   }
@@ -538,12 +557,20 @@ export class World {
     const layers = [0, 1, 2].map(
       () => new THREE.InstancedMesh(coneGeo, leafMat, N),
     );
+    // About a quarter of the trees are round and leafy. They pick from their own random stream, so
+    // every tree keeps the spot it had when the forest was all pines.
+    const vr = mulberry(77);
+    const blobGeo = new THREE.IcosahedronGeometry(1.9, 0);
+    const blobs = [0, 1].map(() => new THREE.InstancedMesh(blobGeo, leafMat, N));
+    const lc = new THREE.Color();
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const p = new THREE.Vector3();
     const sc = new THREE.Vector3();
     const col = new THREE.Color();
     let n = 0;
+    let pines = 0;
+    let leafy = 0;
     for (let tries = 0; n < N && tries < 6000; tries++) {
       const th = (rnd() * 2 - 1) * Math.PI;
       const r = innerRadius(th) + 6 + Math.pow(rnd(), 1.5) * 140;
@@ -563,21 +590,37 @@ export class World {
           (rnd() - 0.5) * 0.1,
           (rnd() - 0.5) * 0.1,
         );
+      n++;
+      if (vr() < 0.26) {
+        // Two overlapping blobs in a warmer green
+        blobs.forEach((b, k) => {
+          const ox = k ? (vr() - 0.5) * 1.6 * s : 0;
+          const oz = k ? (vr() - 0.5) * 1.6 * s : 0;
+          const w = s * (k ? 0.75 : 1);
+          b.setMatrixAt(leafy, m.compose(p.set(x + ox, y + (k ? 2.8 : 3.3) * s, z + oz), q, sc.set(w, s * (k ? 0.65 : 0.85), w)));
+          b.setColorAt(leafy, lc.copy(col).offsetHSL(-0.035, 0.06, 0.06 + 0.04 * k));
+        });
+        leafy++;
+        continue;
+      }
+      // Pines get slightly lighter towards the sunlit tip
       layers.forEach((l, k) => {
         l.setMatrixAt(
-          n,
+          pines,
           m.compose(
             p.set(x, y + (2.2 + 1.7 * k) * s, z),
             q,
             sc.setScalar(s * (1 - 0.22 * k)),
           ),
         );
-        l.setColorAt(n, col);
+        l.setColorAt(pines, lc.copy(col).offsetHSL(0, 0, 0.035 * k));
       });
-      n++;
+      pines++;
     }
-    for (const mesh of [trunk, ...layers]) {
-      mesh.count = n;
+    trunk.count = n;
+    layers.forEach((l) => (l.count = pines));
+    blobs.forEach((b) => (b.count = leafy));
+    for (const mesh of [trunk, ...layers, ...blobs]) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.decor.add(mesh);
@@ -607,9 +650,15 @@ export class World {
     this.decor.add(reeds);
 
     const RK = 46;
+    // Lighter tops, darker undersides
+    const rockGeo = new THREE.DodecahedronGeometry(1);
+    const rp = rockGeo.getAttribute('position');
+    const rc = new Float32Array(rp.count * 3);
+    for (let i = 0; i < rp.count; i++) rc.fill(0.72 + 0.4 * smooth(-0.8, 0.9, rp.getY(i)), i * 3, i * 3 + 3);
+    rockGeo.setAttribute('color', new THREE.BufferAttribute(rc, 3));
     const rocks = new THREE.InstancedMesh(
-      new THREE.DodecahedronGeometry(1),
-      lambert(0x8a8a86),
+      rockGeo,
+      lambert(0x9a9890, { vertexColors: true, map: speckleTexture() }),
       RK,
     );
     let kn = 0;
@@ -642,9 +691,11 @@ export class World {
     const rnd = mulberry(5);
     const planks = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 0.08, 1),
-      lambert(0xffffff),
+      lambert(0xffffff, { map: plankTexture() }),
       260,
     );
+    // Every plank is laid out as a long x box so the grain runs along it; planks across x piers are turned.
+    const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
     const m = new THREE.Matrix4();
     const c = new THREE.Color();
     const q = new THREE.Quaternion();
@@ -676,10 +727,8 @@ export class World {
           n,
           m.compose(
             new THREE.Vector3(pos[0], 0.66, pos[1]),
-            q,
-            alongZ
-              ? new THREE.Vector3(wide, 1, 0.25)
-              : new THREE.Vector3(0.25, 1, wide),
+            alongZ ? q : turn,
+            new THREE.Vector3(wide, 1, 0.25),
           ),
         );
         planks.setColorAt(
@@ -804,20 +853,169 @@ export class World {
     return g;
   }
 
-  private buildMountains(loc: Location): void {
-    const rnd = mulberry(21);
-    const fogC = new THREE.Color(loc.sky);
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2 + rnd() * 0.2;
-      const h = 45 + rnd() * 70;
-      const mt = new THREE.Mesh(
-        new THREE.ConeGeometry(45 + rnd() * 40, h, 6),
-        lambert(new THREE.Color(0x56707e).lerp(fogC, 0.45).getHex()),
-      );
-      const d = 250 + rnd() * 30;
-      mt.position.set(Math.sin(a) * d, h / 2 - 6, Math.cos(a) * d);
-      this.decor.add(mt);
+  /**
+   * Two rings of six-sided peaks, the taller ones snow-capped, with the far ring hazier for depth.
+   * Each ring is one rock mesh plus one snow mesh. They skip the scene fog (it would wash them out
+   * at this distance) and blend toward the sky colour in updateDaylight instead.
+   */
+  private buildMountains(): void {
+    const L = new THREE.Vector3(-0.7, 0.35, 0.6).normalize();
+    // Flat faces lit from one side, baked into vertex colours
+    const shaded = (g: THREE.BufferGeometry, x: number, y: number, z: number): THREE.BufferGeometry => {
+      const ng = g.toNonIndexed();
+      g.dispose();
+      ng.computeVertexNormals();
+      const n = ng.getAttribute('normal');
+      const c = new Float32Array(n.count * 3);
+      for (let i = 0; i < n.count; i++) {
+        const d = n.getX(i) * L.x + n.getY(i) * L.y + n.getZ(i) * L.z;
+        c.fill(0.8 + 0.32 * Math.max(0, d), i * 3, i * 3 + 3);
+      }
+      ng.setAttribute('color', new THREE.BufferAttribute(c, 3));
+      ng.deleteAttribute('uv');
+      return ng.translate(x, y, z);
+    };
+    const add = (geos: THREE.BufferGeometry[], hex: number, haze: number) => {
+      const mat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+      this.mtMats.push({ mat, base: new THREE.Color(hex), haze });
+      this.decor.add(new THREE.Mesh(mergeGeometries(geos)!, mat));
+      geos.forEach((g) => g.dispose());
+    };
+    const rings = [
+      { n: 18, seed: 21, turn: 0, d0: 250, dr: 30, h0: 45, hr: 70, r0: 45, rr: 40, rock: 0x5f7584, haze: 0.42 },
+      { n: 15, seed: 22, turn: 0.21, d0: 335, dr: 40, h0: 75, hr: 80, r0: 60, rr: 50, rock: 0x7486a0, haze: 0.66 },
+    ];
+    for (const ring of rings) {
+      const rnd = mulberry(ring.seed);
+      const capRnd = mulberry(ring.seed + 100);
+      const rock: THREE.BufferGeometry[] = [];
+      const snow: THREE.BufferGeometry[] = [];
+      for (let i = 0; i < ring.n; i++) {
+        const a = (i / ring.n) * Math.PI * 2 + ring.turn + rnd() * 0.2;
+        const h = ring.h0 + rnd() * ring.hr;
+        const R = ring.r0 + rnd() * ring.rr;
+        const d = ring.d0 + rnd() * ring.dr;
+        const x = Math.sin(a) * d;
+        const z = Math.cos(a) * d;
+        const y = h / 2 - 6;
+        rock.push(shaded(new THREE.ConeGeometry(R, h, 6), x, y, z));
+        if (h < 62) continue;
+        // A smaller cone sharing the peak, a touch wider so it sits just proud of the rock
+        const f = 0.24 + capRnd() * 0.12;
+        snow.push(shaded(new THREE.ConeGeometry(R * f * 1.03, h * f, 6), x, y + h / 2 - (h * f) / 2 + 0.2, z));
+      }
+      add(rock, ring.rock, ring.haze);
+      add(snow, 0xf2f5fa, ring.haze - 0.1);
     }
+  }
+
+  /** Grass tufts and flower clusters on grassy ground, lily pads in the shallows. */
+  private buildClutter(loc: Location, map: MapDef): void {
+    const rnd = mulberry(404);
+    const town = this.town;
+    const hub = this.hub;
+    // Same grass weight the terrain colours use, so clutter stays off sand and the town's dirt.
+    const free = (x: number, z: number): boolean => {
+      const y = groundHeight(x, z);
+      if (y > 14 || onDock(x, z, 1)) return false;
+      if (smooth(0.3, 1.6, y) * (1 - 0.85 * padWeight(x, z)) < 0.6) return false;
+      if (town?.blocked(x, z)) return false;
+      if (hub?.colliders.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + 0.6)) return false;
+      return !this.trees.some((t) => Math.abs(t.x - x) < 0.8 && Math.abs(t.z - z) < 0.8);
+    };
+    // Mostly along the shore, the rest around the town's edges
+    const span = (map.pad.r + 6) * 2;
+    const spot = (): [number, number] => {
+      if (rnd() < 0.62) {
+        const th = (rnd() * 2 - 1) * Math.PI;
+        const r = innerRadius(th) + 0.5 + Math.pow(rnd(), 1.4) * 30;
+        return [Math.sin(th) * r, Math.cos(th) * r];
+      }
+      return [map.pad.x + (rnd() - 0.5) * span, map.pad.z + (rnd() - 0.5) * span];
+    };
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const p = new THREE.Vector3();
+    const sc = new THREE.Vector3();
+    const c = new THREE.Color();
+
+    // Grass tufts: three leaning blades
+    const blades = [0, 1, 2].map((k) => {
+      const h = 0.3 + k * 0.08;
+      // Open-ended: the base would sit in the ground anyway, and leaving it out halves the triangles
+      return new THREE.ConeGeometry(0.035, h, 3, 1, true)
+        .translate(0, h / 2, 0)
+        .rotateZ(0.32)
+        .rotateY((k / 3) * Math.PI * 2 + 0.4);
+    });
+    const tuftGeo = mergeGeometries(blades)!;
+    const TN = 3600;
+    const tufts = new THREE.InstancedMesh(tuftGeo, lambert(0xffffff), TN);
+    let tn = 0;
+    for (let tries = 0; tn < TN && tries < TN * 4; tries++) {
+      const [x, z] = spot();
+      if (!free(x, z)) continue;
+      const s = 0.55 + rnd() * 0.6;
+      q.setFromEuler(e.set(0, rnd() * 6.28, 0));
+      tufts.setMatrixAt(tn, m.compose(p.set(x, groundHeight(x, z) - 0.02, z), q, sc.set(s, s * (0.7 + rnd() * 0.5), s)));
+      tufts.setColorAt(tn++, c.set(loc.grass).offsetHSL((rnd() - 0.5) * 0.03, 0.02, -0.1 + rnd() * 0.08));
+    }
+    tufts.count = tn;
+    tufts.receiveShadow = true;
+    this.decor.add(tufts);
+
+    // Flower clusters in soft pastel colours
+    const FN = 1100;
+    const flowers = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.08), lambert(0xffffff), FN);
+    const petals = [0xffffff, 0xffe066, 0xff9fb8, 0xc9a7ff, 0xffb36b];
+    let fn = 0;
+    for (let tries = 0; fn < FN && tries < 600; tries++) {
+      const [cx, cz] = spot();
+      if (!free(cx, cz)) continue;
+      const col = petals[Math.floor(rnd() * petals.length)];
+      const k = 4 + Math.floor(rnd() * 6);
+      for (let i = 0; i < k && fn < FN; i++) {
+        const x = cx + (rnd() - 0.5) * 1.4;
+        const z = cz + (rnd() - 0.5) * 1.4;
+        if (!free(x, z)) continue;
+        flowers.setMatrixAt(fn, m.compose(p.set(x, groundHeight(x, z) + 0.2 + rnd() * 0.12, z), q.identity(), sc.setScalar(0.8 + rnd() * 0.5)));
+        flowers.setColorAt(fn++, c.set(col));
+      }
+    }
+    flowers.count = fn;
+    this.decor.add(flowers);
+
+    // Lily pads in the shallows, a few with a pink bloom
+    const LN = 120;
+    const padGeo = new THREE.CircleGeometry(0.42, 12, 0.35, Math.PI * 2 - 0.7).rotateX(-Math.PI / 2);
+    const pads = new THREE.InstancedMesh(padGeo, lambert(0xffffff, { side: THREE.DoubleSide }), LN);
+    const blooms = new THREE.InstancedMesh(new THREE.ConeGeometry(0.11, 0.14, 6).translate(0, 0.07, 0), lambert(0xff9fc2), LN);
+    let ln = 0;
+    let bn = 0;
+    for (let tries = 0; ln < LN && tries < 400; tries++) {
+      const th = (rnd() * 2 - 1) * Math.PI;
+      const r = innerRadius(th) - 1.5 - rnd() * 7;
+      const k = 1 + Math.floor(rnd() * 5);
+      for (let i = 0; i < k && ln < LN; i++) {
+        const x = Math.sin(th) * r + (rnd() - 0.5) * 2.4;
+        const z = Math.cos(th) * r + (rnd() - 0.5) * 2.4;
+        const y = groundHeight(x, z);
+        if (y > -0.35 || y < -1.8 || onDock(x, z, 2.5)) continue;
+        const s = 0.6 + rnd() * 0.7;
+        q.setFromEuler(e.set(0, rnd() * 6.28, 0));
+        pads.setMatrixAt(ln, m.compose(p.set(x, 0.1, z), q, sc.setScalar(s)));
+        pads.setColorAt(ln++, c.set(0x5c9a45).offsetHSL((rnd() - 0.5) * 0.04, 0, (rnd() - 0.5) * 0.08));
+        if (rnd() < 0.18) blooms.setMatrixAt(bn++, m.compose(p.set(x + 0.1 * s, 0.12, z), q, sc.setScalar(s)));
+      }
+    }
+    pads.count = ln;
+    blooms.count = bn;
+    pads.receiveShadow = true;
+    this.decor.add(pads, blooms);
+
+    this.clutter = [tufts, flowers];
+    this.applyClutter();
   }
 
   castTarget(distance: number): THREE.Vector3 {

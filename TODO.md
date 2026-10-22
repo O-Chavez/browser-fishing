@@ -166,6 +166,11 @@
   - Roulette plays `audio.jingle('epic')` on a win and `audio.snap()` on a loss (`src/game/game.ts:1265-1266`, same as the Lucky Wheel at `game.ts:982`), but the blackjack result in `onBlackjack` (`game.ts:229`) plays nothing. Decide what a push sounds like (maybe a softer jingle, or nothing)
   - Should also cover hands that end on the deal, which skip the result banner today; overlaps the "Make player and dealer blackjacks clear" item (branch `blackjack-natural-banner`), so do it after that merges or together with it
   - Done (2026-10-22): `onBlackjack` plays the sound with the result banner, so naturals on the deal get one too. A push plays the short two-note sale jingle (the fish is kept). Smoke now records the sounds and checks a finished hand plays exactly the one for its outcome (saw a doubled win: `jingle:epic`)
+- [x] Visual polish for the outdoor world, keeping the cute low-poly look
+  - Options rendered at four levels (2026-10-22): https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc. Oscar picked level 2: painted textures plus scenery variety
+  - Textures drawn in code (`src/game/textures.ts`), multiplied over existing colours: ground dabs, dock plank grain, cottage siding and shingle roofs, stone well and chimneys, two-tone rocks
+  - Scenery: two rings of snow-capped mountains tinted by the sky, about a quarter of the trees round and leafy, grass tufts and flower clusters on grassy ground only (off sand, paths, hidden bottles and the worm patch), lily pads in the shallows. Lite graphics hides the tufts and flowers
+  - Done (2026-10-22): render time +2.3-2.6% in the pond and town scenes (about 0.05 ms a frame at 2.2 ms), casino unchanged (+0.2%, the control). Three alternating runs each against main on a quiet machine. Triangles 88k to 131k (pond) and draw calls +3 (pond) / +18 (town, the textured cottages only merge with same-coloured parts). Mountains went from 18 meshes to 4. No leaked geometries or textures across map changes. Grass blades are open-ended cones and flowers octahedra to halve their triangles. `npm run bench` works again (`openMenu('wardrobe')`, and `BENCH_PORT` overrides 5299). Smoke 57/57; README screenshots regenerated (fish lineup unchanged)
 
 ## Ideas
 
@@ -173,7 +178,8 @@
 
 - Fake "light pools" (cheap glowing decals) under lamps and above casino chandeliers, so fewer real point lights are needed. Cutting real lights from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
-- `npm run bench` is broken on main: it clicks a wardrobe tab selector that no longer exists (needs `openMenu('wardrobe')`). The bench scenes also have no high-tier fish, so they can't measure the fish tier effects
+- The bench scenes have no high-tier fish, so they can't measure the fish tier effects
+- Level 3 of the visual polish options (https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc): a soft foam line just offshore and lighter shallows (a baked shore-distance texture read by the water shader), small round bushes along the shore and hillsides, slightly richer greens. Each piece could ship on its own
 - `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
 - The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
 - Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)

@@ -3,6 +3,7 @@ import type { MapDef, NpcDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { DARK, WOOD, ball, cyl, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
+import { boxUV, shingleTexture, sidingTexture, stoneTexture } from './textures';
 import { faceHead } from './faces';
 import type { Circle } from './player';
 
@@ -62,6 +63,10 @@ export class Town {
   private smoke: { m: THREE.Mesh; base: THREE.Vector3; ph: number }[] = [];
   private heads: { head: THREE.Object3D; body: THREE.Object3D; pos: THREE.Vector3; yaw: number }[] = [];
   private cobble = cobbleTexture();
+  /** Textured materials shared by colour, so mergeStatic can still bake same-coloured parts together. */
+  private paintedMats = new Map<string, THREE.MeshLambertMaterial>();
+  /** Cobbled strips (ax, az, bx, bz, half width), so ground clutter can stay off them. */
+  readonly paths: [number, number, number, number, number][] = [];
   private foundKey = '';
   private night = 0;
 
@@ -86,6 +91,29 @@ export class Town {
     if (map.worms) this.buildWormPatch(map.worms.x, map.worms.z);
   }
 
+  /** True on a cobbled path or inside anything solid: ground clutter skips these spots. */
+  blocked(x: number, z: number, pad = 0.4): boolean {
+    for (const [ax, az, bx, bz, hw] of this.paths) {
+      const dx = bx - ax;
+      const dz = bz - az;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+      if (Math.hypot(x - ax - dx * t, z - az - dz * t) < hw + pad) return true;
+    }
+    const s = this.map.town.square;
+    if (Math.hypot(x - s.x, z - s.z) < s.r + pad) return true;
+    // Keep hidden bottles and the worm patch easy to spot
+    if (this.bottles.some((b) => Math.hypot(x - b.pos.x, z - b.pos.z) < 1.5)) return true;
+    if (this.wormSpot && Math.hypot(x - this.wormSpot.x, z - this.wormSpot.z) < 2) return true;
+    return this.colliders.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + pad + 0.3);
+  }
+
+  private painted(color: number, map: THREE.Texture): THREE.MeshLambertMaterial {
+    const key = `${color}|${map.uuid}`;
+    let m = this.paintedMats.get(key);
+    if (!m) this.paintedMats.set(key, (m = mat(color, { map })));
+    return m;
+  }
+
   private at(obj: THREE.Object3D, x: number, z: number, facing = 0, y?: number): void {
     obj.position.set(x, y ?? groundHeight(x, z), z);
     obj.rotation.y = facing;
@@ -102,6 +130,7 @@ export class Town {
   private path(ax: number, az: number, bx: number, bz: number, w: number): void {
     // Overlapping strips each get their own height and depth bias so their cobbles never z-fight.
     const layer = this.pathLayers++;
+    this.paths.push([ax, az, bx, bz, w / 2]);
     const len = Math.hypot(bx - ax, bz - az);
     const geo = new THREE.PlaneGeometry(w, len).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
@@ -137,7 +166,10 @@ export class Town {
 
     // Well
     const well = new THREE.Group();
-    const wall = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.9, 16), mat(0x9a948a));
+    // Cylinder UVs run 0..1 around and up, so the stones are repeated to keep them roughly square.
+    const stones = stoneTexture().clone();
+    stones.repeat.set(5, 0.9);
+    const wall = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.9, 16), mat(0xb4ada2, { map: stones }));
     wall.position.y = 0.45;
     wall.castShadow = wall.receiveShadow = true;
     const water = new THREE.Mesh(new THREE.CircleGeometry(0.85, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x17394a }));
@@ -200,7 +232,7 @@ export class Town {
     shape.closePath();
     const wallGeo = new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: false }).translate(0, 0, -W / 2).rotateY(Math.PI / 2);
     // After rotation the gable faces +x/-x and the long walls face +z/-z.
-    const walls = new THREE.Mesh(wallGeo, mat(h.wall));
+    const walls = new THREE.Mesh(boxUV(wallGeo, 1.05), this.painted(h.wall, sidingTexture()));
     walls.castShadow = walls.receiveShadow = true;
     g.add(walls);
 
@@ -208,6 +240,8 @@ export class Town {
     const rl = Math.hypot(D / 2, rise) + 0.35;
     for (const s of [-1, 1]) {
       const r = rbox(W + 0.5, 0.12, rl, h.roof, 0.03);
+      boxUV(r.geometry, 1.5);
+      r.material = this.painted(h.roof, shingleTexture());
       r.position.set(0, H + rise / 2 + 0.07, s * (D / 4));
       r.rotation.x = s * slope;
       g.add(r);
@@ -250,6 +284,8 @@ export class Town {
     g.add(lamp);
     // Chimney
     const chim = rbox(0.55, 1.6, 0.55, 0x8d6e63, 0.03);
+    boxUV(chim.geometry, 1.6);
+    chim.material = this.painted(0xa08478, stoneTexture());
     chim.position.set(-1.4, H + 1.0, -0.6);
     g.add(chim);
     this.at(g, h.x, h.z, h.facing);
