@@ -102,6 +102,9 @@
   - Client sends a new `feedback` WebSocket message (`server/room.ts`); the server caps length, rate-limits per account, reuses the chat profanity filter, and attaches context (account, level, map, position, build hash, browser, time)
   - Server posts to a Discord webhook from a Render env var (`DISCORD_FEEDBACK_WEBHOOK`, never sent to the client), one forum thread per report with a category tag and `allowed_mentions: { parse: [] }`; store in Postgres as a fallback if Discord is unreachable
   - Oscar sets up the forum channel, its tags (bug/idea, new/planned/done) and the webhook
+- [ ] Discord ping when a player joins (pairs with the feedback webhook above)
+  - To see whether anyone plays after the Reddit post: the server posts to a Discord webhook from a Render env var (separate channel from feedback, never sent to the client) when a player joins, e.g. name, new vs returning account, map, players online
+  - Hook in `Room.join` (`server/room.ts:95`, called from `server/index.ts:137`); throttle or batch (e.g. one summary per few minutes) so a burst of joins or reconnects doesn't spam the channel or hit Discord's rate limit
 - [ ] Sketch out a possible route to making the game mobile friendly
   - [ ] How feasable?
   - [ ] What would need to change?
