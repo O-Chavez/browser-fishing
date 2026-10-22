@@ -131,9 +131,10 @@
   - Mobile spec with screen mockups over real phone-size renders (2026-10-21): https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv. Verdict: fits; weak spots are first-person walking and chat on a landscape keyboard. Five open decisions listed at the end
   - Test build behind "Try touch controls (early test)" on the desktop-only notice (`src/game/touch.ts`, `Game.enableTouch()`; `?touch` forces it on desktop). Touch mode lays the page out 1400px wide so the desktop HUD/menus scale to fit, and runs without pointer lock via `forceActive`
   - Validated by Oscar on a real phone over the LAN (2026-10-21): steady 60 fps in both full and lite graphics; fishing, the shop, the Lucky Wheel and running around all work. Slight hitching for the first few seconds after load
-- [ ] Escape on the shop closes it but then opens the inventory
+- [x] Escape on the shop closes it but then opens the inventory
   - Regression of "Escape always closes the current menu": Escape should close the open menu and nothing else, for every menu (shop, inventory, wardrobe, etc.)
   - Likely the browser releasing pointer lock on Escape: the `pointerlockchange` handler (`src/game/game.ts:639`) calls `setMenu(true)` and resets `this.tab` to `'inventory'`, alongside the Escape keydown handler (`game.ts:697-702`)
+  - Done (2026-10-21): `openMenu` frees the mouse with `exitPointerLock()`, so Chrome hands it straight back to `closeMenu` without a click, and the same Esc then releases it again. A lock loss within 1 s of an Esc close now just shows "Click to keep playing" instead of the pause menu. Smoke check added; not yet tried by hand in a real browser
 - [ ] Hotbar slot bounce, and scroll-wheel slot switching that feels extremely clean
   - A slight bounce when a slot is selected (number key, click or scroll), so it's easy to tell which slot was just picked. Today there's only a 0.16 s `slot-pick` animation on `.slot.held.pick` (`src/style.css:141-144`)
   - Scroll switching is still janky after the earlier "Make scroll-wheel slot switching smooth" fix: `WheelStepper` (`src/game/wheelstep.ts`, used at `src/game/game.ts:676`). Check both a mouse wheel and a trackpad; each notch/gesture should move exactly one slot, with no skipped, doubled or laggy steps
