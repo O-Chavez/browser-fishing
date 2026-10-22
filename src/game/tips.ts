@@ -27,15 +27,17 @@ function nextBait(s: Pick<SaveData, 'slots' | 'locker'>) {
   return BAITS.find((b) => b.tier === best + 1) ?? null;
 }
 
-/** Tip text as HTML. Only game data goes in, so nothing needs escaping. */
-export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker'>, vendor: string): string {
+/** Tip text as HTML. Only game data goes in, so nothing needs escaping. `touch` words controls for the on-screen buttons. */
+export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker'>, vendor: string, touch = false): string {
   switch (id) {
     case 'start':
-      return '<b>Hold Click</b> to wind up, let go to cast. Wait for the <b>!</b>, then click to hook the fish.';
+      return touch
+        ? '<b>Hold the cast button</b> to wind up, let go to cast. Wait for the <b>!</b>, then tap it to hook the fish.'
+        : '<b>Hold Click</b> to wind up, let go to cast. Wait for the <b>!</b>, then click to hook the fish.';
     case 'reel':
-      return '<b>Hold Click</b> to reel in. Ease off when the fish surges, or the line can snap.';
+      return `<b>${touch ? 'Hold the button' : 'Hold Click'}</b> to reel in. Ease off when the fish surges, or the line can snap.`;
     case 'catch':
-      return `Your first fish! Sell it to <b>${vendor}</b> at the striped stall by the pier: walk up and press <kbd>E</kbd>.`;
+      return `Your first fish! Sell it to <b>${vendor}</b> at the striped stall by the pier: walk up and ${touch ? 'tap the prompt' : 'press <kbd>E</kbd>'}.`;
     case 'sold': {
       const b = nextBait(s);
       if (!b) return 'Coins earned! Spend them on better rods and bait at the stall.';

@@ -115,9 +115,13 @@
 - [ ] Remove the casino multiplier cap
   - No limit on how much a gambled fish can be worth: drop `MULT_CAP` (×16, `src/data/casino.ts:6`) and its checks in `src/game/casino.ts:15,28` and `src/game/game.ts:1063,1166,1232` ("too rich for the table"), plus the test in `casino.test.ts` and the cap line in `GAME_DESIGN.md:374`
   - Check that huge values still display, save and sell correctly (number formatting, nothing past `Number.MAX_SAFE_INTEGER`). This also settles the Lucky Wheel cap idea: neither is capped
-- [ ] Sketch out a possible route to making the game mobile friendly
-  - [ ] How feasable?
-  - [ ] What would need to change?
+- [x] Sketch out a possible route to making the game mobile friendly
+  - [x] How feasable?
+    - Feasible (2026-10-21): the verbs (move, look, hold to cast/reel, interact, pick a slot) map cleanly to touch, and the server needs no changes. Hard parts: iPhone Safari has no Pointer Lock (game activity is tied to it in `game.ts`), input handling is mixed into `game.ts`, menus rely on hover, and phone GPUs vs the current shadows/lights
+  - [x] What would need to change?
+  - Mobile spec with screen mockups over real phone-size renders (2026-10-21): https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv. Verdict: fits; weak spots are first-person walking and chat on a landscape keyboard. Five open decisions listed at the end
+  - Test build behind "Try touch controls (early test)" on the desktop-only notice (`src/game/touch.ts`, `Game.enableTouch()`; `?touch` forces it on desktop). Touch mode lays the page out 1400px wide so the desktop HUD/menus scale to fit, and runs without pointer lock via `forceActive`
+  - Validated by Oscar on a real phone over the LAN (2026-10-21): steady 60 fps in both full and lite graphics; fishing, the shop, the Lucky Wheel and running around all work. Slight hitching for the first few seconds after load
 
 ## Ideas
 
@@ -132,3 +136,5 @@
 - Shoreline rocks, flower pots and log piles have no colliders, so players walk through them. Decide whether that's intended
 - Dev console `/tips` command to clear the new-player tips list for testing (needs both the tips and dev console branches merged)
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs
+- Full mobile support, building on the touch test build and the mobile spec (https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv): answer the spec's five open decisions first, then full-screen menus with tap-to-select and a detail bar instead of hover tooltips, quick-chat chips, long-press to drop, and touch wording in the remaining key/click text (casino table hints, toasts like "Hold a fish (1-5)"). Remove the FPS readout (dev-only today) and decide whether touch mode should skip the desktop-only notice
+- Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing

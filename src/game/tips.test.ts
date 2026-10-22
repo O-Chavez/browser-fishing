@@ -22,6 +22,8 @@ describe('new-player tips', () => {
 
   it('names the vendor in the selling tip', () => {
     expect(tipText('catch', newSave(), 'Marlow')).toContain('Marlow');
+    expect(tipText('catch', newSave(), 'Marlow', true)).not.toContain('<kbd>E</kbd>');
+    expect(tipText('start', newSave(), 'Marlow', true)).not.toContain('Click');
   });
 
   it('gives saves from before tips none if they are fresh, and all of them otherwise', () => {

@@ -19,6 +19,7 @@ import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
+import { FpsMeter, TouchControls } from './touch';
 import { ChatBox } from './chatbox';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
@@ -103,6 +104,11 @@ export class Game {
   private phase: Phase = 'idle';
   private holding = false;
   private forceActive = false;
+  private touch: TouchControls | null = null;
+  private touchMove = { x: 0, y: 0, sprint: false };
+  private touchWoke = false;
+  private fps: FpsMeter | null = null;
+  private shownPhase: Phase | '' = '';
   private power = 0;
   private powerDir = 1;
   private perfect = false;
@@ -197,7 +203,9 @@ export class Game {
     const urlName = q.get('name');
     const name = urlName || localStorage.getItem('fishing-name') || '';
     let token = localStorage.getItem('fishing-token');
-    if (!token) localStorage.setItem('fishing-token', (token = crypto.randomUUID() + crypto.randomUUID()));
+    // getRandomValues, not randomUUID: randomUUID only exists on HTTPS/localhost, and phones testing
+    // over the LAN load the game from a plain http:// IP address.
+    if (!token) localStorage.setItem('fishing-token', (token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('')));
     this.net = new NetClient(name, token, q.get('room') || 'lobby', {
       onState: (save) => {
         const moved = !!save.location && save.location !== this.s.location;
@@ -558,10 +566,13 @@ export class Game {
       this.onMenuClick(e.target as HTMLElement),
     );
     $('hotbar').addEventListener('click', (e) => {
-      const i = Number((e.target as HTMLElement).closest<HTMLElement>('.slot.sellable')?.dataset.i);
-      if (!Number.isInteger(i)) return;
-      if (this.tab === 'casino') this.cashOut(i);
-      else this.sellSlot(i);
+      const slot = (e.target as HTMLElement).closest<HTMLElement>('.slot');
+      const i = Number(slot?.dataset.i);
+      if (!slot || !Number.isInteger(i)) return;
+      if (slot.classList.contains('sellable')) {
+        if (this.tab === 'casino') this.cashOut(i);
+        else this.sellSlot(i);
+      } else if (this.touch && this.active && this.phase === 'idle') this.takeSlot(i);
     });
     $('menu').addEventListener('mouseover', (e) => {
       this.tryOn(e.target as HTMLElement, true);
@@ -597,23 +608,15 @@ export class Game {
       }
     });
     window.addEventListener('blur', () => this.keys.clear());
+    // Touch devices also send emulated mouse events; in touch mode only the on-screen controls count.
     document.addEventListener('mousemove', (e) => {
-      if (!this.active || this.dbgLock) return;
-      this.world.yaw -= e.movementX * 0.0022;
-      this.world.pitch = Math.max(
-        -1.2,
-        Math.min(0.6, this.world.pitch - e.movementY * 0.0022),
-      );
+      if (!this.touch) this.turn(e.movementX * 0.0022, e.movementY * 0.0022);
     });
     document.addEventListener('mousedown', (e) => {
-      if (!this.active || e.button !== 0 || this.dbgLock || this.chat.isOpen) return;
-      this.holding = true;
-      this.onPress();
+      if (e.button === 0 && !this.touch) this.pointerDown();
     });
     document.addEventListener('mouseup', (e) => {
-      if (e.button !== 0) return;
-      this.holding = false;
-      if (this.phase === 'charging') this.releaseCast();
+      if (e.button === 0 && !this.touch) this.pointerUp();
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
     const wheel = new WheelStepper();
@@ -625,11 +628,7 @@ export class Game {
       this.takeSlot((this.s.held + step + n) % n);
     }, { passive: true });
     document.addEventListener('keydown', (e) => {
-      if (this.active && (e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat) {
-        if (!this.net.connected) return this.toast('Chat needs a server connection.');
-        this.keys.clear();
-        return this.chat.open();
-      }
+      if (this.active && (e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat) return this.openChat();
       if (this.active && e.code.startsWith('Key')) {
         this.keys.add(e.code);
         if (e.code === 'KeyE' && !e.repeat && this.phase === 'idle') this.interact();
@@ -656,6 +655,121 @@ export class Game {
       else if (e.code === 'Space' && this.active && this.phase === 'idle') { e.preventDefault(); this.player.jump(); }
       else if (e.code === 'KeyM' && !e.repeat) this.toast(audio.toggleMusic() ? '🎵 Music on' : '🔇 Music off');
     });
+  }
+
+  /** Mouse look and touch drags both turn the camera; pitch stops short of straight up or down. */
+  private turn(dYaw: number, dPitch: number): void {
+    if (!this.active || this.dbgLock) return;
+    this.world.yaw -= dYaw;
+    this.world.pitch = Math.max(-1.2, Math.min(0.6, this.world.pitch - dPitch));
+  }
+
+  /** Left mouse button or the touch action button going down: cast, hook, reel, bet. */
+  private pointerDown(): void {
+    if (!this.active || this.dbgLock || this.chat.isOpen) return;
+    this.holding = true;
+    this.onPress();
+  }
+
+  private pointerUp(): void {
+    this.holding = false;
+    if (this.phase === 'charging') this.releaseCast();
+  }
+
+  private openChat(): void {
+    if (!this.net.connected) return this.toast('Chat needs a server connection.');
+    this.keys.clear();
+    this.chat.open();
+  }
+
+  /**
+   * Turns on the on-screen controls for touch-only devices. The game then runs without pointer
+   * lock (phones don't have it): it is active whenever no menu is open.
+   */
+  enableTouch(): void {
+    if (this.touch) return;
+    document.body.classList.add('touch');
+    // Lay the page out 1400px wide and let the browser scale it to the screen, so the desktop HUD and
+    // menus fit a phone in landscape at about 0.6x without a separate layout.
+    document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=1400, user-scalable=no');
+    this.world.setPixelCap(1);
+    this.forceActive = true;
+    $('resume').classList.add('hidden');
+    const wake = () => {
+      if (this.touchWoke) return;
+      this.touchWoke = true;
+      audio.start();
+      this.dismissWelcome();
+      this.guide('start');
+    };
+    this.touch = new TouchControls({
+      move: (x, y, sprint) => {
+        if (x || y) wake();
+        this.touchMove = { x, y, sprint };
+      },
+      look: (dx, dy) => {
+        wake();
+        this.turn(dx * 0.005, dy * 0.005);
+      },
+      tap: (x, y) => {
+        wake();
+        this.tapView(x, y);
+      },
+      press: () => {
+        wake();
+        this.pointerDown();
+      },
+      release: () => this.pointerUp(),
+      jump: () => {
+        if (this.active && this.phase === 'idle') this.player.jump();
+      },
+      bag: () => this.openMenu('inventory'),
+      chat: () => this.openChat(),
+    });
+    $('prompt').addEventListener('click', () => {
+      if (this.active && this.phase === 'idle') this.interact();
+    });
+    $('catch').addEventListener('click', () => {
+      if (this.phase === 'result' && !this.dbgLock) this.dismissCatch();
+    });
+    // iOS Safari ignores touch-action for pinch zoom; this stops it zooming the page mid-game.
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    if (import.meta.env.DEV) this.fps = new FpsMeter((lite) => this.world.setLite(lite));
+  }
+
+  /** A tap on the open view: at a casino table it plays the piece under the finger. */
+  private tapView(x: number, y: number): void {
+    const hall = this.world.hall;
+    if (!this.active || this.phase !== 'idle' || !this.table || !hall) return;
+    this.aim = hall.pick(this.world.camera, 4.2, new THREE.Vector2((x / innerWidth) * 2 - 1, 1 - (y / innerHeight) * 2));
+    if (this.aim) this.tableClick();
+  }
+
+  /** Shows or hides the touch controls and labels the action button for the current phase. */
+  private updateTouch(): void {
+    const t = this.touch!;
+    t.setVisible(this.active && $('join').classList.contains('hidden'));
+    switch (this.phase) {
+      case 'idle':
+        if (this.map.casino) t.setAction('🎰', 'PLAY', this.table ? 'gold' : 'quiet');
+        else t.setAction('🎣', 'CAST', eco.canCast(this.s) === 'ok' ? 'gold' : 'quiet');
+        break;
+      case 'charging':
+        t.setAction('🎣', 'RELEASE', 'gold');
+        break;
+      case 'bite':
+        t.setAction('❗', 'HOOK!', 'hook');
+        break;
+      case 'reeling':
+        if (this.reel?.surging) t.setAction('✋', 'LET GO', 'danger');
+        else t.setAction('🎣', this.holding ? 'REELING' : 'HOLD', 'gold');
+        break;
+      case 'result':
+        t.setAction('👍', 'OK', 'gold');
+        break;
+      default:
+        t.setAction('⏳', 'WAIT', 'quiet');
+    }
   }
 
   private onMenuClick(el: HTMLElement): void {
@@ -1270,9 +1384,10 @@ export class Game {
     const w = this.world;
     const walking = this.active && this.phase === 'idle';
     const k = this.keys;
-    const fwd = walking ? Number(k.has('KeyW')) - Number(k.has('KeyS')) : 0;
-    const strafe = walking ? Number(k.has('KeyD')) - Number(k.has('KeyA')) : 0;
-    const sprint = k.has('ShiftLeft') || k.has('ShiftRight');
+    const tm = this.touchMove;
+    const fwd = walking ? Number(k.has('KeyW')) - Number(k.has('KeyS')) + tm.y : 0;
+    const strafe = walking ? Number(k.has('KeyD')) - Number(k.has('KeyA')) + tm.x : 0;
+    const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || tm.sprint;
     this.player.update(dt, fwd, strafe, sprint, w.yaw, w.colliders);
     w.eye.set(this.player.x, this.player.eyeY, this.player.z);
     w.walkBob = this.player.bob;
@@ -1781,6 +1896,14 @@ export class Game {
     this.tick(dt);
     this.world.update(dt);
     this.drawGauge(now / 1000);
+    if (this.phase !== this.shownPhase) {
+      // CSS hides parts of the touch HUD by phase (e.g. the hotbar during a fight).
+      document.body.dataset.phase = this.phase;
+      if (this.touch && this.phase === 'bite') navigator.vibrate?.(120);
+      this.shownPhase = this.phase;
+    }
+    if (this.touch) this.updateTouch();
+    this.fps?.frame(now);
     requestAnimationFrame(this.loop);
   };
 
@@ -2101,7 +2224,7 @@ export class Game {
     this.net.send({ t: 'tip', id });
     this.persist();
     const el = $('guide');
-    el.innerHTML = `<span>${tipText(id, this.s, this.map.vendor.name)}</span>`;
+    el.innerHTML = `<span>${tipText(id, this.s, this.map.vendor.name, !!this.touch)}</span>`;
     el.classList.add('show');
     clearTimeout(this.guideTimer);
     this.guideTimer = window.setTimeout(() => el.classList.remove('show'), 9000);
@@ -2214,7 +2337,7 @@ export class Game {
     ctx.font = '600 14px system-ui';
     ctx.fillStyle = '#fff';
     const small = surge
-      ? 'Release click until it calms'
+      ? this.touch ? 'Lift your thumb until it calms' : 'Release click until it calms'
       : warn
         ? 'Fish is about to surge'
         : r.inSweetSpot
