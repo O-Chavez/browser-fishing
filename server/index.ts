@@ -60,6 +60,7 @@ function room(name: string): Room {
   if (!r) {
     r = new Room(name, MAPS, persist);
     r.hall = () => accounts.hall();
+    r.hallStale = () => accounts.hallStale();
     r.chatGate = chatGate;
     r.devGate = devGate;
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
@@ -116,7 +117,7 @@ wss.on('connection', (ws, req) => {
   const r = room((url.searchParams.get('room') ?? 'lobby').replace(/[^\w-]/g, '').slice(0, 24) || 'lobby');
   sockets.set(r, (sockets.get(r) ?? 0) + 1);
   let id = 0;
-  const send = (m: unknown) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
+  const send = (m: unknown, json?: string) => ws.readyState === ws.OPEN && ws.send(json ?? JSON.stringify(m));
   ws.on('message', (data) => {
     let msg: ClientMsg;
     try {

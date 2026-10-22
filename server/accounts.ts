@@ -20,6 +20,7 @@ export type AuthResult = { ok: true; account: Account } | { ok: false; msg: stri
 export class AccountStore {
   private accounts = new Map<string, Account>();
   private dirty = false;
+  private hallRows: HallRow[] | null = null;
 
   constructor(raw: Record<string, unknown> = {}) {
     for (const [k, a] of Object.entries(raw) as [string, Omit<Account, 'online'>][]) {
@@ -43,13 +44,18 @@ export class AccountStore {
     return { ok: true, account: acct };
   }
 
-  /** The most valuable catches across every account, online or not. */
-  hall(n = 8): HallRow[] {
-    return [...this.accounts.values()]
+  /** The most valuable catches across every account, online or not. Cached until `hallStale`. */
+  hall(): HallRow[] {
+    return (this.hallRows ??= [...this.accounts.values()]
       .filter((a) => a.save.best)
       .map((a) => ({ name: a.name, level: a.save.level, best: a.save.best! }))
       .sort((a, b) => b.best.value - a.best.value || a.name.localeCompare(b.name))
-      .slice(0, n);
+      .slice(0, 8));
+  }
+
+  /** Call when a player's level or best catch may have changed, so the next `hall` re-ranks. */
+  hallStale(): void {
+    this.hallRows = null;
   }
 
   touch(): void {
