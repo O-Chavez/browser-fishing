@@ -68,6 +68,7 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #offline { position: fixed; z-index: 3; top: 16px; left: 50%; transform: translateX(-50%); max-width: min(560px, 46vw); display: flex; gap: 14px; align-items: center; padding: 10px 12px 10px 18px; border-radius: 14px; background: var(--hud-bg); box-shadow: 0 0 0 3px var(--bad), 0 8px 18px rgba(0,0,0,.35); pointer-events: auto; }
 #offline b { display: block; font-size: 17px; font-weight: 900; }
 #offline b::before { content: '📡 '; }
+#offline.gpu b::before { content: '⚠️ '; }
 #offline small { display: block; font-size: 13px; font-weight: 700; color: var(--cream-muted); }
 #offline .btn { flex: none; white-space: nowrap; }
 /* New-player tips: their own slot above the hotbar, so action toasts never replace them. */
@@ -417,6 +418,8 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 
 /* join screen */
 #join { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(8, 14, 22, .88); backdrop-filter: blur(4px); }
+/* Blurring the live 3D view behind it every frame is costly on phones; the backdrop is nearly opaque anyway. */
+body.touch #join { backdrop-filter: none; }
 .swatches input[type=color] { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; overflow: hidden; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); cursor: pointer; }
 .swatches input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
 .swatches input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }

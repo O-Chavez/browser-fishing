@@ -219,16 +219,32 @@ export class World {
     this.applyQuality();
   }
 
-  /** Lighter graphics for weaker devices: no sun shadows and 25% fewer pixels in each direction. */
+  /** Lighter graphics for weaker devices: no sun shadows, grass or flowers, and 25% fewer pixels in each direction. */
   setLite(on: boolean): void {
     this.lite = on;
     this.applyQuality();
   }
 
+  get isLite(): boolean {
+    return this.lite;
+  }
+
   private applyQuality(): void {
-    this.sun.castShadow = !this.indoor && !this.lite;
+    this.applyShadows();
     this.applyClutter();
     this.resize();
+  }
+
+  /** Sun shadows outdoors in full graphics. Without them the 2048² shadow map is freed too, which phones need. */
+  private applyShadows(): void {
+    const on = !this.indoor && !this.lite;
+    this.sun.castShadow = on;
+    if (on) this.renderer.shadowMap.needsUpdate = true;
+    else if (this.sun.shadow.map) {
+      // three.js makes a new one when shadows come back on.
+      this.sun.shadow.map.dispose();
+      this.sun.shadow.map = null;
+    }
   }
 
   private applyClutter(): void {
@@ -430,7 +446,7 @@ export class World {
     this.scene.add(this.decor);
     this.sky.visible = this.stars.visible = this.clouds.visible = !this.indoor;
     // Indoors the sun is off; without this its shadow map still renders every few frames.
-    this.sun.castShadow = !this.indoor && !this.lite;
+    this.applyShadows();
     this.trees = [];
     this.mtMats = [];
     this.clutter = [];
