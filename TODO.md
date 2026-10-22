@@ -131,6 +131,9 @@
   - Mobile spec with screen mockups over real phone-size renders (2026-10-21): https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv. Verdict: fits; weak spots are first-person walking and chat on a landscape keyboard. Five open decisions listed at the end
   - Test build behind "Try touch controls (early test)" on the desktop-only notice (`src/game/touch.ts`, `Game.enableTouch()`; `?touch` forces it on desktop). Touch mode lays the page out 1400px wide so the desktop HUD/menus scale to fit, and runs without pointer lock via `forceActive`
   - Validated by Oscar on a real phone over the LAN (2026-10-21): steady 60 fps in both full and lite graphics; fishing, the shop, the Lucky Wheel and running around all work. Slight hitching for the first few seconds after load
+- [ ] Escape on the shop closes it but then opens the inventory
+  - Regression of "Escape always closes the current menu": Escape should close the open menu and nothing else, for every menu (shop, inventory, wardrobe, etc.)
+  - Likely the browser releasing pointer lock on Escape: the `pointerlockchange` handler (`src/game/game.ts:639`) calls `setMenu(true)` and resets `this.tab` to `'inventory'`, alongside the Escape keydown handler (`game.ts:697-702`)
 
 ## Ideas
 
