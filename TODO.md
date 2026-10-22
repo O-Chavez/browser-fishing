@@ -149,6 +149,9 @@
 - [ ] Suggest a rod upgrade after a tough fight or a lost fish
   - When a reel fight runs long or ends in a snapped line / escaped fish, show a hint like "A better rod makes fish easier to reel in". Outcomes are handled at the end of the reel tick in `src/game/game.ts:2268-2274` (`Reel` in `src/game/reel.ts`, built with the rod's control at `game.ts:1720`)
   - Keep it from nagging: only when a better rod exists that the player hasn't bought, and with a cooldown or once-per-session limit
+- [ ] Tip jar so players who enjoy the game can tip Oscar
+  - A plain external link (Ko-fi recommended: no cut on one-off tips, can pay out to PayPal, and doesn't show a legal name the way PayPal.me can; GitHub Sponsors in the README too if the repo is public). Suggest $3-5 rather than $1, since fixed fees take about half of a $1 tip. Hard rule: a tip gives nothing in game (no coins, chips, perks or head start), because selling anything that feeds the casino is real money for gambling currency
+  - Non-intrusive placement: a small line on the welcome-back screen (`welcomeText`, `src/game/progression.ts:163`), the ⚙️ settings tab (`settingsHtml`, `src/game/game.ts:2858`) and the README; maybe one prompt at a milestone like the first Spirit Fish, never mid-fight or repeated. Taste-driven: propose options first. Optional: a Ko-fi webhook posting tips to Discord, like the join pings (`server/discord.ts`)
 
 ## Ideas
 
