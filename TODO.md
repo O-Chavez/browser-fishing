@@ -134,6 +134,9 @@
 - [ ] Escape on the shop closes it but then opens the inventory
   - Regression of "Escape always closes the current menu": Escape should close the open menu and nothing else, for every menu (shop, inventory, wardrobe, etc.)
   - Likely the browser releasing pointer lock on Escape: the `pointerlockchange` handler (`src/game/game.ts:639`) calls `setMenu(true)` and resets `this.tab` to `'inventory'`, alongside the Escape keydown handler (`game.ts:697-702`)
+- [ ] Hotbar slot bounce, and scroll-wheel slot switching that feels extremely clean
+  - A slight bounce when a slot is selected (number key, click or scroll), so it's easy to tell which slot was just picked. Today there's only a 0.16 s `slot-pick` animation on `.slot.held.pick` (`src/style.css:141-144`)
+  - Scroll switching is still janky after the earlier "Make scroll-wheel slot switching smooth" fix: `WheelStepper` (`src/game/wheelstep.ts`, used at `src/game/game.ts:676`). Check both a mouse wheel and a trackpad; each notch/gesture should move exactly one slot, with no skipped, doubled or laggy steps
 
 ## Ideas
 
