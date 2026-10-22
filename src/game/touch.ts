@@ -167,13 +167,11 @@ export class FpsMeter {
   private el = document.createElement('button');
   private frames = 0;
   private since = 0;
-  private lite = false;
 
-  constructor(onToggle: (lite: boolean) => void) {
+  constructor(private lite: () => boolean, onToggle: () => void) {
     this.el.id = 'fps';
     this.el.addEventListener('click', () => {
-      this.lite = !this.lite;
-      onToggle(this.lite);
+      onToggle();
       this.since = 0;
     });
     document.body.append(this.el);
@@ -188,7 +186,7 @@ export class FpsMeter {
     }
     if (now - this.since < 500) return;
     const fps = Math.round((this.frames * 1000) / (now - this.since));
-    this.el.textContent = `${fps} fps · ${this.lite ? 'lite' : 'full'} (tap to switch)`;
+    this.el.textContent = `${fps} fps · ${this.lite() ? 'lite' : 'full'} (tap to switch)`;
     this.frames = 0;
     this.since = now;
   }

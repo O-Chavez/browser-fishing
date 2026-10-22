@@ -98,6 +98,8 @@ const CAMP_TIPS = [
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const GRAVITY = 9.8;
+/** 'full' or 'lite', remembered per browser; unset means the device's default. */
+const GRAPHICS_KEY = 'fishing-graphics';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
 const MAX_HOLD_PITCH = 1.5;
 
@@ -212,6 +214,15 @@ export class Game {
 
   constructor() {
     this.world = new World($('game') as HTMLCanvasElement);
+    this.applyGraphics();
+    // A GPU crash or reset. Chromium won't make a new context until the page reloads (it draws a blank
+    // "sad canvas" meanwhile), so offer a reload, which starts in lite graphics to ease the load.
+    const canvas = this.world.renderer.domElement;
+    canvas.addEventListener('webglcontextlost', () => {
+      localStorage.setItem(GRAPHICS_KEY, 'lite');
+      this.showOffline('Graphics stopped working', 'Reload to keep playing. Lite graphics will be on, which is easier on your device.', 'gpu');
+    });
+    canvas.addEventListener('webglcontextrestored', () => $('offline').classList.add('hidden'));
     this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name));
     this.dropsView = new DropsView(this.world.scene, (x, z) => this.world.surface(x, z));
     const q = new URLSearchParams(location.search);
@@ -817,6 +828,8 @@ export class Game {
       bag: () => this.openMenu('inventory'),
       chat: () => this.openChat(),
     });
+    // Phones start in lite graphics unless the player picked otherwise.
+    this.applyGraphics();
     $('prompt').addEventListener('click', () => {
       if (this.active && this.phase === 'idle') this.interact();
     });
@@ -825,7 +838,7 @@ export class Game {
     });
     // iOS Safari ignores touch-action for pinch zoom; this stops it zooming the page mid-game.
     document.addEventListener('gesturestart', (e) => e.preventDefault());
-    if (import.meta.env.DEV) this.fps = new FpsMeter((lite) => this.world.setLite(lite));
+    if (import.meta.env.DEV) this.fps = new FpsMeter(() => this.world.isLite, () => this.toggleGraphics());
   }
 
   /** A tap on the open view: at a casino table it plays the piece under the finger. */
@@ -874,6 +887,7 @@ export class Game {
     else if (pick) this.pick[pick as keyof typeof this.pick] = id;
     else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
     else if (act === 'music') audio.toggleMusic();
+    else if (act === 'graphics') this.toggleGraphics();
     else if (act === 'sellall') return this.sellAll();
     else if (act === 'equiprod') this.equipRod(id!);
     else if (act === 'equipbait') this.equipBait(id!);
@@ -1195,9 +1209,22 @@ export class Game {
   }
 
   /** The player went offline without choosing to: say so until they reload, which reconnects. */
-  private showOffline(why: string): void {
+  private showOffline(why: string, what = "Playing offline: progress here isn't saved to your account.", kind = ''): void {
     $('offline-why').textContent = why;
-    $('offline').classList.remove('hidden');
+    $('offline-what').textContent = what;
+    $('offline-go').textContent = kind === 'gpu' ? 'Reload' : 'Refresh to reconnect';
+    $('offline').className = kind;
+  }
+
+  /** Full or lite graphics: the player's choice in Settings, otherwise lite on touch devices (phones). */
+  private applyGraphics(): void {
+    const saved = localStorage.getItem(GRAPHICS_KEY);
+    this.world.setLite(saved ? saved === 'lite' : !!this.touch);
+  }
+
+  private toggleGraphics(): void {
+    localStorage.setItem(GRAPHICS_KEY, this.world.isLite ? 'full' : 'lite');
+    this.applyGraphics();
   }
 
   /** Offline play saves locally; online, the server owns the save. */
@@ -2955,7 +2982,8 @@ export class Game {
       ? `<p>Erase coins, level, gear, fish, Fishdex and cosmetics? Your name, colour and face stay. This can't be undone.</p>${this.btn('Yes, reset my account', 'data-act="resetyes"', 'bad')}${this.btn('Cancel', 'data-act="resetno"', 'plain')}`
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
-      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}
+      <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
   }
 
   /** The tip jar. A tip gives nothing in game, only the 💗 by the player's name. */

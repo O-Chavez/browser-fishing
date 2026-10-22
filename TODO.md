@@ -143,6 +143,10 @@
   - Test build behind "Try touch controls (early test)" on the desktop-only notice (`src/game/touch.ts`, `Game.enableTouch()`; `?touch` forces it on desktop). Touch mode lays the page out 1400px wide so the desktop HUD/menus scale to fit, and runs without pointer lock via `forceActive`
   - Validated by Oscar on a real phone over the LAN (2026-10-21): steady 60 fps in both full and lite graphics; fishing, the shop, the Lucky Wheel and running around all work. Slight hitching for the first few seconds after load
 - [x] Escape on the shop closes it but then opens the inventory
+- [x] Phones: white screen after joining, and the styling changes slowed them down
+  - A friend on Android (Brave, touch controls on) saw a white screen with the HUD and a small icon top left after creating a character: Chromium's "sad canvas", drawn when the GPU process crashes. Couldn't reproduce on desktop GPUs; every shader is far inside phone uniform/texture limits, so the likely cause is load or GPU memory right after joining
+  - The outdoor painted textures, casino style pass and night glow cost about +3% on an M1 but +20-27% outdoors on SwiftShader at the touch resolution (a rough stand-in for a fill-rate-bound phone); the grass tufts and flowers alone were about 15-20%
+  - Done (2026-10-22): touch devices start in Lite graphics, and ⚙️ Settings has a Full/Lite switch (remembered per browser; the dev FPS meter uses the same setting). Lite now frees the 2048² shadow map, the hidden character preview shrinks its drawing buffer to 1x1, and touch mode drops the join screen's backdrop blur. A lost WebGL context shows a "Graphics stopped working" banner with Reload, and the reload starts in Lite. Lite renders in about half the time of Full on SwiftShader (pond 205 → 96 ms, town square ~235 → ~125 ms), below what phones paid before the styling changes. Build, 208 unit tests and a headless phone run (lite on after join, toggle, preview buffer, simulated context loss) pass. `npm run smoke` 62/63: the one failure, "pond night: town lamps lit", fails on `main` too. Not yet checked on a real phone
   - Regression of "Escape always closes the current menu": Escape should close the open menu and nothing else, for every menu (shop, inventory, wardrobe, etc.)
   - Likely the browser releasing pointer lock on Escape: the `pointerlockchange` handler (`src/game/game.ts:639`) calls `setMenu(true)` and resets `this.tab` to `'inventory'`, alongside the Escape keydown handler (`game.ts:697-702`)
   - Done (2026-10-21): `openMenu` frees the mouse with `exitPointerLock()`, so Chrome hands it straight back to `closeMenu` without a click, and the same Esc then releases it again. A lock loss within 1 s of an Esc close now just shows "Click to keep playing" instead of the pause menu. Smoke check added; not yet tried by hand in a real browser
@@ -202,6 +206,8 @@
 ## Ideas
 
 <!-- Add new ideas here. Move them into the checklist when you decide to do them. -->
+
+- `npm run smoke` fails "pond night: town lamps lit, lanterns and windows drawn" on `main` (seen 2026-10-22). Probably since the night glow made real lights fade in: the check reads `intensity > 1` only 600 ms after switching to night. Fix the check (or the fade) so smoke is green again
 
 - Fewer real point lights: cutting them from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling. Outdoors, the night glow pools (`src/game/nightglow.ts`) now stand in for far lamps, so a lower cap might look fine there; the casino chandeliers would need pools of their own
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames

@@ -610,7 +610,7 @@ export class CharacterPreview {
     this.renderer.setPixelRatio(Math.min(2, devicePixelRatio));
     this.fit();
     // The menu's CSS sets the canvas size; follow it so the render stays sharp and unstretched.
-    new ResizeObserver(() => this.fit()).observe(this.canvas);
+    new ResizeObserver(() => this.raf && this.fit()).observe(this.canvas);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x556677, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(2, 4, 3);
@@ -655,6 +655,7 @@ export class CharacterPreview {
 
   start(): void {
     if (this.raf) return;
+    this.fit();
     let last = performance.now();
     const loop = (t: number) => {
       this.raf = requestAnimationFrame(loop);
@@ -667,8 +668,11 @@ export class CharacterPreview {
     this.raf = requestAnimationFrame(loop);
   }
 
+  /** Stops spinning and shrinks the drawing buffer, so a hidden preview holds almost no GPU memory. */
   stop(): void {
+    if (!this.raf) return;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.renderer.setSize(1, 1, false);
   }
 }
