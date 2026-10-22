@@ -367,6 +367,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 ### Access
 - The pond gate opens at **level 15** (`CASINO_LEVEL`, the Aurora Rod level) so players have fished before they gamble. The server enforces it on travel.
 - The casino is an **indoor map** (no water, terrain or dock): a carpeted hall with a roulette table, a blackjack table and a cashier counter. Fishing is disabled inside. The front door returns to the pond.
+- The hall's look (`src/game/casinoroom.ts`, tables in `casinohall.ts`): damask walls over raised wood panels, a coffered wood ceiling with gold medallions above the chandeliers, fluted pillars, brass sconces and framed fish paintings, and velvet ropes at the cashier. The table felt is printed in gold with the real rules ("BLACKJACK ×3 · DEALER STANDS ON 17"; a border and wheel ring on roulette). Only the chandeliers are real lights; sconces and the ceiling use glowing materials. `npm run screenshots -- casino` re-shoots the poster image at the pond gate.
 - Tables are played **in the world**: walk up, hold the fish to bet (keys 1-5), then aim and click the 3D red/black/green patches, or the DEAL / HIT / STAND / DOUBLE buttons on the felt. Cards are laid out on the table and a small status line shows the bet and result.
 - At the cashier, hold a fish and click the chip tray to turn it in. Click the prize case (or press E) to open the perk list and buy unlocks.
 

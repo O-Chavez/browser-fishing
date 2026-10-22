@@ -1,7 +1,10 @@
 // README screenshots: stages scenes in headless Chrome and writes them to docs/images/.
 //
 //   npm run screenshots              # every shot
-//   npm run screenshots -- dock reel # only these (dock, night, reel, fish, wardrobe)
+//   npm run screenshots -- dock reel # only these (dock, night, reel, fish, wardrobe, casino)
+//
+// `casino` re-shoots src/assets/images/casino-preview.jpg, the look inside shown by the poster at the
+// pond's casino gate (and in the README).
 //
 // Starts its own game server on a throwaway data folder with seeded, dressed-up accounts, so your
 // saves are never touched. Re-run after visual changes and check the images before committing.
@@ -20,7 +23,7 @@ const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Conte
 const VITE_PORT = 5299;
 const SERVER_PORT = 8799;
 const OUT = path.resolve('docs/images');
-const SHOTS = ['dock', 'night', 'reel', 'fish', 'wardrobe'];
+const SHOTS = ['dock', 'night', 'reel', 'fish', 'wardrobe', 'casino'];
 const only = process.argv.slice(2);
 const unknown = only.filter((s) => !SHOTS.includes(s));
 if (unknown.length) {
@@ -56,6 +59,7 @@ const accounts = {
   cam: account('Cam', { color: 0x7ac76a, face: 'smile' }),
   reeler: account('Reeler', {}, { held: 0, rod: 'aurora', bait: 'pearl', slots: [{ k: 'rod', id: 'aurora' }, { k: 'bait', id: 'pearl', n: 20 }, null, null, null] }),
   fishcam: account('Fishcam', {}),
+  vegas: account('Vegas', {}, { location: 'casino' }),
   ivy: account('Ivy', { color: 0xf2c14e, face: 'wink', hat: 'crown', shirt: 'cloak', jewelry: 'diamond' }, { owned: COSMETICS.map((c) => c.id) }),
 };
 fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify(accounts));
@@ -175,6 +179,17 @@ try {
     await game(p, `G.teleport(0, 24); G.day(0.1); G.openMenu('wardrobe');`);
     await sleep(1500);
     await shoot(p, 'wardrobe');
+    await leave(p);
+  }
+  // The casino floor from just inside the entrance, for the poster at the pond's casino gate.
+  if (want('casino')) {
+    const p = await join('Vegas', 'casino');
+    await p.setViewport({ width: 1200, height: 675 });
+    await hideHud(p);
+    await game(p, `G.teleport(0, 32.5); G.look(Math.PI, -0.06);`);
+    await sleep(1500);
+    await p.screenshot({ path: 'src/assets/images/casino-preview.jpg', type: 'jpeg', quality: 85 });
+    console.log('wrote src/assets/images/casino-preview.jpg');
     await leave(p);
   }
 } catch (e) {
