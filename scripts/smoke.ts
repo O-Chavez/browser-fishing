@@ -70,6 +70,7 @@ try {
   await pondChecks();
   await casinoChecks();
   await chatChecks();
+  await noWebglChecks();
   // Last: it stops the server.
   await offlineChecks();
 } catch (e) {
@@ -85,6 +86,27 @@ check('no page errors', errors.length === 0, errors.slice(0, 5).join(' | '));
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed. Screenshots in ${path.relative(process.cwd(), SHOTS)}/`);
 process.exit(failed.length ? 1 : 0);
+
+// ---------- no WebGL ----------
+
+/** Chromium blocks WebGL for a site after a GPU crash; the page must say so, not sit there dead. */
+async function noWebglChecks(): Promise<void> {
+  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--disable-3d-apis'] });
+  try {
+    const page = await b.newPage();
+    await page.setViewport({ width: 915, height: 412, isMobile: true, hasTouch: true });
+    await page.goto(`http://localhost:${VITE_PORT}/`, { waitUntil: 'load' });
+    await page.waitForSelector('#desktop-only.error', { visible: true, timeout: 15000 }).catch(() => null);
+    const shown = await page.evaluate(() => {
+      const el = document.getElementById('desktop-only')!;
+      return { visible: getComputedStyle(el).display !== 'none', text: el.querySelector('h2')?.textContent ?? '', reload: !!el.querySelector('button') };
+    });
+    await page.screenshot({ path: `${SHOTS}/no-webgl.png` });
+    check('no WebGL: the page explains it instead of a dead screen', shown.visible && /3D graphics/.test(shown.text) && shown.reload, shown.text);
+  } finally {
+    await b.close();
+  }
+}
 
 // ---------- pond (offline) ----------
 

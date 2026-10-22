@@ -194,7 +194,7 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 ## 11. Non-Functional Requirements
 
 - **Performance:** 60 FPS target; graceful quality settings (low/med/high).
-- **Graphics:** Full or Lite in ⚙ Settings, remembered per browser. Lite turns off sun shadows (and frees the shadow map), grass tufts and flowers, and draws 25% fewer pixels each way. Touch devices start in Lite. If the browser loses the WebGL context (a GPU crash; Chromium then shows a blank "sad canvas" and won't make a new context until a reload), a banner offers a reload, which starts in Lite.
+- **Graphics:** Full or Lite in ⚙ Settings, remembered per browser. Lite turns off sun shadows (and frees the shadow map), grass tufts and flowers, and draws 25% fewer pixels each way. Touch devices start in Lite. If the browser loses the WebGL context (a GPU crash; Chromium then shows a blank "sad canvas" and won't make a new context until a reload), a banner offers a reload, which starts in Lite. If WebGL can't be created at all (blocked after a crash, or no hardware acceleration), the page says so with a Reload button instead of failing silently. Phones don't draw the world behind the "made for desktop" notice.
 - **Compatibility:** latest two versions of major browsers; WebGL2 required.
 - **Accessibility:** colour-blind-safe rarity indicators (icons plus colour), rebindable controls, subtitles for audio cues, simplified reel option.
 - **Maintainability:** data-driven content, modular systems (casting, fishing, progression, economy, UI, save), unit tests for progression and loot-table logic.

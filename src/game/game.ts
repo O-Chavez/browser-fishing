@@ -19,7 +19,7 @@ import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
-import { FpsMeter, TouchControls } from './touch';
+import { FpsMeter, TouchControls, touchOnly } from './touch';
 import { ChatBox } from './chatbox';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
@@ -1219,7 +1219,12 @@ export class Game {
   /** Full or lite graphics: the player's choice in Settings, otherwise lite on touch devices (phones). */
   private applyGraphics(): void {
     const saved = localStorage.getItem(GRAPHICS_KEY);
-    this.world.setLite(saved ? saved === 'lite' : !!this.touch);
+    this.world.setLite(saved ? saved === 'lite' : touchOnly || !!this.touch);
+  }
+
+  /** While a full-screen notice hides the view, skip drawing it so the GPU stays idle. */
+  setCovered(on: boolean): void {
+    this.world.paused = on;
   }
 
   private toggleGraphics(): void {

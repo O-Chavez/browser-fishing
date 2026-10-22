@@ -1,3 +1,6 @@
+/** Phones and tablets: a coarse pointer and nothing that can hover (no mouse). */
+export const touchOnly = matchMedia('(pointer: coarse) and (hover: none)').matches;
+
 /** What the on-screen controls ask the game to do. */
 export interface TouchHandlers {
   /** Stick position: x strafes right, y walks forward, both -1..1; sprint when pushed past the rim. */

@@ -110,6 +110,8 @@ export class World {
   hall: CasinoHall | null = null;
   private indoor = false;
   private lite = false;
+  /** Skip drawing (a full-screen notice covers the view); the scene still updates. */
+  paused = false;
   /** Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5. */
   private pixelCap = 1.25;
   private trees: Circle[] = [];
@@ -1130,6 +1132,6 @@ export class World {
     this.fx.update(dt, t);
     this.bobber.visible = this.bobberVisible;
     if (this.frame++ % 3 === 0) this.renderer.shadowMap.needsUpdate = true;
-    this.renderer.render(this.scene, this.camera);
+    if (!this.paused) this.renderer.render(this.scene, this.camera);
   }
 }
