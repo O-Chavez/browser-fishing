@@ -191,6 +191,27 @@ export function blackjackFactor(g: Blackjack): number {
   }
 }
 
+/**
+ * How a finished hand reads on the result banner (title, sub) and the table readout (line). A natural
+ * 21 ends the hand on the deal, so it says who had blackjack.
+ */
+export function blackjackVerdict(v: BlackjackView): { kind: 'win' | 'lose' | 'push'; title: string; sub: string; line: string } {
+  const r = v.result ?? 'lose';
+  const kind = r === 'win' || r === 'blackjack' ? 'win' : r === 'push' ? 'push' : 'lose';
+  const dealer21 = v.dealer.length === 2 && v.dealer.every((c) => c) && handTotal(v.dealer as Card[]) === 21;
+  if (r === 'blackjack') return { kind, title: 'BLACKJACK!', sub: `You were dealt 21 · your fish is now worth ×${v.factor}`, line: 'Blackjack! You were dealt 21.' };
+  if (dealer21 && r === 'push') return { kind, title: 'BOTH BLACKJACK', sub: 'You and the dealer were both dealt 21 · your fish is safe', line: 'Both blackjack. Your fish is safe.' };
+  if (dealer21) return { kind, title: 'DEALER BLACKJACK', sub: 'The dealer was dealt 21 · the fish is gone', line: 'Dealer blackjack. The fish is gone.' };
+  const title = { win: 'YOU WIN!', push: 'PUSH', lose: 'DEALER WINS', bust: 'BUST!' }[r];
+  const line = { win: 'You win!', push: 'Push. Your fish is safe.', lose: 'Dealer wins. The fish is gone.', bust: 'Bust. The fish is gone.' }[r];
+  // A doubled hand also staked coins: refunded on a push, lost with the fish.
+  const sub =
+    kind === 'win' ? `Your fish is now worth ×${v.factor}`
+    : kind === 'push' ? (v.stake ? `Your fish is safe and ${v.stake} 🪙 came back` : 'Your fish is safe')
+    : v.stake ? `The fish and ${v.stake} 🪙 are gone` : 'The fish is gone';
+  return { kind, title, sub, line };
+}
+
 /** What the client may see: the dealer's second card stays hidden until the hand is over. */
 export interface BlackjackView {
   player: Card[];

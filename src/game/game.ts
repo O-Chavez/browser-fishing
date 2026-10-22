@@ -59,7 +59,7 @@ import {
 import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
-import { chipsFor, doubleCost, type BlackjackView } from './casino';
+import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
@@ -227,15 +227,12 @@ export class Game {
       onWheel: (win, ms) => this.startSpin(win, ms),
       onRoulette: (r) => this.startRoulette(r),
       onBlackjack: (v) => {
-        const wasDone = !this.bj || this.bj.done;
         this.bj = v;
-        if (v?.done && !wasDone) {
-          const r = v.result ?? 'lose';
-          const label: Record<string, string> = { win: 'YOU WIN!', blackjack: 'BLACKJACK!', push: 'PUSH', lose: 'DEALER WINS', bust: 'BUST!' };
-          const won = r === 'win' || r === 'blackjack';
-          // A doubled hand also staked coins: refunded on a push, lost with the fish.
-          const sub = won ? 'Your fish is worth more' : r === 'push' ? (v.stake ? `Your fish is safe and ${v.stake} 🪙 came back` : 'Your fish is safe') : v.stake ? `The fish and ${v.stake} 🪙 are gone` : 'The fish is gone';
-          this.showResult(won ? 'win' : r === 'push' ? 'push' : 'lose', label[r] ?? r.toUpperCase(), sub);
+        // The server sends one view per deal or action, so a finished one is always a new result,
+        // including a hand that ends on the deal with a natural 21.
+        if (v?.done) {
+          const { kind, title, sub } = blackjackVerdict(v);
+          this.showResult(kind, title, sub);
         }
         this.world.hall?.setBlackjack(v);
         if (this.menuOpen && this.tab === 'casino') this.renderMenu();
@@ -1380,8 +1377,8 @@ export class Game {
     if (t === 'blackjack' && g) {
       lines.push(`Dealer <b>${g.dealerTotal ?? '?'}</b> · You <b>${g.playerTotal}</b>`);
       if (g.done) {
-        const verdict: Record<string, string> = { win: 'You win!', blackjack: 'Blackjack!', push: 'Push. Your fish is safe.', lose: 'Dealer wins. The fish is gone.', bust: 'Bust. The fish is gone.' };
-        lines.push(`<b class="${g.result === 'win' || g.result === 'blackjack' ? 'win' : g.result === 'push' ? '' : 'lose'}">${verdict[g.result ?? 'lose']}</b>`);
+        const { kind, line } = blackjackVerdict(g);
+        lines.push(`<b class="${kind === 'push' ? '' : kind}">${line}</b>`);
       }
     }
     if (this.casinoMsg) lines.push(this.casinoMsg);
