@@ -140,6 +140,9 @@
 - [ ] Other players can see each other jump
   - Jumps are local only today: `Player.jump()` (`src/game/player.ts:31`) lifts the player, but the `pos` message (`src/net/protocol.ts:30`, sent from `src/game/net.ts:99`, relayed in `server/room.ts:155`) carries only `x`, `z`, `yaw`, so remote players stay on the ground
   - Send the jump (a height in `pos`, or a one-off jump event that remotes play back with the same arc) and show it on other players' models, smoothly and without extra network spam
+- [ ] Make player and dealer blackjacks clear: the win/loss banner never shows when a hand ends on the deal
+  - A natural on the deal (player or dealer) skips the big result banner: `onBlackjack` (`src/game/game.ts:229`) only shows it when the previous view was live, and `blackjackAct` (`game.ts:1281`) clears `this.bj` before dealing. Instant dealer blackjacks with no banner may add to the "rigged" feeling
+  - Show the banner for these hands and make it obvious who had blackjack (e.g. "Dealer blackjack" / "Blackjack!"), with the dealer's cards revealed
 
 ## Ideas
 
@@ -158,4 +161,3 @@
 - Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
 - Feedback discoverability: today the only pointer to `/bug` and `/idea` is the chat input placeholder. A Bug/Idea button (settings tab or pause menu) would reach players who never open chat. Taste-driven: propose options first
 - Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%)
-- Blackjack hands that end on the deal (a dealer or player natural) never show the big result banner: `onBlackjack` in `game.ts` only shows it when the previous view was live, and `blackjackAct` clears `this.bj` before dealing. Instant dealer blackjacks with no banner may add to the "rigged" feeling
