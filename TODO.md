@@ -105,6 +105,9 @@
 - [ ] Discord ping when a player joins (pairs with the feedback webhook above)
   - To see whether anyone plays after the Reddit post: the server posts to a Discord webhook from a Render env var (separate channel from feedback, never sent to the client) when a player joins, e.g. name, new vs returning account, map, players online
   - Hook in `Room.join` (`server/room.ts:95`, called from `server/index.ts:137`); throttle or batch (e.g. one summary per few minutes) so a burst of joins or reconnects doesn't spam the channel or hit Discord's rate limit
+- [ ] NPCs wander around so the world feels more alive
+  - Town NPCs (`NpcDef` in `src/data/maps.ts`, built by `Town.buildNpc()` in `src/game/town.ts:294`) walk fixed routes or wander randomly inside set areas, with a walk animation, pauses and turning toward nearby players; vendors at their stalls (`src/game/hub.ts`) stay put
+  - "Talk to" range (`game.ts:1406`) must follow the NPC's live position; keep them walk-through and off water/props. Client-only is fine unless players need to see NPCs in the same spot
 - [ ] Sketch out a possible route to making the game mobile friendly
   - [ ] How feasable?
   - [ ] What would need to change?
