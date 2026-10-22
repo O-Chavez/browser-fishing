@@ -208,6 +208,17 @@ async function pondChecks(): Promise<void> {
   await page.evaluate(() => window.__game.activate());
   check('menus: Escape closes every tab', escClosed.length === 4, escClosed.join(', '));
 
+  // In a real browser the same Esc can also release the mouse closeMenu just re-captured: that
+  // must not reopen the menu on the inventory tab.
+  await page.evaluate(() => window.__game.openMenu('shop'));
+  await sleep(100);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.dispatchEvent(new Event('pointerlockchange')));
+  await sleep(100);
+  const escRelock = await page.evaluate(() => document.getElementById('menu')!.classList.contains('hidden'));
+  await page.evaluate(() => window.__game.activate());
+  check('menus: Escape on the shop does not reopen the inventory', escRelock);
+
   // Faces: the wardrobe lists them, and clicking one wears it.
   await page.evaluate(() => window.__game.openMenu('wardrobe'));
   await sleep(200);

@@ -162,6 +162,8 @@ export class Game {
   private keys = new Set<string>();
   private menuOpen = false;
   private keepTab = false;
+  /** When Esc last closed a menu; see the pointerlockchange handler. */
+  private escClosedAt = -Infinity;
   private atVendor = false;
   private near: { label: string; act: () => void } | null = null;
 
@@ -654,6 +656,15 @@ export class Game {
         this.showResume('Chat closed · ');
         return;
       }
+      // The Esc that closed a menu can also take back the mouse closeMenu just re-captured (Chrome
+      // grants the lock without a click after exitPointerLock, then Esc releases it). That isn't a
+      // pause: stay closed and wait for a click instead of opening the inventory.
+      if (!this.locked && performance.now() - this.escClosedAt < 1000) {
+        this.holding = false;
+        this.keys.clear();
+        if (!this.forceActive) this.showResume();
+        return;
+      }
       this.setMenu(!this.locked);
       if (!this.locked) {
         this.holding = false;
@@ -701,7 +712,10 @@ export class Game {
         this.setMenu(true);
         return this.renderMenu();
       }
-      if (e.code === 'Escape' && this.menuOpen && !e.repeat) return this.closeMenu();
+      if (e.code === 'Escape' && this.menuOpen && !e.repeat) {
+        this.escClosedAt = performance.now();
+        return this.closeMenu();
+      }
       if (e.repeat || this.menuOpen || !this.active) return;
       // By key position, not e.key: holding Shift to sprint turns "1" into "!".
       const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
