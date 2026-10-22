@@ -1,5 +1,5 @@
 import { FISH, byId } from '../src/data/content';
-import type { MapDef } from '../src/data/maps';
+import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
@@ -397,11 +397,12 @@ export class Room {
 
   private teleport(m: Member, map: string): void {
     const dest = this.maps[map];
+    const at = arrivalSpot(dest, m.info.map);
     m.pending = null;
     m.acct.save.location = dest.id;
     m.info.map = dest.id;
-    m.info.x = dest.spawn.x;
-    m.info.z = dest.spawn.z;
+    m.info.x = at.x;
+    m.info.z = at.z;
     m.moved = true;
     this.broadcast({ t: 'moved', id: m.info.id, map: dest.id });
     // Snaps only carry players who moved, so the arrival gets everyone already standing on the new map.

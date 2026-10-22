@@ -502,6 +502,9 @@ async function casinoChecks(): Promise<void> {
     await sleep(800);
     const hub = await page.evaluate(() => window.__smoke.attachedReport('hub'));
     check('travel: hub intact after arriving', hub.missing.length === 0, hub.missing.join(', '));
+    const at = await page.evaluate(() => ({ ...window.__game.player(), yaw: window.__game.world.yaw }));
+    const want = MAPS[0].gateArrival!;
+    check('travel: back from the casino at the pond gate, facing town', Math.hypot(at.x - want.x, at.z - want.z) < 0.5 && Math.abs(at.yaw - want.yaw) < 0.01, JSON.stringify(at));
     await page.screenshot({ path: `${SHOTS}/pond-after-travel.png` });
   }
   await ctx.close();
