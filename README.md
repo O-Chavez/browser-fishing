@@ -124,4 +124,4 @@ Then open the URL Vite prints (usually http://localhost:5173).
 | `npm run screenshots` | Regenerate the README screenshots in `docs/images/` |
 | `npm run trailer` | Re-record the README gameplay clip (`docs/images/gameplay.mp4` and `.gif`); needs ffmpeg |
 
-Environment variables (all optional locally): `PORT`, `DATABASE_URL` (use Postgres instead of JSON files), `DATA_DIR` (where the JSON saves go).
+Environment variables (all optional locally): `PORT`, `DATABASE_URL` (use Postgres instead of JSON files), `DATA_DIR` (where the JSON saves go), `DEV_USER`/`DEV_PASS` (dev console login), `DISCORD_JOINS_WEBHOOK` (batched "player joined" pings), `DISCORD_FEEDBACK_WEBHOOK` (one forum post per `/bug`, `/idea` or `/feedback` report; reports are kept in storage when it is unset or Discord is down) and `DISCORD_FEEDBACK_TAGS` (optional forum tag ids, e.g. `bug=123,idea=456,new=789`).

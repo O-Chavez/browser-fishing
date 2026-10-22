@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import pg from 'pg';
 
@@ -11,6 +11,8 @@ export interface Storage {
   readonly kind: string;
   load(): Promise<GameData>;
   save(data: GameData): Promise<void>;
+  /** Keeps a player feedback report that couldn't be posted to Discord. */
+  saveFeedback(report: object): Promise<void>;
 }
 
 /** JSON files in a directory; survives restarts only where the disk does. */
@@ -45,6 +47,11 @@ export class FileStorage implements Storage {
   async save(data: GameData): Promise<void> {
     this.write('accounts.json', data.accounts);
   }
+
+  async saveFeedback(report: object): Promise<void> {
+    mkdirSync(this.dir, { recursive: true });
+    appendFileSync(join(this.dir, 'feedback.jsonl'), JSON.stringify(report) + '\n');
+  }
 }
 
 /** Postgres (any host: Render, Neon, Supabase...) keeps progress across deploys with no disk. */
@@ -66,6 +73,11 @@ export class PgStorage implements Storage {
   async save(data: GameData): Promise<void> {
     const sql = 'INSERT INTO game_state (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value';
     await this.pool.query(sql, ['accounts', JSON.stringify(data.accounts)]);
+  }
+
+  async saveFeedback(report: object): Promise<void> {
+    await this.pool.query('CREATE TABLE IF NOT EXISTS feedback (id serial PRIMARY KEY, at timestamptz NOT NULL DEFAULT now(), report jsonb NOT NULL)');
+    await this.pool.query('INSERT INTO feedback (report) VALUES ($1)', [JSON.stringify(report)]);
   }
 }
 

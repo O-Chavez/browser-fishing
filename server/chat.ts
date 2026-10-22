@@ -29,9 +29,9 @@ export function censor(text: string): string {
 }
 
 /** Trims, drops control characters, collapses whitespace and caps the length. Empty means "nothing to send". */
-export function cleanText(raw: unknown): string {
+export function cleanText(raw: unknown, max = CHAT_MAX): string {
   if (typeof raw !== 'string') return '';
-  return [...raw.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim()].slice(0, CHAT_MAX).join('');
+  return [...raw.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim()].slice(0, max).join('');
 }
 
 export type ChatResult = { ok: true; text: string } | { ok: false; msg?: string };

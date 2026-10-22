@@ -65,7 +65,7 @@ export type ClientMsg =
   | { t: 'tip'; id: string }
   /** A global chat line. */
   | { t: 'chat'; text: string }
-  /** A dev console slash command (never broadcast). */
+  /** A slash command: /bug, /idea, /feedback or the dev console (never broadcast). */
   | { t: 'cmd'; text: string };
 
 export type ServerMsg =
@@ -95,7 +95,7 @@ export type ServerMsg =
   | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
   /** A server-wide notice for the chat window ("Ann has joined"). */
   | { t: 'sys'; text: string }
-  /** Dev console replies, for the player who typed the command only; `time` overrides their day/night. */
+  /** Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night. */
   | { t: 'dev'; lines: string[]; time?: number | null };
 
 export interface HallRow { name: string; level: number; best: BestCatch }

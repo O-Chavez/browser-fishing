@@ -5,6 +5,7 @@ dist/
 # runtime save data (accounts hold login-token hashes)
 server/rooms.json
 server/accounts.json
+server/feedback.jsonl
 
 # env files, logs, platform and OS files
 .env

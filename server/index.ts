@@ -8,6 +8,8 @@ import { SERVER_PORT, type ClientMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate } from './dev';
+import { JoinFeed, NOT_FORUM, postWebhook } from './discord';
+import { FeedbackGate, feedbackPost, parseTags, type FeedbackReport } from './feedback';
 import { Room } from './room';
 import { createStorage } from './storage';
 
@@ -23,6 +25,31 @@ const chatGate = new ChatGate();
 const devGate = new DevGate({ user: process.env.DEV_USER, pass: process.env.DEV_PASS });
 if (devGate.enabled) console.log('dev console: enabled');
 setInterval(() => chatGate.prune(), 60_000);
+const feedbackGate = new FeedbackGate();
+// Discord webhooks; each feature is off while its URL is unset. The URLs are secrets: never logged or sent to clients.
+const BUILD = process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'dev';
+const JOINS_HOOK = process.env.DISCORD_JOINS_WEBHOOK;
+const FEEDBACK_HOOK = process.env.DISCORD_FEEDBACK_WEBHOOK;
+const feedbackTags = parseTags(process.env.DISCORD_FEEDBACK_TAGS);
+const online = () => [...rooms.values()].reduce((n, r) => n + r.size, 0);
+const joinFeed = JOINS_HOOK ? new JoinFeed((content) => void postWebhook(JOINS_HOOK, { content }), online) : null;
+console.log(`discord: joins ${JOINS_HOOK ? 'on' : 'off'}, feedback ${FEEDBACK_HOOK ? 'on' : 'off'}`);
+/** Posts a report to the feedback forum; if Discord is off or unreachable, keeps it in storage instead. */
+async function sendFeedback(r: FeedbackReport): Promise<void> {
+  const report = { ...r, build: BUILD };
+  console.log(`[feedback] ${r.kind} from ${r.name}: ${r.text}`);
+  if (FEEDBACK_HOOK) {
+    let res = await postWebhook(FEEDBACK_HOOK, feedbackPost(report, feedbackTags));
+    // A webhook on a plain text channel can't open forum posts; send a normal message there instead.
+    if (!res.ok && res.code === NOT_FORUM) res = await postWebhook(FEEDBACK_HOOK, feedbackPost(report, feedbackTags, false));
+    if (res.ok) return;
+  }
+  try {
+    await storage.saveFeedback(report);
+  } catch (e) {
+    console.error('feedback could not be saved', e);
+  }
+}
 console.log(`saves: ${storage.kind} (${Object.keys(data.accounts).length} accounts loaded)`);
 if (process.env.RENDER && !process.env.DATABASE_URL) {
   console.warn('WARNING: running on Render without DATABASE_URL - progress will be lost on every deploy. Set it in the web service Environment tab.');
@@ -63,6 +90,8 @@ function room(name: string): Room {
     r.hallStale = () => accounts.hallStale();
     r.chatGate = chatGate;
     r.devGate = devGate;
+    r.feedbackGate = feedbackGate;
+    r.report = (rep) => void sendFeedback(rep);
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }
@@ -111,12 +140,14 @@ const http = createServer((req, res) => {
   });
   createReadStream(file).pipe(res);
 });
-const wss = new WebSocketServer({ server: http, maxPayload: 1024 });
+// Room for a full-length feedback report (500 characters, up to 4 bytes each).
+const wss = new WebSocketServer({ server: http, maxPayload: 4096 });
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const r = room((url.searchParams.get('room') ?? 'lobby').replace(/[^\w-]/g, '').slice(0, 24) || 'lobby');
   sockets.set(r, (sockets.get(r) ?? 0) + 1);
   let id = 0;
+  let name = '';
   const send = (m: unknown, json?: string) => ws.readyState === ws.OPEN && ws.send(json ?? JSON.stringify(m));
   ws.on('message', (data) => {
     let msg: ClientMsg;
@@ -134,10 +165,13 @@ wss.on('connection', (ws, req) => {
       send({ t: 'error', msg: res.msg });
       return ws.close();
     }
-    id = r.join({ send }, res.account, msg.color);
+    id = r.join({ send, ua: req.headers['user-agent'] }, res.account, msg.color);
+    name = res.account.name;
+    joinFeed?.join({ name, isNew: res.created, level: res.account.save.level, map: res.account.save.location });
   });
   ws.on('close', () => {
     if (id) r.leave(id);
+    if (name) joinFeed?.left(name);
     // Any ?room= name creates a room; drop it once no socket uses it so they don't pile up.
     const left = (sockets.get(r) ?? 1) - 1;
     if (left > 0) sockets.set(r, left);
