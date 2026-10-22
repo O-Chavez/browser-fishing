@@ -286,6 +286,15 @@ async function pondChecks(): Promise<void> {
   const n = await page.evaluate(() => (window.__game.s as any).slots.length as number);
   check('hotbar: each scroll notch moves one slot', w1 === (w0 + 3) % n, `${w0 + 1} -> ${w1 + 1}`);
   check('hotbar: newly held slot animates', popped);
+  // Switching slots marks the held one in place instead of rebuilding the hotbar, so the old slot
+  // can glide back down while the new one bounces.
+  const kept = await page.evaluate(async () => {
+    const first = document.querySelector('#hotbar .slot');
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit2' }));
+    await new Promise((r) => setTimeout(r, 50));
+    return { same: document.querySelector('#hotbar .slot') === first, held: document.querySelectorAll('#hotbar .slot.held').length, picks: document.querySelectorAll('#hotbar .pick').length };
+  });
+  check('hotbar: switching slots keeps the slot elements (old slot glides down)', kept.same && kept.held === 1 && kept.picks === 1, JSON.stringify(kept));
 
   // Drop a fish and pick it back up.
   await page.evaluate((f) => { (window.__game.s as any).slots[3] = f; }, fish(4));
