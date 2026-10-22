@@ -102,6 +102,8 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 .chat-input.hidden { display: none; }
 .chat-hint { font-size: 12px; opacity: .75; text-align: right; text-shadow: 0 1px 3px #000; }
 .chat-hint b { opacity: 1; }
+.chat-cmd { font-weight: 800; color: #ffd98a; }
+.chat-cmd.on { padding: 0 4px; border-radius: 4px; background: rgba(255,217,138,.25); }
 #resume { position: fixed; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; background: rgba(0,0,0,.25); cursor: pointer; }
 #resume::before { content: ''; position: absolute; width: 360px; height: 64px; border-radius: 16px; background: var(--hud-bg); box-shadow: var(--hud-edge); z-index: -1; }
 #resume b { padding: 1px 9px; margin: 0 6px; background: var(--gold); color: var(--gold-ink); border-radius: 7px; box-shadow: 0 3px 0 var(--gold-dark); }
