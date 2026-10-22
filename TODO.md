@@ -146,6 +146,9 @@
 - [ ] Check that a doubled blackjack win raises the fish's value instead of paying out coins plus the fish
   - Intended: a doubled win only multiplies the fish (×4 in `blackjackFactor`, `src/game/casino.ts:181`). The double-down coins (`doubleCost`/`doubleDown`, `casino.ts:158-170`) are spent, and only a push gives them back (`settleBlackjack`, `casino.ts:175`)
   - Check it in-game and on the server (`Room.bjAct`, `server/room.ts:425`): coins before/after and the fish's value after a doubled win, loss and push. Add a test in `casino.test.ts` if one is missing
+- [ ] Suggest a rod upgrade after a tough fight or a lost fish
+  - When a reel fight runs long or ends in a snapped line / escaped fish, show a hint like "A better rod makes fish easier to reel in". Outcomes are handled at the end of the reel tick in `src/game/game.ts:2268-2274` (`Reel` in `src/game/reel.ts`, built with the rod's control at `game.ts:1720`)
+  - Keep it from nagging: only when a better rod exists that the player hasn't bought, and with a cooldown or once-per-session limit
 
 ## Ideas
 
