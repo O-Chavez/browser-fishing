@@ -406,6 +406,53 @@ describe('chat', () => {
   });
 });
 
+describe('blackjack double down', () => {
+  const card = (r: number) => ({ r, s: 0 });
+  // A doubled 5+6 draws the next card; the dealer holds 10+7 or 10+10.
+  const play = (dealer: number, draw: number) => {
+    const { room, store } = setup();
+    const res = store.auth('Ann', 'token-token-token-Ann');
+    if (!res.ok) throw new Error(res.msg);
+    const s = res.account.save;
+    s.location = 'casino';
+    const fishId = FISH[FISH.length - 1].id;
+    s.slots[2] = { k: 'fish', fishId, size: FISH[FISH.length - 1].maxSize };
+    const c = conn();
+    const id = room.join(c, res.account);
+    const spot = MAPS.find((m) => m.id === 'casino')!.casino!.blackjack;
+    room.handle(id, { t: 'pos', x: spot.x, z: spot.z, yaw: 0 });
+    const value = eco.fishValue(s.slots[2] as Extract<typeof s.slots[number], { k: 'fish' }>);
+    const cost = Math.round(value);
+    s.coins = cost + 100;
+    (room as any).members.get(id).bj = { deck: [card(draw)], player: [card(5), card(6)], dealer: [card(10), card(dealer)], slot: 2, doubled: false, stake: 0, done: false };
+    room.handle(id, { t: 'bj', a: 'double' });
+    const it = s.slots[2];
+    return { s, c, value, cost, after: it?.k === 'fish' ? eco.fishValue(it) : null };
+  };
+
+  it('a win multiplies the fish by 4 and keeps the double-down coins spent', () => {
+    const r = play(7, 10);
+    expect(last(r.c, 'bj').view).toMatchObject({ done: true, result: 'win', stake: r.cost });
+    expect(r.s.coins).toBe(100);
+    expect(r.after).toBe(r.value * 4);
+    expect(last(r.c, 'state').save.coins).toBe(100);
+  });
+
+  it('a push keeps the fish as it was and refunds the coins', () => {
+    const r = play(10, 9);
+    expect(last(r.c, 'bj').view).toMatchObject({ done: true, result: 'push' });
+    expect(r.s.coins).toBe(r.cost + 100);
+    expect(r.after).toBe(r.value);
+  });
+
+  it('a loss takes the fish and the coins', () => {
+    const r = play(10, 2);
+    expect(last(r.c, 'bj').view).toMatchObject({ done: true, result: 'lose' });
+    expect(r.s.coins).toBe(100);
+    expect(r.after).toBeNull();
+  });
+});
+
 describe('faces', () => {
   it('changes face, tells the room, and keeps it through a reset', () => {
     const { room, join } = setup();

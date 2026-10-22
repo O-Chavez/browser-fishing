@@ -403,17 +403,26 @@ async function casinoChecks(): Promise<void> {
   check('casino: blackjack deal shows cards on the felt', bj.cards >= 3 && bj.cardsAttached, `${bj.cards} cards`);
   check('casino: blackjack shows hit/stand (or the hand ended at once)', live || bj.vis.deal, JSON.stringify(bj.vis));
   if (live) {
-    await aimAt(page, 'bj', 'stand');
-    const done = await page.evaluate(async () => {
+    // Double down: it ends the hand like a stand, and costs coins equal to the fish. A win only
+    // multiplies the fish (x4) and keeps the coins spent, a push refunds them, a loss takes both.
+    await aimAt(page, 'bj', 'double');
+    const dbl = await page.evaluate(async () => {
       const g = window.__game;
       const h = (g.world as any).hall;
+      const s = g.s as any;
+      const before = { coins: s.coins, mult: s.slots[3]?.mult ?? 1 };
       g.press();
       g.release();
       const t0 = performance.now();
       while (performance.now() - t0 < 4000 && !h.bjButtons.deal.visible) await new Promise((r) => setTimeout(r, 50));
-      return h.bjButtons.deal.visible;
+      // The server sends the new save before the finished hand, so it's already applied here.
+      return { done: h.bjButtons.deal.visible, before, coins: s.coins, mult: s.slots[3] ? (s.slots[3].mult ?? 1) : null };
     });
-    check('casino: standing ends the hand (DEAL comes back)', done);
+    const spent = dbl.before.coins - dbl.coins;
+    const outcome = dbl.mult === null ? 'lost' : dbl.mult === dbl.before.mult * 4 ? 'won' : dbl.mult === dbl.before.mult ? 'push' : 'other';
+    const settled = outcome === 'push' ? spent === 0 : outcome !== 'other' && spent > 0;
+    check('casino: doubling down ends the hand (DEAL comes back)', dbl.done);
+    check('casino: a doubled hand settles coins and fish (win = fish x4, coins stay spent)', dbl.done && settled, `${outcome}, ${JSON.stringify(dbl)}`);
   }
 
   // Cash a fish in at the chip tray.
@@ -440,7 +449,8 @@ async function casinoChecks(): Promise<void> {
   await page.click('[data-prize="cosmetics"]');
   await page.click('[data-pick="ccos"][data-id="visor"]');
   await sleep(150);
-  const chips0 = await page.evaluate(() => window.__game.s.chips);
+  // Coins as they are now: a doubled blackjack hand above may have spent some.
+  const { chips: chips0, coins: coins0 } = await page.evaluate(() => ({ chips: window.__game.s.chips, coins: window.__game.s.coins }));
   await page.click('#tab .detail [data-act="buycos"]');
   const bought = await page.evaluate(async () => {
     const s = window.__game.s;
@@ -448,7 +458,7 @@ async function casinoChecks(): Promise<void> {
     while (performance.now() - t0 < 3000 && !s.owned.includes('visor')) await new Promise((r) => setTimeout(r, 50));
     return { owned: s.owned.includes('visor'), chips: s.chips, coins: s.coins };
   });
-  check('casino: High Roller tab sells cosmetics for chips', bought.owned && bought.chips === chips0 - 30 && bought.coins === 5000, JSON.stringify({ chips0, ...bought }));
+  check('casino: High Roller tab sells cosmetics for chips', bought.owned && bought.chips === chips0 - 30 && bought.coins === coins0, JSON.stringify({ chips0, coins0, ...bought }));
   await page.click('[data-act="equip"][data-id="visor"]');
   await sleep(800);
   const worn = await page.evaluate(() => window.__game.s.look.hat);
