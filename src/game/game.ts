@@ -322,6 +322,8 @@ export class Game {
       mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
     });
     $('resume').addEventListener('click', () => {
+      // Audio has to start inside a click (Safari); this overlay is the desktop way into the game.
+      audio.start();
       // Chrome refuses a re-lock for a moment after Esc; the overlay stays up until a later click works.
       const req = this.world.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
       req?.catch?.(() => {});
@@ -637,6 +639,7 @@ export class Game {
     document.addEventListener('pointerlockchange', () => {
       $('resume').classList.add('hidden');
       if (this.locked) {
+        audio.start();
         this.dismissWelcome();
         this.guide('start');
       }
