@@ -12,7 +12,7 @@ import {
 } from '../data/content';
 import { audio } from './audio';
 import { MAPS, type MapDef } from '../data/maps';
-import { isWater } from './env';
+import { isWater, standHeight } from './env';
 import { Avatars } from './avatars';
 import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
 import { DropsView, itemName } from './dropsview';
@@ -97,6 +97,8 @@ const CAMP_TIPS = [
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const GRAVITY = 9.8;
+/** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
+const MAX_HOLD_PITCH = 1.5;
 
 export class Game {
   private s: SaveData = load();
@@ -1740,7 +1742,7 @@ export class Game {
     w.fx.ripple(this.landFrom, 3.5);
     audio.splash(1);
     w.rig.pose({
-      pitch: hangPitch(this.heldScale()),
+      pitch: this.holdPitch(this.heldScale()),
       yaw: 0,
       bendP: 0.5,
       bendY: 0,
@@ -1776,6 +1778,11 @@ export class Game {
         this.bob.copy(tip).addScaledVector(d, reach);
         const radial = this.bobVel.dot(d);
         if (radial > 0) this.bobVel.addScaledVector(d, -radial);
+      }
+      const floor = this.hangFloor(this.bob.x, this.bob.z, sc);
+      if (this.bob.y < floor) {
+        this.bob.y = floor;
+        this.bobVel.y = Math.max(0, this.bobVel.y);
       }
     }
   }
@@ -1819,7 +1826,7 @@ export class Game {
     this.fish = null;
     this.endCast('result');
     this.world.rig.pose({
-      pitch: hangPitch(this.heldScale()),
+      pitch: this.holdPitch(this.held!.group.scale.x),
       yaw: 0,
       bendP: 0.45,
       bendY: 0,
@@ -1896,6 +1903,19 @@ export class Game {
     return heldScale(this.hookedSize, this.hooked?.tier ?? 1);
   }
 
+  /**
+   * Rod pitch while a catch dangles. The rod turns with the view, so it's raised by however far the
+   * player looks down; otherwise looking down would dip the fish into the water.
+   */
+  private holdPitch(sc: number): number {
+    return Math.min(MAX_HOLD_PITCH, hangPitch(sc) - Math.min(0, this.world.pitch));
+  }
+
+  /** Lowest a dangling fish's middle may go, so its tail stays clear of the water, dock and ground. */
+  private hangFloor(x: number, z: number, sc: number): number {
+    return Math.max(this.world.surface(x, z), standHeight(x, z)) + 0.08 + 0.5 * sc;
+  }
+
   /** Mouth position of a fish dangling from the rod tip, with a gentle pendulum swing. */
   private hangPoint(
     out: THREE.Vector3,
@@ -1905,7 +1925,8 @@ export class Game {
     this.world.rig.tip.getWorldPosition(out);
     out.x += Math.sin(t * 1.7) * 0.07 * swing;
     out.z += Math.cos(t * 1.3) * 0.04 * swing;
-    out.y -= hangLen(this.heldScale());
+    const sc = this.heldScale();
+    out.y = Math.max(out.y - hangLen(sc), this.hangFloor(out.x, out.z, sc) + 0.5 * sc);
     return out;
   }
 
@@ -2120,6 +2141,7 @@ export class Game {
       case 'result':
         if (this.held) {
           const g = this.held.group;
+          this.world.rig.pose({ pitch: this.holdPitch(g.scale.x) });
           this.stepBob(dt);
           const tip = this.tipPos;
           const up = this.swingDir.subVectors(tip, this.bob).normalize();
@@ -2275,6 +2297,7 @@ export class Game {
       Math.sin(u * Math.PI * 3) * 0.5 * (1 - e),
     );
     animateFish(this.fish!, w.time, 22, 0.6);
+    w.rig.pose({ pitch: this.holdPitch(sc) });
     w.line.update(
       w.rig.tip.getWorldPosition(new THREE.Vector3()),
       m,
