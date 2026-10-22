@@ -59,7 +59,7 @@ import {
 import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
-import { chipsFor, type BlackjackView } from './casino';
+import { chipsFor, doubleCost, type BlackjackView } from './casino';
 import { load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
@@ -225,7 +225,10 @@ export class Game {
         if (v?.done && !wasDone) {
           const r = v.result ?? 'lose';
           const label: Record<string, string> = { win: 'YOU WIN!', blackjack: 'BLACKJACK!', push: 'PUSH', lose: 'DEALER WINS', bust: 'BUST!' };
-          this.showResult(r === 'win' || r === 'blackjack' ? 'win' : r === 'push' ? 'push' : 'lose', label[r] ?? r.toUpperCase(), r === 'push' ? 'Your fish is safe' : r === 'win' || r === 'blackjack' ? 'Your fish is worth more' : 'The fish is gone');
+          const won = r === 'win' || r === 'blackjack';
+          // A doubled hand also staked coins: refunded on a push, lost with the fish.
+          const sub = won ? 'Your fish is worth more' : r === 'push' ? (v.stake ? `Your fish is safe and ${v.stake} 🪙 came back` : 'Your fish is safe') : v.stake ? `The fish and ${v.stake} 🪙 are gone` : 'The fish is gone';
+          this.showResult(won ? 'win' : r === 'push' ? 'push' : 'lose', label[r] ?? r.toUpperCase(), sub);
         }
         this.world.hall?.setBlackjack(v);
         if (this.menuOpen && this.tab === 'casino') this.renderMenu();
@@ -1324,7 +1327,8 @@ export class Game {
 
   private aimLabel(a: { k: string; id: string }): string {
     if (a.k === 'rbet') return `bet on ${a.id} · ×${ROULETTE_PAY[a.id as RouletteBet]}`;
-    return { deal: 'deal a hand', hit: 'hit', stand: 'stand', double: 'double down' }[a.id] ?? a.id;
+    if (a.id === 'double') return `double down · ${doubleCost(this.s, this.betSlot)} 🪙`;
+    return { deal: 'deal a hand', hit: 'hit', stand: 'stand' }[a.id] ?? a.id;
   }
 
   private tableClick(): void {

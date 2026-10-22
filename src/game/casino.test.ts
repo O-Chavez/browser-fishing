@@ -110,7 +110,7 @@ describe('roulette', () => {
 });
 
 describe('blackjack', () => {
-  const game = (player: cas.Card[], dealer: cas.Card[], deck: cas.Card[] = []): cas.Blackjack => ({ deck: [...deck].reverse(), player, dealer, slot: 2, doubled: false, done: false });
+  const game = (player: cas.Card[], dealer: cas.Card[], deck: cas.Card[] = []): cas.Blackjack => ({ deck: [...deck].reverse(), player, dealer, slot: 2, doubled: false, stake: 0, done: false });
 
   it('totals aces softly', () => {
     expect(cas.handTotal([card(1), card(13)])).toBe(21);
@@ -146,6 +146,47 @@ describe('blackjack', () => {
     expect(cas.blackjackFactor(g)).toBe(4);
     const late = game([card(2), card(3), card(4)], [card(10), card(7)], [card(2)]);
     expect(cas.actBlackjack(late, 'double')).toBe(false);
+  });
+
+  it('doubling down costs coins equal to the fish, refunded only on a push', () => {
+    const value = (s: ReturnType<typeof saveWith>) => eco.fishValue(s.slots[2] as ReturnType<typeof fish>);
+    const cost = cas.doubleCost(saveWith(fish()), 2);
+    expect(cost).toBe(Math.round(value(saveWith(fish()))));
+
+    const broke = saveWith(fish());
+    broke.coins = cost - 1;
+    const g0 = game([card(5), card(6)], [card(10), card(7)], [card(10)]);
+    expect(cas.doubleDown(broke, g0)).toMatch(/costs/);
+    expect(g0).toMatchObject({ doubled: false, done: false, stake: 0 });
+    expect(broke.coins).toBe(cost - 1);
+
+    const win = saveWith(fish());
+    win.coins = cost + 5;
+    const g1 = game([card(5), card(6)], [card(10), card(7)], [card(10)]);
+    expect(cas.doubleDown(win, g1)).toBeNull();
+    cas.settleBlackjack(win, g1);
+    expect(win.coins).toBe(5);
+    expect(value(win)).toBe(value(saveWith(fish())) * 4);
+
+    const push = saveWith(fish());
+    push.coins = cost;
+    const g2 = game([card(5), card(6)], [card(10), card(10)], [card(9)]);
+    expect(cas.doubleDown(push, g2)).toBeNull();
+    expect(g2.result).toBe('push');
+    cas.settleBlackjack(push, g2);
+    expect(push.coins).toBe(cost);
+    expect(push.slots[2]).not.toBeNull();
+
+    const lose = saveWith(fish());
+    lose.coins = cost;
+    const g3 = game([card(5), card(6)], [card(10), card(10)], [card(2)]);
+    expect(cas.doubleDown(lose, g3)).toBeNull();
+    cas.settleBlackjack(lose, g3);
+    expect(lose.coins).toBe(0);
+    expect(lose.slots[2]).toBeNull();
+
+    const late = game([card(2), card(3), card(4)], [card(10), card(7)], [card(2)]);
+    expect(cas.doubleDown(saveWith(fish()), late)).toMatch(/first two cards/);
   });
 
   it('deals two cards each from a 52-card deck', () => {

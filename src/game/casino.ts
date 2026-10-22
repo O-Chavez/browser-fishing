@@ -77,6 +77,8 @@ export interface Blackjack {
   /** The hotbar slot holding the bet fish. */
   slot: number;
   doubled: boolean;
+  /** Coins paid to double down: lost with the fish, refunded on a push. */
+  stake: number;
   done: boolean;
   result?: BjResult;
 }
@@ -108,7 +110,7 @@ function shuffled(rng: Rng): Card[] {
 
 export function dealBlackjack(slot: number, rng: Rng): Blackjack {
   const deck = shuffled(rng);
-  const g: Blackjack = { deck, player: [deck.pop()!], dealer: [deck.pop()!], slot, doubled: false, done: false };
+  const g: Blackjack = { deck, player: [deck.pop()!], dealer: [deck.pop()!], slot, doubled: false, stake: 0, done: false };
   g.player.push(deck.pop()!);
   g.dealer.push(deck.pop()!);
   const pn = isNatural(g.player);
@@ -152,6 +154,29 @@ export function actBlackjack(g: Blackjack, a: BjAction): boolean {
   return true;
 }
 
+/** Coins it costs to double down: the bet fish's value, so the fish and the coins are both at stake. */
+export function doubleCost(s: SaveData, slot: number): number {
+  const it = s.slots[slot];
+  return it?.k === 'fish' ? Math.round(fishValue(it)) : 0;
+}
+
+/** Doubles down, paying the stake in coins. Returns why it can't, or null once the action is taken. */
+export function doubleDown(s: SaveData, g: Blackjack): string | null {
+  if (!canDouble(g)) return 'You can only double down on your first two cards.';
+  const cost = doubleCost(s, g.slot);
+  if (s.coins < cost) return `Doubling down costs ${cost} 🪙. You only have ${Math.floor(s.coins)} 🪙.`;
+  s.coins -= cost;
+  g.stake = cost;
+  actBlackjack(g, 'double');
+  return null;
+}
+
+/** Pays out a finished hand: the fish wins, survives or is lost, and a push refunds the double-down stake. */
+export function settleBlackjack(s: SaveData, g: Blackjack): void {
+  settleBet(s, g.slot, blackjackFactor(g));
+  if (g.result === 'push') s.coins += g.stake;
+}
+
 /** The multiplier a finished hand pays: 0 destroys the fish, 1 returns it unchanged. */
 export function blackjackFactor(g: Blackjack): number {
   switch (g.result) {
@@ -176,6 +201,8 @@ export interface BlackjackView {
   result?: BjResult;
   factor: number;
   canDouble: boolean;
+  /** Coins staked on a double down. */
+  stake: number;
 }
 
 export function blackjackView(g: Blackjack): BlackjackView {
@@ -188,5 +215,6 @@ export function blackjackView(g: Blackjack): BlackjackView {
     result: g.result,
     factor: g.done ? blackjackFactor(g) : 0,
     canDouble: canDouble(g),
+    stake: g.stake,
   };
 }
