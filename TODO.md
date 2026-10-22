@@ -97,6 +97,14 @@
 - [x] Fill out readme for the project.
   - Highlight technologies uses, game features/progression/etc
 - [ ] Add messaging that the game is meant for desktop play (prevents mobile players from getting frustrated)
+- [ ] Player feedback forwarded to a Discord forum channel
+  - Start with a `/feedback <text>` chat command (reuse the slash-command handling in `src/game/chatbox.ts`); a Bug/Idea panel can come later (taste-driven: propose options first)
+  - Client sends a new `feedback` WebSocket message (`server/room.ts`); the server caps length, rate-limits per account, reuses the chat profanity filter, and attaches context (account, level, map, position, build hash, browser, time)
+  - Server posts to a Discord webhook from a Render env var (`DISCORD_FEEDBACK_WEBHOOK`, never sent to the client), one forum thread per report with a category tag and `allowed_mentions: { parse: [] }`; store in Postgres as a fallback if Discord is unreachable
+  - Oscar sets up the forum channel, its tags (bug/idea, new/planned/done) and the webhook
+- [ ] Sketch out a possible route to making the game mobile friendly
+  - [ ] How feasable?
+  - [ ] What would need to change?
 
 ## Ideas
 
