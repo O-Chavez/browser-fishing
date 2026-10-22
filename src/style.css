@@ -39,6 +39,8 @@
 html, body { margin: 0; height: 100%; overflow: hidden; font-family: Nunito, ui-rounded, system-ui, sans-serif; font-weight: 700; color: var(--cream); background: #000; }
 kbd { text-shadow: none; display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 7px; font: 900 13px Nunito, ui-rounded, system-ui, sans-serif; background: var(--gold); color: var(--gold-ink); box-shadow: 0 3px 0 var(--gold-dark); }
 canvas { display: block; position: fixed; inset: 0; }
+/* The world view always fills the window; World.resize follows this box for its render size. */
+#game { width: 100%; height: 100%; }
 .hidden { display: none !important; }
 
 #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,.8); pointer-events: none; }

@@ -109,6 +109,7 @@ export class World {
   hall: CasinoHall | null = null;
   private indoor = false;
   private lite = false;
+  /** Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5. */
   private pixelCap = 1.25;
   private trees: Circle[] = [];
   yaw = 0;
@@ -160,8 +161,6 @@ export class World {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    // Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5.
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // Shadows refresh every few frames (see update); the sun and props move too slowly to notice.
@@ -202,6 +201,10 @@ export class World {
     this.buildBobber();
     this.bobber.visible = false;
     this.resize();
+    // CSS keeps the canvas at the full window; follow its box rather than window resize events, which
+    // don't fire when a phone's URL bar or the touch-mode viewport switch settles the page late.
+    new ResizeObserver(() => this.resize()).observe(canvas);
+    // Zoom and moving to another screen change devicePixelRatio, sometimes without changing the box.
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -223,7 +226,6 @@ export class World {
   private applyQuality(): void {
     this.sun.castShadow = !this.indoor && !this.lite;
     this.applyClutter();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.pixelCap) * (this.lite ? 0.75 : 1));
     this.resize();
   }
 
@@ -231,9 +233,18 @@ export class World {
     for (const o of this.clutter) o.visible = !this.lite;
   }
 
+  /** Matches the render to the canvas's on-screen size and the current pixel ratio. */
   private resize(): void {
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+    const canvas = this.renderer.domElement;
+    const w = canvas.clientWidth || window.innerWidth;
+    const h = canvas.clientHeight || window.innerHeight;
+    const ratio = Math.min(window.devicePixelRatio, this.pixelCap) * (this.lite ? 0.75 : 1);
+    // Each call reallocates the drawing buffer, so skip it when nothing changed.
+    if (this.renderer.getPixelRatio() !== ratio) this.renderer.setPixelRatio(ratio);
+    const size = this.renderer.getSize(new THREE.Vector2());
+    // `false` leaves the canvas's CSS size alone (no inline px), so it can't go stale.
+    if (size.x !== w || size.y !== h) this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
 
