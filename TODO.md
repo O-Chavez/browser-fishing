@@ -194,9 +194,10 @@
   - E.g. a player who started a throwaway account on one device wants to switch to their main account there. Today "Log out of this device" only appears once a password is set (`acctForm` in `src/game/game.ts:2971-2974`) and the server refuses `forget` without one (`server/index.ts:252`), so the only way to switch is clearing site data
   - Add a "Log in as a different account" option in ⚙️ Settings > Account for every account, leading to the join screen (name + password). For a password-free account, warn clearly that it can't be got back after logging out (or offer to set a password first)
 
-- [ ] Make it obvious when you're playing offline, with a way to reconnect
+- [x] Make it obvious when you're playing offline, with a way to reconnect
   - Today a dropped connection or "play offline" only shows a one-off toast ("Disconnected - playing offline.", `src/game/game.ts:324`; also `game.ts:305`), plus a line in the players panel (`game.ts:2917`), so it's easy to miss that progress isn't reaching the server
   - Show a small persistent badge/banner while offline, e.g. "Offline - refresh to connect" (or a "Reconnect" button that reloads/rejoins). Taste-driven: propose options first
+  - Done (2026-10-22): Oscar picked a top-center banner whose button reloads the page, shown only when the player didn't choose to go offline. `#offline` ("📡 Disconnected / Playing offline: progress here isn't saved to your account." + **Refresh to reconnect**) replaces the old toast after a dropped connection, a refused join, or an unreachable server on a direct `?name=` login, and stays until the reload. "Play offline" on the join screen shows nothing. It sits outside `#hud` above the resume overlay, so the button can be clicked whenever the mouse is free. A reload rejoins by itself for returning players (`fishing-auto`). Smoke has new checks (no banner for "Play offline", the banner after the server is killed, clickable over the overlay, reload with the server still down): 63/63
 
 ## Ideas
 
