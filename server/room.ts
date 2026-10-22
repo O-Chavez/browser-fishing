@@ -393,7 +393,12 @@ export class Room {
 
   private bjAct(m: Member, a: 'hit' | 'stand' | 'double'): void {
     const g = m.bj;
-    if (!g || !cas.actBlackjack(g, a)) return;
+    if (!g) return;
+    if (a === 'double') {
+      // Doubling down pays its stake in coins, so it can be refused.
+      const bad = cas.doubleDown(m.acct.save, g);
+      if (bad) return m.conn.send({ t: 'notice', msg: bad });
+    } else if (!cas.actBlackjack(g, a)) return;
     this.bjDone(m);
     m.conn.send({ t: 'bj', view: cas.blackjackView(g) });
   }
@@ -403,7 +408,7 @@ export class Room {
     const g = m.bj;
     if (!g?.done) return;
     m.bj = null;
-    cas.settleBet(m.acct.save, g.slot, cas.blackjackFactor(g));
+    cas.settleBlackjack(m.acct.save, g);
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: m.acct.save });

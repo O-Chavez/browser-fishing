@@ -152,6 +152,24 @@ describe('casino tables', () => {
     expect(final.view!.factor === 0 ? item === null : item !== null).toBe(true);
   });
 
+  it('blackjack double down needs coins for the fish value and refuses without them', () => {
+    const { room, p, setRoll } = seat('Flo');
+    goTo(room, p.id, casino.casino!.blackjack);
+    setRoll(0.3);
+    room.handle(p.id, { t: 'bj', a: 'deal', i: 2 });
+    const last = () => ([...p.c.log].reverse().find((m) => m.t === 'bj') as Extract<ServerMsg, { t: 'bj' }>).view!;
+    // A fixed roll deals the same hand every time; 0.3 leaves a live hand to double on.
+    expect(last().canDouble).toBe(true);
+    p.acct.save.coins = 0;
+    room.handle(p.id, { t: 'bj', a: 'double' });
+    expect(p.c.log.some((m) => m.t === 'notice' && m.msg.includes('Doubling down costs'))).toBe(true);
+    expect(last()).toMatchObject({ done: false, canDouble: true });
+    p.acct.save.coins = 10_000_000;
+    room.handle(p.id, { t: 'bj', a: 'double' });
+    expect(last()).toMatchObject({ done: true, stake: expect.any(Number) });
+    expect(p.acct.save.coins).toBe(10_000_000 - (last().result === 'push' ? 0 : last().stake));
+  });
+
   it('turns fish in for chips at the prize counter and sells perks', () => {
     const { room, p } = seat('Di');
     room.handle(p.id, { t: 'cashout', i: 2 });

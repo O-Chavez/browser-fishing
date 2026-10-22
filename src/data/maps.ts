@@ -208,7 +208,7 @@ MAPS.push({
         lines: [
           'Turn your catch in for chips, darling. Bet it first if you are feeling lucky.',
           'A fish that wins is worth more, a fish that loses is gone.',
-          'A fish worth sixteen times its price is too rich for the tables. Cash it in.',
+          'No limit at my tables, darling. Double it, double it again, then cash it in before your luck turns.',
         ],
       },
       {

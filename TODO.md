@@ -112,9 +112,11 @@
   - Today an account is a name plus a random token kept in that browser's localStorage (`game.ts:198-200`, checked by `AccountStore.auth` in `server/accounts.ts`), so a new browser or cleared site data can't get back in. Add an optional "set a password" step that claims the name; password-free play stays as it is, and existing accounts keep working
   - Passwords hashed with a slow hash (Node's `crypto.scrypt`, not the token `hash()`), login lockout reusing the pattern in `server/dev.ts`. Recovery: skip email; consider a one-time recovery code shown when the password is set, or a "link a device" code from a logged-in browser
   - Larger item: propose a plan (UI on the join screen, protocol, migration, recovery) before editing
-- [ ] Remove the casino multiplier cap
+- [x] Remove the casino multiplier cap
   - No limit on how much a gambled fish can be worth: drop `MULT_CAP` (×16, `src/data/casino.ts:6`) and its checks in `src/game/casino.ts:15,28` and `src/game/game.ts:1063,1166,1232` ("too rich for the table"), plus the test in `casino.test.ts` and the cap line in `GAME_DESIGN.md:374`
   - Check that huge values still display, save and sell correctly (number formatting, nothing past `Number.MAX_SAFE_INTEGER`). This also settles the Lucky Wheel cap idea: neither is capped
+- [x] Blackjack double down costs coins
+  - Doubling used to risk nothing extra (a loss destroyed the fish either way, a win paid ×4). It now costs coins equal to the fish's value: refunded on a push, lost on a loss or bust, refused with a notice if the player can't pay
 - [x] Sketch out a possible route to making the game mobile friendly
   - [x] How feasable?
     - Feasible (2026-10-21): the verbs (move, look, hold to cast/reel, interact, pick a slot) map cleanly to touch, and the server needs no changes. Hard parts: iPhone Safari has no Pointer Lock (game activity is tied to it in `game.ts`), input handling is mixed into `game.ts`, menus rely on hover, and phone GPUs vs the current shadows/lights
@@ -138,3 +140,5 @@
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs
 - Full mobile support, building on the touch test build and the mobile spec (https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv): answer the spec's five open decisions first, then full-screen menus with tap-to-select and a detail bar instead of hover tooltips, quick-chat chips, long-press to drop, and touch wording in the remaining key/click text (casino table hints, toasts like "Hold a fish (1-5)"). Remove the FPS readout (dev-only today) and decide whether touch mode should skip the desktop-only notice
 - Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
+- Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%)
+- Blackjack hands that end on the deal (a dealer or player natural) never show the big result banner: `onBlackjack` in `game.ts` only shows it when the previous view was live, and `blackjackAct` clears `this.bj` before dealing. Instant dealer blackjacks with no banner may add to the "rigged" feeling
