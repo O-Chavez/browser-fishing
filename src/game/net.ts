@@ -13,6 +13,7 @@ export interface NetEvents {
   onPlayers(): void;
   onBoard(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
+  onJump(id: number): void;
   onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }): void;
   onCastFail(msg: string): void;
   /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
@@ -172,6 +173,9 @@ export class NetClient {
         if (m.id !== this.id) this.events.onAct(p, m.act);
         break;
       }
+      case 'jump':
+        if (m.id !== this.id) this.events.onJump(m.id);
+        break;
       case 'snap':
         for (const [id, x, z, yaw] of m.p) {
           const p = this.players.get(id);

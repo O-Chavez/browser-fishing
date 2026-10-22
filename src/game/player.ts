@@ -11,6 +11,11 @@ const SPRINT = 7;
 const BODY_R = 0.35;
 const GRAVITY = 20;
 const JUMP_SPEED = 6.2;
+/** How long a jump lasts, takeoff to landing. */
+export const JUMP_TIME = (2 * JUMP_SPEED) / GRAVITY;
+
+/** Height above the ground `t` seconds into a jump: the same arc `Player` flies, for other players' avatars. */
+export const jumpLift = (t: number): number => (t <= 0 || t >= JUMP_TIME ? 0 : JUMP_SPEED * t - (GRAVITY * t * t) / 2);
 
 /** First-person walker: slides along water edges, obstacles and the map boundary. */
 export class Player {
@@ -28,8 +33,11 @@ export class Player {
     return this.lift > 0.001 || this.vy > 0;
   }
 
-  jump(): void {
-    if (!this.airborne) this.vy = JUMP_SPEED;
+  /** Starts a jump; false if already in the air. */
+  jump(): boolean {
+    if (this.airborne) return false;
+    this.vy = JUMP_SPEED;
+    return true;
   }
 
   constructor(private radius: number) {}

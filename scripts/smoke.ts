@@ -521,6 +521,28 @@ async function chatChecks(): Promise<void> {
   const onTop = await bubbleShown(0.3, -2.5);
   check('chat: bubble hidden when far away or standing on the speaker', mid > 0.9 && far === 0 && onTop === 0, JSON.stringify({ mid, far, onTop }));
 
+  // Jumps are sent to the others on the map: Bob sees Ann's avatar leave the ground and land.
+  await b.page.evaluate(() => window.__game.teleport(0, 2));
+  await sleep(300);
+  const annY = () => b.page.evaluate(() => {
+    let y = NaN;
+    // Nameplates are the only sprites at renderOrder 10; the avatar is the plate's parent.
+    (window.__game.world as any).scene.traverse((s: any) => { if (s.isSprite && s.renderOrder === 10) y = s.parent.position.y; });
+    return y;
+  });
+  const ground = await annY();
+  await a.page.keyboard.press('Space');
+  const arc = await b.page.evaluate(async () => {
+    const ys: number[] = [];
+    const t0 = performance.now();
+    while (performance.now() - t0 < 1200) {
+      (window.__game.world as any).scene.traverse((s: any) => { if (s.isSprite && s.renderOrder === 10) ys.push(s.parent.position.y); });
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return { peak: Math.max(...ys), end: ys[ys.length - 1] };
+  });
+  check('jump: other players see the jump and the landing', arc.peak - ground > 0.6 && Math.abs(arc.end - ground) < 0.05, JSON.stringify({ ground, ...arc }));
+
   // Esc while typing releases the mouse in a real browser: that cancels the chat without pausing.
   await a.page.evaluate(() => { (window.__game as any).activate(); });
   await a.page.keyboard.press('Enter');

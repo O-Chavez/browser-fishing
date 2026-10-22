@@ -406,6 +406,30 @@ describe('chat', () => {
   });
 });
 
+describe('jumping', () => {
+  it('shows a jump to the others on the same map only, and drops ones faster than a jump lasts', () => {
+    const { room, join, store, advance } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    const res = store.auth('Cat', 'token-token-token-Cat');
+    if (!res.ok) throw new Error(res.msg);
+    res.account.save.location = 'casino';
+    const c = conn();
+    room.join(c, res.account);
+    const jumps = (x: { log: ServerMsg[] }) => x.log.filter((m) => m.t === 'jump');
+    room.handle(a.id, { t: 'jump' });
+    expect(jumps(b.c)).toEqual([{ t: 'jump', id: a.id }]);
+    expect(jumps(a.c)).toHaveLength(0);
+    expect(jumps(c)).toHaveLength(0);
+    advance(100);
+    room.handle(a.id, { t: 'jump' });
+    expect(jumps(b.c)).toHaveLength(1);
+    advance(600);
+    room.handle(a.id, { t: 'jump' });
+    expect(jumps(b.c)).toHaveLength(2);
+  });
+});
+
 describe('faces', () => {
   it('changes face, tells the room, and keeps it through a reset', () => {
     const { room, join } = setup();

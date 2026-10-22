@@ -5,6 +5,7 @@ import { Character } from './character';
 import { standHeight } from './env';
 import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
 import { remoteHang, remoteScale } from './fishscale';
+import { JUMP_TIME, jumpLift } from './player';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -25,6 +26,10 @@ class Avatar {
   private view = new THREE.Vector3();
   private target = new THREE.Vector3();
   private yaw = 0;
+  /** Smoothed ground height under the avatar; a jump's lift goes on top. */
+  private groundY = 0;
+  /** Seconds into a jump, or -1 on the ground. */
+  private jumpT = -1;
   private fresh = true;
   private act: Activity | null = null;
   private bobber: THREE.Mesh;
@@ -127,6 +132,10 @@ class Avatar {
     this.bubble = null;
   }
 
+  jump(): void {
+    this.jumpT = 0;
+  }
+
   setLook(look: PlayerInfo['look']): void {
     this.char.set(look);
   }
@@ -162,11 +171,16 @@ class Avatar {
     this.target.set(p.x, standHeight(p.x, p.z), p.z);
     if (this.fresh) {
       this.group.position.copy(this.target);
+      this.groundY = this.target.y;
       this.yaw = p.yaw;
       this.fresh = false;
     }
     const k = 1 - Math.exp(-dt * 10);
     this.group.position.lerp(this.target, k);
+    // The jump plays at full height on top of the smoothed ground, not through the lerp, which would flatten it.
+    this.groundY += (this.target.y - this.groundY) * k;
+    if (this.jumpT >= 0) this.jumpT = this.jumpT + dt >= JUMP_TIME ? -1 : this.jumpT + dt;
+    this.group.position.y = this.groundY + jumpLift(this.jumpT);
     const d = Math.atan2(Math.sin(p.yaw - this.yaw), Math.cos(p.yaw - this.yaw));
     this.yaw += d * k;
     // Camera yaw 0 looks along -z, the model's front is +z.
@@ -248,6 +262,11 @@ export class Avatars {
       a.setLook(p.look);
       a.setVisible(p.map === map);
     }
+  }
+
+  jump(id: number): void {
+    const a = this.list.get(id);
+    if (a?.group.visible) a.jump();
   }
 
   say(id: number, text: string): void {
