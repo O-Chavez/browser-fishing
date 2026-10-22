@@ -16,7 +16,7 @@ const ROOT = path.resolve(process.env.BENCH_ROOT ?? '.');
 const OUT_DIR = path.resolve(process.env.BENCH_OUT ?? 'bench-results');
 const SAMPLES = 9; // timed batches per scene visit; the median is that visit's result
 const ROUNDS = Number(process.env.BENCH_ROUNDS) || 3; // visits per scene; the median visit is reported, the min-max is the spread
-const PORT = 5299;
+const PORT = Number(process.env.BENCH_PORT) || 5299; // override when another Vite already holds 5299
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const server = await createServer({ root: ROOT, cacheDir: path.join(ROOT, '.vite-bench-cache'), server: { port: PORT, strictPort: true }, logLevel: 'error' });
@@ -137,8 +137,7 @@ try {
 
   R.loops.afterPlayOffline = await loops();
   // The spinning character preview lives on the wardrobe tab.
-  await page.evaluate(() => window.__game.openMenu('inventory'));
-  await page.click('[data-act="invtab"][data-id="wardrobe"]');
+  await page.evaluate(() => window.__game.openMenu('wardrobe'));
   await sleep(300);
   await page.evaluate(() => { window.__game.closeMenu(); window.__game.activate(); });
   await sleep(300);

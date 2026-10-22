@@ -160,6 +160,8 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 ## 8. Art & Audio Direction
 
 - Stylized low-poly 3D, bright and calm colours, readable water shader with ripples.
+- Surfaces get small hand-painted textures drawn in code at load (`src/game/textures.ts`): soft dabs on the ground, wood grain on the dock, siding and shingles on cottages, stone on the well and chimneys. They are near-white and multiply over each material's colour, so the flat-shaded look and palette stay the same; nothing is downloaded.
+- Scenery: two rings of snow-capped mountains that take on the sky's haze through the day, a mixed forest of pines and round leafy trees, grass tufts and flower clusters on grassy ground (never on sand, paths or near hidden bottles), and lily pads in the shallows. Lite graphics hides the tufts and flowers.
 - Fish are shown as 3D models (swimming silhouettes visible in clear water is a stretch goal).
 - Audio: relaxing ambient soundtrack, dynamic tension audio during the reel, distinct bite cue.
 
