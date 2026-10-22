@@ -276,7 +276,10 @@ export class Game {
       },
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
-        else if (this.pendingWelcome) this.welcome();
+        else if (this.pendingWelcome) {
+          this.showOffline("Can't reach the game server");
+          this.welcome();
+        }
       },
       onPlayers: () => {
         this.world.hub?.setLeaders(this.anglers());
@@ -302,7 +305,7 @@ export class Game {
           return this.joinMessage(msg);
         }
         if (!this.pendingWelcome) return void (this.offlineWhy = msg.replace(/\.$/, ''));
-        this.toast(`Offline mode: ${msg}`);
+        this.showOffline(msg.replace(/\.$/, ''));
         this.welcome();
       },
       onAccount: (msg) => {
@@ -321,7 +324,7 @@ export class Game {
         }
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
-        this.toast(`${this.offlineWhy ?? 'Disconnected'} - playing offline.`);
+        this.showOffline(this.offlineWhy ?? 'Disconnected');
         this.offlineWhy = undefined;
       },
     });
@@ -382,6 +385,7 @@ export class Game {
       }
     });
     $('join-go').addEventListener('click', () => this.submitJoin());
+    $('offline-go').addEventListener('click', () => location.reload());
     input.addEventListener('keydown', (e) => e.key === 'Enter' && this.submitJoin());
     $('join-pass').addEventListener('keydown', (e) => e.key === 'Enter' && this.submitJoin());
     // The password prompt belongs to the name the server asked about.
@@ -1188,6 +1192,12 @@ export class Game {
     const el = $('resume');
     el.innerHTML = `${prefix}<b>Click</b> ${action}`;
     el.classList.remove('hidden');
+  }
+
+  /** The player went offline without choosing to: say so until they reload, which reconnects. */
+  private showOffline(why: string): void {
+    $('offline-why').textContent = why;
+    $('offline').classList.remove('hidden');
   }
 
   /** Offline play saves locally; online, the server owns the save. */

@@ -70,6 +70,8 @@ try {
   await pondChecks();
   await casinoChecks();
   await chatChecks();
+  // Last: it stops the server.
+  await offlineChecks();
 } catch (e) {
   check('smoke test ran to the end', false, String(e));
 } finally {
@@ -93,8 +95,10 @@ async function pondChecks(): Promise<void> {
     menu: !document.getElementById('menu')!.classList.contains('hidden'),
     banner: document.getElementById('banner')!.classList.contains('hidden') ? '' : document.getElementById('banner')!.textContent,
     resume: document.getElementById('resume')!.classList.contains('hidden') ? '' : document.getElementById('resume')!.textContent,
+    offline: !document.getElementById('offline')!.classList.contains('hidden'),
   }));
   check('join: the inventory stays closed after joining', !joined.menu);
+  check('join: choosing "Play offline" shows no disconnected banner', !joined.offline);
   check('join: a new player gets the welcome banner', joined.banner!.includes('Welcome to Lakeside'), joined.banner!);
   check('join: the banner asks for a click to start fishing', joined.resume!.includes('Click to start fishing'), joined.resume!);
   await page.evaluate(() => window.__game.activate());
@@ -601,6 +605,36 @@ async function chatChecks(): Promise<void> {
   }));
   check('chat: losing the mouse while typing cancels chat without the pause menu', !esc.chat && !esc.menu && esc.resume, JSON.stringify(esc));
   for (const p of [a, b, c]) await p.ctx.close();
+}
+
+// ---------- losing the server ----------
+
+async function offlineChecks(): Promise<void> {
+  const ctx = await browser.createBrowserContext();
+  const page = await openPage(`http://localhost:${VITE_PORT}/?name=Dee&room=drop`, ctx, 'Dee-token-0123456789abcdef');
+  await page.waitForFunction(() => window.__game.online(), { timeout: 15000 });
+  const shown = () => page.evaluate(() => {
+    const el = document.getElementById('offline')!;
+    if (el.classList.contains('hidden')) return null;
+    // The mouse is free here, so the "Click to keep playing" overlay is up: the button must sit above it.
+    const r = document.getElementById('offline-go')!.getBoundingClientRect();
+    return { text: el.textContent!, clickable: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.id === 'offline-go' };
+  });
+  check('offline: no disconnected banner while online', (await shown()) === null);
+  const exited = new Promise((r) => server.once('exit', r));
+  server.kill();
+  await exited;
+  await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 10000 });
+  const drop = await shown();
+  await page.screenshot({ path: path.join(SHOTS, 'offline.png') });
+  check('offline: a dropped connection shows the banner', !!drop?.text.includes('Disconnected'), drop?.text);
+  check('offline: the reconnect button can be clicked over the resume overlay', !!drop?.clickable);
+  // Refreshing tries the server again; it's still down, so the reloaded page says it can't reach it.
+  await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.click('#offline-go')]);
+  await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 15000 });
+  const again = await shown();
+  check('offline: reconnect reloads, and an unreachable server keeps the banner up', !!again?.text.includes("Can't reach the game server"), again?.text);
+  await ctx.close();
 }
 
 // ---------- helpers ----------
