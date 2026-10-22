@@ -7,6 +7,7 @@ import { DARK, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
 import { buildRoom, neonSign } from './casinoroom';
 import { mergeStatic } from './merge';
+import { boxUV, feltTexture, grainTexture, panelTexture } from './textures';
 
 const POCKETS = ROULETTE_POCKETS.red + ROULETTE_POCKETS.black + ROULETTE_POCKETS.green;
 const FELT = 0x1f6b43;
@@ -34,6 +35,43 @@ function wheelTexture(): THREE.CanvasTexture {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
+/** Felt speckle plus gold printing, one canvas per table top, laid out in metres from the dealer's edge. */
+function printedFelt(w: number, d: number, draw: (g: CanvasRenderingContext2D, px: number) => void): THREE.CanvasTexture {
+  const px = 256;
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * px);
+  c.height = Math.round(d * px);
+  const g = c.getContext('2d')!;
+  // The felt colour is painted in (the material stays white) so the gold print isn't tinted green
+  g.fillStyle = '#' + new THREE.Color(FELT).getHexString(THREE.SRGBColorSpace);
+  g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = g.createPattern(feltTexture().image as HTMLCanvasElement, 'repeat')!;
+  g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'source-over';
+  g.save();
+  draw(g, px);
+  g.restore();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.flipY = false; // canvas top = dealer side (-z), so the print reads upright from the player's side
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Maps a table top's x/z straight onto 0..1, for one non-repeating printed felt. */
+function topUV(geo: THREE.BufferGeometry, w: number, d: number): void {
+  const p = geo.getAttribute('position');
+  const uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) {
+    uv[i * 2] = p.getX(i) / w + 0.5;
+    uv[i * 2 + 1] = p.getZ(i) / d + 0.5;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+const GOLD_INK = '#e8c25a';
 
 /** Tables sit lower than real ones so the wheel, cards and buttons read from eye height. */
 const TABLE_DROP = 0.3;
@@ -85,7 +123,7 @@ export class CasinoHall {
     this.colliders.push({ x: s.x, z: s.z, r });
   }
 
-  private table(w: number, d: number): THREE.Group {
+  private table(w: number, d: number, print: (g: CanvasRenderingContext2D, px: number) => void): THREE.Group {
     const t = new THREE.Group();
     const top = rbox(w, 0.14, d, FELT, 0.05);
     top.position.y = 1.0;
@@ -93,6 +131,13 @@ export class CasinoHall {
     rim.position.y = 0.92;
     const body = rbox(w - 0.3, 0.9, d - 0.3, DARK, 0.04);
     body.position.y = 0.45;
+    // Printed felt (green painted into the canvas, so the material stays white), grain rim, panelled base
+    topUV(top.geometry, w, d);
+    top.material = mat(0xffffff, { map: printedFelt(w, d, print) });
+    boxUV(rim.geometry, 2);
+    rim.material = mat(0x7a4428, { map: grainTexture() });
+    boxUV(body.geometry, 1 / 0.9, 0, 0.45);
+    body.material = mat(0x6a4a30, { map: panelTexture() });
     t.add(rim, top, body);
     return t;
   }
@@ -106,7 +151,18 @@ export class CasinoHall {
   }
 
   private buildRoulette(s: Spot): void {
-    const t = this.table(2.8, 2.8);
+    const t = this.table(2.8, 2.8, (g, px) => {
+      // Double gold border and a ring around the wheel
+      g.strokeStyle = GOLD_INK;
+      for (const [inset, lw] of [[0.1, 5], [0.16, 2]] as const) {
+        g.lineWidth = lw;
+        g.strokeRect(inset * px, inset * px, (2.8 - 2 * inset) * px, (2.8 - 2 * inset) * px);
+      }
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(1.4 * px, 1.4 * px, 0.92 * px, 0, Math.PI * 2);
+      g.stroke();
+    });
     const base = cyl(0.95, 1.05, 0.12, 0x5a2f1c, 28);
     base.position.y = 1.12;
     this.wheel.position.y = 1.2;
@@ -151,7 +207,37 @@ export class CasinoHall {
   }
 
   private buildBlackjack(s: Spot): void {
-    const t = this.table(3.0, 1.9);
+    const t = this.table(3.0, 1.9, (g, px) => {
+      // Classic arc text between the dealer's cards and the player's, centred behind the dealer
+      const cx = 1.5 * px;
+      const cy = -0.6 * px;
+      g.strokeStyle = GOLD_INK;
+      g.fillStyle = GOLD_INK;
+      g.lineWidth = 3;
+      for (const r of [1.26, 1.45]) {
+        g.beginPath();
+        g.arc(cx, cy, r * px, Math.PI * 0.18, Math.PI * 0.82);
+        g.stroke();
+      }
+      // Matches the real rules: blackjackFactor pays a natural ×3, and the dealer draws to 17
+      const text = 'BLACKJACK ×3 · DEALER STANDS ON 17';
+      g.font = `800 ${0.1 * px}px system-ui, sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      const R = 1.35 * px;
+      const span = g.measureText(text).width / R;
+      let a = Math.PI / 2 + span / 2;
+      for (const ch of text) {
+        const cw = g.measureText(ch).width / R;
+        a -= cw / 2;
+        g.save();
+        g.translate(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+        g.rotate(a - Math.PI / 2);
+        g.fillText(ch, 0, 0);
+        g.restore();
+        a -= cw / 2;
+      }
+    });
     const spot = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.2, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: GOLD }));
     spot.position.set(0, 1.085, 0.25);
     t.add(spot, this.cards);
@@ -275,6 +361,33 @@ export class CasinoHall {
     const g = new THREE.Group();
     const counter = rbox(5.0, 1.05, 1.1, 0x4a1a2c, 0.06);
     counter.position.y = 0.52;
+    boxUV(counter.geometry, 1 / 1.05, 2.5, 0.52);
+    counter.material = mat(0x7a3048, { map: panelTexture() });
+
+    // Velvet ropes on brass posts at both ends of the counter, leaving the front open
+    const rope = mat(0x9a1f3a);
+    const postSpots: [number, number][] = [];
+    for (const side of [-1, 1]) {
+      const posts: THREE.Vector3[] = [];
+      for (const [px, pz] of [[side * 2.9, 1.3], [side * 4.1, 1.3], [side * 4.1, 0.2]]) {
+        const post = cyl(0.05, 0.05, 1.0, GOLD, 8);
+        post.position.set(px, 0.5, pz);
+        const foot = cyl(0.18, 0.2, 0.06, GOLD, 12);
+        foot.position.set(px, 0.03, pz);
+        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mat(GOLD));
+        knob.position.set(px, 1.04, pz);
+        g.add(post, foot, knob);
+        posts.push(new THREE.Vector3(px, 0.92, pz));
+        postSpots.push([px, pz]);
+      }
+      for (let i = 0; i < posts.length - 1; i++) {
+        const a = posts[i];
+        const b = posts[i + 1];
+        const mid = a.clone().add(b).multiplyScalar(0.5);
+        mid.y -= 0.22;
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, mid, b), 12, 0.035, 6), rope));
+      }
+    }
     const top = rbox(5.2, 0.1, 1.3, GOLD, 0.04);
     top.position.y = 1.08;
     g.add(counter, top);
@@ -392,6 +505,10 @@ export class CasinoHall {
     this.place(g, s, 2.3);
     // The counter is long; block its ends so nobody walks through.
     this.colliders.push({ x: s.x - 1.7, z: s.z, r: 0.9 }, { x: s.x + 1.7, z: s.z, r: 0.9 });
+    // The rope posts are solid; the ropes themselves aren't, so nobody gets snagged between posts
+    const cos = Math.cos(s.facing);
+    const sin = Math.sin(s.facing);
+    for (const [lx, lz] of postSpots) this.colliders.push({ x: s.x + lx * cos + lz * sin, z: s.z - lx * sin + lz * cos, r: 0.25 });
   }
 
   /** Redraws the chip balance board above the tray. */

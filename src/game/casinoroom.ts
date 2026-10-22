@@ -2,10 +2,13 @@ import * as THREE from 'three';
 import type { MapDef, Spot } from '../data/maps';
 import { DARK, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
+import { boxUV, damaskTexture, fluteTexture, latticeTexture, panelTexture } from './textures';
 
 const WALL_H = 5.4;
 const GOLD = 0xe0b441;
 const PLUM = 0x6a2a44;
+/** Chandelier spots (x, z, strong light), shared with the ceiling medallions above them. */
+const CHANDELIERS = [[-9, 43, true], [9, 43, true], [0, 53, true], [0, 34, false], [-12, 33, false], [12, 33, false], [-12, 54, false], [12, 54, false]] as const;
 
 export interface RoomCtx {
   group: THREE.Group;
@@ -87,16 +90,25 @@ export function buildRoom(ctx: RoomCtx, hall: NonNullable<MapDef['casino']>['hal
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat(0xffffff, { map: tex }));
   floor.receiveShadow = true;
   put(floor, cx, 0, cz);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2), mat(0x4a2434));
+  const lattice = latticeTexture().clone();
+  lattice.repeat.set(w / 2, d / 2);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2), mat(0x6a3448, { map: lattice, emissive: new THREE.Color(0x24101a) }));
   put(ceil, cx, WALL_H, cz);
 
   // Walls: plum upper, dark wood wainscot, gold rail.
+  const upperMat = mat(PLUM, { map: damaskTexture() });
+  const wainsMat = mat(0x6a4028, { map: panelTexture() });
   const wall = (len: number, x: number, z: number, ry: number): void => {
     const g = new THREE.Group();
     const upper = rbox(len, WALL_H, 0.4, PLUM, 0.02);
     upper.position.y = WALL_H / 2;
     const wains = rbox(len - 0.1, 1.3, 0.46, 0x4a2c1c, 0.03);
     wains.position.y = 0.65;
+    // Damask tiles are 1 m wide and 2 m tall; one wood panel is 1.3 m square
+    boxUV(upper.geometry, 1, len / 2, 0, 0.5);
+    upper.material = upperMat;
+    boxUV(wains.geometry, 1 / 1.3, len / 2, 0.65);
+    wains.material = wainsMat;
     const rail = rbox(len - 0.05, 0.12, 0.5, GOLD, 0.03);
     rail.position.y = 1.36;
     const crown = rbox(len, 0.25, 0.55, GOLD, 0.04);
@@ -144,7 +156,8 @@ export function buildRoom(ctx: RoomCtx, hall: NonNullable<MapDef['casino']>['hal
   // Pillars.
   for (const [px, pz] of [[-5.5, 34.5], [5.5, 34.5], [-5.5, 51.5], [5.5, 51.5]]) {
     const p = new THREE.Group();
-    const shaft = cyl(0.42, 0.45, WALL_H, 0x3b1a2a, 16);
+    const shaft = cyl(0.42, 0.45, WALL_H, 0x5a2a3c, 16);
+    (shaft.material as THREE.MeshLambertMaterial).map = fluteTexture();
     shaft.position.y = WALL_H / 2;
     const base = cyl(0.62, 0.66, 0.35, GOLD, 16);
     base.position.y = 0.17;
@@ -175,7 +188,7 @@ export function buildRoom(ctx: RoomCtx, hall: NonNullable<MapDef['casino']>['hal
     g.add(l);
     put(g, x, 0, z);
   };
-  for (const [x, z, s] of [[-9, 43, true], [9, 43, true], [0, 53, true], [0, 34, false], [-12, 33, false], [12, 33, false], [-12, 54, false], [12, 54, false]] as const) chandelier(x, z, s);
+  for (const [x, z, s] of CHANDELIERS) chandelier(x, z, s);
 
   // Slot machines along both side walls.
   const slotBody = mat(0x2a1232);
@@ -201,6 +214,99 @@ export function buildRoom(ctx: RoomCtx, hall: NonNullable<MapDef['casino']>['hal
       put(g, side < 0 ? x0 + 0.65 : x1 - 0.65, 0, z, side < 0 ? Math.PI : 0);
       solid({ x: side < 0 ? x0 + 0.8 : x1 - 0.8, z, r: 0.55 });
     }
+  }
+
+  {
+    // Coffered ceiling: a grid of dark wood beams with gold medallions over the chandeliers
+    // A faint warm self-glow stands in for chandelier light reaching up to the ceiling
+    const beamMat = mat(0x7a4a34, { map: panelTexture(), emissive: new THREE.Color(0x2a140c) });
+    const step = w / 8;
+    for (let i = 1; i < 8; i++) {
+      const bx = rbox(0.32, 0.3, d, 0x3a1a22, 0.03);
+      boxUV(bx.geometry, 1.5);
+      bx.material = beamMat;
+      put(bx, x0 + i * step, WALL_H - 0.15, cz);
+      const bz = rbox(w, 0.3, 0.32, 0x3a1a22, 0.03);
+      boxUV(bz.geometry, 1.5);
+      bz.material = beamMat;
+      put(bz, cx, WALL_H - 0.15, z0 + i * (d / 8));
+    }
+    const medMat = mat(GOLD, { emissive: new THREE.Color(0x4a3008) });
+    for (const [x, z] of CHANDELIERS) {
+      const med = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.06, 24), medMat);
+      put(med, x, WALL_H - 0.05, z);
+      const inner = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.08, 24), mat(0x6a3448));
+      put(inner, x, WALL_H - 0.06, z);
+    }
+  }
+
+  {
+    // Wall sconces above the slot machines: glow only, no extra lights
+    const glowBulb = ctx.glow(0xffd9a0);
+    const sconce = (x: number, z: number, ry: number) => {
+      const g = new THREE.Group();
+      const plate = rbox(0.28, 0.5, 0.06, GOLD, 0.02);
+      const arm = cyl(0.03, 0.03, 0.3, GOLD, 6);
+      arm.rotation.x = Math.PI / 2;
+      arm.position.set(0, -0.05, 0.15);
+      const cup = cyl(0.13, 0.07, 0.12, GOLD, 10);
+      cup.position.set(0, 0.02, 0.3);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), glowBulb);
+      bulb.position.set(0, 0.14, 0.3);
+      g.add(plate, arm, cup, bulb);
+      g.scale.setScalar(1.5);
+      put(g, x, 3.3, z, ry);
+    };
+    for (let z = z0 + 6.3; z < z1 - 3; z += 4.3) {
+      sconce(x0 + 0.02, z, Math.PI / 2);
+      sconce(x1 - 0.02, z, -Math.PI / 2);
+    }
+    // Framed fish paintings on the back and front walls
+    const painting = (x: number, z: number, ry: number, hue: number, seed: number) => {
+      const { mesh, ctx: p, tex } = textPlane(2.0, 1.35, 384);
+      const W = p.canvas.width;
+      const H = p.canvas.height;
+      const sky = p.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, `hsl(${hue}, 45%, 70%)`);
+      sky.addColorStop(1, `hsl(${hue + 20}, 55%, 30%)`);
+      p.fillStyle = sky;
+      p.fillRect(0, 0, W, H);
+      p.fillStyle = 'rgba(255,255,255,0.18)';
+      for (let i = 0; i < 6; i++) p.fillRect(0, H * (0.55 + i * 0.07), W, 3);
+      p.save();
+      p.translate(W * 0.5, H * 0.5);
+      p.rotate(seed % 2 ? -0.18 : 0.12);
+      p.fillStyle = `hsl(${(hue + 160) % 360}, 70%, 60%)`;
+      p.beginPath();
+      p.ellipse(0, 0, W * 0.22, H * 0.16, 0, 0, Math.PI * 2);
+      p.fill();
+      p.beginPath();
+      p.moveTo(W * 0.18, 0);
+      p.lineTo(W * 0.32, -H * 0.15);
+      p.lineTo(W * 0.32, H * 0.15);
+      p.closePath();
+      p.fill();
+      p.fillStyle = '#fff';
+      p.beginPath();
+      p.arc(-W * 0.13, -H * 0.03, H * 0.035, 0, Math.PI * 2);
+      p.fill();
+      p.fillStyle = '#222';
+      p.beginPath();
+      p.arc(-W * 0.125, -H * 0.03, H * 0.018, 0, Math.PI * 2);
+      p.fill();
+      p.restore();
+      tex.needsUpdate = true;
+      (mesh.material as THREE.MeshBasicMaterial).color.setScalar(0.8);
+      const frame = rbox(2.3, 1.65, 0.1, GOLD, 0.04);
+      const g = new THREE.Group();
+      mesh.position.z = 0.06;
+      g.add(frame, mesh);
+      put(g, x, 2.9, z + (ry === 0 ? 0.07 : -0.07), ry);
+    };
+    painting(-11, z1 - 0.02, Math.PI, 200, 1);
+    painting(11, z1 - 0.02, Math.PI, 30, 2);
+    painting(-8, z0 + 0.02, 0, 280, 3);
+    painting(8, z0 + 0.02, 0, 150, 4);
   }
 
   // Dressing mirror on the left wall by the entrance.
