@@ -51,7 +51,7 @@ describe('dev commands in a room', () => {
     const b = join('Bob');
     room.handle(a.id, { t: 'cmd', text: '/coins 9999' });
     expect(a.save.coins).toBe(20);
-    expect(devLines(a.log).at(-1)).toMatch(/login/);
+    expect(devLines(a.log).at(-1)).toMatch(/\/bug/);
     room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
     room.handle(a.id, { t: 'cmd', text: '/coins 9999' });
     expect(a.save.coins).toBe(9999);

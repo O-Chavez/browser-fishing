@@ -12,10 +12,13 @@ import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
+import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
 export interface Conn {
   /** `json` is `msg` already serialized, passed by broadcasts so it is built once for everyone. */
   send(msg: ServerMsg, json?: string): void;
+  /** The browser's user-agent header, for feedback reports. */
+  ua?: string;
 }
 
 interface Pending {
@@ -71,6 +74,10 @@ export class Room {
   devGate = new DevGate();
   /** Last dig per account, for the worm patch cooldown. */
   private dugAt = new Map<Account, number>();
+  /** Limits on `/bug`, `/idea` and `/feedback`; the server shares one gate between rooms. */
+  feedbackGate: FeedbackGate;
+  /** Delivers a player's feedback report (the server posts it to Discord). */
+  report: (r: FeedbackReport) => void = () => {};
   /** Delivers chat lines and notices; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -83,6 +90,7 @@ export class Room {
   ) {
     this.drops = new Drops(now);
     this.chatGate = new ChatGate(now);
+    this.feedbackGate = new FeedbackGate(now);
     // No prototype, so a client-sent id like "constructor" finds nothing instead of an Object method.
     this.maps = Object.assign(Object.create(null), Object.fromEntries(maps.map((m) => [m.id, m])));
   }
@@ -312,11 +320,22 @@ export class Room {
     this.say({ t: 'chat', room: this.name, id: m.info.id, name: m.info.name, map: m.info.map, text: res.text });
   }
 
-  /** Dev console: `/login user pass` unlocks the other commands for this connection. */
+  private feedback(m: Member, kind: FeedbackKind, text: string, reply: (lines: string[]) => void): void {
+    const res = this.feedbackGate.check(m.acct.name, kind, text);
+    if (!res.ok) return reply([res.msg]);
+    const { info } = m;
+    const map = this.maps[info.map]?.name ?? info.map;
+    this.report({ kind, text: res.text, name: m.acct.name, level: m.acct.save.level, map, x: info.x, z: info.z, room: this.name, browser: browserName(m.conn.ua), at: this.now() });
+    reply([kind === 'bug' ? 'Thanks! Your bug report was sent to the developer.' : kind === 'idea' ? 'Thanks! Your idea was sent to the developer.' : 'Thanks! Your feedback was sent to the developer.']);
+  }
+
+  /** Slash commands: `/bug`, `/idea` and `/feedback` for everyone; `/login user pass` unlocks the dev console for this connection. */
   private command(m: Member, text: unknown): void {
     if (typeof text !== 'string' || !text.startsWith('/')) return;
     const [cmd = '', ...args] = text.slice(1, 200).trim().split(/\s+/);
     const reply = (lines: string[], extra: { time?: number | null } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
+    const kind = cmd.toLowerCase() as FeedbackKind;
+    if (FEEDBACK_KINDS.includes(kind)) return this.feedback(m, kind, text.replace(/^\/\S*\s*/, ''), reply);
     if (cmd === 'login') {
       const bad = this.devGate.login(m.acct.name, args[0] ?? '', args[1] ?? '');
       console.log(`[dev] ${m.acct.name} login ${bad ? 'failed' : 'ok'}`);
@@ -324,7 +343,7 @@ export class Room {
       m.dev = true;
       return reply(['Dev console unlocked. /help lists the commands.']);
     }
-    if (!m.dev) return reply(['Unknown command. (Dev console: /login <user> <password>)']);
+    if (!m.dev) return reply(['Unknown command. Send feedback with /bug <what went wrong> or /idea <your idea>.']);
     if (cmd === 'logout') {
       m.dev = false;
       return reply(['Logged out of the dev console.']);

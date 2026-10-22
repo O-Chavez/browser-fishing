@@ -9,3 +9,9 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: DISCORD_JOINS_WEBHOOK
+        sync: false
+      - key: DISCORD_FEEDBACK_WEBHOOK
+        sync: false
+      - key: DISCORD_FEEDBACK_TAGS
+        sync: false

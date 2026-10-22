@@ -11,7 +11,8 @@ export interface Account {
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
-export type AuthResult = { ok: true; account: Account } | { ok: false; msg: string };
+/** `created` is true when this login claimed a new name. */
+export type AuthResult = { ok: true; account: Account; created: boolean } | { ok: false; msg: string };
 
 /**
  * Name + secret token accounts. The first join with a name claims it; the token (kept in the
@@ -34,6 +35,7 @@ export class AccountStore {
     if (typeof token !== 'string' || token.length < 16 || token.length > 128) return { ok: false, msg: 'Bad token.' };
     const key = clean.toLowerCase();
     let acct = this.accounts.get(key);
+    const created = !acct;
     if (!acct) {
       acct = { name: clean, hash: hash(token), save: newSave(), online: false };
       this.accounts.set(key, acct);
@@ -41,7 +43,7 @@ export class AccountStore {
     } else if (acct.hash !== hash(token)) return { ok: false, msg: `The name "${clean}" is taken.` };
     if (acct.online) return { ok: false, msg: `${acct.name} is already logged in.` };
     acct.online = true;
-    return { ok: true, account: acct };
+    return { ok: true, account: acct, created };
   }
 
   /** The most valuable catches across every account, online or not. Cached until `hallStale`. */

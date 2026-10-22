@@ -2,8 +2,9 @@
 export const CHAT_TTL_MS = 5 * 60_000;
 /** Lines shown at once; older ones scroll away. */
 const SHOWN = 8;
-/** Matches the server's limit (`server/chat.ts`). */
+/** Matches the server's limits (`server/chat.ts`, and `server/feedback.ts` for slash commands like /bug). */
 const MAX_LEN = 120;
+const CMD_MAX_LEN = 500;
 
 export interface ChatLine {
   name: string;
@@ -53,7 +54,11 @@ export class ChatBox {
     this.input = root.querySelector('.chat-input')!;
     this.hint = root.querySelector('.chat-hint')!;
     this.input.maxLength = MAX_LEN;
-    this.input.placeholder = 'Say something to everyone on the server…';
+    this.input.placeholder = 'Say something… or /bug, /idea to send feedback';
+    // Feedback reports get more room than chat lines.
+    this.input.addEventListener('input', () => {
+      this.input.maxLength = this.input.value.startsWith('/') ? CMD_MAX_LEN : MAX_LEN;
+    });
     this.input.addEventListener('keydown', (e) => {
       // The game listens on the document; keep typing from moving the player or switching slots.
       e.stopPropagation();
@@ -88,6 +93,7 @@ export class ChatBox {
 
   open(): void {
     this.input.value = '';
+    this.input.maxLength = MAX_LEN;
     this.input.classList.remove('hidden');
     this.root.classList.add('typing');
     this.input.focus();

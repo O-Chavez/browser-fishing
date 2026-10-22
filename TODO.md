@@ -97,14 +97,16 @@
 - [x] Fill out readme for the project.
   - Highlight technologies uses, game features/progression/etc
 - [x] Add messaging that the game is meant for desktop play (prevents mobile players from getting frustrated)
-- [ ] Player feedback forwarded to a Discord forum channel
+- [x] Player feedback forwarded to a Discord forum channel
   - Start with a `/feedback <text>` chat command (reuse the slash-command handling in `src/game/chatbox.ts`); a Bug/Idea panel can come later (taste-driven: propose options first)
   - Client sends a new `feedback` WebSocket message (`server/room.ts`); the server caps length, rate-limits per account, reuses the chat profanity filter, and attaches context (account, level, map, position, build hash, browser, time)
   - Server posts to a Discord webhook from a Render env var (`DISCORD_FEEDBACK_WEBHOOK`, never sent to the client), one forum thread per report with a category tag and `allowed_mentions: { parse: [] }`; store in Postgres as a fallback if Discord is unreachable
   - Oscar sets up the forum channel, its tags (bug/idea, new/planned/done) and the webhook
-- [ ] Discord ping when a player joins (pairs with the feedback webhook above)
+  - Done (2026-10-21): `/bug`, `/idea` and `/feedback` reuse the existing `cmd` message rather than a new one (`server/feedback.ts`, `server/discord.ts`). Forum tags are optional through `DISCORD_FEEDBACK_TAGS` (Discord doesn't show tag ids in the app). A webhook on a plain text channel also works: reports are posted as normal messages. Checked live against Oscar's webhook; the current feedback webhook is on a text channel, not a forum
+- [x] Discord ping when a player joins (pairs with the feedback webhook above)
   - To see whether anyone plays after the Reddit post: the server posts to a Discord webhook from a Render env var (separate channel from feedback, never sent to the client) when a player joins, e.g. name, new vs returning account, map, players online
   - Hook in `Room.join` (`server/room.ts:95`, called from `server/index.ts:137`); throttle or batch (e.g. one summary per few minutes) so a burst of joins or reconnects doesn't spam the channel or hit Discord's rate limit
+  - Done (2026-10-21): `JoinFeed` in `server/discord.ts`, from `DISCORD_JOINS_WEBHOOK`. The first join waits 30 s to gather a burst, then at most one message per 5 min; players online within the last 10 min aren't posted again. Checked live against Oscar's webhook
 - [ ] NPCs wander around so the world feels more alive
   - Town NPCs (`NpcDef` in `src/data/maps.ts`, built by `Town.buildNpc()` in `src/game/town.ts:294`) walk fixed routes or wander randomly inside set areas, with a walk animation, pauses and turning toward nearby players; vendors at their stalls (`src/game/hub.ts`) stay put
   - "Talk to" range (`game.ts:1406`) must follow the NPC's live position; keep them walk-through and off water/props. Client-only is fine unless players need to see NPCs in the same spot
@@ -142,5 +144,6 @@
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs
 - Full mobile support, building on the touch test build and the mobile spec (https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv): answer the spec's five open decisions first, then full-screen menus with tap-to-select and a detail bar instead of hover tooltips, quick-chat chips, long-press to drop, and touch wording in the remaining key/click text (casino table hints, toasts like "Hold a fish (1-5)"). Remove the FPS readout (dev-only today) and decide whether touch mode should skip the desktop-only notice
 - Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
+- Feedback discoverability: today the only pointer to `/bug` and `/idea` is the chat input placeholder. A Bug/Idea button (settings tab or pause menu) would reach players who never open chat. Taste-driven: propose options first
 - Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%)
 - Blackjack hands that end on the deal (a dealer or player natural) never show the big result banner: `onBlackjack` in `game.ts` only shows it when the previous view was live, and `blackjackAct` clears `this.bj` before dealing. Instant dealer blackjacks with no banner may add to the "rigged" feeling

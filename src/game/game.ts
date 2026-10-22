@@ -288,7 +288,7 @@ export class Game {
     this.chat = new ChatBox($('chat'), {
       send: (text) => {
         if (!text.startsWith('/')) return this.net.send({ t: 'chat', text });
-        // Slash commands go to the dev console, never to chat; only you see them, password hidden.
+        // Slash commands (feedback and the dev console) go to the server, never to chat; only you see them, password hidden.
         const shown = text.replace(/^(\/login\s+\S+\s+).*/, '$1••••');
         this.chat.add({ name: '', map: '', text: `> ${shown}`, self: true, system: true });
         this.net.send({ t: 'cmd', text });
