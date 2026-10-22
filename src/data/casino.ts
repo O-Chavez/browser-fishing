@@ -2,8 +2,6 @@
 
 /** Coins of fish value that make one chip when a fish is turned in at the prize shop. */
 export const CHIP_COINS = 1000;
-/** A fish's gambling multiplier never exceeds this; a fish at the cap can only be turned in. */
-export const MULT_CAP = 16;
 /** Minimum player level to travel to the casino. */
 export const CASINO_LEVEL = 15;
 /** How close you must stand to a table or the prize counter. */

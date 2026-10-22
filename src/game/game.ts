@@ -58,7 +58,7 @@ import {
 } from './progression';
 import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
-import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, MULT_CAP, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
+import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { chipsFor, type BlackjackView } from './casino';
 import { load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
@@ -1174,7 +1174,7 @@ export class Game {
     if (it?.k !== 'fish') return;
     const name = byId(FISH, it.fishId).name;
     const before = eco.fishValue(it);
-    const after = Math.min(MULT_CAP, (it.mult ?? 1) * r.factor) * (before / (it.mult ?? 1));
+    const after = before * r.factor;
     this.spin = true;
     this.casinoMsg = '<span class="muted">The wheel is spinning…</span>';
     this.world.hall?.spin(r.pocket, r.ms);
@@ -1277,7 +1277,6 @@ export class Game {
     this.aim = hall.pick(this.world.camera);
     const it = this.s.slots[this.betSlot];
     const fish = it?.k === 'fish' ? it : null;
-    const rich = !!fish && (fish.mult ?? 1) >= MULT_CAP;
     const lines: string[] = [];
     if (t === 'prizes') {
       const held = this.s.slots[this.s.held];
@@ -1300,7 +1299,7 @@ export class Game {
     }
     lines.push(
       fish
-        ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${Math.round(eco.fishValue(fish))} 🪙${rich ? ' <span class="lose">(too rich for the table, turn it in)</span>' : ''}`
+        ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${Math.round(eco.fishValue(fish))} 🪙`
         : 'Hold a fish (1-5) to bet it.',
     );
     const g = this.bj;
@@ -1343,7 +1342,6 @@ export class Game {
     const it = this.s.slots[this.betSlot];
     const needsFish = a.k === 'rbet' || a.id === 'deal';
     if (needsFish && it?.k !== 'fish') return this.toast('Hold a fish (1-5) to bet it.');
-    if (needsFish && (it as { mult?: number }).mult !== undefined && ((it as { mult?: number }).mult ?? 1) >= MULT_CAP) return this.toast('That fish is too rich for the table. Turn it in at the prize counter.');
     if (a.k === 'rbet') this.rouletteBet(a.id as RouletteBet);
     else this.blackjackAct(a.id as 'deal' | 'hit' | 'stand' | 'double');
   }

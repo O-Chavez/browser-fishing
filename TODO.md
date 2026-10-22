@@ -112,7 +112,7 @@
   - Today an account is a name plus a random token kept in that browser's localStorage (`game.ts:198-200`, checked by `AccountStore.auth` in `server/accounts.ts`), so a new browser or cleared site data can't get back in. Add an optional "set a password" step that claims the name; password-free play stays as it is, and existing accounts keep working
   - Passwords hashed with a slow hash (Node's `crypto.scrypt`, not the token `hash()`), login lockout reusing the pattern in `server/dev.ts`. Recovery: skip email; consider a one-time recovery code shown when the password is set, or a "link a device" code from a logged-in browser
   - Larger item: propose a plan (UI on the join screen, protocol, migration, recovery) before editing
-- [ ] Remove the casino multiplier cap
+- [x] Remove the casino multiplier cap
   - No limit on how much a gambled fish can be worth: drop `MULT_CAP` (×16, `src/data/casino.ts:6`) and its checks in `src/game/casino.ts:15,28` and `src/game/game.ts:1063,1166,1232` ("too rich for the table"), plus the test in `casino.test.ts` and the cap line in `GAME_DESIGN.md:374`
   - Check that huge values still display, save and sell correctly (number formatting, nothing past `Number.MAX_SAFE_INTEGER`). This also settles the Lucky Wheel cap idea: neither is capped
 - [x] Sketch out a possible route to making the game mobile friendly

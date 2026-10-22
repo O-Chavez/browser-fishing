@@ -371,7 +371,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 - A player bets a **fish** at a table. The fish keeps its identity and gains a **×multiplier** (as the Lucky Wheel does).
 - A win multiplies the fish's value. A loss destroys the fish. There is no cash-out prompt at the table: the player simply keeps playing or walks away.
 - Cashing out is separate. The player **turns the fish in manually at the casino prize shop**, which pays **chips** at its current boosted value times a fixed rate. The decision to stop is always theirs.
-- The multiplier is capped (about ×16). A fish at the cap is refused at the tables and can only be turned in.
+- The multiplier has no cap: a fish can be bet again and again until it is lost or turned in.
 - The server rolls everything and applies the result after the animation, like the wheel. If a player disconnects mid-round, the round settles on the server so the result can't be dodged.
 
 ### Tables

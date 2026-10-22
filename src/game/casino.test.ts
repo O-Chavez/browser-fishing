@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHIP_COINS, MULT_CAP } from '../data/casino';
+import { CHIP_COINS } from '../data/casino';
 import { FISH } from '../data/content';
 import * as cas from './casino';
 import * as eco from './economy';
@@ -18,14 +18,17 @@ const seq = (...v: number[]) => {
 const card = (r: number, s = 0): cas.Card => ({ r, s });
 
 describe('betting a fish', () => {
-  it('multiplies on a win, destroys on a loss, and caps at the limit', () => {
+  it('multiplies on a win with no cap, and destroys on a loss', () => {
     const s = saveWith(fish());
     const base = eco.fishValue(s.slots[2] as ReturnType<typeof fish>);
     cas.settleBet(s, 2, 2);
     expect(eco.fishValue(s.slots[2] as ReturnType<typeof fish>)).toBe(base * 2);
-    cas.settleBet(s, 2, 16);
-    expect((s.slots[2] as ReturnType<typeof fish>).mult).toBe(MULT_CAP);
-    expect(cas.betError(s, 2)).toMatch(/turn it in/i);
+    for (let i = 0; i < 6; i++) cas.settleBet(s, 2, 16);
+    expect((s.slots[2] as ReturnType<typeof fish>).mult).toBe(2 * 16 ** 6);
+    expect(cas.betError(s, 2)).toBeNull();
+    // Even a fish worth this much still sells and turns in for whole numbers.
+    expect(Number.isSafeInteger(eco.sellPrice(s, s.slots[2] as ReturnType<typeof fish>))).toBe(true);
+    expect(cas.chipsFor(eco.fishValue(s.slots[2] as ReturnType<typeof fish>))).toBeGreaterThan(1e6);
     cas.settleBet(s, 2, 0);
     expect(s.slots[2]).toBeNull();
   });

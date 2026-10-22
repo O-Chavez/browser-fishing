@@ -1,4 +1,4 @@
-import { CHIP_COINS, MULT_CAP, ROULETTE_PAY, ROULETTE_POCKETS, type RouletteBet } from '../data/casino';
+import { CHIP_COINS, ROULETTE_PAY, ROULETTE_POCKETS, type RouletteBet } from '../data/casino';
 import { fishValue } from './economy';
 import type { SaveData } from './state';
 
@@ -8,15 +8,14 @@ type Rng = () => number;
 
 // ---------- betting a fish ----------
 
-/** A fish can be bet unless it already sits at the multiplier cap. */
+/** Any fish can be bet; there is no limit on how much it can grow. */
 export function betError(s: SaveData, i: number): string | null {
   const it = s.slots[i];
   if (!Number.isInteger(i) || it?.k !== 'fish') return 'Hold a fish to bet it.';
-  if ((it.mult ?? 1) >= MULT_CAP) return `This fish is already at ×${MULT_CAP}. Turn it in at the prize shop.`;
   return null;
 }
 
-/** Settles a bet on the fish in slot i: a win multiplies its value (up to the cap), a loss destroys it. */
+/** Settles a bet on the fish in slot i: a win multiplies its value, a loss destroys it. */
 export function settleBet(s: SaveData, i: number, factor: number): { before: number; after: number } {
   const it = s.slots[i];
   if (it?.k !== 'fish') return { before: 0, after: 0 };
@@ -25,7 +24,7 @@ export function settleBet(s: SaveData, i: number, factor: number): { before: num
     s.slots[i] = null;
     return { before, after: 0 };
   }
-  if (factor > 1) it.mult = Math.min(MULT_CAP, (it.mult ?? 1) * factor);
+  if (factor > 1) it.mult = (it.mult ?? 1) * factor;
   return { before, after: fishValue(it) };
 }
 
