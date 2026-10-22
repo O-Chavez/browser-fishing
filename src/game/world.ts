@@ -1,6 +1,7 @@
 import { audio } from './audio';
 import * as THREE from 'three';
 import { LightPool } from './lightpool';
+import { NightGlow, glowTag } from './nightglow';
 import type { Location } from '../data/content';
 import type { MapDef } from '../data/maps';
 import {
@@ -122,6 +123,7 @@ export class World {
   private decor = new THREE.Group();
   private frame = 0;
   private lightPool = new LightPool(8);
+  private glow: NightGlow | null = null;
   private clouds = new THREE.Group();
   private cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.92 });
   private stars!: THREE.Points;
@@ -443,6 +445,7 @@ export class World {
       this.hall = new CasinoHall(map.casino!);
       this.decor.add(this.hall.group);
       this.lightPool.collect(this.decor);
+      this.glow = null;
       return;
     }
 
@@ -494,6 +497,8 @@ export class World {
     this.hall = null;
     this.buildClutter(loc, map);
     this.lightPool.collect(this.decor);
+    this.glow = new NightGlow(this.decor);
+    this.decor.add(this.glow.group);
   }
 
   private buildTerrain(loc: Location): void {
@@ -789,6 +794,7 @@ export class World {
       lanternPost.position.set(x, 0.95, z);
       const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), glow);
       lantern.position.set(x, 1.3, z);
+      glowTag(lantern, 0.75);
       dock.add(lantern, lanternPost);
     }
     const crate = new THREE.Mesh(
@@ -1085,7 +1091,9 @@ export class World {
     this.hub?.update(t, this.eye.x, this.eye.z);
     this.town?.update(t, this.eye.x, this.eye.z);
     this.hall?.update(t, dt);
+    // After every owner has set its lights' intensity this frame: the pool fades them on top of it.
     this.lightPool.update(dt, this.eye);
+    this.glow?.update(t, this.night, this.eye, this.renderer.domElement.height, this.renderer.getPixelRatio());
     this.camera.rotation.set(
       this.pitch +
         this.pitchKick +

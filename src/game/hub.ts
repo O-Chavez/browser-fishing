@@ -4,6 +4,7 @@ import { FISH } from '../data/content';
 import type { MapDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { mergeStatic } from './merge';
+import { glowTag } from './nightglow';
 import { buildFish } from './fishmodel';
 import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
@@ -306,6 +307,7 @@ export class Hub {
       (torch.material as THREE.MeshLambertMaterial).emissive.set(0xff3c1e);
       torch.position.set(lx, 4.95, 0);
       this.torches.push(torch);
+      glowTag(torch, 1.0);
       g.add(post, cap, torch);
     }
     const lintel = cyl(0.3, 0.3, 5.6, 0x6b4a2b, 12);
@@ -348,6 +350,7 @@ export class Hub {
       bm.emissive.set(0xffb84a);
       this.lampMats.push(bm);
       bulb.position.y = 2.3;
+      glowTag(bulb, 0.75);
       lamp.add(pole, bulb);
       if (lit.has(`${x},${z}`)) {
         const l = new THREE.PointLight(0xffc266, 0, 13, 1.6);
@@ -573,6 +576,7 @@ export class Hub {
       g.add(f);
     }
     this.fireLight.position.set(0, 1.0, 0);
+    glowTag(this.fireLight, 1.6, 1, true);
     g.add(this.fireLight);
     this.place(g, spot);
     this.fixed.push({ x: spot.x, z: spot.z, r: 0.8 });
