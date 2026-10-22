@@ -690,7 +690,7 @@ export class Game {
     const wheel = new WheelStepper();
     document.addEventListener('wheel', (e) => {
       if (!this.active || this.menuOpen || this.phase !== 'idle') return;
-      const step = wheel.step(e.deltaY, e.deltaMode, e.timeStamp);
+      const step = wheel.step(e.deltaY, e.deltaMode, e.timeStamp, (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY);
       if (!step) return;
       const n = this.s.slots.length;
       this.takeSlot((this.s.held + step + n) % n);
@@ -2570,7 +2570,10 @@ export class Game {
     const moved = this.hotbarHeld !== s.held;
     this.hotbarHeld = s.held;
     const activeBait = eco.activeSlot(s);
-    let html = '';
+    // Slots are updated in place rather than rebuilt, so switching slots (or the bait marker moving)
+    // doesn't replace them: the old slot glides back down while the new one bounces up.
+    const el = $('hotbar');
+    if (el.children.length !== s.slots.length) el.innerHTML = s.slots.map(() => '<div></div>').join('');
     s.slots.forEach((sl, i) => {
       // Icon, a short label underneath, and a corner badge for bait stack size.
       let body = '';
@@ -2589,19 +2592,34 @@ export class Game {
         body = `<span class="ic">${fishIcon(f.id, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
         cls += ' fish';
       } else cls += ' empty';
-      if (i === s.held) cls += moved ? ' held pick' : ' held';
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
       if (sellable) cls += ' sellable';
-      const tip = sellable ? ` data-sell="Sell · ${eco.sellPrice(this.s, sl)} 🪙"` : '';
-      const name = sl?.k === 'fish' ? ` title="${byId(FISH, sl.fishId).name}"` : '';
-      html += `<div class="${cls}" data-i="${i}"${tip}${name}${ring ? ` style="--ring:${ring}"` : ''}><i>${i + 1}</i>${body}</div>`;
+      const sell = sellable ? `Sell · ${eco.sellPrice(this.s, sl)} 🪙` : '';
+      const name = sl?.k === 'fish' ? byId(FISH, sl.fishId).name : '';
+      const c = el.children[i] as HTMLElement;
+      const key = [cls, body, sell, name, ring].join('|');
+      if (c.dataset.h === key) return;
+      c.dataset.h = key;
+      c.dataset.i = String(i);
+      c.className = cls + (c.classList.contains('pick') ? ' pick' : '');
+      c.innerHTML = `<i>${i + 1}</i>${body}`;
+      if (sell) c.dataset.sell = sell;
+      else delete c.dataset.sell;
+      if (name) c.title = name;
+      else c.removeAttribute('title');
+      if (ring) c.style.setProperty('--ring', ring);
+      else c.style.removeProperty('--ring');
     });
-    const el = $('hotbar');
-    if (el.dataset.h !== html) {
-      el.dataset.h = html;
-      el.innerHTML = html;
+    [...el.children].forEach((c, i) => c.classList.toggle('held', i === s.held));
+    if (moved) {
+      el.querySelector('.pick')?.classList.remove('pick');
+      const held = el.children[s.held] as HTMLElement | undefined;
+      if (held) {
+        void held.offsetWidth;
+        held.classList.add('pick');
+      }
+      this.showHeldName();
     }
-    if (moved) this.showHeldName();
   }
 
   /** Names the item in hand above the hotbar for a moment after switching slots. */
