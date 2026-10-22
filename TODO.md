@@ -183,12 +183,18 @@
   - Textures drawn in code (`src/game/textures.ts`), multiplied over existing colours: ground dabs, dock plank grain, cottage siding and shingle roofs, stone well and chimneys, two-tone rocks
   - Scenery: two rings of snow-capped mountains tinted by the sky, about a quarter of the trees round and leafy, grass tufts and flower clusters on grassy ground only (off sand, paths, hidden bottles and the worm patch), lily pads in the shallows. Lite graphics hides the tufts and flowers
   - Done (2026-10-22): render time +2.3-2.6% in the pond and town scenes (about 0.05 ms a frame at 2.2 ms), casino unchanged (+0.2%, the control). Three alternating runs each against main on a quiet machine. Triangles 88k to 131k (pond) and draw calls +3 (pond) / +18 (town, the textured cottages only merge with same-coloured parts). Mountains went from 18 meshes to 4. No leaked geometries or textures across map changes. Grass blades are open-ended cones and flowers octahedra to halve their triangles. `npm run bench` works again (`openMenu('wardrobe')`, and `BENCH_PORT` overrides 5299). Smoke 57/57; README screenshots regenerated (fish lineup unchanged)
+- [x] Light the distant town and dock at night without adding real lights
+  - Only the 8 point lights nearest the camera are on (each one costs every lit pixel), so far lamps looked switched off and the pier vanished at night. Options at four levels (2026-10-22): https://claude.ai/artifact/CSfsXXhLZuo8NxUcF6yqCS. Oscar picked level 3 after trying it locally
+  - Done (2026-10-22): `src/game/nightglow.ts` adds soft halos round bulbs, lanterns, fires, torches and windows; light pools on the ground and dock under lamps whose real light is off; and shimmering lamp reflections on the lake. One draw call each, hidden by day. Glow sources are tagged where they're built (`glowTag`)
+  - Pools use three.js's own point-light falloff and are calibrated per surface to about 0.7-0.8x the real light (measured on the same patch of ground). Pools add light while real lights scale with the surface colour, so the dark dock planks need a much lower gain (`POOL_GAIN`)
+  - `LightPool` fades lights over 0.4 s (`LIGHT_FADE`) instead of popping them on: a light leaving the nearest 8 dims to zero, then hands its slot to the incoming one, so the light count (and shaders) never change. Each pool crossfades with its lamp's real light. Tests in `lightpool.test.ts`
+  - Cost (`bench:ab`, 6 alternating pairs on an M1 against main): plazaNight +2% (about 0.04 ms at 2.3 ms, 5 of 6 pairs slower), pondNight and every day scene unchanged (within noise), draw calls +3 at night. Map build and first-render timings were noisy in both directions. Results in `bench-results/ab-main-vs-943a328.json`. Smoke 58/58; README night screenshot re-shot
 
 ## Ideas
 
 <!-- Add new ideas here. Move them into the checklist when you decide to do them. -->
 
-- Fake "light pools" (cheap glowing decals) under lamps and above casino chandeliers, so fewer real point lights are needed. Cutting real lights from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling
+- Fewer real point lights: cutting them from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling. Outdoors, the night glow pools (`src/game/nightglow.ts`) now stand in for far lamps, so a lower cap might look fine there; the casino chandeliers would need pools of their own
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
 - The bench scenes have no high-tier fish, so they can't measure the fish tier effects
 - Level 3 of the visual polish options (https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc): a soft foam line just offshore and lighter shallows (a baked shore-distance texture read by the water shader), small round bushes along the shore and hillsides, slightly richer greens. Each piece could ship on its own

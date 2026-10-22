@@ -3,6 +3,7 @@ import type { MapDef, NpcDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { DARK, WOOD, ball, cyl, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
+import { glowTag } from './nightglow';
 import { boxUV, shingleTexture, sidingTexture, stoneTexture } from './textures';
 import { faceHead } from './faces';
 import type { Circle } from './player';
@@ -263,6 +264,7 @@ export class Town {
       frame.position.set(sx, 1.45, D / 2 + 0.03);
       const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.62), this.windowMat);
       pane.position.set(sx, 1.45, D / 2 + 0.1);
+      glowTag(pane, 0.8, 0.5);
       const bar = rbox(0.05, 0.64, 0.02, 0xf3ead2, 0.01);
       bar.position.set(sx, 1.45, D / 2 + 0.11);
       const sill = rbox(1.1, 0.08, 0.28, 0x6b4a2b, 0.02);
@@ -280,6 +282,7 @@ export class Town {
     const lamp = ball(0.1, 0xffd27a);
     (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
     lamp.position.set(0.85, 1.95, D / 2 + 0.2);
+    glowTag(lamp, 0.7);
     this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
     g.add(lamp);
     // Chimney
@@ -461,6 +464,7 @@ export class Town {
     (lantern.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
     this.lamps.push(lantern.material as THREE.MeshLambertMaterial);
     lantern.position.set(0.45, 2.1, 0);
+    glowTag(lantern, 0.75);
     const cap = cyl(0.01, 0.16, 0.12, DARK, 6);
     cap.position.set(0.45, 2.32, 0);
     g.add(pole, arm, lantern, cap);
@@ -513,6 +517,7 @@ export class Town {
     }
     const light = new THREE.PointLight(0xff8a3c, 6, 11, 2);
     light.position.y = 0.9;
+    glowTag(light, 1.4, 1, true);
     g.add(light);
     this.fires.push({ light, flames, ph: x * 3.1 + z });
     for (let i = 0; i < seats; i++) {
@@ -557,6 +562,7 @@ export class Town {
       const m = b.material as THREE.MeshLambertMaterial;
       m.emissive.set(colors[i % 4]);
       this.lamps.push(m);
+      glowTag(b, 0.3, 0.7);
       this.at(b, x, z, 0, y);
     }
   }

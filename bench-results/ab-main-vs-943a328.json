@@ -1,0 +1,998 @@
+{
+  "A": {
+    "rev": "main",
+    "sha": "2749d7a",
+    "runs": [
+      {
+        "label": "2749d7a-0",
+        "date": "2026-10-22T10:56:27.303Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.4350000003973644,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4350000003973644,
+            "renderMsHi": 2.4350000003973644,
+            "renderMsRounds": [
+              2.4350000003973644
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.423333332935969,
+            "drawCalls": 68,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.423333332935969,
+            "renderMsHi": 2.423333332935969,
+            "renderMsRounds": [
+              2.423333332935969
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.4766666660706202,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4766666660706202,
+            "renderMsHi": 2.4766666660706202,
+            "renderMsRounds": [
+              2.4766666660706202
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.4600000003973643,
+            "drawCalls": 201,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4600000003973643,
+            "renderMsHi": 2.4600000003973643,
+            "renderMsRounds": [
+              2.4600000003973643
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9383333335320154,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9383333335320154,
+            "renderMsHi": 1.9383333335320154,
+            "renderMsRounds": [
+              1.9383333335320154
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 101.90000003576279,
+          "pondFirstRenderMs": 9.299999952316284,
+          "casinoBuildMs": 31.5,
+          "casinoFirstRenderMs": 1.0999999642372131,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 87.30000001192093,
+          "firstCasinoVisitRenderMs": 94.90000003576279
+        }
+      },
+      {
+        "label": "2749d7a-1",
+        "date": "2026-10-22T10:58:46.399Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.430000000198682,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.430000000198682,
+            "renderMsHi": 2.430000000198682,
+            "renderMsRounds": [
+              2.430000000198682
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.469999999801318,
+            "drawCalls": 68,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.469999999801318,
+            "renderMsHi": 2.469999999801318,
+            "renderMsRounds": [
+              2.469999999801318
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.4649999996026355,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4649999996026355,
+            "renderMsHi": 2.4649999996026355,
+            "renderMsRounds": [
+              2.4649999996026355
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.4633333335320153,
+            "drawCalls": 201,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4633333335320153,
+            "renderMsHi": 2.4633333335320153,
+            "renderMsRounds": [
+              2.4633333335320153
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9416666666666667,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9416666666666667,
+            "renderMsHi": 1.9416666666666667,
+            "renderMsRounds": [
+              1.9416666666666667
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 92.69999998807907,
+          "pondFirstRenderMs": 9.5,
+          "casinoBuildMs": 28.899999976158142,
+          "casinoFirstRenderMs": 1.0999999642372131,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 65.39999997615814,
+          "firstCasinoVisitRenderMs": 79.60000002384186
+        }
+      },
+      {
+        "label": "2749d7a-2",
+        "date": "2026-10-22T10:59:33.260Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.4349999994039537,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4349999994039537,
+            "renderMsHi": 2.4349999994039537,
+            "renderMsRounds": [
+              2.4349999994039537
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.428333334128062,
+            "drawCalls": 68,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.428333334128062,
+            "renderMsHi": 2.428333334128062,
+            "renderMsRounds": [
+              2.428333334128062
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.4649999996026355,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4649999996026355,
+            "renderMsHi": 2.4649999996026355,
+            "renderMsRounds": [
+              2.4649999996026355
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.476666667064031,
+            "drawCalls": 201,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.476666667064031,
+            "renderMsHi": 2.476666667064031,
+            "renderMsRounds": [
+              2.476666667064031
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9550000001986823,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9550000001986823,
+            "renderMsHi": 1.9550000001986823,
+            "renderMsRounds": [
+              1.9550000001986823
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 107.69999998807907,
+          "pondFirstRenderMs": 8.699999988079071,
+          "casinoBuildMs": 27.5,
+          "casinoFirstRenderMs": 1.100000023841858,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 58.10000002384186,
+          "firstCasinoVisitRenderMs": 78.39999997615814
+        }
+      },
+      {
+        "label": "2749d7a-3",
+        "date": "2026-10-22T11:01:54.515Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.2683333327372868,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2683333327372868,
+            "renderMsHi": 2.2683333327372868,
+            "renderMsRounds": [
+              2.2683333327372868
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.2883333335320155,
+            "drawCalls": 68,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2883333335320155,
+            "renderMsHi": 2.2883333335320155,
+            "renderMsRounds": [
+              2.2883333335320155
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.2666666666666666,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2666666666666666,
+            "renderMsHi": 2.2666666666666666,
+            "renderMsRounds": [
+              2.2666666666666666
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.269999999801318,
+            "drawCalls": 201,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.269999999801318,
+            "renderMsHi": 2.269999999801318,
+            "renderMsRounds": [
+              2.269999999801318
+            ]
+          },
+          "casino": {
+            "renderMs": 1.901666667064031,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.901666667064031,
+            "renderMsHi": 1.901666667064031,
+            "renderMsRounds": [
+              1.901666667064031
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 93.60000002384186,
+          "pondFirstRenderMs": 7.899999976158142,
+          "casinoBuildMs": 26.599999964237213,
+          "casinoFirstRenderMs": 1.100000023841858,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 65,
+          "firstCasinoVisitRenderMs": 74.19999998807907
+        }
+      },
+      {
+        "label": "2749d7a-4",
+        "date": "2026-10-22T11:02:41.038Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.2683333337306975,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2683333337306975,
+            "renderMsHi": 2.2683333337306975,
+            "renderMsRounds": [
+              2.2683333337306975
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.2983333339293797,
+            "drawCalls": 68,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2983333339293797,
+            "renderMsHi": 2.2983333339293797,
+            "renderMsRounds": [
+              2.2983333339293797
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.260000000397364,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.260000000397364,
+            "renderMsHi": 2.260000000397364,
+            "renderMsRounds": [
+              2.260000000397364
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.275,
+            "drawCalls": 201,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.275,
+            "renderMsHi": 2.275,
+            "renderMsRounds": [
+              2.275
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9300000001986821,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9300000001986821,
+            "renderMsHi": 1.9300000001986821,
+            "renderMsRounds": [
+              1.9300000001986821
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 105.5,
+          "pondFirstRenderMs": 8.199999988079071,
+          "casinoBuildMs": 26.69999998807907,
+          "casinoFirstRenderMs": 1,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 58.69999998807907,
+          "firstCasinoVisitRenderMs": 74.30000001192093
+        }
+      },
+      {
+        "label": "2749d7a-5",
+        "date": "2026-10-22T11:05:03.828Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.3483333329359692,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.3483333329359692,
+            "renderMsHi": 2.3483333329359692,
+            "renderMsRounds": [
+              2.3483333329359692
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.2899999996026357,
+            "drawCalls": 68,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2899999996026357,
+            "renderMsHi": 2.2899999996026357,
+            "renderMsRounds": [
+              2.2899999996026357
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.3266666660706203,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.3266666660706203,
+            "renderMsHi": 2.3266666660706203,
+            "renderMsRounds": [
+              2.3266666660706203
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.2650000005960464,
+            "drawCalls": 201,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2650000005960464,
+            "renderMsHi": 2.2650000005960464,
+            "renderMsRounds": [
+              2.2650000005960464
+            ]
+          },
+          "casino": {
+            "renderMs": 1.8399999996026357,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.8399999996026357,
+            "renderMsHi": 1.8399999996026357,
+            "renderMsRounds": [
+              1.8399999996026357
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 93.30000001192093,
+          "pondFirstRenderMs": 8,
+          "casinoBuildMs": 27.599999964237213,
+          "casinoFirstRenderMs": 1.2000000476837158,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 93.80000001192093,
+          "firstCasinoVisitRenderMs": 101.79999995231628
+        }
+      }
+    ]
+  },
+  "B": {
+    "rev": "943a328",
+    "sha": "943a328",
+    "runs": [
+      {
+        "label": "943a328-0",
+        "date": "2026-10-22T10:57:13.263Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.4316666662693023,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4316666662693023,
+            "renderMsHi": 2.4316666662693023,
+            "renderMsRounds": [
+              2.4316666662693023
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.430000000198682,
+            "drawCalls": 71,
+            "triangles": 139218,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.430000000198682,
+            "renderMsHi": 2.430000000198682,
+            "renderMsRounds": [
+              2.430000000198682
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.4883333335320157,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4883333335320157,
+            "renderMsHi": 2.4883333335320157,
+            "renderMsRounds": [
+              2.4883333335320157
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.5283333331346514,
+            "drawCalls": 204,
+            "triangles": 195538,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.5283333331346514,
+            "renderMsHi": 2.5283333331346514,
+            "renderMsRounds": [
+              2.5283333331346514
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9600000003973643,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9600000003973643,
+            "renderMsHi": 1.9600000003973643,
+            "renderMsRounds": [
+              1.9600000003973643
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 109.10000002384186,
+          "pondFirstRenderMs": 8.899999976158142,
+          "casinoBuildMs": 28.700000047683716,
+          "casinoFirstRenderMs": 1.100000023841858,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 66.69999998807907,
+          "firstCasinoVisitRenderMs": 89.39999997615814
+        }
+      },
+      {
+        "label": "943a328-1",
+        "date": "2026-10-22T10:57:59.130Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.444999999801318,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.444999999801318,
+            "renderMsHi": 2.444999999801318,
+            "renderMsRounds": [
+              2.444999999801318
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.453333333134651,
+            "drawCalls": 71,
+            "triangles": 139218,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.453333333134651,
+            "renderMsHi": 2.453333333134651,
+            "renderMsRounds": [
+              2.453333333134651
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.4600000003973643,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.4600000003973643,
+            "renderMsHi": 2.4600000003973643,
+            "renderMsRounds": [
+              2.4600000003973643
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.5049999992052716,
+            "drawCalls": 204,
+            "triangles": 195538,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.5049999992052716,
+            "renderMsHi": 2.5049999992052716,
+            "renderMsRounds": [
+              2.5049999992052716
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9199999998013177,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9199999998013177,
+            "renderMsHi": 1.9199999998013177,
+            "renderMsRounds": [
+              1.9199999998013177
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 106.89999997615814,
+          "pondFirstRenderMs": 8.400000035762787,
+          "casinoBuildMs": 29,
+          "casinoFirstRenderMs": 1.2000000476837158,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 70.59999996423721,
+          "firstCasinoVisitRenderMs": 80.80000001192093
+        }
+      },
+      {
+        "label": "943a328-2",
+        "date": "2026-10-22T11:00:19.948Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.2066666672627133,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2066666672627133,
+            "renderMsHi": 2.2066666672627133,
+            "renderMsRounds": [
+              2.2066666672627133
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.3116666664679846,
+            "drawCalls": 71,
+            "triangles": 139218,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.3116666664679846,
+            "renderMsHi": 2.3116666664679846,
+            "renderMsRounds": [
+              2.3116666664679846
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.25,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.25,
+            "renderMsHi": 2.25,
+            "renderMsRounds": [
+              2.25
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.318333332737287,
+            "drawCalls": 204,
+            "triangles": 195538,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.318333332737287,
+            "renderMsHi": 2.318333332737287,
+            "renderMsRounds": [
+              2.318333332737287
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9100000003973643,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9100000003973643,
+            "renderMsHi": 1.9100000003973643,
+            "renderMsRounds": [
+              1.9100000003973643
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 91.19999998807907,
+          "pondFirstRenderMs": 9.800000011920929,
+          "casinoBuildMs": 29.30000001192093,
+          "casinoFirstRenderMs": 1.0999999642372131,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 64.69999998807907,
+          "firstCasinoVisitRenderMs": 74.10000002384186
+        }
+      },
+      {
+        "label": "943a328-3",
+        "date": "2026-10-22T11:01:07.156Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.2566666662693025,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2566666662693025,
+            "renderMsHi": 2.2566666662693025,
+            "renderMsRounds": [
+              2.2566666662693025
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.3116666664679846,
+            "drawCalls": 71,
+            "triangles": 139218,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.3116666664679846,
+            "renderMsHi": 2.3116666664679846,
+            "renderMsRounds": [
+              2.3116666664679846
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.2650000005960464,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2650000005960464,
+            "renderMsHi": 2.2650000005960464,
+            "renderMsRounds": [
+              2.2650000005960464
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.3133333335320154,
+            "drawCalls": 204,
+            "triangles": 195538,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.3133333335320154,
+            "renderMsHi": 2.3133333335320154,
+            "renderMsRounds": [
+              2.3133333335320154
+            ]
+          },
+          "casino": {
+            "renderMs": 1.9149999996026357,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.9149999996026357,
+            "renderMsHi": 1.9149999996026357,
+            "renderMsRounds": [
+              1.9149999996026357
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 93.19999998807907,
+          "pondFirstRenderMs": 8.800000011920929,
+          "casinoBuildMs": 28.100000023841858,
+          "casinoFirstRenderMs": 1.199999988079071,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 74.10000002384186,
+          "firstCasinoVisitRenderMs": 72.5
+        }
+      },
+      {
+        "label": "943a328-4",
+        "date": "2026-10-22T11:03:27.060Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.2433333337306975,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2433333337306975,
+            "renderMsHi": 2.2433333337306975,
+            "renderMsRounds": [
+              2.2433333337306975
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.298333332935969,
+            "drawCalls": 71,
+            "triangles": 139218,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.298333332935969,
+            "renderMsHi": 2.298333332935969,
+            "renderMsRounds": [
+              2.298333332935969
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.2333333333333334,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.2333333333333334,
+            "renderMsHi": 2.2333333333333334,
+            "renderMsRounds": [
+              2.2333333333333334
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.3333333333333335,
+            "drawCalls": 204,
+            "triangles": 195538,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.3333333333333335,
+            "renderMsHi": 2.3333333333333335,
+            "renderMsRounds": [
+              2.3333333333333335
+            ]
+          },
+          "casino": {
+            "renderMs": 1.8066666672627132,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.8066666672627132,
+            "renderMsHi": 1.8066666672627132,
+            "renderMsRounds": [
+              1.8066666672627132
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 93.20000004768372,
+          "pondFirstRenderMs": 12.199999988079071,
+          "casinoBuildMs": 28,
+          "casinoFirstRenderMs": 1.199999988079071,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 70.5,
+          "firstCasinoVisitRenderMs": 87.80000001192093
+        }
+      },
+      {
+        "label": "943a328-5",
+        "date": "2026-10-22T11:04:16.122Z",
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+        "scenes": {
+          "pondDay": {
+            "renderMs": 2.281666667262713,
+            "drawCalls": 67,
+            "triangles": 131262,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.281666667262713,
+            "renderMsHi": 2.281666667262713,
+            "renderMsRounds": [
+              2.281666667262713
+            ]
+          },
+          "pondNight": {
+            "renderMs": 2.253333333134651,
+            "drawCalls": 71,
+            "triangles": 139218,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.253333333134651,
+            "renderMsHi": 2.253333333134651,
+            "renderMsRounds": [
+              2.253333333134651
+            ]
+          },
+          "plazaDay": {
+            "renderMs": 2.269999999801318,
+            "drawCalls": 200,
+            "triangles": 187582,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.269999999801318,
+            "renderMsHi": 2.269999999801318,
+            "renderMsRounds": [
+              2.269999999801318
+            ]
+          },
+          "plazaNight": {
+            "renderMs": 2.3150000005960463,
+            "drawCalls": 204,
+            "triangles": 195538,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 2.3150000005960463,
+            "renderMsHi": 2.3150000005960463,
+            "renderMsRounds": [
+              2.3150000005960463
+            ]
+          },
+          "casino": {
+            "renderMs": 1.7949999998013177,
+            "drawCalls": 132,
+            "triangles": 27274,
+            "visibleLights": 10,
+            "pixelRatio": 1.25,
+            "renderMsLo": 1.7949999998013177,
+            "renderMsHi": 1.7949999998013177,
+            "renderMsRounds": [
+              1.7949999998013177
+            ]
+          }
+        },
+        "loops": {
+          "afterPlayOffline": 1,
+          "afterWardrobeClosed": 1
+        },
+        "mapChange": {
+          "pondBuildMs": 135.29999995231628,
+          "pondFirstRenderMs": 11.200000047683716,
+          "casinoBuildMs": 35.69999998807907,
+          "casinoFirstRenderMs": 1.2000000476837158,
+          "leakedGeometriesPerTrip": 0,
+          "leakedTexturesPerTrip": 0,
+          "newProgramsPerTrip": 0,
+          "firstCasinoVisitBuildMs": 100.59999996423721,
+          "firstCasinoVisitRenderMs": 119.60000002384186
+        }
+      }
+    ]
+  }
+}
