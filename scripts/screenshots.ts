@@ -1,7 +1,7 @@
 // README screenshots: stages scenes in headless Chrome and writes them to docs/images/.
 //
 //   npm run screenshots              # every shot
-//   npm run screenshots -- dock reel # only these (dock, night, reel, fish, wardrobe, casino)
+//   npm run screenshots -- dock reel # only these (dock, night, reel, fish, outfits, wardrobe, casino)
 //
 // `casino` re-shoots src/assets/images/casino-preview.jpg, the look inside shown by the poster at the
 // pond's casino gate (and in the README).
@@ -23,7 +23,7 @@ const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Conte
 const VITE_PORT = 5299;
 const SERVER_PORT = 8799;
 const OUT = path.resolve('docs/images');
-const SHOTS = ['dock', 'night', 'reel', 'fish', 'wardrobe', 'casino'];
+const SHOTS = ['dock', 'night', 'reel', 'fish', 'outfits', 'wardrobe', 'casino'];
 const only = process.argv.slice(2);
 const unknown = only.filter((s) => !SHOTS.includes(s));
 if (unknown.length) {
@@ -61,6 +61,13 @@ const accounts = {
   fishcam: account('Fishcam', {}),
   vegas: account('Vegas', {}, { location: 'casino' }),
   ivy: account('Ivy', { color: 0xf2c14e, face: 'wink', hat: 'crown', shirt: 'cloak', jewelry: 'diamond' }, { owned: COSMETICS.map((c) => c.id) }),
+  // The outfits line-up, left to right as the camera sees them (Ivy stands in the middle).
+  dee: account('Dee', { color: 0x38b6a8, face: 'toothy', hat: 'visor', shirt: 'dealer', jewelry: 'dice' }),
+  juno: account('Juno', { color: 0x7bc86c, face: 'smile', hat: 'horned', shirt: 'vest', jewelry: 'pearl' }),
+  rex: account('Rex', { color: 0x8e6bd8, face: 'grin', hat: 'tophat', shirt: 'tux', jewelry: 'jackpot' }),
+  nell: account('Nell', { color: 0x4a90e2, face: 'joy', hat: 'captain', shirt: 'coat', jewelry: 'amulet' }),
+  kai: account('Kai', { color: 0xe8704a, face: 'cat', hat: 'straw', shirt: 'hawaiian', jewelry: 'shell' }),
+  pip: account('Pip', { color: 0xe06aa8, face: 'tongue', hat: 'bucket', shirt: 'striped', jewelry: 'chain' }),
 };
 fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify(accounts));
 
@@ -161,17 +168,40 @@ try {
     if (!shot) throw new Error('reel: never got a mid-fight moment in 6 casts');
   }
 
-  // One fish per tier, rendered on its own canvas by screenshot-fish.ts.
+  // Every fish by tier, rendered on its own canvas by screenshot-fish.ts.
   if (want('fish')) {
     const p = await join('Fishcam', 'fish');
+    await p.setViewport({ width: 1600, height: 1450 });
     await hideHud(p);
-    await p.evaluate(async () => {
+    const height = (await p.evaluate(async () => {
       const mod = await import('/scripts/screenshot-fish.ts' as string);
-      mod.renderLineup(1600, 600, ['carp', 'trout', 'koi', 'dorado', 'aurorapike']);
-    });
+      return mod.renderGrid(1600);
+    })) as number;
     await sleep(500);
-    await shoot(p, 'fish', { x: 0, y: 150, width: 1600, height: 310 });
+    await shoot(p, 'fish', { x: 0, y: 0, width: 1600, height });
     await leave(p);
+  }
+
+  // Seven players in different outfits on the cross-pier, facing a camera on the main pier. The sun
+  // always sits toward -z, so looking +z lights them from the front.
+  if (want('outfits')) {
+    const names = ['Dee', 'Juno', 'Rex', 'Ivy', 'Nell', 'Kai', 'Pip'];
+    const models: Page[] = [];
+    for (const n of names) models.push(await join(n, 'outfits'));
+    const cam = await join('Cam', 'outfits');
+    const C = { x: 0, z: 0.4 };
+    for (let i = 0; i < names.length; i++) {
+      // Looking +z puts +x on the left of the frame. A shallow arc keeps the ends from looking far away.
+      const x = ((names.length - 1) / 2 - i) * 1.2;
+      const z = 4.6 - Math.abs(x) * 0.1;
+      await game(models[i], `G.teleport(${x}, ${z}); G.look(${yawTo(x, z, C.x, C.z)}, 0);`);
+    }
+    await game(cam, `G.teleport(${C.x}, ${C.z}); G.look(Math.PI, -0.04); G.day(0.45);`);
+    await sleep(2500);
+    await hideHud(cam);
+    // Cropped above the dock's crate, which sits between the camera and the group.
+    await shoot(cam, 'outfits', { x: 0, y: 20, width: 1600, height: 715 });
+    await leave(cam, ...models);
   }
 
   if (want('wardrobe')) {

@@ -16,9 +16,9 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![Reeling in a fish from the end of the pier: the rod is bent and the tension ring warns "Let go!"](docs/images/reel.jpg)
 
-**🐟 20 species to discover.** You'll start with Silver Minnows and Bluegill in the Shallows. Then come the Sport Fish and the Lake Giants, then the gem-bright Jewel Fish. At the top are the legendary Spirit Fish: the Ghost Carp, the Phoenix Trout and the Starweaver Eel. Each one has its own look, and the rarest are huge. Fill your **Fishdex** and chase your personal records.
+**🐟 19 species to discover.** You'll start with Silver Minnows and Bluegill in the Shallows. Then come the Sport Fish and the Lake Giants, then the gem-bright Jewel Fish. At the top are the legendary Spirit Fish: the Ghost Carp, the Phoenix Trout and the Starweaver Eel. Each one has its own look, and the rarest are huge. Fill your **Fishdex** and chase your personal records.
 
-![One fish from each tier: Common Carp, Rainbow Trout, Golden Koi, Sapphire Dorado and Aurora Pike](docs/images/fish.jpg)
+![All 19 fish in five tiers: Shallows, Sport fish, Lake giants, Jewel fish and Spirit fish, with night-only fish marked by a moon](docs/images/fish.jpg)
 
 **🌙 The lake changes after dark.** A full day/night cycle brings out fish you'll never see at noon. Night is also the best time to hook a **shiny**: a rare golden variant worth five times as much.
 
@@ -34,7 +34,9 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![Two players in hats chatting on the end of the pier at sunset, one with a speech bubble above their head](docs/images/dock.jpg)
 
-**🎩 Make it yours.** Choose a face and a colour, and dress up in 25 hats, shirts and pieces of jewellery from the town stall and the casino prize counter.
+**🎩 Make it yours.** Choose a face and a colour, and dress up in 24 hats, shirts and pieces of jewellery from the town stall and the casino prize counter.
+
+![Seven players lined up on the pier in different outfits, from a dealer's visor and waistcoat to a gold crown and aurora cloak](docs/images/outfits.jpg)
 
 ![The wardrobe, with a player in a crown and cloak and the hats and shirts to choose from](docs/images/wardrobe.jpg)
 
