@@ -189,6 +189,23 @@ describe('blackjack', () => {
     expect(cas.doubleDown(saveWith(fish()), late)).toMatch(/first two cards/);
   });
 
+  it('names a natural 21 on the result, for the player, the dealer or both', () => {
+    const view = (player: cas.Card[], dealer: cas.Card[]) => {
+      const g = game(player, dealer);
+      const pn = cas.handTotal(player) === 21;
+      const dn = cas.handTotal(dealer) === 21;
+      Object.assign(g, { done: true, result: pn && dn ? 'push' : pn ? 'blackjack' : 'lose' });
+      return cas.blackjackVerdict(cas.blackjackView(g));
+    };
+    expect(view([card(1), card(13)], [card(10), card(7)])).toMatchObject({ kind: 'win', title: 'BLACKJACK!', sub: expect.stringContaining('×3') });
+    expect(view([card(10), card(7)], [card(1), card(12)])).toMatchObject({ kind: 'lose', title: 'DEALER BLACKJACK' });
+    expect(view([card(1), card(11)], [card(10), card(1)])).toMatchObject({ kind: 'push', title: 'BOTH BLACKJACK' });
+    // A dealer reaching 21 with a third card isn't a blackjack.
+    const late = game([card(10), card(9)], [card(10), card(4)], [card(7)]);
+    cas.actBlackjack(late, 'stand');
+    expect(cas.blackjackVerdict(cas.blackjackView(late))).toMatchObject({ kind: 'lose', title: 'DEALER WINS' });
+  });
+
   it('deals two cards each from a 52-card deck', () => {
     const g = cas.dealBlackjack(2, Math.random);
     expect(g.deck.length).toBe(48);
