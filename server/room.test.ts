@@ -6,7 +6,7 @@ import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { FISH } from '../src/data/content';
 import { sellValue } from '../src/game/progression';
-import { Room } from './room';
+import { BOARD_MS, Room } from './room';
 
 const conn = () => {
   const log: ServerMsg[] = [];
@@ -457,5 +457,91 @@ describe('join notices', () => {
     const a = join('Ann');
     expect(last(c, 'sys')).toEqual({ t: 'sys', text: 'Ann has joined' });
     expect(a.c.log.some((m) => m.t === 'sys')).toBe(false);
+  });
+});
+
+describe('scaling', () => {
+  const snaps = (c: { log: ServerMsg[] }) => c.log.filter((m) => m.t === 'snap') as Extract<ServerMsg, { t: 'snap' }>[];
+  const toCasino = (t: ReturnType<typeof setup>, p: { id: number; acct: { save: { level: number } } }) => {
+    p.acct.save.level = 99;
+    const g = MAPS[0].gate;
+    t.room.handle(p.id, { t: 'pos', x: g.x, z: g.z, yaw: 0 });
+    t.room.handle(p.id, { t: 'travel', to: 'casino' });
+  };
+
+  it('serializes a broadcast once and hands the same JSON to everyone', () => {
+    const t = setup();
+    const a = t.join('Ann');
+    const b = t.join('Bob');
+    const seen: (string | undefined)[] = [];
+    for (const p of [a, b]) {
+      const send = p.c.send;
+      p.c.send = (m: ServerMsg, json?: string) => (seen.push(json), send(m));
+    }
+    t.room.broadcast({ t: 'left', id: 99 });
+    expect(seen).toEqual([JSON.stringify({ t: 'left', id: 99 }), JSON.stringify({ t: 'left', id: 99 })]);
+  });
+
+  it('only snaps players who moved, and only to their own map', () => {
+    const t = setup();
+    const a = t.join('Ann');
+    const b = t.join('Bob');
+    const c = t.join('Cat');
+    t.room.handle(a.id, { t: 'pos', x: 1, z: 2, yaw: 0 });
+    t.room.snapshot();
+    expect(last(b.c, 'snap').p).toEqual([[a.id, 1, 2, 0]]);
+    b.c.log.length = 0;
+    t.room.snapshot();
+    expect(snaps(b.c)).toHaveLength(0);
+
+    toCasino(t, c);
+    t.room.snapshot();
+    a.c.log.length = 0;
+    t.room.handle(c.id, { t: 'pos', x: 5, z: 5, yaw: 0 });
+    t.room.snapshot();
+    expect(snaps(a.c)).toHaveLength(0);
+  });
+
+  it('gives a player arriving on a map the positions of everyone already there', () => {
+    const t = setup();
+    const a = t.join('Ann');
+    const b = t.join('Bob');
+    toCasino(t, a);
+    t.room.handle(a.id, { t: 'pos', x: 3, z: 4, yaw: 1 });
+    t.room.snapshot();
+    t.room.snapshot();
+    b.c.log.length = 0;
+    toCasino(t, b);
+    expect(last(b.c, 'snap').p).toEqual([[a.id, 3, 4, 1]]);
+  });
+
+  it('sends the board at most once per BOARD_MS', () => {
+    const t = setup();
+    const a = t.join('Ann');
+    const b = t.join('Bob');
+    t.room.snapshot();
+    const boards = () => b.c.log.filter((m) => m.t === 'board').length;
+    const n = boards();
+    a.acct.save.coins += 10;
+    t.room.snapshot();
+    expect(boards()).toBe(n);
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    expect(boards()).toBe(n + 1);
+    expect(last(b.c, 'board').coins[a.id]).toBe(a.acct.save.coins);
+  });
+
+  it('re-ranks the cached hall of fame when an online player sets a new best', () => {
+    const t = setup();
+    t.room.hall = () => t.store.hall();
+    t.room.hallStale = () => t.store.hallStale();
+    const a = t.join('Ann');
+    t.room.snapshot();
+    const rows = t.store.hall();
+    expect(t.store.hall()).toBe(rows);
+    a.acct.save.best = { fishId: FISH[0].id, size: 30, value: 500 };
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    expect(last(a.c, 'hall').rows.map((r) => r.name)).toEqual(['Ann']);
   });
 });

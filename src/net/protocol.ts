@@ -82,6 +82,7 @@ export type ServerMsg =
   | { t: 'bj'; view: BlackjackView | null }
   | { t: 'joined'; player: PlayerInfo }
   | { t: 'left'; id: number }
+  /** [id, x, z, yaw] of the players on the receiver's map who moved since the last snap. */
   | { t: 'snap'; p: [number, number, number, number][] }
   | { t: 'moved'; id: number; map: string }
   | { t: 'act'; id: number; act: Activity | null }

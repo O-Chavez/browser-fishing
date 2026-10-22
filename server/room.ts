@@ -14,7 +14,8 @@ import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
 
 export interface Conn {
-  send(msg: ServerMsg): void;
+  /** `json` is `msg` already serialized, passed by broadcasts so it is built once for everyone. */
+  send(msg: ServerMsg, json?: string): void;
 }
 
 interface Pending {
@@ -38,11 +39,16 @@ interface Member {
   dev?: boolean;
   /** Dev console time override, as a day fraction. */
   dayFrac?: number | null;
+  /** Position changed since the last snap. */
+  moved?: boolean;
 }
 
 const VENDOR_RANGE = 5;
 const MIN_FIGHT_MS = 1500;
 export const SPIN_MS = 3800;
+/** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
+export const BOARD_MS = 1000;
+const NO_HALL: HallRow[] = [];
 
 /** One lobby: its players and their shared drops. Economy actions are validated here. */
 export class Room {
@@ -51,9 +57,14 @@ export class Room {
   readonly drops: Drops;
   private maps: Record<string, MapDef>;
   private lastBoard = '';
+  private boardAt = -Infinity;
+  private lastStats = '';
   private lastHall = '';
+  private lastHallRows: HallRow[] | null = null;
   /** Supplies the all-accounts leaderboard (set by the server). */
-  hall: () => HallRow[] = () => [];
+  hall: () => HallRow[] = () => NO_HALL;
+  /** Tells the server's hall cache that an online player's level or best catch changed. */
+  hallStale: () => void = () => {};
   /** Chat rules; the server shares one gate between rooms so limits follow the account. */
   chatGate: ChatGate;
   /** Dev console login; off unless the server sets credentials. */
@@ -130,7 +141,10 @@ export class Room {
     if (m.bj && msg.t !== 'pos' && msg.t !== 'bj') return;
     switch (msg.t) {
       case 'pos':
-        if (finite(msg.x, msg.z, msg.yaw)) Object.assign(m.info, { x: msg.x, z: msg.z, yaw: msg.yaw });
+        if (finite(msg.x, msg.z, msg.yaw)) {
+          Object.assign(m.info, { x: msg.x, z: msg.z, yaw: msg.yaw });
+          m.moved = true;
+        }
         return;
       case 'slot':
         changed = eco.selectSlot(s, Math.floor(Number(msg.i)));
@@ -339,7 +353,11 @@ export class Room {
     m.info.map = dest.id;
     m.info.x = dest.spawn.x;
     m.info.z = dest.spawn.z;
+    m.moved = true;
     this.broadcast({ t: 'moved', id: m.info.id, map: dest.id });
+    // Snaps only carry players who moved, so the arrival gets everyone already standing on the new map.
+    const here = [...this.members.values()].filter((o) => o !== m && o.info.map === dest.id);
+    if (here.length) m.conn.send({ t: 'snap', p: here.map(snapEntry) });
   }
 
   private deny(m: Member, msg: string): false {
@@ -477,9 +495,22 @@ export class Room {
   snapshot(): void {
     if (this.drops.expire()) this.broadcast({ t: 'drops', list: this.drops.all() });
     for (const m of this.members.values()) this.settle(m);
+    if (this.now() - this.boardAt >= BOARD_MS) this.board();
+    this.positions();
+  }
+
+  /** Leaderboard and hall of fame updates, throttled to BOARD_MS. */
+  private board(): void {
+    this.boardAt = this.now();
     const coins = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, m.acct.save.coins]));
     const stats = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, { level: m.acct.save.level, best: m.acct.save.best ?? null }]));
-    const key = JSON.stringify([coins, stats]);
+    const sk = JSON.stringify(stats);
+    // Offline accounts can't change, so the hall of fame only moves when an online player's stats do.
+    if (sk !== this.lastStats) {
+      this.lastStats = sk;
+      this.hallStale();
+    }
+    const key = JSON.stringify(coins) + sk;
     if (key !== this.lastBoard) {
       this.lastBoard = key;
       // Kept on the player info too, so the list sent to a new joiner isn't stale.
@@ -487,24 +518,43 @@ export class Room {
       this.broadcast({ t: 'board', coins, stats });
     }
     const rows = this.hall();
+    // The server hands back the same cached array until something changed.
+    if (rows === this.lastHallRows) return;
+    this.lastHallRows = rows;
     const hk = JSON.stringify(rows);
     if (hk !== this.lastHall) {
       this.lastHall = hk;
       this.broadcast({ t: 'hall', rows });
     }
-    if (this.members.size < 2) return;
-    const p = [...this.members.values()].map(
-      (m) => [m.info.id, round(m.info.x), round(m.info.z), round(m.info.yaw)] as [number, number, number, number],
-    );
-    this.broadcast({ t: 'snap', p });
+  }
+
+  /** Sends the players who moved since the last tick to everyone on their map. */
+  private positions(): void {
+    const byMap = new Map<string, Member[]>();
+    for (const m of this.members.values()) {
+      const list = byMap.get(m.info.map);
+      if (list) list.push(m);
+      else byMap.set(m.info.map, [m]);
+    }
+    for (const list of byMap.values()) {
+      const moved = list.filter((m) => m.moved);
+      if (list.length > 1 && moved.length) this.sendAll(list, { t: 'snap', p: moved.map(snapEntry) });
+    }
+    for (const m of this.members.values()) m.moved = false;
   }
 
   /** Sends a message to everyone in this room. */
   broadcast(msg: ServerMsg): void {
-    for (const m of this.members.values()) m.conn.send(msg);
+    this.sendAll(this.members.values(), msg);
+  }
+
+  private sendAll(to: Iterable<Member>, msg: ServerMsg): void {
+    const json = JSON.stringify(msg);
+    for (const m of to) m.conn.send(msg, json);
   }
 }
 
 const finite = (...n: number[]) => n.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e4);
 const round = (v: number) => Math.round(v * 100) / 100;
+const snapEntry = (m: Member): [number, number, number, number] => [m.info.id, round(m.info.x), round(m.info.z), round(m.info.yaw)];
 const str = (v: unknown) => String(v ?? '').slice(0, 32);
