@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -10,6 +10,7 @@ import { ChatGate } from './chat';
 import { DevGate } from './dev';
 import { JoinFeed, NOT_FORUM, postWebhook } from './discord';
 import { FeedbackGate, feedbackPost, parseTags, type FeedbackReport } from './feedback';
+import { matchTip, parseKofi, tipMessage } from './kofi';
 import { Room } from './room';
 import { createStorage } from './storage';
 
@@ -33,9 +34,12 @@ const BUILD = process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'dev';
 const JOINS_HOOK = process.env.DISCORD_JOINS_WEBHOOK;
 const FEEDBACK_HOOK = process.env.DISCORD_FEEDBACK_WEBHOOK;
 const feedbackTags = parseTags(process.env.DISCORD_FEEDBACK_TAGS);
+const TIPS_HOOK = process.env.DISCORD_TIPS_WEBHOOK;
+// Ko-fi sends this token with every tip (Ko-fi > Settings > API); with it unset, /kofi turns every request away.
+const KOFI_TOKEN = process.env.KOFI_VERIFY_TOKEN ?? '';
 const online = () => [...rooms.values()].reduce((n, r) => n + r.size, 0);
 const joinFeed = JOINS_HOOK ? new JoinFeed((content) => void postWebhook(JOINS_HOOK, { content }), online) : null;
-console.log(`discord: joins ${JOINS_HOOK ? 'on' : 'off'}, feedback ${FEEDBACK_HOOK ? 'on' : 'off'}`);
+console.log(`discord: joins ${JOINS_HOOK ? 'on' : 'off'}, feedback ${FEEDBACK_HOOK ? 'on' : 'off'}, tips ${TIPS_HOOK ? 'on' : 'off'}; ko-fi ${KOFI_TOKEN ? 'on' : 'off'}`);
 /** Posts a report to the feedback forum; if Discord is off or unreachable, keeps it in storage instead. */
 async function sendFeedback(r: FeedbackReport): Promise<void> {
   const report = { ...r, build: BUILD };
@@ -55,6 +59,29 @@ async function sendFeedback(r: FeedbackReport): Promise<void> {
 console.log(`saves: ${storage.kind} (${Object.keys(data.accounts).length} accounts loaded)`);
 if (process.env.RENDER && !process.env.DATABASE_URL) {
   console.warn('WARNING: running on Render without DATABASE_URL - progress will be lost on every deploy. Set it in the web service Environment tab.');
+}
+
+/** Gives or takes the supporter 💗 and updates every room. Returns a line for the dev console. */
+function setSupporter(name: string, on: boolean): string {
+  const acct = accounts.setSupporter(name, on);
+  if (!acct) return `No account named "${name}".`;
+  const names = accounts.supporters();
+  rooms.forEach((r) => r.supportersChanged(acct, on, names));
+  return on ? `💗 ${acct.name} is a supporter.` : `${acct.name} is no longer shown as a supporter.`;
+}
+/** Ko-fi retries a webhook it thinks failed; remembered ids keep a retry from posting twice. */
+const seenTips = new Set<string>();
+function onTip(body: string): number {
+  const tip = parseKofi(body, KOFI_TOKEN);
+  if (!tip) return 403;
+  if (tip.id && seenTips.has(tip.id)) return 200;
+  if (tip.id) seenTips.add(tip.id);
+  if (seenTips.size > 500) seenTips.delete(seenTips.values().next().value!);
+  const matched = matchTip(tip, accounts.names());
+  if (matched) setSupporter(matched, true);
+  console.log(`[ko-fi] ${tip.type} ${tip.amount} ${tip.currency}, heart: ${matched ?? 'no match'}`);
+  if (TIPS_HOOK) void postWebhook(TIPS_HOOK, { content: tipMessage(tip, matched) });
+  return 200;
 }
 
 const persist = () => accounts.touch();
@@ -95,6 +122,8 @@ function room(name: string): Room {
     r.feedbackGate = feedbackGate;
     r.report = (rep) => void sendFeedback(rep);
     r.resetPass = (name, pass) => accounts.resetPass(name, pass);
+    r.supporters = () => accounts.supporters();
+    r.setSupporter = setSupporter;
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }
@@ -120,6 +149,7 @@ const TYPES: Record<string, string> = {
 };
 // Serves the built client (npm run build) from the same port as the game socket.
 const http = createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/kofi') return kofiHook(req, res);
   let path: string;
   try {
     path = decodeURIComponent((req.url ?? '/').split('?')[0]);
@@ -143,6 +173,22 @@ const http = createServer((req, res) => {
   });
   createReadStream(file).pipe(res);
 });
+/** Ko-fi's tip webhook: a small form-encoded POST. */
+function kofiHook(req: IncomingMessage, res: ServerResponse): void {
+  let body = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk: string) => {
+    body += chunk;
+    if (body.length > 16_384) {
+      res.writeHead(413).end();
+      req.destroy();
+    }
+  });
+  req.on('end', () => {
+    if (res.headersSent) return;
+    res.writeHead(onTip(body)).end();
+  });
+}
 // Room for a full-length feedback report (500 characters, up to 4 bytes each).
 const wss = new WebSocketServer({ server: http, maxPayload: 4096 });
 wss.on('connection', (ws, req) => {

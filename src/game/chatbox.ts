@@ -14,6 +14,8 @@ export interface ChatLine {
   self: boolean;
   /** A server notice ("Ann has joined"): no speaker, shown in every world filter. */
   system?: boolean;
+  /** The speaker tipped on Ko-fi: a 💗 before their name. */
+  sup?: boolean;
   at: number;
 }
 
@@ -175,7 +177,7 @@ export class ChatBox {
       .map((l) => {
         if (l.system) return `<div class="chat-line sys">${esc(l.text)}</div>`;
         const tag = !this.onlyHere && l.map !== here ? `<span class="chat-tag">${esc(this.opts.mapName(l.map))}</span> ` : '';
-        return `<div class="chat-line${l.self ? ' self' : ''}">${tag}<b>${esc(l.name)}:</b> ${esc(l.text)}</div>`;
+        return `<div class="chat-line${l.self ? ' self' : ''}">${tag}<b>${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${esc(l.text)}</div>`;
       })
       .join('');
     this.renderHint();

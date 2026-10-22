@@ -15,3 +15,7 @@ services:
         sync: false
       - key: DISCORD_FEEDBACK_TAGS
         sync: false
+      - key: KOFI_VERIFY_TOKEN
+        sync: false
+      - key: DISCORD_TIPS_WEBHOOK
+        sync: false

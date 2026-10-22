@@ -12,6 +12,8 @@ export interface NetEvents {
   onDrops(list: Drop[]): void;
   onPlayers(): void;
   onBoard(): void;
+  /** The list of Ko-fi supporters changed. */
+  onSupporters(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
   onJump(id: number): void;
   onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }): void;
@@ -42,6 +44,9 @@ export class NetClient {
   /** Everyone's coins by player id (self included), for the leaderboard. */
   coins = new Map<number, number>();
   hall: HallRow[] = [];
+  /** Supporter names, newest first; `isSupporter` checks a name. */
+  supporters: string[] = [];
+  private supporterKeys = new Set<string>();
   color: number | undefined;
   /** Sent with the next join only, to log in on a browser the account doesn't know yet. */
   pass: string | undefined;
@@ -192,6 +197,11 @@ export class NetClient {
         this.hall = m.rows;
         this.events.onBoard();
         break;
+      case 'supporters':
+        this.supporters = m.names;
+        this.supporterKeys = new Set(m.names.map((n) => n.toLowerCase()));
+        this.events.onSupporters();
+        break;
       case 'board':
         this.coins = new Map(Object.entries(m.coins).map(([k, v]) => [Number(k), v]));
         for (const [id, c] of this.coins) {
@@ -205,6 +215,11 @@ export class NetClient {
         this.events.onBoard();
         break;
     }
+  }
+
+  /** Names are unique regardless of case, so this tells whose name gets the 💗. */
+  isSupporter(name: string): boolean {
+    return this.supporterKeys.has(name.toLowerCase());
   }
 
   private setSave(save: SaveData): void {

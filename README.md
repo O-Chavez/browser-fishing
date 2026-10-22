@@ -51,6 +51,12 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 - Character customisation: faces, colours, hats, shirts and jewellery
 - Your progress is saved on the server, so just log back in with your name
 
+## Support
+
+Lakeside is free with no ads, made by one person. If you enjoy it, you can leave a tip on Ko-fi. Tips never give anything in game. Write your Lakeside name in the Ko-fi message and a 💗 appears by your name, plus a thank-you on the supporters board in town.
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ochavez)
+
 ## Controls
 
 | Key | Action |
@@ -124,4 +130,4 @@ Then open the URL Vite prints (usually http://localhost:5173).
 | `npm run screenshots` | Regenerate the README screenshots in `docs/images/` |
 | `npm run trailer` | Re-record the README gameplay clip (`docs/images/gameplay.mp4` and `.gif`); needs ffmpeg |
 
-Environment variables (all optional locally): `PORT`, `DATABASE_URL` (use Postgres instead of JSON files), `DATA_DIR` (where the JSON saves go), `DEV_USER`/`DEV_PASS` (dev console login), `DISCORD_JOINS_WEBHOOK` (batched "player joined" pings), `DISCORD_FEEDBACK_WEBHOOK` (one forum post per `/bug`, `/idea` or `/feedback` report; reports are kept in storage when it is unset or Discord is down) and `DISCORD_FEEDBACK_TAGS` (optional forum tag ids, e.g. `bug=123,idea=456,new=789`).
+Environment variables (all optional locally): `PORT`, `DATABASE_URL` (use Postgres instead of JSON files), `DATA_DIR` (where the JSON saves go), `DEV_USER`/`DEV_PASS` (dev console login), `DISCORD_JOINS_WEBHOOK` (batched "player joined" pings), `DISCORD_FEEDBACK_WEBHOOK` (one forum post per `/bug`, `/idea` or `/feedback` report; reports are kept in storage when it is unset or Discord is down) `DISCORD_FEEDBACK_TAGS` (optional forum tag ids, e.g. `bug=123,idea=456,new=789`), `KOFI_VERIFY_TOKEN` (Ko-fi's webhook token; turns on the `/kofi` endpoint that gives tippers the 💗) and `DISCORD_TIPS_WEBHOOK` (a message per Ko-fi tip).

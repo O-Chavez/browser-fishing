@@ -94,6 +94,7 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 .chat-log { display: flex; flex-direction: column; gap: 2px; }
 .chat-line { padding: 4px 10px; background: var(--hud-bg); border-radius: 8px; overflow-wrap: anywhere; line-height: 1.3; }
 .chat-line b { color: #ffd98a; }
+.chat-line .sup { margin-right: 3px; font-size: .9em; }
 .chat-line.self b { color: #9fd8ff; }
 .chat-line.sys { font-style: italic; opacity: .75; }
 .chat-tag { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(255,255,255,.18); opacity: .8; }
@@ -305,6 +306,7 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 .btn.plain { background: var(--paper-3); color: var(--ink); box-shadow: 0 0 0 2px rgba(58,39,22,.15); }
 .btn.bad { background: var(--bad); color: #fff; box-shadow: 0 4px 0 #a33424; }
 .btn:disabled { box-shadow: none; transform: none; }
+a.btn { text-decoration: none; }
 .btn.plain:disabled { color: var(--ink-muted); }
 
 /* wardrobe */
@@ -362,6 +364,7 @@ canvas.preview.dragging { cursor: grabbing; }
 .angler .rank { width: 26px; text-align: center; font-weight: 900; color: var(--ink-muted); }
 .angler img { width: 38px; height: 38px; border-radius: 50%; }
 .angler b { font-size: 16px; font-weight: 900; }
+.angler .sup { margin-left: 5px; font-size: 13px; }
 .angler .you { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 6px; background: var(--gold); color: var(--gold-ink); }
 .angler .lv { margin-left: auto; font-weight: 900; padding: 3px 10px; border-radius: 10px; background: var(--paper-2); }
 
