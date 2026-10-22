@@ -64,6 +64,7 @@ import { load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
+import { KOFI_URL } from '../data/support';
 import { World } from './world';
 
 type Phase =
@@ -211,7 +212,7 @@ export class Game {
 
   constructor() {
     this.world = new World($('game') as HTMLCanvasElement);
-    this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z));
+    this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name));
     this.dropsView = new DropsView(this.world.scene, (x, z) => this.world.surface(x, z));
     const q = new URLSearchParams(location.search);
     const urlName = q.get('name');
@@ -251,7 +252,7 @@ export class Game {
       onNotice: (msg) => this.toast(msg),
       onChat: (m) => {
         const self = m.room === this.net.room && m.id === this.net.id;
-        this.chat.add({ name: m.name, map: m.map, text: m.text, self });
+        this.chat.add({ name: m.name, map: m.map, text: m.text, self, sup: this.net.isSupporter(m.name) });
         if (!self && m.room === this.net.room && m.map === this.map.id) this.avatars.say(m.id, m.text);
       },
       onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
@@ -266,6 +267,11 @@ export class Game {
       onBoard: () => {
         this.world.hub?.setLeaders(this.anglers());
         if (this.menuOpen && this.tab === 'players') this.renderMenu();
+      },
+      onSupporters: () => {
+        this.world.hub?.setSupporters(this.net.supporters);
+        this.avatars.sync(this.net.players, this.net.id, this.map.id);
+        if (this.menuOpen && (this.tab === 'players' || this.tab === 'settings')) this.renderMenu();
       },
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
@@ -1209,6 +1215,7 @@ export class Game {
     this.avatars.sync(this.net.players, this.net.id, this.map.id);
     // A new hub starts with an empty board, and the server only resends it when someone's stats change.
     this.world.hub?.setLeaders(this.anglers());
+    this.world.hub?.setSupporters(this.net.supporters);
   }
 
   // ---------- walking & interaction ----------
@@ -2893,11 +2900,15 @@ export class Game {
 
   // ---------- Anglers ----------
 
+  private heart(name: string): string {
+    return this.net.isSupporter(name) ? '<span class="sup" title="Lakeside supporter">💗</span>' : '';
+  }
+
   private playersHtml(): string {
     const rows = this.leaders()
       .map(
         (p, i) =>
-          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><b>${escapeHtml(p.name)}</b>${p.me ? '<span class="you">you</span>' : ''}<span class="lv">Lv ${p.level}</span></div>`,
+          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><b>${escapeHtml(p.name)}${this.heart(p.name)}</b>${p.me ? '<span class="you">you</span>' : ''}<span class="lv">Lv ${p.level}</span></div>`,
       )
       .join('');
     const head = this.net.connected ? `<b>${this.net.players.size + 1}</b> online now` : 'Playing offline - join a server to fish with others.';
@@ -2908,7 +2919,7 @@ export class Game {
       .map((a, i) => {
         const f = FISH.find((x) => x.name === a.fish);
         const me = a.name === this.net.name;
-        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span></div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
+        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}${this.heart(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span></div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
       })
       .join('');
     return `<div class="cols anglers-cols">
@@ -2931,7 +2942,17 @@ export class Game {
       ? `<p>Erase coins, level, gear, fish, Fishdex and cosmetics? Your name, colour and face stay. This can't be undone.</p>${this.btn('Yes, reset my account', 'data-act="resetyes"', 'bad')}${this.btn('Cancel', 'data-act="resetno"', 'plain')}`
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
-      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+  }
+
+  /** The tip jar. A tip gives nothing in game, only the 💗 by the player's name. */
+  private supportHtml(): string {
+    const name = escapeHtml(this.net.name);
+    const how = !this.net.connected || !name ? 'Tips never give anything in game.'
+      : this.net.isSupporter(this.net.name) ? `💗 ${name} is a supporter. Thank you!`
+      : `Write your name (<b>${name}</b>) in the Ko-fi message to get a 💗 by it. Tips never give anything in game.`;
+    return `<h4>Support Lakeside</h4><p>Lakeside is free, with no ads, and made by one person. If you enjoy it, you can leave a tip.</p>
+      <a class="btn plain" href="${KOFI_URL}" target="_blank" rel="noopener">☕ Tip on Ko-fi</a><p class="foot">${how}</p>`;
   }
 
   private accountHtml(): string {

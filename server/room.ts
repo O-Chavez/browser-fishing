@@ -82,6 +82,10 @@ export class Room {
   feedbackGate: FeedbackGate;
   /** Delivers a player's feedback report (the server posts it to Discord). */
   report: (r: FeedbackReport) => void = () => {};
+  /** Supporter names for a new joiner; the server points this at the account store. */
+  supporters: () => string[] = () => [];
+  /** Dev console `/supporter`; the server gives or takes the 💗 and tells every room. */
+  setSupporter: (name: string, on: boolean) => string = () => 'No account store.';
   /** Dev console `/resetpass`; the server points this at the account store. */
   resetPass: (name: string, pass: string) => Promise<string> = async () => 'No account store.';
   /** Delivers chat lines and notices; the server points this at every room. */
@@ -126,6 +130,7 @@ export class Room {
     });
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
+    conn.send({ t: 'supporters', names: this.supporters() });
     this.broadcast({ t: 'joined', player: info });
     // Before adding the member, so everyone else on the server hears it but not the joiner.
     this.say({ t: 'sys', text: `${acct.name} has joined` });
@@ -358,6 +363,13 @@ export class Room {
       m.dev = false;
       return reply(['Logged out of the dev console.']);
     }
+    if (cmd === 'supporter') {
+      const off = args.length > 1 && /^(off|remove)$/i.test(args[args.length - 1]);
+      const who = (off ? args.slice(0, -1) : args).join(' ');
+      if (!who) return reply(['Usage: /supporter <name> [off]']);
+      console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
+      return reply([this.setSupporter(who, !off)]);
+    }
     if (cmd === 'resetpass') {
       // The last word is the password, so names with spaces work; it never reaches the log.
       if (args.length < 2) return reply(['Usage: /resetpass <name> <new password>']);
@@ -568,6 +580,13 @@ export class Room {
       this.lastHall = hk;
       this.broadcast({ t: 'hall', rows });
     }
+  }
+
+  /** A player gained or lost the supporter 💗: everyone gets the new list, and the player a thank-you. */
+  supportersChanged(acct: Account, on: boolean, names: string[]): void {
+    this.broadcast({ t: 'supporters', names });
+    if (!on) return;
+    for (const m of this.members.values()) if (m.acct === acct) m.conn.send({ t: 'notice', msg: '💗 Thank you for supporting Lakeside!' });
   }
 
   /** Tells everyone else on the player's map that they jumped. */

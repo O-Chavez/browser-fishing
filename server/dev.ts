@@ -60,7 +60,8 @@ export const HELP = [
   '/coins N · /chips N · /level N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /time day|dusk|night|dawn|auto',
-  '/dig (reset worm cooldown) · /resetpass <name> <new password> · /logout',
+  '/dig (reset worm cooldown) · /resetpass <name> <new password>',
+  '/supporter <name> [off] (Ko-fi 💗) · /logout',
 ];
 
 const int = (v: string | undefined, lo: number, hi: number): number | null => {

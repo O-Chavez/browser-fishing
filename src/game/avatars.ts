@@ -39,6 +39,7 @@ class Avatar {
   private rod: THREE.Mesh;
   private char: Character;
   private plate: THREE.Sprite;
+  private sup = false;
   private bubble: { sprite: THREE.Sprite; until: number } | null = null;
 
   constructor(
@@ -69,6 +70,15 @@ class Avatar {
   }
 
   private nameplate(name: string): THREE.Sprite {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.plateTexture(name, false), depthTest: false, transparent: true }));
+    s.scale.set(1.4, 0.35, 1);
+    s.position.y = 2.25;
+    s.renderOrder = 10;
+    return s;
+  }
+
+  /** The name, with a 💗 in front for a Ko-fi supporter. */
+  private plateTexture(name: string, sup: boolean): THREE.CanvasTexture {
     const c = document.createElement('canvas');
     c.width = 256;
     c.height = 64;
@@ -80,13 +90,23 @@ class Avatar {
     g.strokeText(name, 128, 42);
     g.fillStyle = '#fff';
     g.fillText(name, 128, 42);
+    if (sup) {
+      // The heart sits just left of the centred name, so the name doesn't move.
+      const left = 128 - g.measureText(name).width / 2;
+      g.font = '24px system-ui, sans-serif';
+      g.textAlign = 'right';
+      g.fillText('💗', Math.max(30, left - 4), 40);
+    }
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-    s.scale.set(1.4, 0.35, 1);
-    s.position.y = 2.25;
-    s.renderOrder = 10;
-    return s;
+    return tex;
+  }
+
+  setSupporter(name: string, sup: boolean): void {
+    if (sup === this.sup) return;
+    this.sup = sup;
+    this.plate.material.map?.dispose();
+    this.plate.material.map = this.plateTexture(name, sup);
   }
 
   /** Shows a short speech bubble above the head; a new line replaces the old one. */
@@ -243,6 +263,8 @@ export class Avatars {
   constructor(
     private scene: THREE.Scene,
     private surface: (x: number, z: number) => number,
+    /** Whether a player's name gets the supporter 💗. */
+    private supporter: (name: string) => boolean = () => false,
   ) {}
 
   sync(players: Map<number, PlayerInfo>, selfId: number, map: string): void {
@@ -260,6 +282,7 @@ export class Avatars {
         this.list.set(p.id, a);
       }
       a.setLook(p.look);
+      a.setSupporter(p.name, this.supporter(p.name));
       a.setVisible(p.map === map);
     }
   }

@@ -96,6 +96,8 @@ export class Hub {
   readonly campSpot = new THREE.Vector3();
   private leaderCtx!: CanvasRenderingContext2D;
   private leaderTex!: THREE.CanvasTexture;
+  private thanksCtx!: CanvasRenderingContext2D;
+  private thanksTex!: THREE.CanvasTexture;
   private flames: THREE.Mesh[] = [];
   private lampMats: THREE.MeshLambertMaterial[] = [];
   private lampLights: THREE.PointLight[] = [];
@@ -128,9 +130,11 @@ export class Hub {
     this.buildWheel(map.wheel);
     this.buildProps();
     this.buildLeaderboard(map.leaderboard);
+    this.buildThanks(map.leaderboard);
     this.buildMirror(map.mirror);
     this.buildCampfire(map.campfire);
     this.setLeaders([]);
+    this.setSupporters([]);
     this.setGate(false);
     // The shopkeeper and the hanging fish animate; everything else static is baked together.
     mergeStatic(this.group, [this.npc, ...this.hanging]);
@@ -448,6 +452,69 @@ export class Hub {
       ctx.fillText('No anglers yet', w / 2, 200);
     }
     this.leaderTex.needsUpdate = true;
+  }
+
+  /** A small "thank you" board beside Top Anglers, listing the players who tipped on Ko-fi. */
+  private buildThanks(board: Spot): void {
+    const g = new THREE.Group();
+    for (const lx of [-0.6, 0.6]) {
+      const post = cyl(0.06, 0.08, 2.2, DARK, 8);
+      post.position.set(lx, 1.1, 0);
+      g.add(post);
+    }
+    const frame = rbox(1.6, 1.5, 0.1, 0x6b4a2b, 0.04);
+    frame.position.set(0, 1.55, 0);
+    const face = textPlane(1.45, 1.35, 384);
+    face.mesh.position.set(0, 1.55, 0.06);
+    const roof = rbox(1.9, 0.1, 0.55, 0xb5476e, 0.04);
+    roof.position.set(0, 2.36, 0);
+    roof.rotation.x = 0.15;
+    g.add(frame, face.mesh, roof);
+    this.thanksCtx = face.ctx;
+    this.thanksTex = face.tex;
+    const at = this.world(board, 2.45, 0.35);
+    const spot = { x: at.x, z: at.z, facing: board.facing };
+    this.place(g, spot);
+    for (const lx of [-0.6, 0.6]) {
+      const c = this.world(spot, lx, 0);
+      this.fixed.push({ x: c.x, z: c.z, r: 0.25 });
+    }
+  }
+
+  /** Redraws the supporters board: the newest tippers first. */
+  setSupporters(names: string[]): void {
+    const ctx = this.thanksCtx;
+    const { width: w, height: h } = ctx.canvas;
+    ctx.fillStyle = '#4a2338';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#f2a7c3';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(5, 5, w - 10, h - 10);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffe1ec';
+    ctx.font = '800 40px system-ui, sans-serif';
+    ctx.fillText('THANK YOU 💗', w / 2, 54);
+    ctx.font = '600 21px system-ui, sans-serif';
+    ctx.fillStyle = '#e6a9c1';
+    ctx.fillText('Lakeside supporters', w / 2, 82);
+    const shown = names.slice(0, names.length > 5 ? 4 : 5);
+    ctx.font = '700 32px system-ui, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    shown.forEach((n, i) => ctx.fillText(n, w / 2, 126 + i * 40));
+    if (names.length > shown.length) {
+      ctx.font = '600 22px system-ui, sans-serif';
+      ctx.fillStyle = '#e6a9c1';
+      ctx.fillText(`and ${names.length - shown.length} more`, w / 2, 126 + shown.length * 40 - 6);
+    }
+    if (!names.length) {
+      ctx.font = '700 28px system-ui, sans-serif';
+      ctx.fillStyle = '#e6a9c1';
+      ctx.fillText('Be the first!', w / 2, 180);
+    }
+    ctx.font = '600 19px system-ui, sans-serif';
+    ctx.fillStyle = '#c98aa4';
+    ctx.fillText('Tip jar: ⚙️ Settings', w / 2, h - 18);
+    this.thanksTex.needsUpdate = true;
   }
 
   private buildMirror(spot: Spot): void {

@@ -12,6 +12,8 @@ export interface Account {
   pw?: PassHash;
   save: SaveData;
   online: boolean;
+  /** When the player first tipped on Ko-fi (or Oscar gave them the heart). Kept outside the save so a reset keeps it. */
+  supporter?: number;
 }
 
 interface PassHash {
@@ -59,15 +61,16 @@ export class AccountStore {
   private accounts = new Map<string, Account>();
   private dirty = false;
   private hallRows: HallRow[] | null = null;
+  private supporterNames: string[] | null = null;
   private lock: Lockout;
 
   constructor(raw: Record<string, unknown> = {}, now: () => number = Date.now) {
     this.lock = new Lockout(5, 50, 15 * 60_000, now);
-    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; save: unknown };
+    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; save: unknown };
     for (const [k, a] of Object.entries(raw) as [string, Stored][]) {
       // Older saves kept a single token `hash`.
       const tokens = Array.isArray(a?.tokens) ? a.tokens : a?.hash ? [a.hash] : null;
-      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...(a.pw ? { pw: a.pw } : {}), save: migrate(a.save as SaveData), online: false });
+      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), save: migrate(a.save as SaveData), online: false });
     }
   }
 
@@ -124,7 +127,7 @@ export class AccountStore {
 
   /** Dev console: give a locked-out player a new password. Every remembered browser is signed out. */
   async resetPass(name: string, pass: unknown): Promise<string> {
-    const key = String(name ?? '').replace(/[^\w \-]/g, '').trim().slice(0, 16).toLowerCase();
+    const key = nameKey(name);
     const acct = this.accounts.get(key);
     if (!acct) return `No account named "${name}".`;
     const bad = passProblem(pass);
@@ -145,6 +148,30 @@ export class AccountStore {
       .slice(0, 8));
   }
 
+  /** Every account name, for matching a Ko-fi tip to a player. */
+  names(): string[] {
+    return [...this.accounts.values()].map((a) => a.name);
+  }
+
+  /** Gives or takes away the supporter 💗. Null if there's no such account. */
+  setSupporter(name: string, on: boolean, at = Date.now()): Account | null {
+    const acct = this.accounts.get(nameKey(name));
+    if (!acct) return null;
+    if (on) acct.supporter ??= at;
+    else delete acct.supporter;
+    this.supporterNames = null;
+    this.touch();
+    return acct;
+  }
+
+  /** Supporters' names, newest first, for the hearts and the thank-you board. */
+  supporters(): string[] {
+    return (this.supporterNames ??= [...this.accounts.values()]
+      .filter((a) => a.supporter)
+      .sort((a, b) => b.supporter! - a.supporter! || a.name.localeCompare(b.name))
+      .map((a) => a.name));
+  }
+
   /** Call when a player's level or best catch may have changed, so the next `hall` re-ranks. */
   hallStale(): void {
     this.hallRows = null;
@@ -159,7 +186,7 @@ export class AccountStore {
       [...this.accounts].map(([k, a]) => [
         k,
         // `hash` is still written so an older server, after a rollback, keeps the account (it skips ones without).
-        { name: a.name, hash: a.tokens[0] ?? '-', tokens: a.tokens, ...(a.pw ? { pw: a.pw } : {}), save: a.save },
+        { name: a.name, hash: a.tokens[0] ?? '-', tokens: a.tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), save: a.save },
       ]),
     );
   }
@@ -176,8 +203,11 @@ export class AccountStore {
   }
 }
 
+const cleanName = (name: string) => String(name ?? '').replace(/[^\w \-]/g, '').trim().slice(0, 16);
+const nameKey = (name: string) => cleanName(name).toLowerCase();
+
 function parse(name: string, token: string): { clean: string; key: string; h: string } | { msg: string } {
-  const clean = String(name ?? '').replace(/[^\w \-]/g, '').trim().slice(0, 16);
+  const clean = cleanName(name);
   if (clean.length < 2) return { msg: 'Name must be 2-16 letters, numbers, spaces or dashes.' };
   if (typeof token !== 'string' || token.length < 16 || token.length > 128) return { msg: 'Bad token.' };
   return { clean, key: clean.toLowerCase(), h: hash(token) };

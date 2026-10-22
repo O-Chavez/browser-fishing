@@ -103,6 +103,8 @@ export type ServerMsg =
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
   | { t: 'hall'; rows: HallRow[] }
+  /** Every Ko-fi supporter's name, newest first, for the 💗 by their names and the thank-you board. */
+  | { t: 'supporters'; names: string[] }
   /** A chat line from anyone on the server; `room` and `id` let same-room clients show a bubble. */
   | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
   /** A server-wide notice for the chat window ("Ann has joined"). */
