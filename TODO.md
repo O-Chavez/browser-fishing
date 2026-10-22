@@ -190,6 +190,10 @@
   - `LightPool` fades lights over 0.4 s (`LIGHT_FADE`) instead of popping them on: a light leaving the nearest 8 dims to zero, then hands its slot to the incoming one, so the light count (and shaders) never change. Each pool crossfades with its lamp's real light. Tests in `lightpool.test.ts`
   - Cost (`bench:ab`, 6 alternating pairs on an M1 against main): plazaNight +2% (about 0.04 ms at 2.3 ms, 5 of 6 pairs slower), pondNight and every day scene unchanged (within noise), draw calls +3 at night. Map build and first-render timings were noisy in both directions. Results in `bench-results/ab-main-vs-943a328.json`. Smoke 58/58; README night screenshot re-shot
 
+- [ ] Log out of a password-free account and log in as another one
+  - E.g. a player who started a throwaway account on one device wants to switch to their main account there. Today "Log out of this device" only appears once a password is set (`acctForm` in `src/game/game.ts:2971-2974`) and the server refuses `forget` without one (`server/index.ts:252`), so the only way to switch is clearing site data
+  - Add a "Log in as a different account" option in ⚙️ Settings > Account for every account, leading to the join screen (name + password). For a password-free account, warn clearly that it can't be got back after logging out (or offer to set a password first)
+
 ## Ideas
 
 <!-- Add new ideas here. Move them into the checklist when you decide to do them. -->
