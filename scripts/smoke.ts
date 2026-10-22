@@ -115,6 +115,40 @@ async function pondChecks(): Promise<void> {
   check('pond: dock props and NPCs can be walked through', !blocked.bucket && !blocked.barrel && !blocked.reed, JSON.stringify(blocked));
   check('pond: shore props still block', blocked.stallBarrel, JSON.stringify(blocked));
 
+  // Townsfolk walk straight legs between stops; every leg must stay clear of solid props.
+  const walks = await page.evaluate(() => {
+    const w = window.__game.world as any;
+    const cs = w.colliders as { x: number; z: number; r: number }[];
+    const bad: string[] = [];
+    for (const npc of w.town.npcs) {
+      const walk = npc.def.walk;
+      if (!walk) continue;
+      const pts = [{ x: npc.def.x, z: npc.def.z }, ...walk.stops, { x: npc.def.x, z: npc.def.z }];
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.1);
+        for (let k = 0; k <= n; k++) {
+          const x = a.x + ((b.x - a.x) * k) / n;
+          const z = a.z + ((b.z - a.z) * k) / n;
+          const c = cs.find((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.35);
+          if (c) bad.push(`${npc.def.name} at ${x.toFixed(1)},${z.toFixed(1)}`);
+        }
+      }
+    }
+    return { walkers: w.town.npcs.filter((n: any) => n.walker).length, bad: [...new Set(bad)] };
+  });
+  check('pond: townsfolk walks stay clear of props', walks.walkers === 4 && walks.bad.length === 0, walks.bad.slice(0, 3).join(', ') || `${walks.walkers} walkers`);
+  // They actually move (far from the player, so nobody stops to chat). Most start with a 5-8 s pause at
+  // home, so only Pip is sure to be on the move this soon after loading.
+  const home = await page.evaluate(() => window.__game.player());
+  await page.evaluate(() => window.__game.teleport(-24, 40));
+  const before = await page.evaluate(() => (window.__game.world as any).town.npcs.map((n: any) => [n.pos.x, n.pos.z]));
+  await sleep(4000);
+  const moved = await page.evaluate((b: number[][]) => (window.__game.world as any).town.npcs.filter((n: any, i: number) => Math.hypot(n.pos.x - b[i][0], n.pos.z - b[i][1]) > 0.5).map((n: any) => n.def.name), before);
+  check('pond: townsfolk walk around', moved.length >= 1, moved.join(', ') || 'nobody moved');
+  await page.evaluate((p: { x: number; z: number }) => window.__game.teleport(p.x, p.z), home);
+
   // Night: lamps, windows and torches must still be on meshes that are drawn.
   await page.evaluate(() => { window.__game.day(0.7); window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.15); });
   await sleep(600);
