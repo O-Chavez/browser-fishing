@@ -143,6 +143,9 @@
 - [ ] Make player and dealer blackjacks clear: the win/loss banner never shows when a hand ends on the deal
   - A natural on the deal (player or dealer) skips the big result banner: `onBlackjack` (`src/game/game.ts:229`) only shows it when the previous view was live, and `blackjackAct` (`game.ts:1281`) clears `this.bj` before dealing. Instant dealer blackjacks with no banner may add to the "rigged" feeling
   - Show the banner for these hands and make it obvious who had blackjack (e.g. "Dealer blackjack" / "Blackjack!"), with the dealer's cards revealed
+- [ ] Check that a doubled blackjack win raises the fish's value instead of paying out coins plus the fish
+  - Intended: a doubled win only multiplies the fish (×4 in `blackjackFactor`, `src/game/casino.ts:181`). The double-down coins (`doubleCost`/`doubleDown`, `casino.ts:158-170`) are spent, and only a push gives them back (`settleBlackjack`, `casino.ts:175`)
+  - Check it in-game and on the server (`Room.bjAct`, `server/room.ts:425`): coins before/after and the fish's value after a doubled win, loss and push. Add a test in `casino.test.ts` if one is missing
 
 ## Ideas
 
