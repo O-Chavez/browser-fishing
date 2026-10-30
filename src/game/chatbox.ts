@@ -1,5 +1,9 @@
+import { coinText, escapeHtml as esc } from './format';
+
 /** Lines leave the window this long after they arrive. */
 export const CHAT_TTL_MS = 5 * 60_000;
+/** A new line shows at full strength this long before it's back to the faded look (`.chat-line.fresh` in style.css). */
+export const FLASH_MS = 4000;
 /** Lines shown at once; older ones scroll away. */
 const SHOWN = 8;
 /** Matches the server's limits (`server/chat.ts`, and `server/feedback.ts` for slash commands like /bug). */
@@ -26,6 +30,12 @@ export const liveLines = (lines: ChatLine[], now: number): ChatLine[] => lines.f
 export const shownLines = (lines: ChatLine[], onlyMap: string | null): ChatLine[] =>
   lines.filter((l) => !onlyMap || l.system || l.map === onlyMap).slice(-SHOWN);
 
+/**
+ * How far into its flash a line is, or null once it's over. The window is rebuilt on every change,
+ * so a line still flashing picks the animation up where it left off instead of restarting it.
+ */
+export const flashElapsed = (l: ChatLine, now: number): number | null => (now - l.at < FLASH_MS ? Math.max(0, now - l.at) : null);
+
 /** Slash commands any player can use, in Tab order. Dev console commands stay unlisted. */
 export const COMMANDS = [
   { cmd: 'bug', about: 'report a problem' },
@@ -45,8 +55,6 @@ export const typedCommand = (text: string): Command | undefined => {
   const m = /^\/(\w+)\s/.exec(text);
   return m ? COMMANDS.find((c) => c.cmd === m[1].toLowerCase()) : undefined;
 };
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /**
  * The global chat window in the top right: a short log, a "Press Enter to chat" hint, and an
@@ -173,11 +181,16 @@ export class ChatBox {
 
   private render(): void {
     const here = this.opts.map();
+    const now = this.now();
+    const open = (l: ChatLine, cls: string) => {
+      const t = flashElapsed(l, now);
+      return t === null ? `<div class="chat-line${cls}">` : `<div class="chat-line${cls} fresh" style="animation-delay:${-t}ms">`;
+    };
     this.log.innerHTML = shownLines(this.lines, this.onlyHere ? here : null)
       .map((l) => {
-        if (l.system) return `<div class="chat-line sys">${esc(l.text)}</div>`;
+        if (l.system) return `${open(l, ' sys')}${coinText(l.text)}</div>`;
         const tag = !this.onlyHere && l.map !== here ? `<span class="chat-tag">${esc(this.opts.mapName(l.map))}</span> ` : '';
-        return `<div class="chat-line${l.self ? ' self' : ''}">${tag}<b>${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${esc(l.text)}</div>`;
+        return `${open(l, l.self ? ' self' : '')}${tag}<b>${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${coinText(l.text)}</div>`;
       })
       .join('');
     this.renderHint();

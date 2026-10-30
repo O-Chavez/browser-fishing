@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_TTL_MS, commandMatches, liveLines, shownLines, typedCommand, type ChatLine } from './chatbox';
+import { CHAT_TTL_MS, FLASH_MS, commandMatches, flashElapsed, liveLines, shownLines, typedCommand, type ChatLine } from './chatbox';
 
 const line = (text: string, map = 'pond', at = 0): ChatLine => ({ name: 'Ann', map, text, self: false, at });
 
@@ -19,6 +19,14 @@ describe('chat window lines', () => {
   it('keeps server notices in every world filter', () => {
     const lines = [line('hi', 'pond'), { ...line('Bob has joined', ''), system: true }];
     expect(shownLines(lines, 'casino').map((l) => l.text)).toEqual(['Bob has joined']);
+  });
+
+  it('flashes a new line for a few seconds, resuming where it was when the window is rebuilt', () => {
+    const l = line('hi', 'pond', 10_000);
+    expect(flashElapsed(l, 10_000)).toBe(0);
+    expect(flashElapsed(l, 11_500)).toBe(1500);
+    expect(flashElapsed(l, 10_000 + FLASH_MS - 1)).toBe(FLASH_MS - 1);
+    expect(flashElapsed(l, 10_000 + FLASH_MS)).toBeNull();
   });
 });
 

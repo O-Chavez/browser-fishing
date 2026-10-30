@@ -6,8 +6,10 @@ import { groundHeight } from './env';
 import { DARK, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
 import { buildRoom, neonSign } from './casinoroom';
+import { RecordsBoard } from './casinorecords';
 import { mergeStatic } from './merge';
 import { boxUV, feltTexture, grainTexture, panelTexture } from './textures';
+import { pegTicks, spinEase, type DealStep } from './tablepace';
 
 const POCKETS = ROULETTE_POCKETS.red + ROULETTE_POCKETS.black + ROULETTE_POCKETS.green;
 const FELT = 0x1f6b43;
@@ -73,6 +75,21 @@ function topUV(geo: THREE.BufferGeometry, w: number, d: number): void {
 
 const GOLD_INK = '#e8c25a';
 
+const CARD_GEO = new THREE.PlaneGeometry(0.4, 0.56).rotateX(-Math.PI / 2);
+const CARD_GAP = 0.46;
+const ROW_Z = { dealer: -0.55, player: 0.15 };
+/** Where cards leave the shoe, in the card group's space (the shoe sits at the dealer's left). */
+const SHOE = new THREE.Vector3(1.3, 0.1, -0.62);
+
+/** A card on the felt: dealt from the shoe at `slide`, turned over to `flip.card` at `flip`. */
+interface Dealt {
+  m: THREE.Mesh;
+  who: 'player' | 'dealer';
+  i: number;
+  slide?: { at: number; ms: number; heard?: boolean };
+  flip?: { at: number; ms: number; card: Card; heard?: boolean; turned?: boolean };
+}
+
 /** Tables sit lower than real ones so the wheel, cards and buttons read from eye height. */
 const TABLE_DROP = 0.3;
 
@@ -81,17 +98,31 @@ export class CasinoHall {
   readonly group = new THREE.Group();
   readonly colliders: Circle[] = [];
   private wheel = new THREE.Group();
-  private anim: { from: number; to: number; t0: number; ms: number } | null = null;
+  private anim: { from: number; to: number; t0: number; ms: number; last: number } | null = null;
+  /** Ticks as pockets pass the pointer while spinning: delays (s) spread across the frame, and their gain. */
+  onPocket: (at: number[], gain: number) => void = () => {};
+  /** A card leaves the shoe, or the hole card starts to turn over (`flip`). */
+  onCard: (flip: boolean) => void = () => {};
   private glow: { m: THREE.MeshBasicMaterial; c: THREE.Color }[] = [];
   private neon = 0;
   private chipBoard: ReturnType<typeof textPlane> | null = null;
   private chipShown = -1;
   private cards = new THREE.Group();
+  private hand: Dealt[] = [];
+  /** When the current deal started (performance.now), and when its last card has landed. */
+  private dealT0 = 0;
+  private dealEnd = 0;
+  /** Every card is in its final place, face and spot. */
+  private laid = true;
+  /** prefers-reduced-motion: cards appear in place and turn over at once, on the same clock. */
+  private still = false;
   private bjButtons: Record<string, THREE.Object3D> = {};
   private picks: THREE.Object3D[] = [];
   private hover: THREE.Object3D | null = null;
   private ray = new THREE.Raycaster();
   private texCache = new Map<string, THREE.CanvasTexture>();
+  /** The biggest win and loss board on the back wall. */
+  readonly records: RecordsBoard;
 
   constructor(def: NonNullable<MapDef['casino']>) {
     buildRoom(
@@ -114,6 +145,9 @@ export class CasinoHall {
     // separate. Clickable pieces are baked on their own so raycasts still find them.
     for (const p of this.picks) mergeStatic(p, []);
     mergeStatic(this.group, [this.wheel, this.cards, ...this.picks, ...(this.chipBoard ? [this.chipBoard.mesh] : [])]);
+    // Bakes its own frame, so it is added after.
+    this.records = new RecordsBoard(def.records);
+    this.group.add(this.records.group);
   }
 
   private place(obj: THREE.Object3D, s: Spot, r: number): void {
@@ -240,7 +274,12 @@ export class CasinoHall {
     });
     const spot = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.2, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: GOLD }));
     spot.position.set(0, 1.085, 0.25);
-    t.add(spot, this.cards);
+    // The shoe the dealer deals from, with the top card showing its back
+    const shoe = rbox(0.32, 0.12, 0.46, 0x2a0f1c, 0.02);
+    shoe.position.set(SHOE.x, 1.13, SHOE.z);
+    const top = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.38).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: this.cardTex(null), toneMapped: false }));
+    top.position.set(SHOE.x, 1.192, SHOE.z);
+    t.add(spot, shoe, top, this.cards);
     this.cards.position.y = 1.09;
     const labels: [string, string][] = [['deal', 'DEAL'], ['hit', 'HIT'], ['stand', 'STAND'], ['double', 'DOUBLE']];
     for (const [id, text] of labels) {
@@ -305,25 +344,92 @@ export class CasinoHall {
     return t;
   }
 
-  /** Lays the current hand out on the felt and shows only the buttons that make sense. */
-  setBlackjack(v: BlackjackView | null): void {
-    for (const ch of [...this.cards.children]) {
-      this.cards.remove(ch);
-      (ch as THREE.Mesh).geometry.dispose();
+  /**
+   * Lays the current hand out on the felt. The cards in `steps` are dealt from the shoe (and the hole
+   * card turned over) on the deal's clock, starting now; the buttons stay hidden until `setButtons`.
+   */
+  setBlackjack(v: BlackjackView | null, steps: DealStep[] = []): void {
+    for (const c of this.hand) {
+      this.cards.remove(c.m);
+      (c.m.material as THREE.Material).dispose();
     }
-    const row = (list: (Card | null)[], z: number) =>
-      list.forEach((c, i) => {
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.56).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: this.cardTex(c), toneMapped: false }));
-        m.position.set((i - (list.length - 1) / 2) * 0.46, 0.002 * i, z);
-        m.rotation.y = (i % 2 ? -1 : 1) * 0.06;
-        this.cards.add(m);
-      });
+    this.hand = [];
+    this.dealT0 = performance.now();
+    this.dealEnd = Math.max(0, ...steps.map((s) => s.at + s.ms));
+    this.still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (v) {
-      row(v.dealer, -0.55);
-      row(v.player, 0.15);
+      for (const [who, list] of [['dealer', v.dealer], ['player', v.player]] as const)
+        list.forEach((card, i) => {
+          const slide = steps.find((s) => !s.flip && s.who === who && s.i === i);
+          const flip = steps.find((s) => s.flip && s.who === who && s.i === i);
+          // A card still to be turned over lies face down until then
+          const face = slide ? slide.card : flip ? null : card;
+          const m = new THREE.Mesh(CARD_GEO, new THREE.MeshBasicMaterial({ map: this.cardTex(face), toneMapped: false }));
+          this.cards.add(m);
+          this.hand.push({ m, who, i, slide: slide && { at: slide.at, ms: slide.ms }, flip: flip && { at: flip.at, ms: flip.ms, card: flip.card! } });
+        });
     }
+    this.laid = false;
+    this.layCards(0, true);
+    this.setButtons(v, steps.length > 0);
+  }
+
+  /**
+   * Moves each card along its deal: hidden until it leaves the shoe, then an arc to its place; rows
+   * close up as they grow. `snap` puts cards straight in place; `quiet` skips their sounds.
+   */
+  private layCards(dt: number, snap = false, quiet = false): void {
+    const now = performance.now() - this.dealT0;
+    const ease = snap || this.still ? 1 : 1 - Math.exp(-dt * 14);
+    // Without motion a card appears when it would have landed
+    const out = (c: Dealt) => !c.slide || now >= c.slide.at + (this.still ? c.slide.ms : 0);
+    for (const who of ['dealer', 'player'] as const) {
+      const row = this.hand.filter((c) => c.who === who);
+      const n = row.filter(out).length;
+      for (const c of row) {
+        const m = c.m;
+        m.visible = out(c);
+        if (!m.visible) continue;
+        const x = (c.i - (n - 1) / 2) * CARD_GAP;
+        const y = 0.002 * c.i;
+        const z = ROW_Z[who];
+        const yaw = (c.i % 2 ? -1 : 1) * 0.06;
+        const s = c.slide;
+        if (s && !s.heard) {
+          s.heard = true;
+          if (!quiet) this.onCard(false);
+        }
+        if (s && !this.still && now < s.at + s.ms) {
+          const k = (now - s.at) / s.ms;
+          const e = 1 - Math.pow(1 - k, 3);
+          m.position.set(SHOE.x + (x - SHOE.x) * e, SHOE.y + (y - SHOE.y) * e + 0.12 * Math.sin(Math.PI * k), SHOE.z + (z - SHOE.z) * e);
+          m.rotation.y = 0.5 + (yaw - 0.5) * e;
+        } else {
+          m.position.set(m.position.x + (x - m.position.x) * ease, y, z);
+          m.rotation.y = yaw;
+        }
+        const f = c.flip;
+        if (!f || now < f.at) continue;
+        if (!f.heard) {
+          f.heard = true;
+          if (!quiet) this.onCard(true);
+        }
+        const k = this.still ? (now >= f.at + f.ms ? 1 : 0) : Math.min(1, (now - f.at) / f.ms);
+        // Half a turn on its long side: the new face comes up as it passes edge-on
+        if (k >= 0.5 && !f.turned) {
+          f.turned = true;
+          (m.material as THREE.MeshBasicMaterial).map = this.cardTex(f.card);
+        }
+        m.rotation.z = k >= 1 ? 0 : k < 0.5 ? Math.PI * k : Math.PI * (k - 1);
+        m.position.y += 0.1 * Math.sin(Math.PI * k);
+      }
+    }
+  }
+
+  /** Shows only the buttons that make sense for the hand; none while its cards are still being dealt. */
+  setButtons(v: BlackjackView | null, dealing = false): void {
     const live = !!v && !v.done;
-    const show = live ? (v!.canDouble ? ['hit', 'stand', 'double'] : ['hit', 'stand']) : ['deal'];
+    const show = dealing ? [] : live ? (v!.canDouble ? ['hit', 'stand', 'double'] : ['hit', 'stand']) : ['deal'];
     for (const [id, b] of Object.entries(this.bjButtons)) {
       const i = show.indexOf(id);
       b.visible = i >= 0;
@@ -536,16 +642,28 @@ export class CasinoHall {
     const cur = this.wheel.rotation.y;
     const final = ((i + 0.5) / POCKETS) * Math.PI * 2;
     const turns = Math.ceil((cur + Math.PI * 2 * 5 - final) / (Math.PI * 2));
-    this.anim = { from: cur, to: final + turns * Math.PI * 2, t0: performance.now(), ms };
+    this.anim = { from: cur, to: final + turns * Math.PI * 2, t0: performance.now(), ms, last: performance.now() };
   }
 
   update(t: number, dt: number): void {
-    if (this.anim) {
-      const k = Math.min(1, (performance.now() - this.anim.t0) / this.anim.ms);
-      const e = 1 - Math.pow(1 - k, 3);
-      this.wheel.rotation.y = this.anim.from + (this.anim.to - this.anim.from) * e;
+    const a = this.anim;
+    if (a) {
+      const now = performance.now();
+      const k = Math.min(1, (now - a.t0) / a.ms);
+      const prev = this.wheel.rotation.y;
+      this.wheel.rotation.y = a.from + (a.to - a.from) * spinEase(k);
+      // Pocket i lands at (i + 0.5) pockets, so an edge passes the pointer at each whole pocket
+      const tick = pegTicks(prev, this.wheel.rotation.y, POCKETS, (now - a.last) / 1000);
+      a.last = now;
+      if (tick.at.length) this.onPocket(tick.at, tick.gain);
       if (k >= 1) this.anim = null;
     } else this.wheel.rotation.y += 0.12 * dt;
+    // Cards still dealing, or a row still closing up after the last one landed. The last pass puts
+    // everything in place, in case frames stopped mid-deal (a hidden tab).
+    if (!this.laid) {
+      this.laid = performance.now() - this.dealT0 >= this.dealEnd + 600;
+      this.layCards(dt, this.laid, this.laid);
+    }
     const pulse = 0.65 + 0.35 * Math.sin(t * 3);
     const n = Math.round(pulse * 10) / 10;
     if (n !== this.neon) {

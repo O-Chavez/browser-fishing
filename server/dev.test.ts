@@ -65,6 +65,7 @@ describe('dev commands in a room', () => {
   it('gives items, sets level, teleports and overrides the time', () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');
+    const b = join('Bob');
     room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
     room.handle(a.id, { t: 'cmd', text: '/level 20' });
     room.handle(a.id, { t: 'cmd', text: '/bait pearl 10' });
@@ -79,6 +80,8 @@ describe('dev commands in a room', () => {
     expect(a.save.location).toBe(casino.id);
     room.handle(a.id, { t: 'cmd', text: '/time night' });
     expect(a.log.at(-1)).toMatchObject({ t: 'dev', time: TIMES.night });
+    // Only the player who typed it sees the new time.
+    expect(b.log.some((m) => m.t === 'dev')).toBe(false);
     room.handle(a.id, { t: 'cmd', text: '/fish nope' });
     expect(devLines(a.log).at(-1)).toMatch(/Fish ids:/);
   });

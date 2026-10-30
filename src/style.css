@@ -27,6 +27,10 @@
   --ok-dark: #2e9a46;
   --bad: #e5533d;
   --hud-bg: rgba(58, 39, 23, .88);
+  /* the hotbar's rod and bait slots */
+  --gear: #5fb8ae;
+  --gear-bg: rgba(26, 62, 62, .9);
+  --gear-ink: #10302e;
   --hud-edge: 0 0 0 3px var(--wood-900);
   --t1: #b9b9b9;
   --t2: #4cd964;
@@ -55,8 +59,25 @@ canvas { display: block; position: fixed; inset: 0; }
 #lvl .track { stroke: rgba(255,255,255,.15); }
 #xpring { stroke: var(--gold); stroke-linecap: round; stroke-dasharray: 0 157.08; transition: stroke-dasharray .4s; }
 #lvl b { font-size: 22px; font-weight: 900; line-height: 1; }
+/* level pill past 50: the badge and ring take a colour at each milestone (see `pillTier`) */
+#lvl[data-pill="bronze"] { --pill: #d9904f; --pill-ink: #3a1d08; }
+#lvl[data-pill="silver"] { --pill: #d7dde6; --pill-ink: #232a35; }
+#lvl[data-pill="gold"] { --pill: #ffd23a; --pill-ink: #3a2a00; }
+#lvl[data-pill="aurora"] { --pill: #5af0c4; --pill-ink: #062a2a; }
+#lvl[data-pill] { box-shadow: var(--hud-edge), 0 0 0 3px var(--pill), 0 0 12px color-mix(in srgb, var(--pill) 60%, transparent); }
+#lvl[data-pill] #xpring { stroke: var(--pill); }
+#lvl[data-pill] .track { stroke: color-mix(in srgb, var(--pill) 40%, transparent); }
+#lvl[data-pill] small { background: var(--pill); color: var(--pill-ink); }
+#lvl[data-pill="aurora"] small { background: linear-gradient(100deg, #5af0c4, #7aa8ff, #c58bff, #5af0c4); background-size: 300% 100%; animation: aurora 5s linear infinite; }
+#lvl[data-pill="aurora"] { animation: auroraGlow 5s ease-in-out infinite; }
+@keyframes aurora { to { background-position: -300% 0; } }
+@keyframes auroraGlow { 0%, 100% { --pill: #5af0c4; } 33% { --pill: #7aa8ff; } 66% { --pill: #c58bff; } }
+@property --pill { syntax: '<color>'; inherits: true; initial-value: #5af0c4; }
+@media (prefers-reduced-motion: reduce) { #lvl[data-pill="aurora"], #lvl[data-pill="aurora"] small { animation: none; } }
 #lvl small { position: absolute; bottom: -8px; font-size: 10px; font-weight: 900; letter-spacing: .08em; padding: 0 6px; border-radius: 6px; background: var(--gold); color: var(--gold-ink); }
 .coin { display: inline-block; width: 26px; height: 26px; border-radius: 50%; flex: none; background: radial-gradient(circle at 35% 35%, #fff3b0, var(--gold) 45%, #c58a12); box-shadow: inset 0 -2px 0 #a8730d; }
+/* in a line of text (prices, toasts): sized by the font like the 🪙 emoji it replaced */
+.coin.t { width: .8em; height: .8em; vertical-align: -.08em; box-shadow: inset 0 -.08em 0 #a8730d; }
 
 #toast { position: absolute; top: 28%; left: 50%; transform: translateX(-50%); max-width: 70vw; padding: 10px 20px; border-radius: 14px; background: var(--hud-bg); box-shadow: var(--hud-edge); text-align: center; font-size: 20px; font-weight: 800; opacity: 0; transition: opacity .3s; }
 #toast:empty { display: none; }
@@ -98,26 +119,38 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #gauge.surge { animation: jitter .12s linear infinite; }
 @keyframes jitter { 0% { transform: translate(-1.5px, 0); } 50% { transform: translate(1.5px, 1px); } 100% { transform: translate(0, -1px); } }
 
-#chat { position: absolute; top: 16px; right: 16px; width: min(360px, 40vw); font-size: 14px; display: flex; flex-direction: column; gap: 4px; opacity: .5; transition: opacity .2s; }
-/* Faded while playing so it doesn't compete with the game; full strength while typing. */
-#chat.typing { opacity: 1; }
+/* Faded while playing so it doesn't compete with the game; full strength while typing. The fade is
+   per line (--fade) rather than on the window, so a new line can flash at full strength. */
+#chat { --fade: .5; position: absolute; top: 16px; right: 16px; width: min(360px, 40vw); font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+#chat.typing { --fade: 1; }
 .chat-log { display: flex; flex-direction: column; gap: 2px; }
-.chat-line { padding: 4px 10px; background: var(--hud-bg); border-radius: 8px; overflow-wrap: anywhere; line-height: 1.3; }
+.chat-line { --hi: 1; padding: 4px 10px; background: var(--hud-bg); border-radius: 8px; overflow-wrap: anywhere; line-height: 1.3; opacity: var(--fade); transition: opacity .2s; }
+/* A new line holds at full strength with a soft gold edge, then fades back (FLASH_MS in chatbox.ts). */
+.chat-line.fresh { animation: chat-fresh 4s; }
+@keyframes chat-fresh { 0%, 75% { opacity: var(--hi); box-shadow: inset 0 0 0 2px rgba(255,217,138,.5), 0 0 10px rgba(255,201,51,.3); } }
+@keyframes chat-fresh-hold { 0%, 100% { opacity: var(--hi); box-shadow: inset 0 0 0 2px rgba(255,217,138,.5), 0 0 10px rgba(255,201,51,.3); } }
+@media (prefers-reduced-motion: reduce) { .chat-line.fresh { animation: chat-fresh-hold 2.5s; } }
 .chat-line b { color: #ffd98a; }
 .chat-line .sup { margin-right: 3px; font-size: .9em; }
 .chat-line.self b { color: #9fd8ff; }
-.chat-line.sys { font-style: italic; opacity: .75; }
+.chat-line.sys { --hi: .75; font-style: italic; opacity: calc(var(--fade) * .75); }
 .chat-tag { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(255,255,255,.18); opacity: .8; }
 .chat-input { pointer-events: auto; font: inherit; padding: 8px 12px; color: var(--ink); background: var(--paper-3); border: 3px solid var(--wood-600); border-radius: 12px; outline: none; }
 .chat-input::placeholder { color: var(--ink-muted); }
 .chat-input.hidden { display: none; }
-.chat-hint { font-size: 12px; opacity: .75; text-align: right; text-shadow: 0 1px 3px #000; }
+.chat-hint { font-size: 12px; opacity: calc(var(--fade) * .75); text-align: right; text-shadow: 0 1px 3px #000; transition: opacity .2s; }
 .chat-hint b { opacity: 1; }
 .chat-cmd { font-weight: 800; color: #ffd98a; }
 .chat-cmd.on { padding: 0 4px; border-radius: 4px; background: rgba(255,217,138,.25); }
 #resume { position: fixed; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; background: rgba(0,0,0,.25); cursor: pointer; }
 #resume::before { content: ''; position: absolute; width: 360px; height: 64px; border-radius: 16px; background: var(--hud-bg); box-shadow: var(--hud-edge); z-index: -1; }
 #resume b { padding: 1px 9px; margin: 0 6px; background: var(--gold); color: var(--gold-ink); border-radius: 7px; box-shadow: 0 3px 0 var(--gold-dark); }
+/* Below the "Click to keep playing" pill; its click opens Settings > Send feedback instead of resuming. */
+#resume .acts { position: absolute; top: calc(50% + 46px); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#resume .acts > div { display: flex; gap: 10px; }
+#resume .acts .btn { padding: 8px 14px; font-size: 14px; }
+#resume .switch { font-size: 14px; font-weight: 800; color: var(--cream); text-decoration: underline; text-shadow: 0 1px 4px rgba(0,0,0,.8); opacity: .85; }
+#resume .switch:hover { opacity: 1; }
 #prompt { position: absolute; left: 50%; bottom: 140px; transform: translateX(-50%); padding: 10px 18px; background: var(--hud-bg); box-shadow: var(--hud-edge); border-radius: 14px; font-size: 18px; font-weight: 800; white-space: nowrap; }
 /* casino hints sit low, above the prompt, so the table, dealer and boards stay in view */
 #tablehud { position: absolute; left: 50%; bottom: 196px; transform: translateX(-50%); padding: 8px 16px; text-align: center; line-height: 1.6; background: rgba(42, 10, 18, .88); box-shadow: 0 0 0 3px #b8862f; border-radius: 14px; font-size: 15px; font-weight: 800; white-space: nowrap; pointer-events: none; }
@@ -145,10 +178,20 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 .coin.xs { width: 12px; height: 12px; box-shadow: inset 0 -1px 0 #a8730d; }
 /* drawn rod icon: sized by the surrounding icon font size, like the emoji it replaced */
 .rodico { display: block; width: 1.15em; height: 1.15em; }
+/* Shiny Lure on: sparkle and charges on the bait slot's free corner */
+#hotbar .slot .lure { position: absolute; bottom: -9px; right: -15px; padding: 0 5px; border-radius: 7px; font-size: 11px; font-weight: 900; line-height: 17px; background: var(--wood-800); box-shadow: 0 0 0 2px #ffd23a; color: #ffe27a; }
 #hotbar .slot .q { position: absolute; top: 3px; right: 6px; font-size: 12px; font-weight: 900; }
 #hotbar .slot i { position: absolute; top: -8px; left: -8px; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 900; font-style: normal; background: var(--wood-800); box-shadow: 0 0 0 2px var(--wood-600); color: var(--cream-muted); }
-/* the rod and bait your next cast uses */
-#hotbar .slot.use::after { content: ''; position: absolute; bottom: -8px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+/* slots 1 and 2 always hold the rod and bait you fish with: a teal frame, a tag under them, and a gap before the fish */
+#hotbar .slot.gear { --ring: var(--gear); background: var(--gear-bg); }
+#hotbar .slot.baitslot { margin-right: 10px; }
+#hotbar .slot.gear .nm { bottom: 9px; }
+#hotbar .slot .tag { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); padding: 1px 7px; border-radius: 6px; font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; line-height: 14px; background: var(--gear); color: var(--gear-ink); }
+#hotbar .slot.gear.empty { opacity: .75; }
+#hotbar .slot .ic.ghost { opacity: .35; filter: grayscale(1); }
+#hotbar .slot.held .tag { background: var(--gold); color: var(--gold-ink); }
+/* fish left over from an older save, in extra slots that go once they're sold */
+#hotbar .slot.extra { outline: 2px dashed var(--cream-muted); outline-offset: 5px; }
 #hotbar .slot.held { --ring: var(--gold); transform: translateY(-10px); box-shadow: 0 0 0 3px var(--ring), 0 0 18px rgba(255,201,51,.55), 0 10px 18px rgba(0,0,0,.35); }
 #hotbar .slot.held i { background: var(--gold); color: var(--gold-ink); box-shadow: none; }
 /* the slot just picked bounces up, overshoots and settles */
@@ -187,6 +230,8 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 
 #banner { position: fixed; top: 16%; left: 50%; transform: translateX(-50%); font-size: 44px; font-weight: 900; letter-spacing: 1px; text-align: center; pointer-events: none; text-shadow: 0 2px 12px rgba(0,0,0,.8), 0 0 28px currentColor; animation: bannerIn 3.2s ease-out forwards; z-index: 30; white-space: nowrap; }
 #banner small { display: block; font-size: 18px; font-weight: 600; opacity: .9; letter-spacing: 0; }
+#banner.rank { color: var(--gold); font-size: 52px; animation-duration: 4.6s; }
+#banner.rank small { margin-top: 6px; color: var(--cream); font-size: 20px; text-shadow: 0 1px 3px #000, 0 2px 12px rgba(0,0,0,.9); }
 #banner.welcome { color: var(--gold); animation-duration: 4.2s; }
 #banner.welcome small { margin-top: 6px; color: var(--cream); }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
@@ -197,13 +242,15 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 
 /* fishing hints under the level badge, only while a rod is in hand */
 #ctx { position: absolute; top: 90px; left: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-#spot, #nightchip { font-size: 14px; font-weight: 800; padding: 5px 12px; border-radius: 10px; background: var(--hud-bg); box-shadow: 0 0 0 2px var(--wood-900); }
+#spot, #nightchip, #lurechip { font-size: 14px; font-weight: 800; padding: 5px 12px; border-radius: 10px; background: var(--hud-bg); box-shadow: 0 0 0 2px var(--wood-900); }
 #spot.prime { color: #9cf0b0; }
 #spot.pier { color: var(--gold); }
 #spot.shore { color: #ffab80; }
 #spot:empty { display: none; }
 #nightchip { color: #c9d4ff; }
 #nightchip:empty { display: none; }
+#lurechip { color: #ffe27a; }
+#lurechip:empty { display: none; }
 
 /* casino */
 #chipbox { color: #ff9ad0; }
@@ -264,6 +311,7 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 .tile:hover { transform: translateY(-2px); box-shadow: inset 0 -4px 0 var(--c), 0 0 0 2px rgba(58,39,22,.2), 0 6px 12px rgba(58,39,22,.15); }
 .tile .ic { font-size: 32px; line-height: 1.1; }
 .tile .nm { font-size: 13px; font-weight: 900; text-align: center; line-height: 1.1; }
+.tile .pr { font-size: 12px; font-weight: 800; white-space: nowrap; }
 .tile .st { font-size: 12px; font-weight: 800; color: var(--ink-muted); }
 .tile.sel { box-shadow: inset 0 -4px 0 var(--c), 0 0 0 3px var(--gold), 0 6px 14px rgba(58,39,22,.2); }
 .tile.ghost { opacity: .5; }
@@ -292,6 +340,14 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 .perk { display: flex; align-items: center; gap: 6px; padding: 4px 12px 4px 8px; border-radius: 999px; background: var(--paper-3); box-shadow: inset 0 -3px 0 var(--gold); }
 .perk .ic { font-size: 17px; }
 .perk b { font-size: 13px; font-weight: 900; }
+button.perk:hover { background: var(--paper-2); }
+.perk.off { box-shadow: inset 0 -3px 0 var(--cream-muted); }
+.perk.off .ic, .perk.off b { opacity: .6; }
+/* the Shiny Lure's on/off switch */
+.perk .sw { position: relative; flex: none; width: 26px; height: 15px; margin-left: 2px; border-radius: 8px; background: var(--ok); }
+.perk .sw::after { content: ''; position: absolute; top: 2px; left: 13px; width: 11px; height: 11px; border-radius: 50%; background: #fff; transition: left .15s; }
+.perk.off .sw { background: var(--ink-muted); }
+.perk.off .sw::after { left: 2px; }
 /* details panel */
 .detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: var(--paper-2); }
 .detail .hero { display: flex; align-items: center; gap: 12px; }
@@ -356,6 +412,11 @@ canvas.preview.dragging { cursor: grabbing; }
 #catch[data-tier="5"] { background: radial-gradient(ellipse at 50% 18%, color-mix(in srgb, var(--glow) 22%, var(--paper)) 0%, var(--paper) 60%); }
 #catch[data-tier="4"]::after, #catch[data-tier="5"]::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-120%); animation: catchShine 2.6s ease-in-out .4s infinite; }
 #catch[data-tier="5"]::after { animation-duration: 1.8s; }
+#catch .rank-acts { display: flex; gap: 8px; justify-content: center; margin: 8px 0 2px; }
+#catch .btn.mini { padding: 6px 12px; font-size: 13px; border-radius: 10px; box-shadow: 0 3px 0 var(--gold-dark); }
+#catch .btn.mini:disabled { background: var(--paper-3); color: var(--ink-muted); box-shadow: none; }
+#catch .btn.mini kbd { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(0,0,0,.15); }
+body.touch #catch .btn.mini { padding: 10px 18px; font-size: 16px; }
 #catch .catch-ico { position: relative; }
 #catch[data-tier="3"] .catch-ico, #catch[data-tier="4"] .catch-ico, #catch[data-tier="5"] .catch-ico { background: radial-gradient(ellipse at center, color-mix(in srgb, var(--glow) 35%, transparent) 0%, transparent 65%); }
 #catch[data-tier="4"] .catch-ico .fishico, #catch[data-tier="5"] .catch-ico .fishico { animation: icoFloat 2.2s ease-in-out infinite alternate; }
@@ -364,6 +425,15 @@ canvas.preview.dragging { cursor: grabbing; }
 @keyframes catchGlow { from { box-shadow: 0 0 18px var(--glow); } to { box-shadow: 0 0 60px 6px var(--glow); } }
 @keyframes catchShine { 0% { transform: translateX(-120%); } 45%, 100% { transform: translateX(120%); } }
 @keyframes icoFloat { from { transform: translateY(2px) rotate(-2deg); } to { transform: translateY(-3px) rotate(2deg); } }
+
+/* Wardrobe title picker */
+.titles { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.ttl-chip { padding: 7px 12px; border-radius: 12px; font-size: 14px; font-weight: 900; background: var(--paper-3); color: var(--ink); box-shadow: 0 0 0 2px rgba(58,39,22,.12); }
+.ttl-chip:hover { box-shadow: 0 0 0 2px rgba(58,39,22,.35); }
+.ttl-chip.on { box-shadow: 0 0 0 3px var(--gold); }
+.ttl-chip.locked { opacity: .5; cursor: default; }
+.ttl-chip.locked:hover { box-shadow: 0 0 0 2px rgba(58,39,22,.12); }
+.ttl-chip small { font-size: 12px; font-weight: 800; color: var(--ink-muted); }
 
 /* Anglers */
 .list-head { margin: 0 0 12px; font-size: 15px; font-weight: 800; color: var(--ink-muted); }
@@ -376,6 +446,8 @@ canvas.preview.dragging { cursor: grabbing; }
 .angler b { font-size: 16px; font-weight: 900; }
 .angler .sup { margin-left: 5px; font-size: 13px; }
 .angler .you { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 6px; background: var(--gold); color: var(--gold-ink); }
+.angler .ttl, .tiles .ttl { font-size: 12px; font-weight: 800; color: var(--gold-dark); }
+.angler .who2 { min-width: 0; display: flex; flex-direction: column; }
 .angler .lv { margin-left: auto; font-weight: 900; padding: 3px 10px; border-radius: 10px; background: var(--paper-2); }
 
 .cols.anglers-cols { grid-template-columns: 1fr 1fr; }
@@ -430,10 +502,16 @@ body.touch #join { backdrop-filter: none; }
 #join .grow { flex: 1; min-width: 0; }
 #join-preview canvas.preview { width: 240px; height: 300px; }
 #join label { display: block; margin: 10px 0 6px; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
-#join-name, #join-pass, #acct-pass, #acct-name { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
-#join-name:focus, #join-pass:focus, #acct-pass:focus, #acct-name:focus { border-color: var(--gold-dark); }
-#acct-pass, #acct-name { font-size: 15px; padding: 8px 10px; }
-.detail p.acct-msg { color: var(--bad); }
+#join-name, #join-pass, #acct-pass, #acct-name, #fb-text { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
+#join-name:focus, #join-pass:focus, #acct-pass:focus, #acct-name:focus, #fb-text:focus { border-color: var(--gold-dark); }
+#acct-pass, #acct-name, #fb-text { font-size: 15px; padding: 8px 10px; }
+#fb-text { display: block; resize: vertical; min-height: 88px; }
+#fb-text:read-only { opacity: .7; }
+.detail p.acct-msg, .detail p.fb-msg.error { color: var(--bad); }
+.detail p.fb-msg.sent { color: var(--ok-dark); }
+.fb { display: flex; flex-direction: column; gap: 12px; }
+.fb-kind { display: flex; gap: 8px; }
+.fb-kind .btn { flex: 1; }
 .joinmsg { min-height: 22px; color: var(--bad); font-size: 14px; }
 button.primary { display: block; width: 100%; padding: 12px; border-radius: 14px; font-size: 18px; font-weight: 900; background: var(--ok); color: #fff; box-shadow: 0 4px 0 var(--ok-dark); }
 button.primary:disabled { opacity: .6; }

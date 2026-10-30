@@ -5,8 +5,8 @@ import { newSave } from '../src/game/state';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { FISH } from '../src/data/content';
-import { sellValue } from '../src/game/progression';
-import { BOARD_MS, Room } from './room';
+import { sellValue, xpForNextLevel } from '../src/game/progression';
+import { BOARD_MS, CLOCK_MS, Room } from './room';
 
 const conn = () => {
   const log: ServerMsg[] = [];
@@ -159,18 +159,47 @@ describe('Room economy', () => {
     expect(a.acct.save.rod).toBe('twig');
   });
 
-  it('refuses to cast when every slot is full', () => {
+  it('refuses to cast when every fish slot is full, even on the last bait', () => {
     const { room, join } = setup();
     const a = join('Ann');
-    a.acct.save.slots = [
-      { k: 'rod', id: 'twig' },
-      { k: 'bait', id: 'worm', n: 5 },
-      { k: 'fish', fishId: 'perch', size: 20 },
-      { k: 'fish', fishId: 'perch', size: 20 },
-    ];
+    const perch = { k: 'fish', fishId: 'perch', size: 20 } as const;
+    a.acct.save.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 1 }, perch, perch, perch];
     room.handle(a.id, { t: 'cast', x: 0, z: -10 });
-    expect(last(a.c, 'castfail').msg).toMatch(/full/);
-    expect(eco.baitCount(a.acct.save, 'worm')).toBe(5);
+    expect(last(a.c, 'castfail').msg).toMatch(/fish slots are full/);
+    expect(eco.baitCount(a.acct.save, 'worm')).toBe(1);
+  });
+
+  it('lets a catch get away when the fish row fills up mid-fight', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    const ok = last(a.c, 'castok');
+    const perch = { k: 'fish', fishId: 'perch', size: 20 } as const;
+    a.acct.save.slots.splice(2, 3, perch, perch, perch);
+    advance(ok.wait * 1000 + 2000);
+    room.handle(a.id, { t: 'catch' });
+    expect(a.acct.save.slots).toHaveLength(5);
+    expect(a.acct.save.slots[1]).toMatchObject({ k: 'bait', id: 'worm', n: 14 });
+  });
+
+  it('keeps picked-up rods and bait out of the fish slots', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'pos', x: 0, z: 0, yaw: 0 });
+    room.handle(b.id, { t: 'pos', x: 0, z: 0, yaw: 0 });
+    a.acct.save.locker.rods.push('graphite');
+    room.handle(a.id, { t: 'slot', i: 0 });
+    room.handle(a.id, { t: 'drop' });
+    expect(a.acct.save.slots[0]).toEqual({ k: 'rod', id: 'graphite' });
+    const [d] = last(b.c, 'drops').list;
+    // Bob already has a Twig Rod, so it stays on the ground for someone else.
+    room.handle(b.id, { t: 'pickup', id: d.id });
+    expect(room.drops.all()).toHaveLength(1);
+    expect(b.acct.save.slots.slice(2)).toEqual([null, null, null]);
+    // Old clients may still ask to stow gear; there's nothing to stow it from any more.
+    room.handle(a.id, { t: 'stow', i: 0 } as never);
+    expect(a.acct.save.slots[0]).toEqual({ k: 'rod', id: 'graphite' });
   });
 
   it('drops items, lets others pick them up, and expires them after 30 s', () => {
@@ -222,6 +251,26 @@ describe('Room economy', () => {
     room.handle(a.id, { t: 'lost' });
     expect(last(b.c, 'act').act).toBeNull();
   });
+
+  it('sends the Lucky Charm bonus with a held catch, so others see its real value', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'cast', x: 1, z: -9 });
+    advance(20_000);
+    room.handle(a.id, { t: 'catch' });
+    expect(last(b.c, 'act').act).toMatchObject({ a: 'hold' });
+    expect(last(b.c, 'act').act).not.toHaveProperty('mult');
+
+    a.acct.save.perks.push('charm1', 'charm2');
+    room.handle(a.id, { t: 'cast', x: 1, z: -9 });
+    advance(20_000);
+    room.handle(a.id, { t: 'catch' });
+    const act = last(b.c, 'act').act;
+    expect(act).toMatchObject({ a: 'hold', mult: 1.1 });
+    const stored = a.acct.save.slots.find((s) => s?.k === 'fish' && s.mult);
+    expect(stored).toMatchObject({ fishId: act?.a === 'hold' ? act.fish : '', mult: 1.1 });
+  });
 });
 
 describe('lucky wheel', () => {
@@ -230,21 +279,21 @@ describe('lucky wheel', () => {
     const a = t.join('Ann');
     const w = MAPS[0].wheel;
     t.room.handle(a.id, { t: 'pos', x: w.x + 1, z: w.z, yaw: 0 });
-    a.acct.save.slots[1] = { k: 'fish', fishId: 'perch', size: 20 };
-    a.acct.save.held = 1;
+    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
+    a.acct.save.held = 2;
     return { ...t, a };
   };
   it('doubles a fish after the spin finishes, not before', () => {
     const { room, a, advance, setRoll } = stage();
-    const base = eco.fishValue(a.acct.save.slots[1] as never);
+    const base = eco.fishValue(a.acct.save.slots[2] as never);
     setRoll(0.1);
     room.handle(a.id, { t: 'gamble' });
     expect(last(a.c, 'wheel').win).toBe(true);
     room.snapshot();
-    expect((a.acct.save.slots[1] as { mult?: number }).mult).toBeUndefined();
+    expect((a.acct.save.slots[2] as { mult?: number }).mult).toBeUndefined();
     advance(5000);
     room.snapshot();
-    expect((a.acct.save.slots[1] as { mult?: number }).mult).toBe(2);
+    expect((a.acct.save.slots[2] as { mult?: number }).mult).toBe(2);
     room.handle(a.id, { t: 'pos', x: MAPS[0].vendor.shop.x - 2, z: MAPS[0].vendor.shop.z, yaw: 0 });
     const coins = a.acct.save.coins;
     room.handle(a.id, { t: 'sell' });
@@ -256,12 +305,12 @@ describe('lucky wheel', () => {
     room.handle(a.id, { t: 'gamble' });
     room.handle(a.id, { t: 'drop' });
     room.handle(a.id, { t: 'slot', i: 0 });
-    expect(a.acct.save.held).toBe(1);
+    expect(a.acct.save.held).toBe(2);
     advance(5000);
     room.snapshot();
-    expect(a.acct.save.slots[1]).toBeNull();
+    expect(a.acct.save.slots[2]).toBeNull();
     room.handle(a.id, { t: 'pos', x: 0, z: 0, yaw: 0 });
-    a.acct.save.slots[1] = { k: 'fish', fishId: 'perch', size: 20 };
+    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
     a.c.log.length = 0;
     room.handle(a.id, { t: 'gamble' });
     expect(a.c.log.some((m) => m.t === 'wheel')).toBe(false);
@@ -292,6 +341,20 @@ describe('shinies & fishing spots', () => {
     const rows = last(b.c, 'hall').rows;
     expect(rows.map((r) => r.name)).toEqual(['Bob', 'Ann']);
   });
+  it('rolls the Shiny Lure on the server only while the player has it on', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    a.acct.save.lure = 2;
+    room.handle(a.id, { t: 'lure', on: false });
+    expect(last(a.c, 'state').save.lureOff).toBe(true);
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(last(a.c, 'castok').shiny).toBe(false);
+    expect(a.acct.save.lure).toBe(2);
+    room.handle(a.id, { t: 'lure', on: true });
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(last(a.c, 'castok').shiny).toBe(true);
+    expect(a.acct.save.lure).toBe(1);
+  });
   it('flags a perfect cast in the roll', () => {
     const { room, join } = setup() as ReturnType<typeof setup>;
     const a = join('Ann');
@@ -318,10 +381,10 @@ describe('dropping a carried fish', () => {
   it('works while the fish is held in hand', () => {
     const { room, join } = setup();
     const a = join('Ann');
-    a.acct.save.slots[1] = { k: 'fish', fishId: 'perch', size: 20 };
-    room.handle(a.id, { t: 'slot', i: 1 });
+    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
+    room.handle(a.id, { t: 'slot', i: 2 });
     room.handle(a.id, { t: 'drop' });
-    expect(a.acct.save.slots[1]).toBeNull();
+    expect(a.acct.save.slots[2]).toBeNull();
     expect(room.drops.all()).toHaveLength(1);
   });
 });
@@ -504,6 +567,24 @@ describe('player list', () => {
   });
 });
 
+describe('shared clock', () => {
+  it("sends the server's time on join and again every CLOCK_MS, so every sky shows the same hour", () => {
+    const t = setup();
+    const a = t.join('Ann');
+    expect(last(a.c, 'welcome').now).toBe(1_000_000);
+    t.room.snapshot();
+    expect(last(a.c, 'clock').now).toBe(1_000_000);
+    const sent = () => a.c.log.filter((m) => m.t === 'clock').length;
+    t.advance(CLOCK_MS - 1);
+    t.room.snapshot();
+    expect(sent()).toBe(1);
+    t.advance(1);
+    t.room.snapshot();
+    expect(sent()).toBe(2);
+    expect(last(a.c, 'clock').now).toBe(1_000_000 + CLOCK_MS);
+  });
+});
+
 describe('join notices', () => {
   it('tells everyone else on the server, but not the player who joined', () => {
     const { room, join, store } = setup();
@@ -602,5 +683,40 @@ describe('scaling', () => {
     t.advance(BOARD_MS);
     t.room.snapshot();
     expect(last(a.c, 'hall').rows.map((r) => r.name)).toEqual(['Ann']);
+  });
+});
+
+describe('ranks and titles', () => {
+  it('announces a new rank to everyone when a catch reaches it', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    a.acct.save.level = 24;
+    a.acct.save.xp = xpForNextLevel(24) - 1;
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    advance(60_000);
+    room.handle(a.id, { t: 'catch' });
+    expect(a.acct.save.level).toBe(25);
+    expect(b.c.log.filter((m) => m.t === 'sys').map((m) => (m as { text: string }).text)).toContain('⚓ Ann made Bosun!');
+  });
+  it('shrugs off ids that are objects instead of crashing the server', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const bad = { toString: null } as unknown as string;
+    expect(() => room.handle(a.id, { t: 'title', id: bad })).not.toThrow();
+    expect(() => room.handle(a.id, { t: 'buyrod', id: bad })).not.toThrow();
+    expect(a.acct.save.title).toBe(null);
+  });
+  it('shows a worn title to the other players, and only an earned one', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'title', id: 'admiral' });
+    expect(b.c.log.some((m) => m.t === 'title')).toBe(false);
+    a.acct.save.titles.push('bosun');
+    room.handle(a.id, { t: 'title', id: 'bosun' });
+    expect(last(b.c, 'title')).toEqual({ t: 'title', id: a.id, title: 'bosun' });
+    const c = join('Cy');
+    expect(last(c.c, 'welcome').players.find((p) => p.id === a.id)?.title).toBe('bosun');
   });
 });

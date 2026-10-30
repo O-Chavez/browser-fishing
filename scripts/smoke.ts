@@ -16,6 +16,7 @@ import puppeteer, { type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { FISH } from '../src/data/content';
 import { MAPS } from '../src/data/maps';
+import { CARD_SLIDE_MS, RESULT_BEAT_MS } from '../src/game/tablepace';
 import { newSave } from '../src/game/state';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -52,7 +53,8 @@ fs.writeFileSync(
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
-  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '' },
+  // No Discord webhooks: the feedback check below must not post a real report.
+  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 await waitForLine(server, /fishing server on port/);
@@ -177,7 +179,14 @@ async function pondChecks(): Promise<void> {
 
   // Night: lamps, windows and torches must still be on meshes that are drawn.
   await page.evaluate(() => { window.__game.day(0.7); window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.15); });
-  await sleep(600);
+  // Real lights fade in (`LightPool`): one near the plaza waits for a far one to dim before taking its
+  // slot, and slow headless frames stretch that well past a fixed sleep.
+  const litStart = Date.now();
+  await page.waitForFunction(() => {
+    const w = window.__game.world as any;
+    return w.hub.lampLights.some((l: any) => l.intensity > 1) && w.town.lights.some((l: any) => l.intensity > 1);
+  }, { timeout: 5000 }).catch(() => null);
+  const litMs = Date.now() - litStart;
   const night = await page.evaluate(() => {
     const w = window.__game.world as any;
     const used = window.__smoke.materialsInScene();
@@ -189,8 +198,8 @@ async function pondChecks(): Promise<void> {
       windows: used.has(w.town.windowMat),
     };
   });
-  check('pond night: hub lamps lit and their bulbs drawn', night.hubLamps && night.hubLampMats);
-  check('pond night: town lamps lit, lanterns and windows drawn', night.townLamps && night.townLampMats && night.windows);
+  check('pond night: hub lamps lit and their bulbs drawn', night.hubLamps && night.hubLampMats, `lit after ${litMs} ms`);
+  check('pond night: town lamps lit, lanterns and windows drawn', night.townLamps && night.townLampMats && night.windows, `lit after ${litMs} ms`);
   await page.screenshot({ path: `${SHOTS}/pond-plaza-night.png` });
 
   const anim = await page.evaluate(async () => {
@@ -355,6 +364,10 @@ async function pondChecks(): Promise<void> {
     return { same: document.querySelector('#hotbar .slot') === first, held: document.querySelectorAll('#hotbar .slot.held').length, picks: document.querySelectorAll('#hotbar .pick').length };
   });
   check('hotbar: switching slots keeps the slot elements (old slot glides down)', kept.same && kept.held === 1 && kept.picks === 1, JSON.stringify(kept));
+  const gear = await page.evaluate(() =>
+    [...document.querySelectorAll('#hotbar .slot')].slice(0, 3).map((el) => `${el.classList.contains('gear')}:${el.querySelector('.tag')?.textContent ?? ''}`).join(),
+  );
+  check('hotbar: slots 1 and 2 are the tagged rod and bait slots', gear === 'true:Rod,true:Bait,false:', gear);
 
   // Drop a fish and pick it back up.
   await page.evaluate((f) => { (window.__game.s as any).slots[3] = f; }, fish(4));
@@ -438,47 +451,95 @@ async function casinoChecks(): Promise<void> {
   check('casino: roulette wheel idles (rotates)', wheel);
   await page.screenshot({ path: `${SHOTS}/casino.png` });
 
+  // Record the result sounds (to check a finished hand plays the one for its outcome), and when the
+  // pegs tick, cards are dealt, results land and the bet slots change.
+  await page.evaluate(async () => {
+    const { audio } = await import('/src/game/audio.ts' as string);
+    const w = window as any;
+    w.__sounds = [];
+    w.__ticks = { peg: [], card: [], result: [], slots: [] };
+    const jingle = audio.jingle.bind(audio), snap = audio.snap.bind(audio), peg = audio.peg.bind(audio), card = audio.card.bind(audio);
+    audio.jingle = (r: any) => { w.__sounds.push(`jingle:${r}`); w.__ticks.result.push(performance.now()); jingle(r); };
+    audio.snap = () => { w.__sounds.push('snap'); w.__ticks.result.push(performance.now()); snap(); };
+    audio.peg = (...a: any[]) => { w.__ticks.peg.push(performance.now() + (a[2] ?? 0) * 1000); peg(...a); };
+    audio.card = (f: any) => { w.__ticks.card.push(performance.now()); card(f); };
+    let last = '';
+    setInterval(() => {
+      const now = JSON.stringify((window.__game.s as any).slots.slice(2, 4));
+      if (now !== last) w.__ticks.slots.push(performance.now());
+      last = now;
+    }, 20);
+  });
+
   // Roulette: hold a fish, aim at RED, click.
   await page.keyboard.press('3');
   await aimAt(page, 'rbet', 'red');
   const roul = await page.evaluate(async () => {
     const g = window.__game;
     const h = (g.world as any).hall;
+    const w = window as any;
+    w.__ticks.peg = [];
+    w.__ticks.result = [];
     g.press();
     g.release();
     const t0 = performance.now();
     let spun = false;
     while (performance.now() - t0 < 3000 && !spun) { spun = !!h.anim; await new Promise((r) => setTimeout(r, 50)); }
+    const start = performance.now();
+    w.__ticks.slots = [];
+    const before = h.records.shown;
+    let boardAt = NaN;
+    const poll = setInterval(() => { if (isNaN(boardAt) && h.records.shown !== before) boardAt = performance.now(); }, 10);
     await new Promise((r) => setTimeout(r, 5500));
-    return { spun, slot: JSON.stringify((g.s as any).slots[2]) };
+    clearInterval(poll);
+    const pegs: number[] = w.__ticks.peg;
+    const gaps = pegs.slice(1).map((t, i) => t - pegs[i]);
+    return {
+      spun,
+      slot: JSON.stringify((g.s as any).slots[2]),
+      pegs: pegs.length,
+      firstGap: Math.round(gaps.slice(0, 10).reduce((a, b) => a + b, 0) / 10),
+      lastGap: Math.round(gaps[gaps.length - 1]),
+      quiet: Math.round(w.__ticks.result[0] - pegs[pegs.length - 1]),
+      result: Math.round(w.__ticks.result[0] - start),
+      slotsAt: (w.__ticks.slots as number[]).map((t) => Math.round(t - w.__ticks.result[0])),
+      boardAt: Math.round(boardAt - w.__ticks.result[0]),
+    };
   });
   check('casino: roulette bet spins the wheel', roul.spun, `slot after: ${roul.slot}`);
+  // Pockets tick past the pointer, slowing with the wheel; a beat of quiet, then the result, and only then the hotbar.
+  check('casino: roulette ticks slow down, then a beat before the result', roul.pegs > 40 && roul.lastGap > roul.firstGap * 4 && roul.quiet >= RESULT_BEAT_MS - 50 && roul.slotsAt.every((t) => t >= -30), JSON.stringify(roul));
+  // The server is fresh, so the first settled spin, won or lost, is a casino record.
+  const board = await page.evaluate(() => (window.__game.world as any).hall.records.shown as string);
+  check('casino: a settled spin goes up on the record board', board.includes('"name":"Smoke"') && board.includes('"game":"roulette"'), board);
+  check('casino: the record board waits for the result', roul.boardAt >= -30, `board changed ${roul.boardAt} ms after the result`);
 
-  // Blackjack: deal, see cards and buttons, stand.
+  // Blackjack: deal, see the cards dealt one at a time, then the buttons.
   await page.keyboard.press('4');
   await aimAt(page, 'bj', 'deal');
-  // Record the result sounds, to check a finished hand plays the one for its outcome.
-  await page.evaluate(async () => {
-    const { audio } = await import('/src/game/audio.ts');
-    const w = window as any;
-    w.__sounds = [];
-    const jingle = audio.jingle.bind(audio), snap = audio.snap.bind(audio);
-    audio.jingle = (r: any) => { w.__sounds.push(`jingle:${r}`); jingle(r); };
-    audio.snap = () => { w.__sounds.push('snap'); snap(); };
-  });
   const bj = await page.evaluate(async () => {
     const g = window.__game;
     const h = (g.world as any).hall;
+    const w = window as any;
+    w.__ticks.card = [];
+    w.__sounds = [];
     g.press();
     g.release();
     const t0 = performance.now();
-    while (performance.now() - t0 < 4000 && h.cards.children.length === 0) await new Promise((r) => setTimeout(r, 50));
+    const shown = () => h.cards.children.filter((c: any) => c.visible).length;
+    const buttons = () => Object.values(h.bjButtons).filter((b: any) => b.visible).length;
+    while (performance.now() - t0 < 4000 && shown() === 0) await new Promise((r) => setTimeout(r, 20));
+    // Just after the first card leaves the shoe: the rest are still to come, and nothing can be clicked
+    const first = { shown: shown(), buttons: buttons() };
+    while (performance.now() - t0 < 8000 && buttons() === 0) await new Promise((r) => setTimeout(r, 20));
     const vis = Object.fromEntries(Object.entries(h.bjButtons).map(([k, b]: [string, any]) => [k, b.visible]));
-    return { cards: h.cards.children.length, cardsAttached: window.__smoke.attached(h.cards), vis };
+    const cards: number[] = w.__ticks.card;
+    return { first, dealMs: Math.round(cards[cards.length - 1] - cards[0]), cards: h.cards.children.length, cardsAttached: window.__smoke.attached(h.cards), vis };
   });
   await page.screenshot({ path: `${SHOTS}/casino-blackjack.png` });
   const live = bj.vis.hit && bj.vis.stand;
   check('casino: blackjack deal shows cards on the felt', bj.cards >= 3 && bj.cardsAttached, `${bj.cards} cards`);
+  check('casino: blackjack deals one card at a time, buttons after the last', bj.first.shown < 4 && bj.first.buttons === 0 && bj.dealMs >= 3 * CARD_SLIDE_MS, JSON.stringify(bj));
   check('casino: blackjack shows hit/stand (or the hand ended at once)', live || bj.vis.deal, JSON.stringify(bj.vis));
   if (live) {
     // Double down: it ends the hand like a stand, and costs coins equal to the fish. A win only
@@ -489,18 +550,30 @@ async function casinoChecks(): Promise<void> {
       const h = (g.world as any).hall;
       const s = g.s as any;
       const before = { coins: s.coins, mult: s.slots[3]?.mult ?? 1 };
+      const w = window as any;
+      w.__ticks.card = [];
+      w.__ticks.result = [];
+      w.__ticks.slots = [];
       g.press();
       g.release();
       const t0 = performance.now();
-      while (performance.now() - t0 < 4000 && !h.bjButtons.deal.visible) await new Promise((r) => setTimeout(r, 50));
-      // The server sends the new save before the finished hand, so it's already applied here.
-      return { done: h.bjButtons.deal.visible, before, coins: s.coins, mult: s.slots[3] ? (s.slots[3].mult ?? 1) : null };
+      while (performance.now() - t0 < 10000 && !h.bjButtons.deal.visible) await new Promise((r) => setTimeout(r, 50));
+      // The server's new save waits for the last card and lands with the result, so it's applied here.
+      const cards: number[] = w.__ticks.card;
+      const res = w.__ticks.result[0];
+      return {
+        done: h.bjButtons.deal.visible, before, coins: s.coins, mult: s.slots[3] ? (s.slots[3].mult ?? 1) : null,
+        afterCard: Math.round(res - cards[cards.length - 1]),
+        slotsAt: (w.__ticks.slots as number[]).map((t) => Math.round(t - res)),
+      };
     });
     const spent = dbl.before.coins - dbl.coins;
     const outcome = dbl.mult === null ? 'lost' : dbl.mult === dbl.before.mult * 4 ? 'won' : dbl.mult === dbl.before.mult ? 'push' : 'other';
     const settled = outcome === 'push' ? spent === 0 : outcome !== 'other' && spent > 0;
     check('casino: doubling down ends the hand (DEAL comes back)', dbl.done);
     check('casino: a doubled hand settles coins and fish (win = fish x4, coins stay spent)', dbl.done && settled, `${outcome}, ${JSON.stringify(dbl)}`);
+    // The result lands a beat after the last card (a slide or a flip), and the fish only changes with it.
+    check('casino: blackjack result waits for the last card, the hotbar for the result', dbl.afterCard >= CARD_SLIDE_MS + RESULT_BEAT_MS - 50 && dbl.slotsAt.every((t) => t >= -30), JSON.stringify(dbl));
   }
   const sound = await page.evaluate(() => ({ kind: document.getElementById('tableresult')!.className, sounds: (window as any).__sounds as string[] }));
   const want = { win: 'jingle:epic', lose: 'snap', push: 'jingle:common' }[sound.kind.split(' ')[0]];
@@ -586,12 +659,8 @@ async function chatChecks(): Promise<void> {
   await a.page.evaluate(() => window.__game.teleport(0, -2.5));
   await b.page.evaluate(() => { window.__game.teleport(0, 2); window.__game.look(0, -0.05); });
   await sleep(800);
-  const chatOpacity = () => a.page.evaluate(() => Number(getComputedStyle(document.getElementById('chat')!).opacity));
-  const faded = await chatOpacity();
   await a.page.keyboard.press('Enter');
   const typing = await a.page.evaluate(() => document.activeElement?.classList.contains('chat-input') ?? false);
-  await sleep(300);
-  const full = await chatOpacity();
   await a.page.keyboard.type('hello from the pier');
   await a.page.keyboard.press('Enter');
   await sleep(600);
@@ -605,7 +674,6 @@ async function chatChecks(): Promise<void> {
   });
   await b.page.screenshot({ path: `${SHOTS}/chat.png` });
   check('chat: Enter opens the chat input', typing);
-  check('chat: window is faded while playing and full while typing', faded < 0.7 && full === 1, JSON.stringify({ faded, full }));
   check('chat: line shows for the sender and others in the room', la.includes('hello from the pier') && lb.includes('Ann: hello from the pier'), `"${lb}"`);
   check('chat: line reaches players in other rooms', lc.includes('hello from the pier'), `"${lc}"`);
   check('chat: speaker gets a bubble for players nearby', bubble);
@@ -660,6 +728,52 @@ async function chatChecks(): Promise<void> {
     resume: !document.getElementById('resume')!.classList.contains('hidden'),
   }));
   check('chat: losing the mouse while typing cancels chat without the pause menu', !esc.chat && !esc.menu && esc.resume, JSON.stringify(esc));
+
+  // New lines (two at once here) flash at full strength, then fade back to the faded look; typing shows them at full.
+  const said = ['anyone biting?', 'try the lilies'];
+  for (const text of said) {
+    await b.page.keyboard.press('Enter');
+    await b.page.keyboard.type(text);
+    await b.page.keyboard.press('Enter');
+  }
+  const opacities = (p: Page) => p.evaluate((said) => said.map((t) => {
+    const el = [...document.querySelectorAll('#chat .chat-line')].find((e) => e.textContent!.includes(t));
+    return el ? Number(getComputedStyle(el).opacity) : -1;
+  }), said);
+  await c.page.waitForFunction((t) => document.querySelector('#chat .chat-log')!.textContent!.includes(t), { timeout: 5000 }, said[1]);
+  const t0 = Date.now();
+  const fresh = await opacities(c.page);
+  await c.page.screenshot({ path: `${SHOTS}/chat-flash.png` });
+  await c.page.waitForFunction((said) => said.every((t) => {
+    const el = [...document.querySelectorAll('#chat .chat-line')].find((e) => e.textContent!.includes(t));
+    return el && Number(getComputedStyle(el).opacity) <= 0.5;
+  }), { timeout: 8000, polling: 50 }, said).catch(() => null);
+  const backMs = Date.now() - t0;
+  const faded = Math.max(...(await opacities(c.page)));
+  await c.page.keyboard.press('Enter');
+  await sleep(300);
+  const full = Math.min(...(await opacities(c.page)));
+  await c.page.keyboard.press('Enter');
+  check('chat: new lines flash at full strength and fade back after a few seconds', fresh.every((o) => o === 1) && faded <= 0.5 && backMs > 3000 && backMs < 5500, JSON.stringify({ fresh, backMs }));
+  check('chat: window is faded while playing and full while typing', faded < 0.7 && full === 1, JSON.stringify({ faded, full }));
+
+  // The pause screen's feedback button opens the form in Settings; it sends like /idea and shows the server's thanks.
+  await a.page.click('#resume-fb');
+  await a.page.waitForSelector('#fb-text', { visible: true, timeout: 3000 });
+  const fbFocused = await a.page.evaluate(() => document.activeElement?.id === 'fb-text');
+  await a.page.click('[data-act="fbkind"][data-id="idea"]');
+  // Tab and other keybinds stay in the text box instead of closing the menu.
+  await a.page.keyboard.press('Tab');
+  await a.page.keyboard.type('a smoke test idea');
+  await a.page.keyboard.press('Enter');
+  await a.page.waitForSelector('.fb-msg.sent', { timeout: 5000 }).catch(() => null);
+  const fb = await a.page.evaluate(() => ({
+    msg: document.querySelector('.fb-msg')?.textContent ?? '',
+    menu: !document.getElementById('menu')!.classList.contains('hidden'),
+    inChat: (document.querySelector('#chat .chat-log')?.textContent ?? '').includes('was sent'),
+  }));
+  await a.page.screenshot({ path: `${SHOTS}/feedback.png` });
+  check('feedback: the pause screen button opens the form and an idea sent from it is thanked', fbFocused && fb.menu && /idea was sent/.test(fb.msg) && !fb.inChat, JSON.stringify({ fbFocused, ...fb }));
   for (const p of [a, b, c]) await p.ctx.close();
 }
 
@@ -733,7 +847,7 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
       },
       hall: () => {
         const h = w.hall;
-        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh],
+        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh], ['record board', h.records?.face.mesh],
           ...h.picks.map((o: any) => [`clickable ${o.userData.tag.k}:${o.userData.tag.id}`, o])];
       },
     };

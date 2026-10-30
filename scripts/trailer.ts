@@ -16,6 +16,7 @@ import puppeteer, { type KeyInput, type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { COSMETICS } from '../src/data/cosmetics';
 import { ROULETTE_MS } from '../src/data/casino';
+import { RESULT_BEAT_MS } from '../src/game/tablepace';
 import { TIP_IDS } from '../src/game/tips';
 import { newSave } from '../src/game/state';
 
@@ -57,8 +58,8 @@ const account = (name: string, look: object, extra: object = {}) => ({
   },
 });
 const CAM = { color: 0x4a90e2, face: 'smile', hat: 'bucket', shirt: 'vest', jewelry: 'chain' };
-// Four fish to bet with: roulette is random, so the casino scene retries until red wins.
-const betFish = [ROD, ...['dorado', 'sturgeon', 'arowana', 'koi'].map((fishId) => ({ k: 'fish', fishId, size: 120 }))];
+// Four fish to bet with (in slots 3-6, so the Tackle Vest): roulette is random, so the casino scene retries until red wins.
+const betFish = [ROD, { k: 'bait', id: 'pearl', n: 50 }, ...['dorado', 'sturgeon', 'arowana', 'koi'].map((fishId) => ({ k: 'fish', fishId, size: 120 })), null];
 const accounts = Object.fromEntries(
   [
     account('Cam', CAM),
@@ -68,8 +69,8 @@ const accounts = Object.fromEntries(
     account('Ivy', { color: 0xf2c14e, face: 'wink', hat: 'crown', shirt: 'cloak', jewelry: 'diamond' }),
     account('Kai', { color: 0x8e6bd8, face: 'tongue', hat: 'tophat', shirt: 'tux', jewelry: 'jackpot' }),
     account('Lu', { color: 0x7bc86c, face: 'cat', hat: 'horned', shirt: 'hawaiian', jewelry: 'amulet' }),
-    account('Cam2', CAM, { location: 'casino', slots: betFish }),
-    account('Cam3', CAM, { location: 'casino', slots: betFish }),
+    account('Cam2', CAM, { location: 'casino', slots: betFish, perks: ['vest'] }),
+    account('Cam3', CAM, { location: 'casino', slots: betFish, perks: ['vest'] }),
     account('Rosa', { color: 0xe06aa8, face: 'grin', hat: 'tophat', shirt: 'tux', jewelry: 'jackpot' }, { location: 'casino', held: 4 }),
     account('Jun', { color: 0xf2b441, face: 'joy', hat: 'visor', shirt: 'dealer', jewelry: 'dice' }, { location: 'casino', held: 4 }),
     account('Bea', { color: 0x38b6a8, face: 'wink', hat: 'crown', shirt: 'cloak', jewelry: 'diamond' }, { location: 'casino', held: 4 }),
@@ -330,7 +331,7 @@ try {
       await game(table, `G.teleport(-8.6, 39.7);`);
       await sleep(1500);
     }
-    await table.keyboard.press(`Digit${(attempt % 4) + 2}` as KeyInput);
+    await table.keyboard.press(`Digit${(attempt % 4) + 3}` as KeyInput);
     await game(table, `G.look(${wheel.yaw}, ${wheel.pitch + 0.05});`);
     await sleep(1200);
     spin = await record(table, 'casino', 8500, async (mark) => {
@@ -344,7 +345,8 @@ try {
       await sleep(1600);
       await say(jun, lines[attempt % 4][1]);
     });
-    spin.marks.result += ROULETTE_MS / 1000;
+    // The banner lands a beat after the wheel stops
+    spin.marks.result += (ROULETTE_MS + RESULT_BEAT_MS) / 1000;
     const won = await table.evaluate(() => document.getElementById('tableresult')!.className.includes('win'));
     console.log(`roulette spin ${attempt + 1}: ${won ? 'win' : 'lose'}`);
     if (won) break;

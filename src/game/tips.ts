@@ -1,6 +1,7 @@
 import { CASINO_LEVEL } from '../data/casino';
 import { BAITS, RODS, type Rod } from '../data/content';
 import { BAIT_PACK } from './economy';
+import { COIN } from './format';
 import type { SaveData } from './state';
 
 /**
@@ -41,7 +42,7 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
     case 'sold': {
       const b = nextBait(s);
       if (!b) return 'Coins earned! Spend them on better rods and bait at the stall.';
-      const pack = `${BAIT_PACK} for ${b.price * BAIT_PACK} 🪙`;
+      const pack = `${BAIT_PACK} for ${b.price * BAIT_PACK} ${COIN}`;
       return s.level >= b.unlockLevel
         ? `Coins earned! Better bait brings better fish: <b>${b.name}</b> is for sale at the stall (${pack}).`
         : `Coins earned! Better bait brings better fish: <b>${b.name}</b> unlocks at <b>Lv ${b.unlockLevel}</b> (${pack}).`;
@@ -70,5 +71,5 @@ export function rodUpgrade(s: Pick<SaveData, 'level' | 'slots' | 'locker'>): Rod
 /** Rod upgrade hint as HTML, like `tipText`. */
 export function rodHintText(end: FightEnd, rod: Rod, vendor: string): string {
   const lead = end === 'snapped' ? 'Line snapped?' : end === 'escaped' ? 'Fish got away?' : 'Tough fight!';
-  return `${lead} A better rod makes fish easier to reel in: the <b>${rod.name}</b> is at ${vendor}'s stall (${rod.price.toLocaleString('en-US')} 🪙).`;
+  return `${lead} A better rod makes fish easier to reel in: the <b>${rod.name}</b> is at ${vendor}'s stall (${rod.price.toLocaleString('en-US')} ${COIN}).`;
 }

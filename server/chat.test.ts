@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_MAX, CHAT_REPEAT_MS, CHAT_WINDOW_MS, ChatGate, censor, cleanText } from './chat';
+import { CHAT_MAX, CHAT_REPEAT_MS, CHAT_WINDOW_MS, ChatGate, censor, cleanText, rudeName } from './chat';
 
 describe('chat text', () => {
   it('trims, collapses whitespace, strips control characters and caps the length', () => {
@@ -16,6 +16,18 @@ describe('chat text', () => {
     expect(censor('you ass')).toBe('you ***');
     expect(censor('nice class, pass the cocktail, Dickens')).toBe('nice class, pass the cocktail, Dickens');
     expect(censor('caught a bass!')).toBe('caught a bass!');
+  });
+});
+
+describe('rudeName', () => {
+  it('splits names at capitals, digits and symbols, and joins spaced-out letters', () => {
+    const rude = ['BigDickFisher', 'xx_ass_xx', 'Ass99', 'XXAss', 'HanCock', '2Dick4U', 'ASS', 'A55', 'Tw4t', 'P155', 'Sh1tLord', '$h!t', 'f u c k', 'F_U_C_K', 'Fu.ck', 'FuCk', 'fuuuck', 'Wanker', 'Bastard99', 'FiShit', 'YoShit'];
+    for (const name of rude) expect(rudeName(name), name).toBe(true);
+  });
+
+  it('lets real-looking names through, including ones with a rude word inside', () => {
+    const fine = ['Cassandra', 'Dickens', 'Classic', 'Grassy', 'Hancock', 'Scunthorpe', 'Peacock', 'Hitchcock', 'Cockburn', 'Dickson', 'Glasses', 'Sassafras', 'Bass Pro', 'Assist', 'Cl4ss', 'Yoshitaka', 'Shiitake', 'FishIt', 'GoFishIt', 'Saltwater', 'Cocktail', 'Mr T', 'J R Smith', 'Ann'];
+    for (const name of fine) expect(rudeName(name), name).toBe(false);
   });
 });
 

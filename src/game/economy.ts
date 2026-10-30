@@ -1,8 +1,9 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
-import { applyXp, catchXp, eligibleFish, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
-import { BAIT_STACK, type SaveData, type Slot } from './state';
+import { TITLES, type Rank } from '../data/ranks';
+import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
+import { BAIT_SLOT, BAIT_STACK, FISH_SLOT, ROD_SLOT, slotCount, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
 
@@ -11,7 +12,28 @@ const ROD_LEVEL_OK = (s: SaveData, id: string) => {
   return !!r && s.level >= r.unlockLevel;
 };
 
-export const freeSlots = (s: SaveData): number => s.slots.filter((sl) => !sl).length;
+/** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
+export const freeSlots = (s: SaveData): number => {
+  let n = 0;
+  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) n++;
+  return n;
+};
+const freeFishSlot = (s: SaveData): number => {
+  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) return i;
+  return -1;
+};
+
+/** Empties a fish slot. An extra slot past the hotbar size (fish left over from an older save) goes away instead. */
+export function clearSlot(s: SaveData, i: number): void {
+  if (i < slotCount(s)) {
+    s.slots[i] = null;
+    return;
+  }
+  s.slots.splice(i, 1);
+  if (s.held > i) s.held--;
+  s.held = Math.min(s.held, s.slots.length - 1);
+}
+
 export const hasRod = (s: SaveData, id: string): boolean => s.slots.some((sl) => sl?.k === 'rod' && sl.id === id);
 /** Carried in the hotbar or kept in the locker. */
 export const ownsRod = (s: SaveData, id: string): boolean => hasRod(s, id) || s.locker.rods.includes(id);
@@ -30,36 +52,20 @@ function addLocker(s: SaveData, id: string, n: number): void {
   else delete s.locker.bait[id];
 }
 
-/** The slot that bait is currently drawn from (the first stack of the selected type). */
+/** The slot that bait is currently drawn from: the bait slot, while it holds the selected type. */
 export function activeSlot(s: SaveData): number {
-  return s.slots.findIndex((sl) => sl?.k === 'bait' && sl.id === s.bait);
+  const sl = s.slots[BAIT_SLOT];
+  return sl?.k === 'bait' && sl.id === s.bait ? BAIT_SLOT : -1;
 }
 
-/** How many more of this bait fit, topping up stacks first and then empty slots. */
-export function baitRoom(s: SaveData, id: string): number {
-  return s.slots.reduce(
-    (a, sl) => a + (!sl ? BAIT_STACK : sl.k === 'bait' && sl.id === id ? BAIT_STACK - sl.n : 0),
-    0,
-  );
+/** How many more of this bait can be carried: topping up the bait slot (if empty or the same type), then the locker. */
+function baitRoom(s: SaveData, id: string): number {
+  const sl = s.slots[BAIT_SLOT];
+  const slot = !sl ? BAIT_STACK : sl.k === 'bait' && sl.id === id ? BAIT_STACK - sl.n : 0;
+  return slot + Math.max(0, LOCKER_CAP - lockerBait(s, id));
 }
 
-function addBait(s: SaveData, id: BaitType, n: number): void {
-  for (const sl of s.slots) {
-    if (n > 0 && sl?.k === 'bait' && sl.id === id) {
-      const add = Math.min(n, BAIT_STACK - sl.n);
-      sl.n += add;
-      n -= add;
-    }
-  }
-  for (let i = 0; i < s.slots.length && n > 0; i++) {
-    if (s.slots[i]) continue;
-    const add = Math.min(n, BAIT_STACK);
-    s.slots[i] = { k: 'bait', id, n: add };
-    n -= add;
-  }
-}
-
-/** Takes the slot in hand: rods and bait become the active rod / bait, fish are simply held. */
+/** Takes the slot in hand: the rod and bait slots make that rod / bait the active one, fish are simply held. */
 export function selectSlot(s: SaveData, index: number): boolean {
   if (!Number.isInteger(index) || index < 0 || index >= s.slots.length) return false;
   const sl = s.slots[index];
@@ -100,49 +106,36 @@ export function buyBait(s: SaveData, id: string): boolean {
   return true;
 }
 
-/** Index of the rod slot in use (the active rod's slot, else any rod slot). */
-function rodSlot(s: SaveData): number {
-  const i = s.slots.findIndex((sl) => sl?.k === 'rod' && sl.id === s.rod);
-  return i >= 0 ? i : s.slots.findIndex((sl) => sl?.k === 'rod');
-}
-
-/** Puts an owned rod into the hotbar rod slot, sending the rod it replaces back to the locker. */
+/** Puts an owned rod into the rod slot, sending the rod it replaces back to the locker. */
 export function equipRod(s: SaveData, id: string): boolean {
   const r = RODS.find((x) => x.id === id);
   if (!r || !ownsRod(s, id)) return false;
-  if (hasRod(s, id)) {
+  const old = s.slots[ROD_SLOT];
+  if (old?.k === 'rod' && old.id === id) {
     s.rod = id;
     return true;
   }
-  let i = rodSlot(s);
-  if (i < 0) i = s.slots.indexOf(null);
-  if (i < 0) return false;
-  const old = s.slots[i];
   if (old?.k === 'rod') s.locker.rods.push(old.id);
   s.locker.rods = s.locker.rods.filter((x) => x !== id);
-  s.slots[i] = { k: 'rod', id };
+  s.slots[ROD_SLOT] = { k: 'rod', id };
   s.rod = id;
   return true;
 }
 
-/** Equips a bait type: the current stack goes back to the locker and a fresh stack comes out. */
+/** Equips a bait type: the stack in the bait slot goes back to the locker and a fresh stack comes out. */
 export function equipBait(s: SaveData, id: string): boolean {
   const b = BAITS.find((x) => x.id === id);
   if (!b || s.level < b.unlockLevel || baitCount(s, id) <= 0) return false;
-  let i = activeSlot(s);
-  if (i < 0) i = s.slots.findIndex((sl) => sl?.k === 'bait');
-  const cur = i >= 0 ? s.slots[i] : null;
+  const cur = s.slots[BAIT_SLOT];
   if (cur?.k === 'bait' && cur.id === id) {
     s.bait = id;
     refillBait(s);
     return true;
   }
-  if (i < 0) i = s.slots.indexOf(null);
-  if (i < 0) return false;
   if (cur?.k === 'bait') addLocker(s, cur.id, cur.n);
   const n = Math.min(BAIT_STACK, lockerBait(s, id));
   addLocker(s, id, -n);
-  s.slots[i] = { k: 'bait', id: id as BaitType, n };
+  s.slots[BAIT_SLOT] = { k: 'bait', id: id as BaitType, n };
   s.bait = id as BaitType;
   return true;
 }
@@ -155,18 +148,6 @@ export function refillBait(s: SaveData): void {
   if (add <= 0) return;
   sl.n += add;
   addLocker(s, sl.id, -add);
-}
-
-/** Moves a rod or bait stack from the hotbar into the locker to free the slot. */
-export function stowSlot(s: SaveData, i: number): boolean {
-  const sl = s.slots[i];
-  if (!Number.isInteger(i) || !sl || sl.k === 'fish') return false;
-  if (sl.k === 'bait') {
-    if (lockerBait(s, sl.id) + sl.n > LOCKER_CAP) return false;
-    addLocker(s, sl.id, sl.n);
-  } else s.locker.rods.push(sl.id);
-  s.slots[i] = null;
-  return true;
 }
 
 export const WHEEL_WIN = 0.45;
@@ -187,7 +168,7 @@ export const sellPrice = (_s: Pick<SaveData, 'perks'>, item: { fishId: string; s
   Math.round(fishValue(item));
 
 /** The perks that are actually working for this player, with what each one does right now. */
-export function activePerks(s: Pick<SaveData, 'perks' | 'lure'>): { id: string; icon: string; name: string; effect: string }[] {
+export function activePerks(s: Pick<SaveData, 'perks' | 'lure' | 'lureOff'>): { id: string; icon: string; name: string; effect: string }[] {
   const out: { id: string; icon: string; name: string; effect: string }[] = [];
   const add = (id: string, effect: string) => {
     const p = perkById(id)!;
@@ -199,8 +180,18 @@ export function activePerks(s: Pick<SaveData, 'perks' | 'lure'>): { id: string; 
   if (s.perks.includes('gloves')) add('gloves', `Fights ×${GLOVES_CONTROL} easier`);
   if (s.perks.includes('lantern')) add('lantern', `Night luck ×${LANTERN_NIGHT_LUCK}`);
   if (s.perks.includes('vest')) add('vest', `+${VEST_SLOTS} hotbar slots`);
-  if (s.lure > 0) add('lure', `${s.lure} shiny cast${s.lure === 1 ? '' : 's'} left`);
+  if (s.lure > 0) add('lure', s.lureOff ? `Shiny Lure off · ${s.lure} saved` : `${s.lure} shiny cast${s.lure === 1 ? '' : 's'} left`);
   return out;
+}
+
+/** The next cast that hooks a fish spends a Shiny Lure charge, unless the player switched it off. */
+export const lureOn = (s: Pick<SaveData, 'lure' | 'lureOff'>): boolean => s.lure > 0 && !s.lureOff;
+
+/** Switches the Shiny Lure on or off; its charges stay either way. */
+export function setLure(s: SaveData, on: unknown): boolean {
+  if (typeof on !== 'boolean' || s.lureOff === !on) return false;
+  s.lureOff = !on;
+  return true;
 }
 
 /** Rod control with the Quick-Reel Gloves on. */
@@ -212,7 +203,7 @@ export function applyWheel(s: SaveData, win: boolean): number {
   if (item?.k !== 'fish') return 0;
   const before = fishValue(item);
   if (win) item.mult = (item.mult ?? 1) * 2;
-  else s.slots[s.held] = null;
+  else clearSlot(s, s.held);
   return win ? before : -before;
 }
 
@@ -221,7 +212,7 @@ export function sellHeld(s: SaveData): boolean {
   const item = s.slots[s.held];
   if (item?.k !== 'fish') return false;
   s.coins += sellPrice(s, item);
-  s.slots[s.held] = null;
+  clearSlot(s, s.held);
   return true;
 }
 
@@ -230,7 +221,7 @@ export function sellSlot(s: SaveData, i: number): boolean {
   const item = s.slots[i];
   if (!Number.isInteger(i) || item?.k !== 'fish') return false;
   s.coins += sellPrice(s, item);
-  s.slots[i] = null;
+  clearSlot(s, i);
   return true;
 }
 
@@ -243,7 +234,8 @@ export function buyPerk(s: SaveData, id: string): boolean {
   s.chips = Math.round((s.chips - p.chips) * 10) / 10;
   if (p.id === 'lure') s.lure += LURE_CHARGES;
   else s.perks.push(p.id);
-  if (p.id === 'vest') for (let i = 0; i < VEST_SLOTS; i++) s.slots.push(null);
+  // Extra slots holding leftover fish become ordinary ones first.
+  if (p.id === 'vest') while (s.slots.length < slotCount(s)) s.slots.push(null);
   return true;
 }
 
@@ -253,7 +245,8 @@ export function buyPerk(s: SaveData, id: string): boolean {
  */
 export function buyCosmetic(s: SaveData, id: string, at: CosShop = 'stall'): boolean {
   const c = cosById(id);
-  if (!c || c.shop !== at || s.owned.includes(id)) return false;
+  // Earned outfits come only with a rank, never from a counter.
+  if (!c || c.shop === 'earned' || c.shop !== at || s.owned.includes(id)) return false;
   if (c.shop === 'casino') {
     if (s.chips < c.price) return false;
     s.chips = Math.round((s.chips - c.price) * 10) / 10;
@@ -285,28 +278,63 @@ export function setBodyColor(s: SaveData, color: number): boolean {
   return true;
 }
 
-/** Removes the item in hand and returns it, or null if it cannot be dropped (empty hand, or your only rod). */
+/**
+ * Removes the item in hand and returns it, or null if it cannot be dropped (empty hand, or your only rod).
+ * The rod slot is never left empty: the best other rod comes out of the locker. A dropped bait stack is
+ * replaced from the locker like a used-up one.
+ */
 export function dropHeld(s: SaveData): Slot | null {
   const item = s.slots[s.held];
   if (!item) return null;
-  if (item.k === 'rod' && s.slots.filter((x) => x?.k === 'rod').length <= 1) return null;
-  s.slots[s.held] = null;
-  if (item.k === 'rod' && s.rod === item.id && !hasRod(s, item.id)) {
-    const r = s.slots.find((x) => x?.k === 'rod');
-    if (r?.k === 'rod') s.rod = r.id;
+  if (item.k === 'rod') {
+    const next = RODS.filter((r) => s.locker.rods.includes(r.id)).sort((a, b) => b.tier - a.tier)[0];
+    if (!next) return null;
+    s.slots[s.held] = null;
+    equipRod(s, next.id);
+    return item;
   }
+  if (item.k === 'bait') {
+    s.slots[s.held] = null;
+    const next = Math.min(BAIT_STACK, lockerBait(s, item.id));
+    if (next > 0) {
+      s.slots[s.held] = { k: 'bait', id: item.id, n: next };
+      addLocker(s, item.id, -next);
+    }
+    return item;
+  }
+  clearSlot(s, s.held);
   return item;
 }
 
-/** Whether a dropped item would fit in the hotbar. */
+/** Whether a dropped item can be picked up: fish need a free fish slot, rods must be new to you, bait needs room. */
 export function canTake(s: SaveData, item: Slot): boolean {
-  return item.k === 'bait' ? baitRoom(s, item.id) >= item.n : freeSlots(s) > 0;
+  if (item.k === 'bait') return baitRoom(s, item.id) >= item.n;
+  if (item.k === 'rod') return !ownsRod(s, item.id) && RODS.some((r) => r.id === item.id);
+  return freeSlots(s) > 0;
 }
 
+/** Picks an item up. Rods and bait go to their own slot when it's empty (or holds the same bait), else to the locker. */
 export function takeItem(s: SaveData, item: Slot): boolean {
   if (!canTake(s, item)) return false;
-  if (item.k === 'bait') addBait(s, item.id, item.n);
-  else s.slots[s.slots.indexOf(null)] = item;
+  if (item.k === 'fish') s.slots[freeFishSlot(s)] = item;
+  else if (item.k === 'rod') {
+    s.locker.rods.push(item.id);
+    if (!s.slots[ROD_SLOT]) equipRod(s, item.id);
+  } else {
+    let n = item.n;
+    const sl = s.slots[BAIT_SLOT];
+    if (!sl) {
+      s.slots[BAIT_SLOT] = { k: 'bait', id: item.id, n: 0 };
+      s.bait = item.id;
+    }
+    const cur = s.slots[BAIT_SLOT];
+    if (cur?.k === 'bait' && cur.id === item.id) {
+      const add = Math.min(n, BAIT_STACK - cur.n);
+      cur.n += add;
+      n -= add;
+    }
+    addLocker(s, item.id, n);
+  }
   return true;
 }
 
@@ -328,21 +356,21 @@ export function spendBait(s: SaveData): boolean {
 
 export type CastCheck = 'ok' | 'norod' | 'nobait' | 'hands' | 'full';
 
-/** A cast needs a rod, bait, the rod in hand, and room for the catch (a free slot, or one the last bait frees). */
+/** A cast needs a rod, bait, the rod in hand, and a free fish slot for the catch. */
 export function canCast(s: SaveData): CastCheck {
   if (!hasRod(s, s.rod)) return 'norod';
   const held = s.slots[s.held];
   if (held?.k !== 'rod') return 'hands';
   const sl = s.slots[activeSlot(s)];
   if (sl?.k !== 'bait') return 'nobait';
-  return freeSlots(s) > 0 || (sl.n === 1 && lockerBait(s, sl.id) === 0) ? 'ok' : 'full';
+  return freeSlots(s) > 0 ? 'ok' : 'full';
 }
 
 export const CAST_MESSAGES: Record<Exclude<CastCheck, 'ok'>, string> = {
   norod: 'No rod equipped - open your inventory (Tab) to equip one.',
   nobait: 'Out of bait! Buy more at the shop, then equip it in your inventory (Tab).',
-  hands: 'Hold your rod (1-5) to cast.',
-  full: 'Your hotbar is full - sell or drop something first.',
+  hands: 'Hold your rod (1) to cast.',
+  full: 'Your fish slots are full - sell or drop a fish first.',
 };
 
 export interface Roll {
@@ -359,7 +387,7 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
   const rod = byId(RODS, s.rod);
   const bait = byId(BAITS, s.bait);
   const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1);
-  const lure = !!fish && s.lure > 0;
+  const lure = !!fish && lureOn(s);
   if (lure) s.lure--;
   return {
     perfect,
@@ -372,31 +400,70 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
 }
 
 export interface CatchResult {
-  /** False when there was no free slot, so the fish got away. */
+  /** False when there was no free fish slot, so the fish got away. */
   stored: boolean;
   first: boolean;
   record: boolean;
   gained: number;
   leveledUp: boolean;
   level: number;
+  /** Ranks reached with this catch (their titles and outfits are already given). */
+  ranks: Rank[];
 }
 
 export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false): CatchResult {
-  const slot = s.slots.indexOf(null);
-  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level };
+  const slot = freeFishSlot(s);
+  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [] };
   const entry = s.dex[fish.id];
   const first = !entry;
   const gained = catchXp(fish, size, first, shiny);
   const record = !!entry && size > entry.best;
-  s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0) };
+  const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
+  s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
   const bonus = charmBonus(s);
   s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(bonus > 0 ? { mult: 1 + bonus } : {}) };
   const value = Math.round(sellValue(fish, size, shiny) * (1 + bonus));
   if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
-  const res = applyXp(s.level, s.xp, gained);
+  const before = s.level;
+  const ranks = gainXp(s, gained);
+  return { stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks };
+}
+
+/** Adds XP: levels up, gives the gifts for levels past 50 and any ranks reached, and returns those ranks. */
+export function gainXp(s: SaveData, xp: number): Rank[] {
+  const before = s.level;
+  const res = applyXp(s.level, s.xp, xp);
   s.level = res.level;
   s.xp = res.xp;
-  return { stored: true, first, record, gained, leveledUp: res.leveledUp, level: res.level };
+  const g = levelGifts(before, s.level);
+  s.gifts.provisions += g.provisions;
+  s.gifts.fares += g.fares;
+  return grantRanks(s);
+}
+
+/** Back-paid levels give at most this many provisions and fares, so nobody gets dozens at once. */
+export const BACKPAY_GIFTS: Gifts = { provisions: 5, fares: 1 };
+
+/** Pays out the XP the old level-50 cap threw away (see `SaveData.backPay`), once. */
+export function payBack(s: SaveData): { levels: number; ranks: Rank[] } {
+  if (s.backPay.paid) return { levels: 0, ranks: [] };
+  const before = s.level;
+  const res = applyXp(s.level, s.xp, s.backPay.xp);
+  s.level = res.level;
+  s.xp = res.xp;
+  const g = levelGifts(before, s.level);
+  s.gifts.provisions += Math.min(g.provisions, BACKPAY_GIFTS.provisions);
+  s.gifts.fares += Math.min(g.fares, BACKPAY_GIFTS.fares);
+  s.backPay.paid = true;
+  return { levels: s.level - before, ranks: grantRanks(s) };
+}
+
+/** Wears an earned title under the name tag, or none (null). */
+export function setTitle(s: SaveData, id: unknown): boolean {
+  if (id !== null && (typeof id !== 'string' || !s.titles.includes(id) || !TITLES.some((t) => t.id === id))) return false;
+  if (s.title === id) return false;
+  s.title = id;
+  return true;
 }
 
 export const BOTTLE_COINS = 40;
@@ -425,7 +492,7 @@ export function canDig(s: SaveData): boolean {
   return BAITS.every((b) => baitCount(s, b.id) === 0) && s.coins < worm.price * BAIT_PACK;
 }
 
-/** Digs up a pack of worms and puts them on the hotbar if there is room; returns the worms gained. */
+/** Digs up a pack of worms and puts them in the bait slot; returns the worms gained. */
 export function digWorms(s: SaveData): number {
   if (!canDig(s)) return 0;
   addLocker(s, 'worm', DIG_WORMS);

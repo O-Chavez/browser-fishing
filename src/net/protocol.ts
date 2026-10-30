@@ -15,13 +15,16 @@ export interface PlayerInfo {
   coins: number;
   level?: number;
   best?: BestCatch | null;
+  /** Title id worn under the name tag (see `TITLES`, `src/data/ranks.ts`). */
+  title?: string | null;
   /** Current fishing activity, for other players' avatars. */
   act?: Activity;
 }
 
 export type Activity =
   | { a: 'cast'; x: number; z: number }
-  | { a: 'hold'; fish: string; size: number; shiny?: boolean }
+  /** `mult` is the Lucky Charm bonus baked into the catch (missing from older servers: treat as 1). */
+  | { a: 'hold'; fish: string; size: number; shiny?: boolean; mult?: number }
   | { a: 'carry'; fish: string; size: number; shiny?: boolean };
 
 export type ClientMsg =
@@ -32,10 +35,9 @@ export type ClientMsg =
   | { t: 'jump' }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
-  /** Gear from the tackle locker into the hotbar, or a hotbar rod/bait stack back to the locker. */
+  /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
   | { t: 'equiprod'; id: string }
   | { t: 'equipbait'; id: string }
-  | { t: 'stow'; i: number }
   /** Sell the fish in hand, or in hotbar slot i. */
   | { t: 'sell'; i?: number }
   | { t: 'bottle'; id: string }
@@ -45,6 +47,8 @@ export type ClientMsg =
   | { t: 'equip'; slot: CosSlot; id: string | null }
   | { t: 'color'; color: number }
   | { t: 'face'; id: string }
+  /** Wear an earned title under the name tag, or none. */
+  | { t: 'title'; id: string | null }
   | { t: 'reset' }
   /** Take the hotbar slot (0-based) in hand. */
   | { t: 'slot'; i: number }
@@ -64,6 +68,8 @@ export type ClientMsg =
   /** Turn the fish in slot i in at the prize shop for chips. */
   | { t: 'cashout'; i: number }
   | { t: 'buyperk'; id: string }
+  /** Switch the Shiny Lure on or off (off saves its charges). */
+  | { t: 'lure'; on: boolean }
   /** A new-player tip was shown, so it isn't shown again. */
   | { t: 'tip'; id: string }
   /** A global chat line. */
@@ -78,8 +84,13 @@ export type ClientMsg =
   | { t: 'rename'; name: string };
 
 export type ServerMsg =
-  /** `name` is the account's current name, which differs from the joined one after a rename; `renameIn` is ms until it can change again. */
-  | { t: 'welcome'; id: number; room: string; name: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean; renameIn: number }
+  /**
+   * `name` is the account's current name, which differs from the joined one after a rename; `renameIn` is ms until it can change again.
+   * `now` is the server's clock (ms), so every player's sky follows the same day instead of their device's clock.
+   */
+  | { t: 'welcome'; id: number; room: string; name: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean; renameIn: number; now: number }
+  /** The server's clock again (every CLOCK_MS), in case the device's clock jumps mid-session. */
+  | { t: 'clock'; now: number }
   /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
   | { t: 'error'; msg: string; need?: 'password' }
   /** Reply to `setpass` (and a refused `rename`): `msg` is set if it was refused. */
@@ -104,20 +115,33 @@ export type ServerMsg =
   | { t: 'look'; id: number; look: Look }
   /** Player `id` (possibly the receiver) changed their name. */
   | { t: 'named'; id: number; name: string }
+  /** Player `id` now wears this title id (or none). */
+  | { t: 'title'; id: number; title: string | null }
   /** Coins per player id, for the leaderboard. */
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
   | { t: 'hall'; rows: HallRow[] }
   /** Every Ko-fi supporter's name, newest first, for the 💗 by their names and the thank-you board. */
   | { t: 'supporters'; names: string[] }
+  /** The casino's all-time biggest single win and loss, sent on join and whenever one is beaten. */
+  | { t: 'records'; records: CasinoRecords }
   /** A chat line from anyone on the server; `room` and `id` let same-room clients show a bubble. */
   | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
   /** A server-wide notice for the chat window ("Ann has joined"). */
   | { t: 'sys'; text: string }
-  /** Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night. */
-  | { t: 'dev'; lines: string[]; time?: number | null };
+  /**
+   * Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night.
+   * `sent` answers a /bug, /idea or /feedback: whether the report went through (the feedback form reads it).
+   */
+  | { t: 'dev'; lines: string[]; time?: number | null; sent?: boolean };
 
-export interface HallRow { name: string; level: number; best: BestCatch }
+export interface HallRow { name: string; level: number; best: BestCatch; title?: string | null }
+
+export type CasinoGame = 'blackjack' | 'roulette' | 'wheel';
+/** One settled hand or spin: the coins it won or lost, and the fish that was bet. */
+export interface Gamble { amount: number; game: CasinoGame; fishId: string; shiny?: boolean; at: number }
+export interface CasinoRecord extends Gamble { name: string }
+export interface CasinoRecords { win: CasinoRecord | null; loss: CasinoRecord | null }
 
 export const SERVER_PORT = 8787;
 

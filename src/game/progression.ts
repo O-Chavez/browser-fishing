@@ -4,9 +4,12 @@ import {
 } from '../data/content';
 
 import { CASINO_LEVEL } from '../data/casino';
+import { cosById } from '../data/cosmetics';
+import { RANKS, nextRank, type Rank } from '../data/ranks';
 import { onDock } from './env';
 
-export const MAX_LEVEL = 50;
+/** There is no level cap: from this level on every level costs the same, so the pace never slows. */
+export const FLAT_LEVEL = 50;
 
 export type SpotId = 'prime' | 'pier' | 'shore';
 
@@ -35,19 +38,82 @@ export function fishingSpot(x: number, z: number): SpotId {
   return z <= PRIME_Z ? 'prime' : 'pier';
 }
 
-export const xpForNextLevel = (level: number): number => Math.round(10 * Math.pow(level, 1.5));
+export const xpForNextLevel = (level: number): number => Math.round(10 * Math.pow(Math.min(level, FLAT_LEVEL), 1.5));
+
+/** XP from level 1 to `FLAT_LEVEL`. */
+export const XP_TO_FLAT = Array.from({ length: FLAT_LEVEL - 1 }, (_, i) => xpForNextLevel(i + 1)).reduce((a, b) => a + b, 0);
 
 export function applyXp(level: number, xp: number, gained: number): { level: number; xp: number; leveledUp: boolean } {
   let lvl = level;
   let total = xp + gained;
   let leveledUp = false;
-  while (lvl < MAX_LEVEL && total >= xpForNextLevel(lvl)) {
+  while (total >= xpForNextLevel(lvl)) {
     total -= xpForNextLevel(lvl);
     lvl++;
     leveledUp = true;
   }
-  if (lvl >= MAX_LEVEL) total = 0;
   return { level: lvl, xp: total, leveledUp };
+}
+
+/** Free rewards for levels past `FLAT_LEVEL`, kept until the Smokehouse and the charters can use them. */
+export interface Gifts {
+  /** Smoked provisions: one per level past 50. */
+  provisions: number;
+  /** Charter fares: one every 5th level past 50. */
+  fares: number;
+}
+
+/** The gifts for going from level `from` to `to`. */
+export function levelGifts(from: number, to: number): Gifts {
+  const past = (l: number) => Math.max(0, l - FLAT_LEVEL);
+  return { provisions: past(to) - past(from), fares: Math.floor(past(to) / 5) - Math.floor(past(from) / 5) };
+}
+
+/**
+ * Gives every rank's title and outfit up to the player's level that they don't have yet, and
+ * returns the newly reached ranks. Safe to call again: nothing is given twice.
+ */
+export function grantRanks(s: { level: number; titles: string[]; owned: string[] }): Rank[] {
+  const fresh: Rank[] = [];
+  for (const r of RANKS) {
+    if (r.level > s.level || s.titles.includes(r.id)) continue;
+    s.titles.push(r.id);
+    if (r.outfit && !s.owned.includes(r.outfit)) s.owned.push(r.outfit);
+    fresh.push(r);
+  }
+  return fresh;
+}
+
+/** "Bosun + Oilskin Sou'wester": a rank's title and, if it has one, its outfit. */
+export const rankReward = (r: Rank): string => (r.outfit ? `${r.title} + ${cosById(r.outfit)?.name ?? r.outfit}` : r.title);
+
+/**
+ * Every catch's XP, estimated from the Fishdex counts: a mid-size catch of each species, with the
+ * daytime shiny chance (nights and Shiny Lures add more, so it still comes out low) and the double XP
+ * of each species' first catch.
+ */
+export function earnedXp(dex: Record<string, { count: number }>): number {
+  let total = 0;
+  for (const f of FISH) {
+    const n = dex[f.id]?.count ?? 0;
+    const mid = catchXp(f, (f.minSize + f.maxSize) / 2, false);
+    if (n > 0) total += n * mid * (1 + 2 * SHINY_CHANCE) + mid;
+  }
+  return Math.round(total);
+}
+
+/** Bumped when `backPayXp` changes, so unpaid estimates are redone (see `migrate`). */
+export const BACKPAY_VERSION = 2;
+
+/** XP gained past level 50, by a save that has passed it. */
+export const xpPastFlat = (s: { level: number; xp: number }): number => Math.max(0, s.level - FLAT_LEVEL) * xpForNextLevel(FLAT_LEVEL) + (s.level >= FLAT_LEVEL ? s.xp : 0);
+
+/**
+ * Before the cap was lifted, XP past level 50 was thrown away. This is what the Fishdex says was
+ * earned, less the XP it takes to reach 50 and the XP already counted past it (`since`).
+ */
+export function backPayXp(dex: Record<string, { count: number }>, since = 0): number {
+  return Math.max(0, earnedXp(dex) - XP_TO_FLAT - since);
 }
 
 /** The best tier of fish you can hook is set by the bait; the rod only decides how hard the fight is. */
@@ -146,10 +212,12 @@ export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = f
   return Math.round(5 * RARITY_XP[fish.rarity] * (1 + sizeRatio(fish, size) * 0.5) * (firstCatch ? 2 : 1) * (shiny ? 3 : 1));
 }
 
-/** Next unlock, for the "next goal" HUD hint. */
+/** Next unlock, for the "next goal" HUD hint: the next rod, then the next rank and its reward. */
 export function nextGoal(level: number, dex: Record<string, unknown> = {}): string {
   const rod = RODS.find((r) => r.unlockLevel > level);
   if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
+  const rank = nextRank(level);
+  if (rank) return `Level ${rank.level}: ${rankReward(rank)}`;
   const missing = FISH.filter((f) => !dex[f.id]).length;
   return missing ? `Complete your Fishdex! (${missing} to go)` : 'Fishdex complete! Chase shinies and casino perks';
 }
@@ -166,8 +234,10 @@ export function welcomeText(
 ): { title: string; line: string } {
   if (isFreshSave(s)) return { title: 'Welcome to Lakeside', line: 'First goal: catch a fish, then sell it at the stall' };
   const missing = FISH.filter((f) => !s.dex[f.id]).length;
+  const rank = nextRank(s.level);
   const goal =
     s.level < CASINO_LEVEL ? `next goal: Lv ${CASINO_LEVEL} casino`
+    : rank ? `next goal: Lv ${rank.level} ${rank.title}`
     : missing ? `next goal: ${missing} more Fishdex species`
     : 'Fishdex complete · chase shinies';
   return {

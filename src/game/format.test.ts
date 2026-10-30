@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shortCoins } from './format';
+import { COIN, coinText, shortCoins } from './format';
 
 describe('shortCoins', () => {
   it('keeps small amounts whole and shortens big ones without rounding up', () => {
@@ -13,5 +13,11 @@ describe('shortCoins', () => {
     expect(shortCoins(12_480)).toBe('12k');
     expect(shortCoins(999_999)).toBe('999k');
     expect(shortCoins(1_530_000)).toBe('1.5M');
+  });
+});
+
+describe('coinText', () => {
+  it('escapes the text and swaps every coin emoji for the gold coin', () => {
+    expect(coinText('Sold <Koi> for 40 🪙 (+5 🪙)')).toBe(`Sold &lt;Koi&gt; for 40 ${COIN} (+5 ${COIN})`);
   });
 });

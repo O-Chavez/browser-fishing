@@ -4,10 +4,10 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
-import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
+import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
-import { newSave } from '../src/game/state';
+import { newSave, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
@@ -55,7 +55,10 @@ const MIN_FIGHT_MS = 1500;
 export const SPIN_MS = 3800;
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
 export const BOARD_MS = 1000;
+/** How often the server's clock goes out again, so day and night stay in step if a device's clock changes. */
+export const CLOCK_MS = 60_000;
 const NO_HALL: HallRow[] = [];
+const NO_RECORDS: CasinoRecords = { win: null, loss: null };
 
 /** One lobby: its players and their shared drops. Economy actions are validated here. */
 export class Room {
@@ -65,6 +68,7 @@ export class Room {
   private maps: Record<string, MapDef>;
   private lastBoard = '';
   private boardAt = -Infinity;
+  private clockAt = -Infinity;
   private lastStats = '';
   private lastHall = '';
   private lastHallRows: HallRow[] | null = null;
@@ -90,7 +94,13 @@ export class Room {
   resetPass: (name: string, pass: string) => Promise<string> = async () => 'No account store.';
   /** Milliseconds until an account may change its name again; the server points this at the account store. */
   renameWait: (acct: Account) => number = () => 0;
-  /** Delivers chat lines and notices; the server points this at every room. */
+  /** Keeps a settled hand or spin on the account; true when it beat a casino record. The server points this at the account store. */
+  recordGamble: (acct: Account, win: boolean, g: Gamble) => boolean = () => false;
+  /** The casino's all-time biggest win and loss; the server points this at the account store. */
+  records: () => CasinoRecords = () => NO_RECORDS;
+  /** Dev console `/backpay`: lists, or with `apply` pays, the XP the old level-50 cap threw away. The server points this at the account store. */
+  backPay: (apply: boolean) => string[] = () => ['No account store.'];
+  /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
   constructor(
@@ -117,7 +127,7 @@ export class Room {
     const id = this.nextId++;
     const map = this.maps[acct.save.location] ?? Object.values(this.maps)[0];
     acct.save.location = map.id;
-    const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null };
+    const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
     const m: Member = { info, conn, acct, pending: null, spin: null, bj: null };
     acct.online = true;
     const it = acct.save.slots[acct.save.held];
@@ -131,10 +141,12 @@ export class Room {
       players: [...this.members.values()].map((o) => o.info),
       hasPass: !!acct.pw,
       renameIn: this.renameWait(acct),
+      now: this.now(),
     });
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
     conn.send({ t: 'supporters', names: this.supporters() });
+    conn.send({ t: 'records', records: this.records() });
     this.broadcast({ t: 'joined', player: info });
     // Before adding the member, so everyone else on the server hears it but not the joiner.
     this.say({ t: 'sys', text: `${acct.name} has joined` });
@@ -194,9 +206,6 @@ export class Room {
       case 'equipbait':
         changed = eco.equipBait(s, str(msg.id));
         break;
-      case 'stow':
-        changed = eco.stowSlot(s, Math.floor(Number(msg.i)));
-        break;
       case 'bottle': {
         const town = this.maps[m.info.map]?.town;
         const b = town?.bottles.find((x) => x.id === msg.id);
@@ -226,6 +235,17 @@ export class Room {
         break;
       case 'tip':
         changed = markTip(s, msg.id);
+        break;
+      case 'lure':
+        changed = eco.setLure(s, msg.on);
+        break;
+      case 'title':
+        changed = eco.setTitle(s, msg.id === null ? null : str(msg.id));
+        if (changed) {
+          m.info.title = s.title;
+          this.broadcast({ t: 'title', id, title: s.title });
+          this.hallStale();
+        }
         break;
       case 'reset':
         m.pending = null;
@@ -284,6 +304,8 @@ export class Room {
     s.look = look;
     this.setAct(m, null);
     this.broadcast({ t: 'look', id: m.info.id, look });
+    m.info.title = null;
+    this.broadcast({ t: 'title', id: m.info.id, title: null });
   }
 
   private stocks(m: Member): { rods: string[]; bait: string[] } {
@@ -295,7 +317,17 @@ export class Room {
     const held = m.acct.save.slots[m.acct.save.held];
     if (!w || held?.k !== 'fish' || Math.hypot(m.info.x - w.x, m.info.z - w.z) > eco.WHEEL_RANGE) return;
     const win = this.rng() < eco.WHEEL_WIN;
-    m.spin = { at: this.now() + SPIN_MS, run: () => eco.applyWheel(m.acct.save, win) };
+    m.spin = {
+      at: this.now() + SPIN_MS,
+      run: () => {
+        const s = m.acct.save;
+        const fish = s.slots[s.held];
+        if (fish?.k !== 'fish') return;
+        const before = eco.fishValue(fish);
+        eco.applyWheel(s, win);
+        this.gambled(m, 'wheel', fish, cas.netWin(before, win ? eco.fishValue(fish) : 0));
+      },
+    };
     m.conn.send({ t: 'wheel', win, ms: SPIN_MS });
   }
 
@@ -339,20 +371,20 @@ export class Room {
     this.say({ t: 'chat', room: this.name, id: m.info.id, name: m.info.name, map: m.info.map, text: res.text });
   }
 
-  private feedback(m: Member, kind: FeedbackKind, text: string, reply: (lines: string[]) => void): void {
+  private feedback(m: Member, kind: FeedbackKind, text: string, reply: (lines: string[], extra: { sent: boolean }) => void): void {
     const res = this.feedbackGate.check(m.acct.name, kind, text);
-    if (!res.ok) return reply([res.msg]);
+    if (!res.ok) return reply([res.msg], { sent: false });
     const { info } = m;
     const map = this.maps[info.map]?.name ?? info.map;
     this.report({ kind, text: res.text, name: m.acct.name, level: m.acct.save.level, map, x: info.x, z: info.z, room: this.name, browser: browserName(m.conn.ua), at: this.now() });
-    reply([kind === 'bug' ? 'Thanks! Your bug report was sent to the developer.' : kind === 'idea' ? 'Thanks! Your idea was sent to the developer.' : 'Thanks! Your feedback was sent to the developer.']);
+    reply([kind === 'bug' ? 'Thanks! Your bug report was sent to the developer.' : kind === 'idea' ? 'Thanks! Your idea was sent to the developer.' : 'Thanks! Your feedback was sent to the developer.'], { sent: true });
   }
 
   /** Slash commands: `/bug`, `/idea` and `/feedback` for everyone; `/login user pass` unlocks the dev console for this connection. */
   private command(m: Member, text: unknown): void {
     if (typeof text !== 'string' || !text.startsWith('/')) return;
     const [cmd = '', ...args] = text.slice(1, 200).trim().split(/\s+/);
-    const reply = (lines: string[], extra: { time?: number | null } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
+    const reply = (lines: string[], extra: { time?: number | null; sent?: boolean } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
     const kind = cmd.toLowerCase() as FeedbackKind;
     if (FEEDBACK_KINDS.includes(kind)) return this.feedback(m, kind, text.replace(/^\/\S*\s*/, ''), reply);
     if (cmd === 'login') {
@@ -373,6 +405,10 @@ export class Room {
       if (!who) return reply(['Usage: /supporter <name> [off]']);
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply([this.setSupporter(who, !off)]);
+    }
+    if (cmd === 'backpay') {
+      console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
+      return reply(this.backPay(args[0] === 'apply'));
     }
     if (cmd === 'resetpass') {
       // The last word is the password, so names with spaces work; it never reaches the log.
@@ -397,6 +433,15 @@ export class Room {
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: m.acct.save });
+  }
+
+  /** After `/backpay apply`: an online player gets their new save and hears what it paid. */
+  paidBack(acct: Account, levels: number): void {
+    for (const m of this.members.values()) {
+      if (m.acct !== acct) continue;
+      m.conn.send({ t: 'state', save: acct.save });
+      if (levels > 0) m.conn.send({ t: 'notice', msg: `⚓ Back pay: your catches since level 50 earned you ${levels} level${levels === 1 ? '' : 's'}!` });
+    }
   }
 
   private teleport(m: Member, map: string): void {
@@ -424,7 +469,15 @@ export class Room {
     const bad = cas.betError(m.acct.save, i);
     if (bad) return m.conn.send({ t: 'notice', msg: bad });
     const r = cas.spinRoulette(bet, this.rng);
-    m.spin = { at: this.now() + ROULETTE_MS, run: () => { cas.settleBet(m.acct.save, i, r.factor); this.syncCarry(m); } };
+    m.spin = {
+      at: this.now() + ROULETTE_MS,
+      run: () => {
+        const fish = m.acct.save.slots[i];
+        const { before, after } = cas.settleBet(m.acct.save, i, r.factor);
+        if (fish?.k === 'fish') this.gambled(m, 'roulette', fish, cas.netWin(before, after));
+        this.syncCarry(m);
+      },
+    };
     m.conn.send({ t: 'roulette', ...r, ms: ROULETTE_MS });
   }
 
@@ -437,8 +490,8 @@ export class Room {
       const g = cas.dealBlackjack(slot, this.rng);
       m.bj = g;
       m.acct.save.held = slot;
-      this.bjDone(m);
       m.conn.send({ t: 'bj', view: cas.blackjackView(g) });
+      this.bjDone(m);
       return;
     }
     if (!m.bj || !this.atCasino(m, 'blackjack')) return;
@@ -453,19 +506,31 @@ export class Room {
       const bad = cas.doubleDown(m.acct.save, g);
       if (bad) return m.conn.send({ t: 'notice', msg: bad });
     } else if (!cas.actBlackjack(g, a)) return;
-    this.bjDone(m);
     m.conn.send({ t: 'bj', view: cas.blackjackView(g) });
+    this.bjDone(m);
   }
 
-  /** Pays out a finished hand and frees the table. */
+  /**
+   * Pays out a finished hand and frees the table. Callers send the hand first, so the client knows to
+   * hold this new save back until it has dealt the last card.
+   */
   private bjDone(m: Member): void {
     const g = m.bj;
     if (!g?.done) return;
     m.bj = null;
-    cas.settleBlackjack(m.acct.save, g);
+    const fish = m.acct.save.slots[g.slot];
+    const net = cas.settleBlackjack(m.acct.save, g);
+    if (fish?.k === 'fish') this.gambled(m, 'blackjack', fish, net);
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: m.acct.save });
+  }
+
+  /** Hands a settled hand or spin to the casino record board, and tells every room when a record falls. */
+  private gambled(m: Member, game: CasinoGame, fish: Extract<Slot, { k: 'fish' }>, net: number): void {
+    if (!net) return;
+    const g: Gamble = { amount: Math.abs(net), game, fishId: fish.fishId, ...(fish.shiny ? { shiny: true } : {}), at: this.now() };
+    if (this.recordGamble(m.acct, net > 0, g)) this.say({ t: 'records', records: this.records() });
   }
 
   private dig(m: Member): boolean {
@@ -509,11 +574,14 @@ export class Room {
       this.setAct(m, null);
       return false;
     }
-    if (!eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny).stored) {
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny);
+    if (!res.stored) {
       this.setAct(m, null);
       return false;
     }
-    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny });
+    for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
+    const bonus = eco.charmBonus(m.acct.save);
+    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(bonus > 0 ? { mult: 1 + bonus } : {}) });
     return true;
   }
 
@@ -555,6 +623,10 @@ export class Room {
     if (this.drops.expire()) this.broadcast({ t: 'drops', list: this.drops.all() });
     for (const m of this.members.values()) this.settle(m);
     if (this.now() - this.boardAt >= BOARD_MS) this.board();
+    if (this.now() - this.clockAt >= CLOCK_MS) {
+      this.clockAt = this.now();
+      this.broadcast({ t: 'clock', now: this.clockAt });
+    }
     this.positions();
   }
 
@@ -641,4 +713,5 @@ export class Room {
 const finite = (...n: number[]) => n.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e4);
 const round = (v: number) => Math.round(v * 100) / 100;
 const snapEntry = (m: Member): [number, number, number, number] => [m.info.id, round(m.info.x), round(m.info.z), round(m.info.yaw)];
-const str = (v: unknown) => String(v ?? '').slice(0, 32);
+/** Untrusted ids: only strings and numbers count, since `String()` throws on objects like `{ toString: null }`. */
+const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 32) : typeof v === 'number' ? String(v) : '');

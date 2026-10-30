@@ -5,6 +5,7 @@ import type { MapDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { mergeStatic } from './merge';
 import { glowTag } from './nightglow';
+import { pegTicks, spinEase } from './tablepace';
 import { buildFish } from './fishmodel';
 import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
@@ -71,6 +72,37 @@ export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#
   ctx.fillText(text, w / 2, h / 2 + 3);
 }
 
+/** The HUD's gold coin (`.coin` in style.css) on a canvas: `size` px across, centred on (x, y). */
+export function drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const r = size / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.clip();
+  // The darker rim along the bottom, like the CSS coin's inset shadow.
+  ctx.fillStyle = '#a8730d';
+  ctx.fillRect(x - r, y - r, size, size);
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x - r * 0.3, y - r * 0.3, r * 1.84);
+  g.addColorStop(0, '#fff3b0');
+  g.addColorStop(0.45, '#ffc933');
+  g.addColorStop(1, '#c58a12');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y - size * 0.08, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Draws an amount followed by the gold coin, right-aligned at `right` on baseline `y`, in the current `px`-sized font; returns the width. */
+export function fillCoinAmount(ctx: CanvasRenderingContext2D, text: string, right: number, y: number, px: number): number {
+  const d = Math.round(px * 0.8);
+  const gap = Math.round(px * 0.22);
+  ctx.textAlign = 'right';
+  ctx.fillText(text, right - d - gap, y);
+  drawCoin(ctx, right - d / 2, y - px * 0.36, d);
+  return ctx.measureText(text).width + gap + d;
+}
+
 const WHEEL_WEDGES = 8;
 
 export interface LeaderRow {
@@ -81,6 +113,7 @@ export interface LeaderRow {
   tier: number;
   color: string;
   shiny?: boolean;
+  title?: string | null;
 }
 
 /** The town hub: vendor stall with its keeper and the gate to the next map. */
@@ -104,10 +137,9 @@ export class Hub {
   private lampLights: THREE.PointLight[] = [];
   private fireLight = new THREE.PointLight(0xff8a3c, 14, 11, 2);
   private disc = new THREE.Mesh();
-  private spinAnim: { from: number; to: number; t0: number; ms: number } | null = null;
-  private lastTick = 0;
-  /** Fires as the pointer crosses a wedge while spinning. */
-  onWheelTick: () => void = () => {};
+  private spinAnim: { from: number; to: number; t0: number; ms: number; last: number } | null = null;
+  /** Ticks as pegs pass the pointer while spinning: delays (s) spread across the frame, and their gain. */
+  onWheelTick: (at: number[], gain: number) => void = () => {};
   /** Colliders that never change; the gate's are kept apart because they open. */
   private fixed: Circle[] = [];
   private gateBlock: Circle[] = [];
@@ -435,7 +467,8 @@ export class Hub {
       ctx.textAlign = 'right';
       ctx.font = '800 32px system-ui, sans-serif';
       ctx.fillStyle = r.value ? '#ffd23a' : '#6f8aa3';
-      ctx.fillText(r.value ? `${r.value.toLocaleString()} 🪙` : '—', w - 34, y);
+      if (r.value) fillCoinAmount(ctx, r.value.toLocaleString(), w - 34, y, 32);
+      else ctx.fillText('—', w - 34, y);
       if (r.value) {
         ctx.textAlign = 'left';
         ctx.font = '600 24px system-ui, sans-serif';
@@ -633,6 +666,13 @@ export class Hub {
       c.fillText(i % 2 === 0 ? '×2' : 'LOSE', px / 2 - 28, 0);
       c.restore();
     }
+    // A gold peg on each wedge edge: these are what tick past the pointer
+    c.fillStyle = '#ffd35a';
+    for (let i = 0; i < n; i++) {
+      c.beginPath();
+      c.arc(px / 2 + Math.cos(i * w) * (px / 2 - 12), px / 2 + Math.sin(i * w) * (px / 2 - 12), 8, 0, Math.PI * 2);
+      c.fill();
+    }
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     this.disc = new THREE.Mesh(
@@ -668,7 +708,7 @@ export class Hub {
     const base = Math.PI / 2 + (i + 0.5 + (Math.random() - 0.5) * 0.6) * w;
     const from = this.disc.rotation.z;
     const spins = Math.ceil((from + Math.PI * 2 * 6 - base) / (Math.PI * 2));
-    this.spinAnim = { from, to: base + spins * Math.PI * 2, t0: performance.now(), ms };
+    this.spinAnim = { from, to: base + spins * Math.PI * 2, t0: performance.now(), ms, last: performance.now() };
   }
 
   /** Opens or seals the gate for the local player; redraws only when something changed. */
@@ -697,14 +737,14 @@ export class Hub {
   update(t: number, px: number, pz: number): void {
     const a = this.spinAnim;
     if (a) {
-      const k = Math.min(1, (performance.now() - a.t0) / a.ms);
-      const e = 1 - Math.pow(1 - k, 3);
-      this.disc.rotation.z = a.from + (a.to - a.from) * e;
-      const idx = Math.floor((this.disc.rotation.z * WHEEL_WEDGES) / (Math.PI * 2));
-      if (idx !== this.lastTick) {
-        this.lastTick = idx;
-        this.onWheelTick();
-      }
+      const now = performance.now();
+      const k = Math.min(1, (now - a.t0) / a.ms);
+      const prev = this.disc.rotation.z;
+      this.disc.rotation.z = a.from + (a.to - a.from) * spinEase(k);
+      // The pointer is a quarter turn round (two wedges), so an edge passes it at each multiple of the wedge angle
+      const tick = pegTicks(prev, this.disc.rotation.z, WHEEL_WEDGES, (now - a.last) / 1000);
+      a.last = now;
+      if (tick.at.length) this.onWheelTick(tick.at, tick.gain);
       if (k >= 1) this.spinAnim = null;
     }
     this.hanging.forEach((h, i) => {

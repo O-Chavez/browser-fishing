@@ -1,8 +1,15 @@
-import { RENAME_COOLDOWN_MS, waitText, type HallRow } from '../src/net/protocol';
+import { RENAME_COOLDOWN_MS, waitText, type CasinoRecord, type CasinoRecords, type Gamble, type HallRow } from '../src/net/protocol';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { payBack } from '../src/game/economy';
+import { XP_TO_FLAT, applyXp, earnedXp } from '../src/game/progression';
 import { migrate, newSave, type SaveData } from '../src/game/state';
+import { rudeName } from './chat';
 import { Lockout } from './lockout';
+
+const num = (n: number) => n.toLocaleString('en-US');
+/** Accounts listed by `/backpay` before it says "and N more". */
+const BACKPAY_ROWS = 25;
 
 export interface Account {
   name: string;
@@ -14,6 +21,8 @@ export interface Account {
   online: boolean;
   /** When the player first tipped on Ko-fi (or Oscar gave them the heart). Kept outside the save so a reset keeps it. */
   supporter?: number;
+  /** The player's biggest single casino win and loss, for the casino record board. Kept outside the save so a reset keeps it. */
+  casino?: { win?: Gamble; loss?: Gamble };
   /** When the name last changed, for the rename cooldown. */
   renamed?: number;
   /** The name before the last change, lowercase, so browsers that still have it saved follow the account. */
@@ -66,6 +75,7 @@ export class AccountStore {
   private dirty = false;
   private hallRows: HallRow[] | null = null;
   private supporterNames: string[] | null = null;
+  private recordRows: CasinoRecords | null = null;
   private lock: Lockout;
 
   constructor(
@@ -73,7 +83,7 @@ export class AccountStore {
     private now: () => number = Date.now,
   ) {
     this.lock = new Lockout(5, 50, 15 * 60_000, now);
-    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; renamed?: number; prev?: string; save: unknown };
+    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; casino?: Account['casino']; renamed?: number; prev?: string; save: unknown };
     for (const [k, a] of Object.entries(raw) as [string, Stored][]) {
       // Older saves kept a single token `hash`.
       const tokens = Array.isArray(a?.tokens) ? a.tokens : a?.hash ? [a.hash] : null;
@@ -92,6 +102,9 @@ export class AccountStore {
     }
     const created = !acct;
     if (!acct) {
+      // Only new claims: an account that already has such a name keeps logging in. The cut to 16
+      // characters can end on a rude word ("…Associate"), so the saved name is checked too.
+      if (rudeName(String(name)) || rudeName(p.clean)) return { ok: false, msg: `The name "${p.clean}" isn't allowed. Please pick another.` };
       acct = { name: p.clean, tokens: [p.h], save: newSave(), online: false };
       this.accounts.set(p.key, acct);
       this.touch();
@@ -138,6 +151,7 @@ export class AccountStore {
       this.accounts.delete(nameKey(acct.name));
       this.hallRows = null;
       this.supporterNames = null;
+      this.recordRows = null;
     }
     this.touch();
   }
@@ -157,6 +171,7 @@ export class AccountStore {
     const clean = typeof name === 'string' ? cleanName(name) : '';
     if (clean.length < 2) return 'Name must be 2-16 letters, numbers, spaces or dashes.';
     if (clean === acct.name) return `Your name is already ${clean}.`;
+    if (rudeName(name as string) || rudeName(clean)) return `The name "${clean}" isn't allowed. Please pick another.`;
     const wait = this.renameWait(acct);
     if (wait) return `You can change your name again in ${waitText(wait)}.`;
     const key = clean.toLowerCase();
@@ -170,6 +185,7 @@ export class AccountStore {
     this.accounts.set(key, acct);
     this.hallRows = null;
     this.supporterNames = null;
+    this.recordRows = null;
     this.touch();
     return null;
   }
@@ -192,9 +208,35 @@ export class AccountStore {
   hall(): HallRow[] {
     return (this.hallRows ??= [...this.accounts.values()]
       .filter((a) => a.save.best)
-      .map((a) => ({ name: a.name, level: a.save.level, best: a.save.best! }))
+      .map((a) => ({ name: a.name, level: a.save.level, best: a.save.best!, ...(a.save.title ? { title: a.save.title } : {}) }))
       .sort((a, b) => b.best.value - a.best.value || a.name.localeCompare(b.name))
       .slice(0, 8));
+  }
+
+  /** Every account, online or not. */
+  all(): Account[] {
+    return [...this.accounts.values()];
+  }
+
+  /**
+   * Dev console `/backpay`: lists every account still owed the XP the old level-50 cap threw away,
+   * with the level it would reach; with `apply`, pays them all. Returns the accounts paid and their levels.
+   */
+  backPay(apply: boolean): { lines: string[]; paid: { acct: Account; levels: number }[] } {
+    const due = [...this.accounts.values()].filter((a) => !a.save.backPay.paid).sort((a, b) => b.save.backPay.xp - a.save.backPay.xp);
+    if (!due.length) return { lines: ['No back pay owed.'], paid: [] };
+    const rows = due.slice(0, BACKPAY_ROWS).map((a) => {
+      const to = applyXp(a.save.level, a.save.xp, a.save.backPay.xp).level;
+      const catches = Object.values(a.save.dex).reduce((n, e) => n + (e?.count ?? 0), 0);
+      return `${a.name}: Lv ${a.save.level} → ${to} (+${num(a.save.backPay.xp)} XP) · ${num(catches)} catches ≈ ${num(earnedXp(a.save.dex))} XP in all`;
+    });
+    rows.push(`Reaching 50 takes ${num(XP_TO_FLAT)} XP; an account whose catches add up to less got there another way (like /level).`);
+    if (due.length > BACKPAY_ROWS) rows.push(`…and ${due.length - BACKPAY_ROWS} more`);
+    if (!apply) return { lines: [...rows, `${due.length} account${due.length === 1 ? '' : 's'} owed. /backpay apply pays them all.`], paid: [] };
+    const paid = due.map((acct) => ({ acct, levels: payBack(acct.save).levels }));
+    this.hallRows = null;
+    this.touch();
+    return { lines: [...rows, `Paid ${due.length} account${due.length === 1 ? '' : 's'}.`], paid };
   }
 
   /** Every account name, for matching a Ko-fi tip to a player. */
@@ -219,6 +261,33 @@ export class AccountStore {
       .filter((a) => a.supporter)
       .sort((a, b) => b.supporter! - a.supporter! || a.name.localeCompare(b.name))
       .map((a) => a.name));
+  }
+
+  /**
+   * Keeps a settled hand or spin as the player's biggest win (or loss) if it beats theirs. True when
+   * it is also the casino's new all-time record, so every room can be told.
+   */
+  gambled(acct: Account, win: boolean, g: Gamble): boolean {
+    const kind = win ? 'win' : 'loss';
+    if (!(g.amount > 0) || g.amount <= (acct.casino?.[kind]?.amount ?? 0)) return false;
+    const top = this.records()[kind];
+    (acct.casino ??= {})[kind] = g;
+    this.recordRows = null;
+    this.touch();
+    return !top || g.amount > top.amount;
+  }
+
+  /** The biggest single win and loss across every account, online or not; the earlier one keeps a tie. Cached until one changes. */
+  records(): CasinoRecords {
+    const top = (kind: 'win' | 'loss'): CasinoRecord | null => {
+      let best: CasinoRecord | null = null;
+      for (const a of this.accounts.values()) {
+        const g = a.casino?.[kind];
+        if (g && (!best || g.amount > best.amount || (g.amount === best.amount && g.at < best.at))) best = { name: a.name, ...g };
+      }
+      return best;
+    };
+    return (this.recordRows ??= { win: top('win'), loss: top('loss') });
   }
 
   /** Call when a player's level or best catch may have changed, so the next `hall` re-ranks. */
@@ -253,9 +322,10 @@ export class AccountStore {
 }
 
 /** The optional account fields, left out when unset so the saved JSON stays small. */
-const pick = (a: Pick<Account, 'pw' | 'supporter' | 'renamed' | 'prev'>) => ({
+const pick = (a: Pick<Account, 'pw' | 'supporter' | 'casino' | 'renamed' | 'prev'>) => ({
   ...(a.pw ? { pw: a.pw } : {}),
   ...(a.supporter ? { supporter: a.supporter } : {}),
+  ...(a.casino ? { casino: a.casino } : {}),
   ...(a.renamed ? { renamed: a.renamed } : {}),
   ...(a.prev ? { prev: a.prev } : {}),
 });

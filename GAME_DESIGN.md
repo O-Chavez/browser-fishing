@@ -129,7 +129,7 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 
 ### 6.1 First-person controls
 - **Mouse:** look (pointer lock). **Left click:** cast / hook / reel. **WASD:** walk along the dock or shore within bounds.
-- **1–5:** hold that hotbar slot. The held item replaces the rod in your hands: a fish model, or a bait jar; hold the rod to cast. **E:** interact (buy the stall item you are looking at, sell the fish in hand, pick up a drop, talk to the vendor). **G:** drop the item in hand (vanishes after 30 s). **Esc:** closes any open menu, or opens the game menu.
+- **1–5:** hold that hotbar slot (1 is always the rod, 2 the bait, 3 and up fish). The held item replaces the rod in your hands: a fish model, or a bait jar; hold the rod to cast. **E:** interact (buy the stall item you are looking at, sell the fish in hand, pick up a drop, talk to the vendor). **G:** drop the item in hand (vanishes after 30 s). **Esc:** closes any open menu, or opens the game menu.
 - Accessibility: rebindable keys, adjustable mouse sensitivity, optional simplified reel mode.
 
 ### 6.2 Casting
@@ -224,7 +224,7 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 
 ### 14.2 Map shop
 - One vendor per map. **Sell** fish (price by species rarity and weight, as today) and **buy** rods, bait and map-specific gear. Stock improves per map.
-- The hotbar is the entire inventory: 5 slots, each holding one rod, one fish, or a stack of up to 99 bait of one type (more waits in the tackle locker and refills the stack). Each map's stall sells a fixed stock (Starter Pond: worm bait and the free Twig Rod; set per map in `stock`). Goods are bought by looking at them on the stall and pressing E; fish are sold by holding them near the vendor and pressing E. You cannot cast while a fish is in hand or when no slot is free for the catch, so sell or drop fish before the bar fills. Dropped items last 30 seconds in the world, visible to the whole room (anyone can pick them up).
+- The hotbar is everything carried: 5 slots (7 with the Tackle Vest). Slot 1 always holds the rod in use and slot 2 the bait in use (a stack of up to 99 of one type; more waits in the tackle locker and refills the stack), both drawn with a teal frame and a ROD / BAIT tag; slots 3 and up hold fish only, so fish can't crowd the gear out. Other rods and bait wait in the tackle locker and are swapped in from the Bag (Tab); new rods and bait go to the locker and come straight into their slot when it's empty, holds the same bait, or (when bought) holds something lower tier. Picking up a rod you already own is refused. Running out of bait leaves the bait slot empty. Dropping the rod brings out your best other rod (your only rod can't be dropped). Saves from before this layout keep the equipped rod and active bait in slots 1 and 2, move every other rod and bait stack to the locker, and keep their fish; fish that no longer fit wait in extra slots (dashed outline) past the end of the bar until sold, dropped or lost at the casino. Each map's stall sells a fixed stock (Starter Pond: worm bait and the free Twig Rod; set per map in `stock`). Goods are bought by looking at them on the stall and pressing E; fish are sold by holding them near the vendor and pressing E. You cannot cast while a fish is in hand or when no fish slot is free for the catch, so sell or drop fish before the fish row fills. Dropped items last 30 seconds in the world, visible to the whole room (anyone can pick them up).
 
 ### 14.3 Progression gate
 - Each map's gate opens per player once they reach the destination map's `minLevel` (the casino uses `CASINO_LEVEL`, 15). The server checks the level on travel.
@@ -370,7 +370,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 - The pond gate opens at **level 15** (`CASINO_LEVEL`, the Aurora Rod level) so players have fished before they gamble. The server enforces it on travel.
 - The casino is an **indoor map** (no water, terrain or dock): a carpeted hall with a roulette table, a blackjack table and a cashier counter. Fishing is disabled inside. The front door returns to the pond.
 - The hall's look (`src/game/casinoroom.ts`, tables in `casinohall.ts`): damask walls over raised wood panels, a coffered wood ceiling with gold medallions above the chandeliers, fluted pillars, brass sconces and framed fish paintings, and velvet ropes at the cashier. The table felt is printed in gold with the real rules ("BLACKJACK ×3 · DEALER STANDS ON 17"; a border and wheel ring on roulette). Only the chandeliers are real lights; sconces and the ceiling use glowing materials. `npm run screenshots -- casino` re-shoots the poster image at the pond gate.
-- Tables are played **in the world**: walk up, hold the fish to bet (keys 1-5), then aim and click the 3D red/black/green patches, or the DEAL / HIT / STAND / DOUBLE buttons on the felt. Cards are laid out on the table and a small status line shows the bet and result.
+- Tables are played **in the world**: walk up, hold the fish to bet (keys 3-5), then aim and click the 3D red/black/green patches, or the DEAL / HIT / STAND / DOUBLE buttons on the felt. Cards are laid out on the table and a small status line shows the bet and result.
 - At the cashier, hold a fish and click the chip tray to turn it in. Click the prize case (or press E) to open the perk list and buy unlocks.
 
 ### Let it ride
@@ -470,7 +470,7 @@ The ids seen are kept in the save (`tips`), so each shows once per account. Save
 Slash commands typed into the chat box go to the server as `cmd` messages, never to chat; replies come back only to the player who typed them (`dev` messages, shown as system lines).
 
 - **Login:** `/login <user> <password>`, checked on the server against the `DEV_USER` and `DEV_PASS` environment variables. With either unset the console is off. A login lasts for that connection only; `/logout` ends it. Five failed logins lock that account out for 15 minutes, and 30 failures across all accounts lock everyone out for 15 minutes. The password is masked in the local echo and never logged; the server logs each command.
-- **Commands** (`server/dev.ts`): `/help`, `/coins N`, `/chips N`, `/level N`, `/bait <id> [N]`, `/rod <id>`, `/fish <id> [cm] [shiny]`, `/tp <map>`, `/time day|dusk|night|dawn|auto` (only for you, including the server's night bite odds), `/dig` (clears the worm patch cooldown), `/resetpass <name> <new password>` (for a player locked out of every browser: sets the password and signs out all their browsers; the password is masked in the echo and never logged). Commands change the real save. A bad id lists the valid ones.
+- **Commands** (`server/dev.ts`): `/help`, `/coins N`, `/chips N`, `/level N`, `/bait <id> [N]`, `/rod <id>`, `/fish <id> [cm] [shiny]`, `/tp <map>`, `/time day|dusk|night|dawn|auto` (only for you, including the server's night bite odds), `/dig` (clears the worm patch cooldown), `/level N` also gives the ranks up to N (but no gifts), `/backpay` lists every level-50 account still owed XP from the old level cap with the level it would reach, its catches and the XP they add up to (an account whose catches add up to less than reaching 50 takes got its level some other way, like `/level`), and `/backpay apply` pays them all (online players get their new save and a notice), `/resetpass <name> <new password>` (for a player locked out of every browser: sets the password and signs out all their browsers; the password is masked in the echo and never logged). Commands change the real save. A bad id lists the valid ones.
 
 ## 36. Feedback and Discord
 
@@ -487,3 +487,151 @@ Players who enjoy the game can tip Oscar on Ko-fi (`KOFI_URL` in `src/data/suppo
 - **The 💗:** a supporter gets a heart before their name on their floating name tag, in the Anglers list (online and top anglers), and on their chat lines, and is listed on the "Thank you" board beside Top Anglers in the town square (newest first, 5 names, then "and N more"). It is kept on the account, not the save, so an account reset keeps it.
 - **Linking a tip to a player:** Ko-fi posts each tip to `POST /kofi`. The server checks Ko-fi's verification token (`KOFI_VERIFY_TOKEN`; with it unset, every request is turned away), then looks for a Lakeside name written in the tip message as a whole word, falling back to the tipper's Ko-fi name. A message naming several players matches nobody. A matched player gets the heart at once, everyone gets the new supporters list, and the player, if online, a thank-you notice. Retries of the same Ko-fi message id are ignored. The tipper's email is never read.
 - **Discord and the dev console:** `DISCORD_TIPS_WEBHOOK` gets one message per tip (amount, Ko-fi name, message, and who got the heart, or a reminder to give it by hand). `/supporter <name>` in the dev console gives the heart; `/supporter <name> off` takes it away.
+
+## 38. Endgame (planned)
+
+Planned 2026-10-30; the build steps are the "Endgame step N of 8" items in TODO.md. Not built yet.
+
+**The problem:** everything unlocks by level 15 (~3,200 XP). Levels 16-50 take ~66,000 more XP (~1,000 catches with top gear) and give nothing, and a maxed player earns ~1,100-3,100 coins a catch with little left to buy once the cosmetics and casino perks (455 chips) are owned. Coins, fish, XP and chips all stop mattering at about the same time.
+
+**The plan:** four loops that feed each other, with no resets or prestige (decided).
+
+- **Charters** (§38.1) are the endless ladder: they spend coins and give sea fish.
+- **The Smokehouse** (§38.2) turns spare fish into buffs that help push deeper.
+- **The Weekly Derby** (§38.3) gives a reason to log in each week.
+- **Titles, level rewards and levels past 50** (§38.4) give the long tail.
+
+### 38.1 Deep-water charters
+
+Two goals (decided 2026-10-30): charters get harder but never impossible, and every trip gives the player something good and a clear next thing to go for.
+
+**The trip**
+- A new map, run as an instance. Captain Reed sells the trip; a loading screen leads to the player on a boat in rough ocean, which gets rougher with depth (bigger swell rocking the boat, wind, rain, a darker sky, fog, lightning far down).
+- A fare buys **8 casts at Depth N**, with the boat's bait included. Catches go into the boat's 8-fish hold, not the hotbar, so a trip never stops on "slots full". The hold's fish come home with the player at the end.
+- **Landing 3 of the 8 opens Depth N+1.** There is no last depth.
+
+**Why depth can't just raise `difficulty`.** A reel bot (scratch simulation, 2026-10-30: reels unless the fish surges, 0.25 s reaction) lands ~100% of fish up to difficulty 2.4, ~90% at 2.5, 0-40% at 2.8 and 0% at 3.2, whichever simple strategy it plays. Today's hardest fight (a shiny Starweaver Eel on the Aurora Rod with gloves) is about 2.15. The fight goes from easy to impossible over a few tenths, so charter fish keep their `difficulty` under ~2.3, and depth works through separate levers that are tuned against the bot.
+
+**The difficulty curve: harder, then level**
+- Depth sets a pressure from 0 to 1 that eases toward 1 (for example `1 - e^(-depth/20)`): steep early, flat later. Every depth lever goes from today's value to its own ceiling by that pressure, so by about depth 60 fights are at the ceiling and stay there. Past that, **rewards keep growing; difficulty doesn't.**
+- The ceiling is tuned so the bot (0.3 s reaction) lands about 60% at the ceiling against ~95% at depth 1. At 60% a 3-of-8 trip passes ~95% of the time; a weaker player landing 35% still passes ~57%.
+- Depth comes in **zones**, each with its own sea and one new twist, so it gets harder in new ways, not only by bigger numbers:
+
+| Zone | Depths | Sea | New twist |
+|---|---|---|---|
+| The Shelf | 1-5 | Choppy, grey-blue | None: today's fights, learn the trip |
+| The Drop-off | 6-15 | Wind and spray | Longer fights: more reeling per fish |
+| Kelp Deep | 16-30 | Rain, green water | Runs: now and then a fish takes line in a long pull; ease off and ride it |
+| The Twilight | 31-50 | Dark, fog | A shorter snap window and faster surges |
+| The Abyss | 51+ | Storm, lightning | All levers at the ceiling; the fight stops getting harder |
+
+**Hard, but always feasible** (decided 2026-10-30: the Smokehouse is optional, but it is what makes the deeper zones doable)
+- The Shelf and the Drop-off are comfortable on skill alone. From Kelp Deep down, each zone's twist is tuned to be steep without that zone's provision (§38.2) and fair with it.
+- **Never locked out:** every provision a zone needs is smoked from pond fish or from fish of a zone already passed, so a stuck player can always go back and make it. Going back also pays: the earlier zones stay worth fishing.
+- **No lost progress:** a failed trip keeps your best depth; you try the same depth again, or any depth you've reached.
+- **Sea Legs:** each failed trip at a depth makes fights there 5% easier, up to 20%, until you pass it ("🌊 Sea Legs II: fights here are 10% easier"). It resets once the depth is passed.
+- **Easing has a cap:** Sea Legs, Pike Jerky and the Fighting Chair together ease a fight by at most ~35%, so depth still means something.
+
+**Reasons to keep going**
+- **Every trip pays.** Fish are worth +12% per depth, so a trip that lands a fish or two still earns back much of its fare, and a good one about doubles it.
+- **Fast track:** landing 6 of 8 skips a depth (+2) and a clean 8 of 8 skips two (+3) with a bonus, so skilled players don't grind easy depths and every trip can go better than "pass".
+- **Milestones:** first time at every 5th depth, a coin chest; entering a zone, a title (Shelf Runner, Drop-off Diver, Kelp Diver, Twilight Angler, Abyss Walker); past 50, every 10th depth is a new mark on the board ("Abyss 70").
+- **Things to find:** each zone adds 1-2 sea species to the Fishdex and has one rare zone legend (about 1 cast in 40) worth a lot. Size ranges grow with depth, so personal records keep breaking.
+- **Boat upgrades**, a coin sink with visible progress, a few levels each: Fighting Chair (+reel control), Sonar (shows the bite's tier before the hook), Bigger Hold (10 casts per fare), Storm Canopy (calms the camera sway).
+- **Being seen:** the all-time Deepest Charter board, the weekly deepest for the Derby, and a chat line when someone enters a new zone.
+- **Ingredients:** sea fish are smoked into the provisions for the next zone down, and into the Spirit Feast, the Captain's Feast and Chef's Specials (§38.2).
+
+**Positive feedback while playing**
+- A trip HUD: "Depth 14 · 2 of 3 landed · 5 casts left".
+- The third fish: a ship's bell, Reed calls "That's our quota! Depth 15 opens!", the sea calms for a moment and a banner shows.
+- A trip summary card: fish landed, coins earned against the fare, records broken, depth opened, and always the next goal ("Next: Depth 16, Kelp Deep: 2 new species and a title").
+- A failure says how close it was and what helps: "One fish short. Sea Legs I: fights at Depth 14 are 5% easier next trip."
+- Sound and sky change at each zone, so going deeper feels like getting somewhere.
+
+**Tuning and safeguards**
+- A reel-bot test in `npm test` guards the curve, with a 0.3 s reaction. Packing the zone's provision, the bot lands at least 90% at depth 1 and 55% at depth 500. With no provisions it still lands at least 20% everywhere (hard, never zero). Neither curve drops more than a few points between neighbouring depths, so retuning a lever can't create a wall without failing the test.
+- The server counts trips, catches and passes per zone; a dev command (`/charters`) shows real players' rates, so the ceiling is tuned from play, not guessed.
+- The board's records need server-checked fights (§38.5).
+- Later: group charters, where friends share a boat and a depth.
+
+### 38.2 Smokehouse
+
+Decided 2026-10-30: optional, but the way deeper into the charters. Small buffs alone are easy to ignore, so smoked goods **change the rules of a charter trip**, and the best ones are smoked from charter fish.
+
+- **The counter:** a smoker NPC at the Smokehouse cottage. Hand fish into a recipe; it smokes on a rack in real time (minutes for town recipes, longer for sea recipes) and keeps going offline, then goes to the Pantry, kept in the save, not the hotbar. Two racks, a third at level 30. Fill the racks before logging off and come back to a stocked pantry.
+- **Eat it or pack it.** Every smoked item has two uses:
+  - **Eaten at the pond:** a 10-minute buff counted in **online time only**. Different kinds stack, the same kind refreshes, at most 3 at once. Trophy-size ingredients (top 20% of the size range) add 50% time. Buffs multiply with the casino perks; the shiny buff does nothing on a Shiny Lure cast.
+  - **Packed for a charter:** it works for the whole trip. Two provision slots, a third at level 40. Reed remarks on what was packed, and the trip summary credits it ("Second Wind saved a Kelp Grouper").
+
+**Town recipes** (from pond fish, so every pond tier stays useful)
+
+| Item | Made from | Eaten at the pond | Packed for a charter | Unlock |
+|---|---|---|---|---|
+| Minnow Bites | 6 tier 1 fish | Bites come 25% sooner | +1 cast (9 per fare) | — |
+| Kippers | 4 tier 2 fish, one a Largemouth Bass | +20% luck | The first 2 casts hook the zone's best tier | — |
+| Pike Jerky | 3 tier 3 fish, one a Northern Pike | +20% reel control | Steady Hands: fights 15% easier | — |
+| Lantern Glaze | 2 Lantern Eels + any 🌙 fish | Night bite starts at dusk; 🌙 fish ×1.5 | Night trip: 🌙 sea fish appear, shiny chance ×3 | — |
+| Jewel Platter | 3 tier 4 fish | Shiny chance ×1.5 | Zone legend chance ×3 | Level 20 |
+| Spirit Feast | 1 tier 5 fish + 1 sea fish | — | Second Wind: the first lost fish gives its cast back | Level 30 |
+
+**Sea recipes** (from charter fish; each softens the next zone's twist)
+
+| Item | Made from | Packed for a charter |
+|---|---|---|
+| Shelf Chowder | 3 Shelf fish | Drop-off fights are no longer than usual |
+| Drop-off Smoke | 3 Drop-off fish | Kelp Deep runs are half as strong |
+| Kelp Cure | 3 Kelp Deep fish | The Twilight's snap window stays at Kelp Deep's |
+| Twilight Fillet | 3 Twilight fish | Calm water in the Abyss: no camera sway and a slower snap |
+| Captain's Feast | 1 zone legend + 2 tier 5 fish | Fair Winds: passing the trip opens two depths |
+
+- **Well-smoked ★:** smoking a recipe 10 times makes it Well-smoked, and each batch then yields two. Shown on the recipe card with a count toward it.
+- **Chef's Special:** one recipe a day, picked from the date, asking for given species, sizes or a shiny; it gives a double-strength item.
+
+### 38.3 Weekly Derby
+
+- Each Monday the server picks a contest from a rotation by week number (heaviest Northern Pike, most shinies, deepest charter, biggest night catch, ...). A plaza board shows it; it resets weekly.
+- **The reward is a title only** (decided): champion titles for the top 3, and Bronze/Silver/Gold personal targets so the week still counts with few players online. A week that ends while a player is offline pays out on their next login.
+
+### 38.4 Titles, level rewards and levels past 50
+
+Built 2026-10-30 (step 1). The charter, rack, recipe and provision-slot unlocks and the banked gifts take effect when steps 2 and 4 ship. Decided 2026-10-30: a mix of titles, earned outfits and Smokehouse and charter unlocks; level titles are nautical ranks, because everyone knows their order, so a rank reads as progress at a glance.
+
+- **Titles:** one is chosen in the Wardrobe and shown under the name tag and in the Anglers list. Level ranks, charter zone titles, and Derby titles all go in the same list.
+- **Level rewards** (the catches between milestones grow from ~54 to ~250, so rewards grow too):
+
+| Level | Rank | Also earned |
+|---|---|---|
+| 20 | Deckhand | Charters open; the Jewel Platter recipe |
+| 25 | Bosun | Oilskin Sou'wester (hat, Rare) |
+| 30 | First Mate | A third Smokehouse rack; the Spirit Feast recipe |
+| 35 | Skipper | Storm Slicker (shirt, Epic) |
+| 40 | Captain | A third provision slot on charters |
+| 45 | Commodore | Brass Compass (jewelry, Mythic) |
+| 50 | Admiral | Admiral's Bicorne (hat, Legendary) |
+
+- **Earned outfits** can't be bought: a third cosmetic source next to the stall and the casino. The Wardrobe shows them, and the locked ranks, with "🔒 Level 35" so lower levels can see what's ahead. A reward for a feature not built yet (charters, racks, provision slots) takes effect when that feature ships.
+- **The outfits are storm gear** (decided 2026-10-30): the Oilskin Sou'wester is a mustard-yellow waxed rain hat with a long back brim and a dark chin cord; the Storm Slicker a matching yellow rain jacket with the hood bunched at the back, wooden toggles and a white reflective chest band; the Brass Compass a round brass compass on a chain whose glowing red needle slowly swings; the Admiral's Bicorne a navy bicorne with gold braid, a gold rosette with a glowing star, a white plume and Legendary sparkles, kept distinct from the stall's Captain's Hat.
+- **Rank-up** (decided): the big banner ("⚓ BOSUN ⚓" in gold over "Level 25 · Oilskin Sou'wester added to your Wardrobe", 4.6 s; it replaces the "<Tier> fish caught!" banner on that catch) with the legendary jingle, a server-wide chat line ("⚓ Penny made Bosun!"), and [Wear title] / [Wear it] buttons on the catch card. The mouse is locked while fishing on desktop, so the buttons also answer **T** and **O** while the catch card is up. Text from `rankUp` (`src/game/rankup.ts`).
+- **Where it shows:** the title is a smaller gold line under the floating name tag and under the name in the Anglers tab (online and top anglers). The Wardrobe has a Title row (None plus every title, locked ones greyed with "🔒 Level N"), and earned outfits not yet owned show greyed in their slot. The level pill's tooltip names the rank, and from level 60 the pill is bronze, then silver (75), gold (100) and an aurora shimmer (150; it holds still under reduced motion). Ranks, titles and pill tiers live in `src/data/ranks.ts`.
+- **Progress stays visible:** the next-goal HUD line and the welcome banner name the next rank and its reward ("Level 25: Bosun + Oilskin Sou'wester"), and a level-up to a milestone gets a rank banner.
+- **No level cap** (decided 2026-10-30, with several players already at 50, where XP used to be thrown away). Past 50, every level costs a flat `xpForNextLevel(50)` (~3,500 XP, about 50 top-gear catches), so the pace never slows and the level stays the one number everyone reads ("Lv 63"). This replaces the earlier Angler Stars idea, which was the same thing under a second number.
+  - Every level past 50: one free smoked provision (the best recipe unlocked).
+  - Every 5th level past 50: a free charter fare.
+  - Admiral stays the last rank. Later milestones give a title and colour the level pill: 60 Fleet Admiral (bronze), 75 Admiral of the Lakes (silver), 100 Sea Legend (gold), 150 Lord of the Deep (aurora shimmer).
+  - **Back pay:** a level-50 player's thrown-away XP is estimated from their Fishdex counts: each species' count × a mid-size catch's XP, with the daytime shiny chance (5% of catches at triple XP) and each species' double-XP first catch, minus the ~69,000 XP needed to reach 50. Night shinies and Shiny Lures aren't counted, so it still comes out a little low. (The first version left out shinies and first catches, which ran ~15% low and wiped out about the first 10,000 XP owed; `BACKPAY_VERSION` makes `migrate` redo an unpaid older estimate, less the XP already earned past 50 since.) `migrate` takes the estimate once, the first time the server loads the save after the update (before new catches reach the Fishdex), and keeps it in `SaveData.backPay`. Nothing is paid until the dev console's `/backpay apply`; `/backpay` previews each account's new level first. It pays out as levels and titles, but back-paid levels give at most 5 provisions and 1 fare (`BACKPAY_GIFTS`), so nobody gets 25 levels of rewards at once.
+- **Later, species mastery:** bronze, silver and gold per species (catch counts, a trophy size, a shiny), with a Shiny Fishdex page. Shiny counts per species start being saved in step 1.
+
+### 38.5 Server-checked fights
+
+Today the server rolls the fish and size and enforces a minimum fight time, but trusts the client's win. Before the depth and Derby boards, the server sends a reel seed with each cast, the client runs the reel on a fixed 1/60 s step and sends the frames where the button was pressed or released, and the server replays the fight with `Reel` and only accepts a `caught` ending.
+
+### 38.6 Build order
+
+1. Titles, level rewards, no level cap (with back pay), shiny counts.
+2. Smokehouse v1: the counter, racks and Pantry, the town recipes eaten as pond buffs, Well-smoked.
+3. Server-checked fights.
+4. Charters v1: the instance, trips, zones and the difficulty curve with its bot tests, Sea Legs, fast track, milestones and zone titles, the trip HUD and summary card, the sea species, provision slots with the town recipes' charter effects, and the sea recipes. Big; may be split when planned.
+5. Charter rewards: boat upgrades, zone legends and the Captain's Feast, the Deepest Charter board, zone chat lines.
+6. Spirit Feast and the Chef's Special.
+7. Weekly Derby.
+8. Later: group charters and species mastery.

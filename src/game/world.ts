@@ -2,6 +2,7 @@ import { audio } from './audio';
 import * as THREE from 'three';
 import { LightPool } from './lightpool';
 import { NightGlow, glowTag } from './nightglow';
+import { revealAll } from './prewarm';
 import type { Location } from '../data/content';
 import type { MapDef } from '../data/maps';
 import {
@@ -20,6 +21,7 @@ import {
 } from './env';
 import { Hub } from './hub';
 import { Town } from './town';
+import type { Bystander } from './npcwalk';
 import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { FX } from './fx';
@@ -112,6 +114,14 @@ export class World {
   private lite = false;
   /** Skip drawing (a full-screen notice covers the view); the scene still updates. */
   paused = false;
+  /**
+   * Skip drawing while `prewarm` is still compiling, so the page stays responsive instead of stalling
+   * on the compile. `Game` sets it while the join screen covers the view.
+   */
+  holdForShaders = false;
+  /** The running `prewarm`, until its shaders are ready and drawn once. */
+  private warming: Promise<unknown> | null = null;
+  private compiled = false;
   /** Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5. */
   private pixelCap = 1.25;
   private trees: Circle[] = [];
@@ -119,6 +129,10 @@ export class World {
   pitch = -0.12;
   time = 0;
   bobberVisible = false;
+  /** Set by `Game` each frame for the townsfolk: whether you're fishing, and the other players on this map. */
+  fishing = false;
+  readonly others: Bystander[] = [];
+  private you: Bystander = { x: 0, z: 0, fishing: false };
   fovKick = 0;
   pitchKick = 0;
   private shake = 0;
@@ -136,6 +150,8 @@ export class World {
   private base = { water: new THREE.Color(), deep: new THREE.Color(), sky: new THREE.Color(), top: new THREE.Color(), grass: new THREE.Color() };
   /** Set (0..1 of the day) to freeze the time of day; null follows the shared clock. */
   dayOverride: number | null = null;
+  /** The shared clock (ms) the day follows; the game points it at the server's time. */
+  clock: () => number = Date.now;
   night = 0;
   private sky!: THREE.Mesh;
   private hemi = new THREE.HemisphereLight(0xffffff, 0x446644, 1.1);
@@ -223,8 +239,42 @@ export class World {
 
   /** Lighter graphics for weaker devices: no sun shadows, grass or flowers, and 25% fewer pixels in each direction. */
   setLite(on: boolean): void {
+    const changed = on !== this.lite;
     this.lite = on;
     this.applyQuality();
+    // Shadows on or off changes most shader programs (before the first map is built there's nothing to compile).
+    if (changed && this.decor.children.length) this.prewarm();
+  }
+
+  /**
+   * Compiles the shader program of every material in the scene, hidden ones included, in the
+   * background (KHR_parallel_shader_compile where the browser has it). Otherwise each program
+   * compiles on its object's first draw, so the first look around a map stalls, for seconds on
+   * phones. Programs depend on the lights, fog and shadows, so this runs after each map build and
+   * graphics change.
+   */
+  prewarm(): void {
+    this.compiled = false;
+    const p: Promise<unknown> = this.renderer.compileAsync(this.scene, this.camera).then(() => {
+      if (this.warming === p) this.compiled = true;
+    });
+    this.warming = p;
+  }
+
+  /**
+   * Draws everything once, hidden objects included, clipped to one pixel. Some GPUs (phones) only
+   * finish a program on its first draw, so without this the first look around still stalls.
+   */
+  private warmDraw(): void {
+    const restore = revealAll(this.scene);
+    const r = this.renderer;
+    r.shadowMap.needsUpdate = true;
+    r.setScissorTest(true);
+    r.setScissor(0, 0, 1, 1);
+    r.render(this.scene, this.camera);
+    r.setScissorTest(false);
+    restore();
+    r.shadowMap.needsUpdate = true;
   }
 
   get isLite(): boolean {
@@ -382,7 +432,7 @@ export class World {
 
   /** Blends sky, light, water, lamps and fireflies between day and night. */
   private updateDaylight(t: number): void {
-    const f = this.dayOverride ?? dayFraction(Date.now() / 1000);
+    const f = this.dayOverride ?? dayFraction(this.clock() / 1000);
     const n = nightness(f);
     if (this.indoor) {
       this.night = n;
@@ -397,29 +447,29 @@ export class World {
     this.night = n;
     const b = this.base;
     const u = this.waterU;
-    const nightH = new THREE.Color(0x0c1730);
-    const nightT = new THREE.Color(0x02040c);
+    const nightH = new THREE.Color(0x152649);
+    const nightT = new THREE.Color(0x050a19);
     u.uSkyH.value.copy(b.sky).lerp(nightH, n).lerp(new THREE.Color(0xff8a4a), tw * 0.7);
     u.uSkyT.value.copy(b.top).lerp(nightT, n).lerp(new THREE.Color(0x5a4a8a), tw * 0.35);
     u.uFogColor.value.copy(u.uSkyH.value);
     (this.scene.fog as THREE.Fog | null)?.color.copy(u.uSkyH.value);
-    u.uShallow.value.copy(b.water).multiplyScalar(1 - 0.78 * n);
-    u.uDeep.value.copy(b.deep).multiplyScalar(1 - 0.7 * n);
+    u.uShallow.value.copy(b.water).multiplyScalar(1 - 0.75 * n);
+    u.uDeep.value.copy(b.deep).multiplyScalar(1 - 0.67 * n);
     u.uSunCol.value.set(0xfff2d8).lerp(new THREE.Color(0xff9a55), tw).multiplyScalar(1 - n);
-    const el = 0.38 * (1 - n) + 0.06 * n + 0.1 * tw;
+    const el = 0.38 * (1 - n) + 0.13 * n + 0.1 * tw;
     u.uSunDir.value.set(SUN_DIR.x, el, SUN_DIR.z).normalize();
-    this.hemi.intensity = 1.1 * (1 - n) + 0.34 * n;
-    this.hemi.color.copy(b.top).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(0x6a80c0), n);
-    this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(new THREE.Color(0x141c30), n);
-    this.sun.intensity = 3 * (1 - n) + 0.45 * n;
-    this.sun.color.set(0xfff0d6).lerp(new THREE.Color(0xff9a55), tw * 0.8).lerp(new THREE.Color(0x7f9bff), n);
-    this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x1c2540), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
+    this.hemi.intensity = 1.1 * (1 - n) + 0.56 * n;
+    this.hemi.color.copy(b.top).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(0x7088cc), n);
+    this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(new THREE.Color(0x1d2a48), n);
+    this.sun.intensity = 3 * (1 - n) + 0.72 * n;
+    this.sun.color.set(0xfff0d6).lerp(new THREE.Color(0xff9a55), tw * 0.8).lerp(new THREE.Color(0x84a0ff), n);
+    this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
     (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, (n - 0.4) / 0.6);
     this.dockGlow.color.set(0x6a5a3a).lerp(new THREE.Color(0xffd27a), 0.35 + 0.65 * n);
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
-    for (const m of this.mtMats) m.mat.color.copy(m.base).multiplyScalar(1 - 0.82 * n).lerp(u.uSkyH.value, m.haze);
+    for (const m of this.mtMats) m.mat.color.copy(m.base).multiplyScalar(1 - 0.75 * n).lerp(u.uSkyH.value, m.haze);
 
     const fl = this.flies;
     if (fl) {
@@ -461,9 +511,12 @@ export class World {
       this.decor.add(this.town.group);
       this.hub = null;
       this.hall = new CasinoHall(map.casino!);
+      this.hall.onPocket = (at, gain) => { for (const d of at) audio.peg(0.09 * gain, 1.5, d); };
+      this.hall.onCard = (flip) => audio.card(flip);
       this.decor.add(this.hall.group);
       this.lightPool.collect(this.decor);
       this.glow = null;
+      this.prewarm();
       return;
     }
 
@@ -508,7 +561,7 @@ export class World {
     this.buildFireflies();
     this.buildMountains();
     this.hub = new Hub(map);
-    this.hub.onWheelTick = () => audio.tick(0.07);
+    this.hub.onWheelTick = (at, gain) => { for (const d of at) audio.peg(0.16 * gain, 0.75, d); };
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);
@@ -517,6 +570,7 @@ export class World {
     this.lightPool.collect(this.decor);
     this.glow = new NightGlow(this.decor);
     this.decor.add(this.glow.group);
+    this.prewarm();
   }
 
   private buildTerrain(loc: Location): void {
@@ -1107,7 +1161,10 @@ export class World {
       .multiplyScalar(80)
       .add(this.sun.target.position);
     this.hub?.update(t, this.eye.x, this.eye.z);
-    this.town?.update(t, dt, this.eye.x, this.eye.z);
+    this.you.x = this.eye.x;
+    this.you.z = this.eye.z;
+    this.you.fishing = this.fishing;
+    this.town?.update(t, dt, this.you, this.others);
     this.hall?.update(t, dt);
     // After every owner has set its lights' intensity this frame: the pool fades them on top of it.
     this.lightPool.update(dt, this.eye);
@@ -1132,6 +1189,11 @@ export class World {
     this.fx.update(dt, t);
     this.bobber.visible = this.bobberVisible;
     if (this.frame++ % 3 === 0) this.renderer.shadowMap.needsUpdate = true;
-    if (!this.paused) this.renderer.render(this.scene, this.camera);
+    if (this.compiled) {
+      this.compiled = false;
+      this.warming = null;
+      this.warmDraw();
+    }
+    if (!this.paused && !(this.holdForShaders && this.warming)) this.renderer.render(this.scene, this.camera);
   }
 }

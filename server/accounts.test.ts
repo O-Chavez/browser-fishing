@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { MAPS } from '../src/data/maps';
+import { newSave } from '../src/game/state';
 import type { ServerMsg } from '../src/net/protocol';
 import { RENAME_COOLDOWN_MS } from '../src/net/protocol';
 import { AccountStore, MAX_DEVICES } from './accounts';
@@ -8,6 +10,7 @@ import { Room } from './room';
 
 const A = 'a'.repeat(20);
 const B = 'b'.repeat(20);
+const hashOf = (token: string) => createHash('sha256').update(token).digest('hex');
 
 const claimed = (name = 'Ann', token = A) => {
   const store = new AccountStore();
@@ -25,6 +28,20 @@ describe('accounts', () => {
     expect(store.auth('Ann', B)).not.toHaveProperty('need');
     expect(store.auth('x', A)).toMatchObject({ ok: false });
     expect(store.auth('Ann', 'short')).toMatchObject({ ok: false, msg: 'Bad token.' });
+  });
+
+  it('refuses to claim a rude name, but an account that already has one keeps logging in', async () => {
+    const store = new AccountStore();
+    expect(store.auth('BigDickFisher', A)).toEqual({ ok: false, msg: 'The name "BigDickFisher" isn\'t allowed. Please pick another.' });
+    expect(await store.login('xx_ass_xx', A, 'anything')).toMatchObject({ ok: false, msg: expect.stringContaining("isn't allowed") });
+    // The 16-character cut would leave "Ass" at the end.
+    expect(store.auth('xxxxxxxxxxxxxAssociate', A)).toMatchObject({ ok: false, msg: expect.stringContaining('"xxxxxxxxxxxxxAss"') });
+    expect(store.names()).toEqual([]);
+    expect(store.auth('Cassandra', A)).toMatchObject({ ok: true, created: true });
+
+    const old = new AccountStore({ ass99: { name: 'Ass99', tokens: [hashOf(B)], save: newSave() } });
+    expect(old.auth('Ass99', B)).toMatchObject({ ok: true, created: false });
+    expect(old.auth('ass99', A)).toMatchObject({ ok: false, msg: expect.stringContaining('taken') });
   });
 
   it('asks a new browser for the password once one is set, then remembers that browser', async () => {
@@ -105,6 +122,21 @@ describe('accounts', () => {
     expect(store.auth('Ann', B)).toMatchObject({ ok: true, created: true });
   });
 
+  it('deleting a password-free account takes its casino records with it, and the next biggest moves up', () => {
+    const { store, acct } = claimed();
+    const bob = store.auth('Bob', B);
+    if (!bob.ok) throw new Error(bob.msg);
+    const g = { game: 'roulette', fishId: 'trout' } as const;
+    expect(store.gambled(bob.account, true, { ...g, amount: 500, at: 1 })).toBe(true);
+    expect(store.gambled(acct, true, { ...g, amount: 900, at: 2 })).toBe(true);
+    expect(store.gambled(acct, false, { ...g, amount: 300, at: 3 })).toBe(true);
+    // Bob's smaller win is still his own best, ready for when Ann's goes.
+    expect(store.gambled(bob.account, true, { ...g, amount: 400, at: 4 })).toBe(false);
+    expect(store.records()).toMatchObject({ win: { name: 'Ann', amount: 900 }, loss: { name: 'Ann', amount: 300 } });
+    store.forget(acct, A);
+    expect(store.records()).toEqual({ win: { name: 'Bob', amount: 500, ...g, at: 1 }, loss: null });
+  });
+
   it('loads saves from before passwords, and keeps passwords and devices across a reload', async () => {
     const old = claimed();
     const legacy = Object.fromEntries(Object.entries(old.store.snapshot()).map(([k, v]) => [k, { name: (v as { name: string }).name, hash: (v as { hash: string }).hash, save: (v as { save: unknown }).save }]));
@@ -166,11 +198,14 @@ describe('renaming', () => {
     await store.setPass(acct, A, 'trout-lake');
     acct.save.best = { fishId: 'trout', size: 40, value: 99 };
     store.setSupporter('Ann', true);
+    store.gambled(acct, true, { amount: 500, game: 'roulette', fishId: 'trout', at: 1 });
+    expect(store.records().win?.name).toBe('Ann');
     expect(store.rename(acct, '  Bea!! ')).toBeNull();
     expect(acct.name).toBe('Bea');
     expect(store.names()).toEqual(['Bea']);
     expect(store.hall()[0].name).toBe('Bea');
     expect(store.supporters()).toEqual(['Bea']);
+    expect(store.records().win?.name).toBe('Bea');
     expect(store.auth('Bea', A)).toMatchObject({ ok: true, account: acct });
     expect((await store.login('bea', B, 'trout-lake')).ok).toBe(true);
     expect(store.auth('Ann', C)).toMatchObject({ ok: true, created: true });
@@ -183,6 +218,7 @@ describe('renaming', () => {
     expect(store.rename(acct, { name: 'Bea' })).toContain('2-16');
     expect(store.rename(acct, 'Ann')).toContain('already');
     expect(store.rename(acct, 'cy')).toBe('The name "cy" is taken.');
+    expect(store.rename(acct, 'Ass99')).toContain("isn't allowed");
     expect(acct.name).toBe('Ann');
   });
 
@@ -253,5 +289,27 @@ describe('renaming', () => {
     room.join({ send: (m) => again.push(m) }, acct);
     expect(again.find((m) => m.t === 'welcome')).toMatchObject({ name: 'Bea', renameIn: RENAME_COOLDOWN_MS });
     expect(again.find((m) => m.t === 'welcome')).toMatchObject({ players: expect.arrayContaining([expect.objectContaining({ id, name: 'Bea' })]) });
+  });
+});
+
+describe('back pay for the old level cap', () => {
+  const vet = () => {
+    const save: Record<string, unknown> = { ...newSave(), level: 50, xp: 0, dex: { constellation: { count: 3000, best: 250 } } };
+    delete save.backPay;
+    return save;
+  };
+  it('previews what each account is owed, then pays it once', () => {
+    const store = new AccountStore({ ann: { name: 'Ann', tokens: ['x'], save: vet() }, bob: { name: 'Bob', tokens: ['y'], save: { ...newSave(), level: 12 } } });
+    const preview = store.backPay(false);
+    expect(preview.paid).toEqual([]);
+    expect(preview.lines[0]).toMatch(/^Ann: Lv 50 → \d+ \(\+[\d,]+ XP\) · 3,000 catches ≈ [\d,]+ XP in all$/);
+    expect(preview.lines[1]).toContain('Reaching 50 takes');
+    expect(preview.lines.at(-1)).toContain('1 account owed');
+    const ann = store.all().find((a) => a.name === 'Ann')!;
+    expect(ann.save.level).toBe(50);
+    const res = store.backPay(true);
+    expect(res.paid).toHaveLength(1);
+    expect(ann.save.level).toBe(50 + res.paid[0].levels);
+    expect(store.backPay(true).lines).toEqual(['No back pay owed.']);
   });
 });

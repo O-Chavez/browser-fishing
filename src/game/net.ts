@@ -1,4 +1,4 @@
-import type { Activity, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
+import type { Activity, CasinoRecords, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { RENAME_COOLDOWN_MS, SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Drop } from './drops';
@@ -14,6 +14,8 @@ export interface NetEvents {
   onBoard(): void;
   /** The list of Ko-fi supporters changed. */
   onSupporters(): void;
+  /** The casino's biggest win or loss changed. */
+  onRecords(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
   onJump(id: number): void;
   onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }): void;
@@ -27,8 +29,8 @@ export interface NetEvents {
   onNotice(msg: string): void;
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
-  /** Dev console replies; `time` is set when a command changed the day/night override. */
-  onDev(lines: string[], time: number | null | undefined): void;
+  /** Slash command replies; `time` is set when a command changed the day/night override, `sent` on a feedback answer. */
+  onDev(lines: string[], time: number | null | undefined, sent: boolean | undefined): void;
   onClose(): void;
   /** The socket closed before the server accepted the join. */
   onFailed(): void;
@@ -49,6 +51,8 @@ export class NetClient {
   /** Supporter names, newest first; `isSupporter` checks a name. */
   supporters: string[] = [];
   private supporterKeys = new Set<string>();
+  /** The casino's all-time biggest single win and loss. */
+  records: CasinoRecords = { win: null, loss: null };
   color: number | undefined;
   /** Sent with the next join only, to log in on a browser the account doesn't know yet. */
   pass: string | undefined;
@@ -56,6 +60,8 @@ export class NetClient {
   hasPass = false;
   /** `Date.now()` when the name may change again. */
   renameAt = 0;
+  /** Server clock minus this device's clock (ms); 0 offline, where the device's clock is all there is. */
+  private clockOffset = 0;
 
   constructor(
     public name: string,
@@ -94,6 +100,16 @@ export class NetClient {
     };
   }
 
+  /** The server's time (ms), which the day/night cycle follows so every player sees the same sky. */
+  now(): number {
+    return Date.now() + this.clockOffset;
+  }
+
+  /** Message delay is ignored: it's well under a second, and a day lasts minutes. */
+  private setClock(serverNow: number | undefined): void {
+    if (typeof serverNow === 'number' && Number.isFinite(serverNow)) this.clockOffset = serverNow - Date.now();
+  }
+
   send(msg: ClientMsg): void {
     if (this.connected && this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
@@ -117,6 +133,7 @@ export class NetClient {
         this.room = m.room;
         this.hasPass = m.hasPass;
         this.renameAt = Date.now() + m.renameIn;
+        this.setClock(m.now);
         m.players.forEach((p) => this.players.set(p.id, p));
         if (m.name !== this.name) {
           this.name = m.name;
@@ -127,6 +144,9 @@ export class NetClient {
         break;
       case 'state':
         this.setSave(m.save);
+        break;
+      case 'clock':
+        this.setClock(m.now);
         break;
       case 'drops':
         this.events.onDrops(m.list);
@@ -141,7 +161,7 @@ export class NetClient {
         this.events.onSys(m.text);
         break;
       case 'dev':
-        this.events.onDev(m.lines, m.time);
+        this.events.onDev(m.lines, m.time, m.sent);
         break;
       case 'error':
         this.events.onError(m.msg, m.need);
@@ -213,6 +233,12 @@ export class NetClient {
         this.events.onPlayers();
         break;
       }
+      case 'title': {
+        const p = this.players.get(m.id);
+        if (p) p.title = m.title;
+        this.events.onPlayers();
+        break;
+      }
       case 'hall':
         this.hall = m.rows;
         this.events.onBoard();
@@ -221,6 +247,10 @@ export class NetClient {
         this.supporters = m.names;
         this.supporterKeys = new Set(m.names.map((n) => n.toLowerCase()));
         this.events.onSupporters();
+        break;
+      case 'records':
+        this.records = m.records;
+        this.events.onRecords();
         break;
       case 'board':
         this.coins = new Map(Object.entries(m.coins).map(([k, v]) => [Number(k), v]));
