@@ -2098,6 +2098,8 @@ export class Game {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.tick(dt);
+    // Behind the join screen, wait for the background shader compile instead of stalling on it.
+    this.world.holdForShaders = !$('join').classList.contains('hidden');
     this.world.update(dt);
     this.drawGauge(now / 1000);
     if (this.phase !== this.shownPhase) {

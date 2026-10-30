@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FISH } from '../data/content';
+import { defaultLook } from '../data/cosmetics';
 import type { Activity, PlayerInfo } from '../net/protocol';
 import { Character } from './character';
 import { standHeight } from './env';
@@ -265,7 +266,11 @@ export class Avatars {
     private surface: (x: number, z: number) => number,
     /** Whether a player's name gets the supporter 💗. */
     private supporter: (name: string) => boolean = () => false,
-  ) {}
+  ) {
+    // A hidden stand-in that never leaves the scene, so `World.prewarm` compiles the avatar shaders
+    // before other players show up, and they stay compiled while nobody else is around.
+    new Avatar({ id: -1, name: '', map: '', x: 0, z: 0, yaw: 0, look: defaultLook(), coins: 0 }, scene, surface);
+  }
 
   sync(players: Map<number, PlayerInfo>, selfId: number, map: string): void {
     for (const [id, a] of this.list) {

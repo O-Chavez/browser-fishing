@@ -6,7 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
 
 ## Ideas
 
@@ -24,6 +23,9 @@ Finished items move to [DONE.md](DONE.md).
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
 - Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs
+- The first click or touch stalls about 200 ms in headless Chrome while `audio.start()` makes the `AudioContext` (`AudioOutputDevice::GetOutputDeviceInfo`, a synchronous call). It could be made at load (it starts suspended) and only resumed in the click, if real devices show the same stall
+- Shader programs that still compile on first use, because their objects aren't in the scene until later: fish models (`buildFish`, first catch or another player holding one), held items when switching hotbar slots, drops, and the join screen's character preview (its own WebGL context, ~1 s on SwiftShader before the notice is even dismissed). Hidden stand-ins in the scene, like the one `Avatars` keeps for `World.prewarm`, would cover the in-world ones
+- 🎨 The load-hitching fix moved all shader compiling behind the join screen, so on a slow phone the join screen freezes once for longer (SwiftShader: ~3 s of compiling became ~6 s there, and none after joining). If that's noticeable on real phones, the compile could be spread over several frames, or the warm-up draw skipped where the browser compiles fully at link time
 
 ### Gameplay and UI
 
