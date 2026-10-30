@@ -123,7 +123,9 @@ export class Game {
   private perfect = false;
   private castSpot: SpotId = 'prime';
   private spotShown = '';
-  private nightShown = false;
+  private nightShown = '';
+  /** The dev console's /time froze this player's sky (the screenshot scripts' own override doesn't count). */
+  private devTime = false;
   private timer = 0;
 
   private origin = new THREE.Vector3();
@@ -270,7 +272,10 @@ export class Game {
           return this.renderFeedback();
         }
         for (const text of lines) this.chat.add({ name: '', map: '', text, self: false, system: true });
-        if (time !== undefined) this.world.dayOverride = time;
+        if (time !== undefined) {
+          this.world.dayOverride = time;
+          this.devTime = time !== null;
+        }
       },
       onDrops: (list) => {
         this.serverDrops = list;
@@ -345,6 +350,7 @@ export class Game {
         this.offlineWhy = undefined;
       },
     });
+    this.world.clock = () => this.net.now();
     this.applyLocation();
     this.chat = new ChatBox($('chat'), {
       send: (text) => {
@@ -2187,13 +2193,13 @@ export class Game {
     );
   }
 
-  /** Shows how good the water is where the player stands (not while a line is out). */
+  /** Night bites, and a reminder while the dev console's /time freezes this player's sky. */
   private updateNight(): void {
-    const on = this.world.night >= NIGHT_BITE;
-    if (on === this.nightShown) return;
-    this.nightShown = on;
-    const el = $('nightchip');
-    el.textContent = on ? '🌙 Night - rare & night-only fish are biting!' : '';
+    const night = this.world.night >= NIGHT_BITE ? '🌙 Night - rare & night-only fish are biting!' : '';
+    const text = !this.devTime ? night : [night, '🕒 /time is on (only you) · /time auto to undo'].filter(Boolean).join(' · ');
+    if (text === this.nightShown) return;
+    this.nightShown = text;
+    $('nightchip').textContent = text;
   }
 
   private updateSpot(): void {
