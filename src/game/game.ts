@@ -8,7 +8,9 @@ import {
   TIERS,
   byId,
   tierName,
+  type Bait,
   type Fish,
+  type Rod,
 } from '../data/content';
 import { audio } from './audio';
 import { MAPS, arrivalSpot, type MapDef } from '../data/maps';
@@ -2752,9 +2754,9 @@ export class Game {
   // ---------- shared pieces ----------
 
   /** A square item tile; clicking it selects the item (`data-pick`) unless `attrs` says otherwise. */
-  private itemTile(o: { icon: string; name: string; sub: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string; color?: string; cls?: string }): string {
+  private itemTile(o: { icon: string; name: string; sub: string; price?: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string; color?: string; cls?: string }): string {
     const t = Math.max(1, Math.min(5, o.tier));
-    return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}${o.cls ?? ''}" style="--c:${o.color ?? `var(--t${t})`}" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span><span class="st">${o.sub}</span></button>`;
+    return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}${o.cls ?? ''}" style="--c:${o.color ?? `var(--t${t})`}" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span>${o.price ? `<span class="pr">${o.price}</span>` : ''}${o.sub ? `<span class="st">${o.sub}</span>` : ''}</button>`;
   }
 
   private badge(tier: number): string {
@@ -2800,13 +2802,13 @@ export class Game {
       const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
       const owned = eco.ownsRod(s, r.id);
       const sub = equipped ? 'Equipped' : owned ? 'Owned' : s.level < r.unlockLevel ? `🔒 Lv ${r.unlockLevel}` : `At ${vendor}'s`;
-      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, tier: r.tier, on: sel === `rod:${r.id}`, check: equipped, ghost: !owned, attrs: `data-pick="bag" data-id="rod:${r.id}"` });
+      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, price: this.rodPrice(r), tier: r.tier, on: sel === `rod:${r.id}`, check: equipped, ghost: !owned, attrs: `data-pick="bag" data-id="rod:${r.id}"` });
     }).join('');
     const baits = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
       const equipped = s.bait === b.id && s.slots.some((x) => x?.k === 'bait' && x.id === b.id);
       const sub = n > 0 ? `×${n}` : s.level < b.unlockLevel ? `🔒 Lv ${b.unlockLevel}` : `At ${vendor}'s`;
-      return this.itemTile({ icon: BAIT_ICON[b.id] ?? '🪱', name: b.name, sub, tier: b.tier, on: sel === `bait:${b.id}`, check: equipped, ghost: n <= 0, attrs: `data-pick="bag" data-id="bait:${b.id}"` });
+      return this.itemTile({ icon: BAIT_ICON[b.id] ?? '🪱', name: b.name, sub, price: `${this.baitPackPrice(b)} / ${eco.BAIT_PACK}`, tier: b.tier, on: sel === `bait:${b.id}`, check: equipped, ghost: n <= 0, attrs: `data-pick="bag" data-id="bait:${b.id}"` });
     }).join('');
 
     return `<div class="cols"><div class="main">
@@ -2844,7 +2846,7 @@ export class Game {
         ? this.btn('In your hotbar ✓', '', 'ok', true) + this.btn('Put away in locker', `data-act="stow" data-id="${slot}"`, 'plain')
         : n > 0 && !lvl
           ? this.btn('Equip', `data-act="equipbait" data-id="${b.id}"`)
-          : this.btn(lvl ? `Unlocks at level ${b.unlockLevel}` : `Sold at ${vendor}'s · ${b.price * eco.BAIT_PACK} 🪙 / ${eco.BAIT_PACK}`, '', 'plain', true);
+          : this.btn(`${lvl ? `Unlocks at level ${b.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.baitPackPrice(b)} / ${eco.BAIT_PACK}`, '', 'plain', true);
       return this.detail({
         icon: BAIT_ICON[b.id] ?? '🪱',
         name: b.name,
@@ -2862,7 +2864,7 @@ export class Game {
       ? this.btn('Equipped ✓', '', 'ok', true) + this.btn('Put away in locker', `data-act="stow" data-id="${hotRod}"`, 'plain')
       : owned
         ? this.btn('Equip', `data-act="equiprod" data-id="${r.id}"`)
-        : this.btn(s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Sold at ${vendor}'s · ${r.price.toLocaleString()} 🪙`, '', 'plain', true);
+        : this.btn(`${s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.rodPrice(r)}`, '', 'plain', true);
     return this.detail({
       icon: rodIcon(r.tier),
       name: r.name,
@@ -3039,14 +3041,14 @@ export class Game {
       const r = byId(RODS, id);
       const has = eco.ownsRod(s, id);
       const lvl = s.level < r.unlockLevel;
-      const sub = has ? 'Owned' : lvl ? `🔒 Lv ${r.unlockLevel}` : r.price ? `${r.price.toLocaleString()} 🪙` : 'Free';
-      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, tier: r.tier, on: this.pick.gear === `rod:${id}`, check: has, ghost: !has && (lvl || s.coins < r.price), attrs: `data-pick="gear" data-id="rod:${id}"` });
+      const sub = has ? 'Owned' : lvl ? `🔒 Lv ${r.unlockLevel}` : '';
+      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, price: this.rodPrice(r), tier: r.tier, on: this.pick.gear === `rod:${id}`, check: has, ghost: !has && (lvl || s.coins < r.price), attrs: `data-pick="gear" data-id="rod:${id}"` });
     }).join('');
     const baits = this.map.stock.bait.map((id) => {
       const b = byId(BAITS, id);
       const cost = b.price * eco.BAIT_PACK;
       const lvl = s.level < b.unlockLevel;
-      return this.itemTile({ icon: BAIT_ICON[id] ?? '🪱', name: `${b.name} ×${eco.BAIT_PACK}`, sub: lvl ? `🔒 Lv ${b.unlockLevel}` : `${cost.toLocaleString()} 🪙`, tier: b.tier, on: this.pick.gear === `bait:${id}`, ghost: lvl || s.coins < cost, attrs: `data-pick="gear" data-id="bait:${id}"` });
+      return this.itemTile({ icon: BAIT_ICON[id] ?? '🪱', name: `${b.name} ×${eco.BAIT_PACK}`, sub: lvl ? `🔒 Lv ${b.unlockLevel}` : '', price: this.baitPackPrice(b), tier: b.tier, on: this.pick.gear === `bait:${id}`, ghost: lvl || s.coins < cost, attrs: `data-pick="gear" data-id="bait:${id}"` });
     }).join('');
     return `<div class="cols"><div class="main"><h4>Rods</h4><div class="tiles">${rods}</div><h4>Bait · packs of ${eco.BAIT_PACK}</h4><div class="tiles">${baits}</div>
       <p class="foot">New gear goes to your tackle locker. Equip it from your Bag (<kbd>Tab</kbd>).</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
@@ -3060,7 +3062,7 @@ export class Game {
       const cost = b.price * eco.BAIT_PACK;
       const lvl = s.level < b.unlockLevel;
       const action = lvl
-        ? this.btn(`Unlocks at level ${b.unlockLevel}`, '', 'plain', true)
+        ? this.btn(`Unlocks at level ${b.unlockLevel} · ${this.baitPackPrice(b)}`, '', 'plain', true)
         : s.coins < cost
           ? this.btn(`Need ${cost.toLocaleString()} 🪙`, '', 'plain', true)
           : this.btn(`Buy ${eco.BAIT_PACK} for ${cost.toLocaleString()} 🪙`, `data-act="buybait" data-id="${b.id}"`);
@@ -3079,7 +3081,7 @@ export class Game {
     const action = has
       ? this.btn('Owned ✓', '', 'ok', true)
       : lvl
-        ? this.btn(`Unlocks at level ${r.unlockLevel}`, '', 'plain', true)
+        ? this.btn(`Unlocks at level ${r.unlockLevel} · ${this.rodPrice(r)}`, '', 'plain', true)
         : s.coins < r.price
           ? this.btn(`Need ${r.price.toLocaleString()} 🪙`, '', 'plain', true)
           : this.btn(r.price ? `Buy for ${r.price.toLocaleString()} 🪙` : 'Take it (free)', `data-act="buyrod" data-id="${r.id}"`);
@@ -3091,6 +3093,15 @@ export class Game {
       note: `Fights with fish up to ${tierName(r.tier)} feel easy.`,
       actions: action,
     });
+  }
+
+  private rodPrice(r: Rod): string {
+    return r.price ? `${r.price.toLocaleString()} 🪙` : 'Free';
+  }
+
+  /** What one pack of this bait costs at the stall. */
+  private baitPackPrice(b: Bait): string {
+    return `${(b.price * eco.BAIT_PACK).toLocaleString()} 🪙`;
   }
 
   private cosmeticsShopHtml(): string {
