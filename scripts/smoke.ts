@@ -466,7 +466,7 @@ async function casinoChecks(): Promise<void> {
   await aimAt(page, 'bj', 'deal');
   // Record the result sounds, to check a finished hand plays the one for its outcome.
   await page.evaluate(async () => {
-    const { audio } = await import('/src/game/audio.ts');
+    const { audio } = await import('/src/game/audio.ts' as string);
     const w = window as any;
     w.__sounds = [];
     const jingle = audio.jingle.bind(audio), snap = audio.snap.bind(audio);

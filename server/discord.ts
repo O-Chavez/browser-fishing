@@ -16,7 +16,7 @@ export async function postWebhook(url: string, body: object, fetchFn: typeof fet
       const res = await fetchFn(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, signal: AbortSignal.timeout(10_000) });
       if (res.ok) return { ok: true };
       if (res.status === 429 && attempt === 0) {
-        const wait = Number((await res.json().catch(() => null))?.retry_after) || 1;
+        const wait = Number(((await res.json().catch(() => null)) as { retry_after?: number } | null)?.retry_after) || 1;
         await new Promise((r) => setTimeout(r, Math.min(wait, 30) * 1000));
         continue;
       }
