@@ -88,17 +88,32 @@ export function grantRanks(s: { level: number; titles: string[]; owned: string[]
 export const rankReward = (r: Rank): string => (r.outfit ? `${r.title} + ${cosById(r.outfit)?.name ?? r.outfit}` : r.title);
 
 /**
- * Before the cap was lifted, XP past level 50 was thrown away. This estimates it from the Fishdex:
- * every catch counted at a mid-size catch's XP (no shiny, size or first-catch bonus, so it comes out
- * low), less the XP it takes to reach 50.
+ * Every catch's XP, estimated from the Fishdex counts: a mid-size catch of each species, with the
+ * daytime shiny chance (nights and Shiny Lures add more, so it still comes out low) and the double XP
+ * of each species' first catch.
  */
-export function backPayXp(dex: Record<string, { count: number }>): number {
+export function earnedXp(dex: Record<string, { count: number }>): number {
   let total = 0;
   for (const f of FISH) {
     const n = dex[f.id]?.count ?? 0;
-    if (n > 0) total += n * catchXp(f, (f.minSize + f.maxSize) / 2, false);
+    const mid = catchXp(f, (f.minSize + f.maxSize) / 2, false);
+    if (n > 0) total += n * mid * (1 + 2 * SHINY_CHANCE) + mid;
   }
-  return Math.max(0, Math.round(total - XP_TO_FLAT));
+  return Math.round(total);
+}
+
+/** Bumped when `backPayXp` changes, so unpaid estimates are redone (see `migrate`). */
+export const BACKPAY_VERSION = 2;
+
+/** XP gained past level 50, by a save that has passed it. */
+export const xpPastFlat = (s: { level: number; xp: number }): number => Math.max(0, s.level - FLAT_LEVEL) * xpForNextLevel(FLAT_LEVEL) + (s.level >= FLAT_LEVEL ? s.xp : 0);
+
+/**
+ * Before the cap was lifted, XP past level 50 was thrown away. This is what the Fishdex says was
+ * earned, less the XP it takes to reach 50 and the XP already counted past it (`since`).
+ */
+export function backPayXp(dex: Record<string, { count: number }>, since = 0): number {
+  return Math.max(0, earnedXp(dex) - XP_TO_FLAT - since);
 }
 
 /** The best tier of fish you can hook is set by the bait; the rod only decides how hard the fight is. */

@@ -2,11 +2,12 @@ import type { CasinoRecord, CasinoRecords, Gamble, HallRow } from '../src/net/pr
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { payBack } from '../src/game/economy';
-import { applyXp } from '../src/game/progression';
+import { XP_TO_FLAT, applyXp, earnedXp } from '../src/game/progression';
 import { migrate, newSave, type SaveData } from '../src/game/state';
 import { rudeName } from './chat';
 import { Lockout } from './lockout';
 
+const num = (n: number) => n.toLocaleString('en-US');
 /** Accounts listed by `/backpay` before it says "and N more". */
 const BACKPAY_ROWS = 25;
 
@@ -181,8 +182,10 @@ export class AccountStore {
     if (!due.length) return { lines: ['No back pay owed.'], paid: [] };
     const rows = due.slice(0, BACKPAY_ROWS).map((a) => {
       const to = applyXp(a.save.level, a.save.xp, a.save.backPay.xp).level;
-      return `${a.name}: Lv ${a.save.level} → ${to} (+${a.save.backPay.xp.toLocaleString('en-US')} XP)`;
+      const catches = Object.values(a.save.dex).reduce((n, e) => n + (e?.count ?? 0), 0);
+      return `${a.name}: Lv ${a.save.level} → ${to} (+${num(a.save.backPay.xp)} XP) · ${num(catches)} catches ≈ ${num(earnedXp(a.save.dex))} XP in all`;
     });
+    rows.push(`Reaching 50 takes ${num(XP_TO_FLAT)} XP; an account whose catches add up to less got there another way (like /level).`);
     if (due.length > BACKPAY_ROWS) rows.push(`…and ${due.length - BACKPAY_ROWS} more`);
     if (!apply) return { lines: [...rows, `${due.length} account${due.length === 1 ? '' : 's'} owed. /backpay apply pays them all.`], paid: [] };
     const paid = due.map((acct) => ({ acct, levels: payBack(acct.save).levels }));

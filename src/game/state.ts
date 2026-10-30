@@ -2,7 +2,7 @@ import { BAITS, FISH, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { TITLES } from '../data/ranks';
-import { FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, type Gifts } from './progression';
+import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
 
 export interface DexEntry {
@@ -74,7 +74,7 @@ export interface SaveData {
    * XP thrown away at the old level-50 cap, estimated once from the Fishdex when the cap was lifted.
    * The dev console's `/backpay` pays it out; `paid` keeps it from being paid twice.
    */
-  backPay: { xp: number; paid: boolean };
+  backPay: { xp: number; paid: boolean; /** Which estimate made `xp` (see `BACKPAY_VERSION`). */ v?: number };
 }
 
 export interface BestCatch {
@@ -214,8 +214,13 @@ export function migrate(raw: object): SaveData {
   out.gifts = { provisions: count(g.provisions), fares: count(g.fares) };
   // Saves from before the cap was lifted: a level-50 player's thrown-away XP is estimated now,
   // before any new catches land in the Fishdex, and waits for the dev console to pay it.
+  // An unpaid estimate from an older version is redone; catches since the cap was lifted are in the
+  // Fishdex too, so the XP already earned past 50 comes off.
   const bp = data.backPay as Partial<SaveData['backPay']> | undefined;
-  out.backPay = bp ? { xp: count(bp.xp), paid: bp.paid === true } : out.level >= FLAT_LEVEL ? { xp: backPayXp(out.dex), paid: false } : { xp: 0, paid: true };
+  out.backPay =
+    bp && (bp.paid === true || bp.v === BACKPAY_VERSION) ? { xp: count(bp.xp), paid: bp.paid === true, ...(bp.v ? { v: count(bp.v) } : {}) }
+    : out.level >= FLAT_LEVEL ? { xp: backPayXp(out.dex, xpPastFlat(out)), paid: false, v: BACKPAY_VERSION }
+    : { xp: 0, paid: true };
   for (const e of Object.values(out.dex)) if (e && e.shiny !== undefined) e.shiny = count(e.shiny);
   // Accounts from before faces get a random one.
   if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
