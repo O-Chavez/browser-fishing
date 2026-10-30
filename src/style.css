@@ -118,6 +118,8 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #resume { position: fixed; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; background: rgba(0,0,0,.25); cursor: pointer; }
 #resume::before { content: ''; position: absolute; width: 360px; height: 64px; border-radius: 16px; background: var(--hud-bg); box-shadow: var(--hud-edge); z-index: -1; }
 #resume b { padding: 1px 9px; margin: 0 6px; background: var(--gold); color: var(--gold-ink); border-radius: 7px; box-shadow: 0 3px 0 var(--gold-dark); }
+/* Below the "Click to keep playing" pill; its click opens Settings > Send feedback instead of resuming. */
+#resume #resume-fb { position: absolute; top: calc(50% + 46px); left: 0; right: 0; width: max-content; margin: 0 auto; padding: 8px 14px; font-size: 14px; }
 #prompt { position: absolute; left: 50%; bottom: 140px; transform: translateX(-50%); padding: 10px 18px; background: var(--hud-bg); box-shadow: var(--hud-edge); border-radius: 14px; font-size: 18px; font-weight: 800; white-space: nowrap; }
 /* casino hints sit low, above the prompt, so the table, dealer and boards stay in view */
 #tablehud { position: absolute; left: 50%; bottom: 196px; transform: translateX(-50%); padding: 8px 16px; text-align: center; line-height: 1.6; background: rgba(42, 10, 18, .88); box-shadow: 0 0 0 3px #b8862f; border-radius: 14px; font-size: 15px; font-weight: 800; white-space: nowrap; pointer-events: none; }
@@ -430,10 +432,16 @@ body.touch #join { backdrop-filter: none; }
 #join .grow { flex: 1; min-width: 0; }
 #join-preview canvas.preview { width: 240px; height: 300px; }
 #join label { display: block; margin: 10px 0 6px; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
-#join-name, #join-pass, #acct-pass { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
-#join-name:focus, #join-pass:focus, #acct-pass:focus { border-color: var(--gold-dark); }
-#acct-pass { font-size: 15px; padding: 8px 10px; }
-.detail p.acct-msg { color: var(--bad); }
+#join-name, #join-pass, #acct-pass, #fb-text { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
+#join-name:focus, #join-pass:focus, #acct-pass:focus, #fb-text:focus { border-color: var(--gold-dark); }
+#acct-pass, #fb-text { font-size: 15px; padding: 8px 10px; }
+#fb-text { display: block; resize: vertical; min-height: 88px; }
+#fb-text:read-only { opacity: .7; }
+.detail p.acct-msg, .detail p.fb-msg.error { color: var(--bad); }
+.detail p.fb-msg.sent { color: var(--ok-dark); }
+.fb { display: flex; flex-direction: column; gap: 12px; }
+.fb-kind { display: flex; gap: 8px; }
+.fb-kind .btn { flex: 1; }
 .joinmsg { min-height: 22px; color: var(--bad); font-size: 14px; }
 button.primary { display: block; width: 100%; padding: 12px; border-radius: 14px; font-size: 18px; font-weight: 900; background: var(--ok); color: #fff; box-shadow: 0 4px 0 var(--ok-dark); }
 button.primary:disabled { opacity: .6; }

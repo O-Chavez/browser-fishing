@@ -335,20 +335,20 @@ export class Room {
     this.say({ t: 'chat', room: this.name, id: m.info.id, name: m.info.name, map: m.info.map, text: res.text });
   }
 
-  private feedback(m: Member, kind: FeedbackKind, text: string, reply: (lines: string[]) => void): void {
+  private feedback(m: Member, kind: FeedbackKind, text: string, reply: (lines: string[], extra: { sent: boolean }) => void): void {
     const res = this.feedbackGate.check(m.acct.name, kind, text);
-    if (!res.ok) return reply([res.msg]);
+    if (!res.ok) return reply([res.msg], { sent: false });
     const { info } = m;
     const map = this.maps[info.map]?.name ?? info.map;
     this.report({ kind, text: res.text, name: m.acct.name, level: m.acct.save.level, map, x: info.x, z: info.z, room: this.name, browser: browserName(m.conn.ua), at: this.now() });
-    reply([kind === 'bug' ? 'Thanks! Your bug report was sent to the developer.' : kind === 'idea' ? 'Thanks! Your idea was sent to the developer.' : 'Thanks! Your feedback was sent to the developer.']);
+    reply([kind === 'bug' ? 'Thanks! Your bug report was sent to the developer.' : kind === 'idea' ? 'Thanks! Your idea was sent to the developer.' : 'Thanks! Your feedback was sent to the developer.'], { sent: true });
   }
 
   /** Slash commands: `/bug`, `/idea` and `/feedback` for everyone; `/login user pass` unlocks the dev console for this connection. */
   private command(m: Member, text: unknown): void {
     if (typeof text !== 'string' || !text.startsWith('/')) return;
     const [cmd = '', ...args] = text.slice(1, 200).trim().split(/\s+/);
-    const reply = (lines: string[], extra: { time?: number | null } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
+    const reply = (lines: string[], extra: { time?: number | null; sent?: boolean } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
     const kind = cmd.toLowerCase() as FeedbackKind;
     if (FEEDBACK_KINDS.includes(kind)) return this.feedback(m, kind, text.replace(/^\/\S*\s*/, ''), reply);
     if (cmd === 'login') {
