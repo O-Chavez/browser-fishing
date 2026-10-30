@@ -222,6 +222,26 @@ describe('Room economy', () => {
     room.handle(a.id, { t: 'lost' });
     expect(last(b.c, 'act').act).toBeNull();
   });
+
+  it('sends the Lucky Charm bonus with a held catch, so others see its real value', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'cast', x: 1, z: -9 });
+    advance(20_000);
+    room.handle(a.id, { t: 'catch' });
+    expect(last(b.c, 'act').act).toMatchObject({ a: 'hold' });
+    expect(last(b.c, 'act').act).not.toHaveProperty('mult');
+
+    a.acct.save.perks.push('charm1', 'charm2');
+    room.handle(a.id, { t: 'cast', x: 1, z: -9 });
+    advance(20_000);
+    room.handle(a.id, { t: 'catch' });
+    const act = last(b.c, 'act').act;
+    expect(act).toMatchObject({ a: 'hold', mult: 1.1 });
+    const stored = a.acct.save.slots.find((s) => s?.k === 'fish' && s.mult);
+    expect(stored).toMatchObject({ fishId: act?.a === 'hold' ? act.fish : '', mult: 1.1 });
+  });
 });
 
 describe('lucky wheel', () => {

@@ -509,7 +509,8 @@ export class Room {
       this.setAct(m, null);
       return false;
     }
-    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny });
+    const bonus = eco.charmBonus(m.acct.save);
+    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(bonus > 0 ? { mult: 1 + bonus } : {}) });
     return true;
   }
 
