@@ -6,9 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] 💬 Make the day/night cycle follow the server's clock, not each device's clock: players reported some saw night while others saw day at the same moment
-  - Likely cause: each client draws the sky from its own device clock (`dayFraction(Date.now() / 1000)` in `World.updateDaylight`, `src/game/world.ts:390`), and a day lasts only 10 minutes (`DAY_SECONDS`, `src/game/daynight.ts`), so a phone clock off by a minute or two shifts its whole cycle. The server already decides night bites from its own clock (`server/room.ts:493`), so a skewed client can also show night while the server rolls day fish. Fix: the server sends its time (or the day fraction) on join and now and then, and the client uses that offset instead of its own clock
-  - Also check the dev `/time` override (`m.dayFrac` in `server/room.ts`, `dayOverride` set in `src/game/game.ts:285`) only affects the player who typed it, and that it stays obvious when it's on
 - [ ] Use the HUD's gold coin everywhere a price or coin amount is shown, in the shops and the rest of the UI
   - The top-left coin count draws a CSS coin (`.coin`, `src/style.css:59`, with `.sm`/`.xs` sizes), but most prices use the 🪙 emoji instead (about 34 places: `src/game/game.ts` shop, bag and casino tiles and detail panels, `casino.ts`, `tips.ts`), which looks different on every platform. Swap the HTML ones for the `.coin` span at a size that sits on the text line
   - Plain-text spots can't hold a span: toasts (e.g. the catch toast, `game.ts:316`), chat lines, and the canvas-drawn Top Anglers board (`hub.ts:438`) and casino record board (`src/game/casinorecords.ts`). Decide per spot: draw a matching coin on the canvas, allow HTML in toasts, or keep the emoji there

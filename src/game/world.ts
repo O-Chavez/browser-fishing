@@ -150,6 +150,8 @@ export class World {
   private base = { water: new THREE.Color(), deep: new THREE.Color(), sky: new THREE.Color(), top: new THREE.Color(), grass: new THREE.Color() };
   /** Set (0..1 of the day) to freeze the time of day; null follows the shared clock. */
   dayOverride: number | null = null;
+  /** The shared clock (ms) the day follows; the game points it at the server's time. */
+  clock: () => number = Date.now;
   night = 0;
   private sky!: THREE.Mesh;
   private hemi = new THREE.HemisphereLight(0xffffff, 0x446644, 1.1);
@@ -430,7 +432,7 @@ export class World {
 
   /** Blends sky, light, water, lamps and fireflies between day and night. */
   private updateDaylight(t: number): void {
-    const f = this.dayOverride ?? dayFraction(Date.now() / 1000);
+    const f = this.dayOverride ?? dayFraction(this.clock() / 1000);
     const n = nightness(f);
     if (this.indoor) {
       this.night = n;

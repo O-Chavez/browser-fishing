@@ -76,7 +76,10 @@ export type ClientMsg =
   | { t: 'forget' };
 
 export type ServerMsg =
-  | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean }
+  /** `now` is the server's clock (ms), so every player's sky follows the same day instead of their device's clock. */
+  | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean; now: number }
+  /** The server's clock again (every CLOCK_MS), in case the device's clock jumps mid-session. */
+  | { t: 'clock'; now: number }
   /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
   | { t: 'error'; msg: string; need?: 'password' }
   /** Reply to `setpass`: `msg` is set if it was refused. */

@@ -56,6 +56,8 @@ export class NetClient {
   pass: string | undefined;
   /** The account has a password (so it can log in on other devices). */
   hasPass = false;
+  /** Server clock minus this device's clock (ms); 0 offline, where the device's clock is all there is. */
+  private clockOffset = 0;
 
   constructor(
     public name: string,
@@ -94,6 +96,16 @@ export class NetClient {
     };
   }
 
+  /** The server's time (ms), which the day/night cycle follows so every player sees the same sky. */
+  now(): number {
+    return Date.now() + this.clockOffset;
+  }
+
+  /** Message delay is ignored: it's well under a second, and a day lasts minutes. */
+  private setClock(serverNow: number | undefined): void {
+    if (typeof serverNow === 'number' && Number.isFinite(serverNow)) this.clockOffset = serverNow - Date.now();
+  }
+
   send(msg: ClientMsg): void {
     if (this.connected && this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
@@ -116,12 +128,16 @@ export class NetClient {
         this.id = m.id;
         this.room = m.room;
         this.hasPass = m.hasPass;
+        this.setClock(m.now);
         m.players.forEach((p) => this.players.set(p.id, p));
         this.setSave(m.save);
         this.events.onPlayers();
         break;
       case 'state':
         this.setSave(m.save);
+        break;
+      case 'clock':
+        this.setClock(m.now);
         break;
       case 'drops':
         this.events.onDrops(m.list);

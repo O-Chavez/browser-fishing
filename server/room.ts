@@ -55,6 +55,8 @@ const MIN_FIGHT_MS = 1500;
 export const SPIN_MS = 3800;
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
 export const BOARD_MS = 1000;
+/** How often the server's clock goes out again, so day and night stay in step if a device's clock changes. */
+export const CLOCK_MS = 60_000;
 const NO_HALL: HallRow[] = [];
 const NO_RECORDS: CasinoRecords = { win: null, loss: null };
 
@@ -66,6 +68,7 @@ export class Room {
   private maps: Record<string, MapDef>;
   private lastBoard = '';
   private boardAt = -Infinity;
+  private clockAt = -Infinity;
   private lastStats = '';
   private lastHall = '';
   private lastHallRows: HallRow[] | null = null;
@@ -132,6 +135,7 @@ export class Room {
       save: acct.save,
       players: [...this.members.values()].map((o) => o.info),
       hasPass: !!acct.pw,
+      now: this.now(),
     });
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
@@ -585,6 +589,10 @@ export class Room {
     if (this.drops.expire()) this.broadcast({ t: 'drops', list: this.drops.all() });
     for (const m of this.members.values()) this.settle(m);
     if (this.now() - this.boardAt >= BOARD_MS) this.board();
+    if (this.now() - this.clockAt >= CLOCK_MS) {
+      this.clockAt = this.now();
+      this.broadcast({ t: 'clock', now: this.clockAt });
+    }
     this.positions();
   }
 

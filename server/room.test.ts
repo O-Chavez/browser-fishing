@@ -6,7 +6,7 @@ import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { FISH } from '../src/data/content';
 import { sellValue } from '../src/game/progression';
-import { BOARD_MS, Room } from './room';
+import { BOARD_MS, CLOCK_MS, Room } from './room';
 
 const conn = () => {
   const log: ServerMsg[] = [];
@@ -550,6 +550,24 @@ describe('player list', () => {
     const b = join('Bob');
     const welcome = b.c.log.find((m) => m.t === 'welcome') as Extract<ServerMsg, { t: 'welcome' }>;
     expect(welcome.players.find((p) => p.id === a.id)?.level).toBe(7);
+  });
+});
+
+describe('shared clock', () => {
+  it("sends the server's time on join and again every CLOCK_MS, so every sky shows the same hour", () => {
+    const t = setup();
+    const a = t.join('Ann');
+    expect(last(a.c, 'welcome').now).toBe(1_000_000);
+    t.room.snapshot();
+    expect(last(a.c, 'clock').now).toBe(1_000_000);
+    const sent = () => a.c.log.filter((m) => m.t === 'clock').length;
+    t.advance(CLOCK_MS - 1);
+    t.room.snapshot();
+    expect(sent()).toBe(1);
+    t.advance(1);
+    t.room.snapshot();
+    expect(sent()).toBe(2);
+    expect(last(a.c, 'clock').now).toBe(1_000_000 + CLOCK_MS);
   });
 });
 
