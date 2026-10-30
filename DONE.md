@@ -2,6 +2,8 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] `npm run smoke` fails "pond night: town lamps lit, lanterns and windows drawn" on `main` (seen 2026-10-22). Probably since the night glow made real lights fade in: the check reads `intensity > 1` only 600 ms after switching to night. Fix the check (or the fade) so smoke is green again
+  - Done (2026-10-30): couldn't reproduce; `main` passed 66/66 too, so it's timing-dependent. Teleporting to the plaza changes which 8 lights are nearest, and an incoming lamp only gets a slot after a far one has faded out (0.4 s), on top of the pool's 0.25 s re-rank and the 50 ms cap on each frame's game time, so slow headless frames can push it past the fixed 600 ms sleep. The check now waits up to 5 s for a hub lamp and a town lamp to light (`waitForFunction`) and reports how long that took (78 ms on an idle M1). The fade itself is unchanged. Smoke 66/66
 - [x] 💬 Log out of a password-free account and log in as another one
   - E.g. a player who started a throwaway account on one device wants to switch to their main account there. Today "Log out of this device" only appears once a password is set (`acctForm` in `src/game/game.ts:2971-2974`) and the server refuses `forget` without one (`server/index.ts:252`), so the only way to switch is clearing site data
   - Add a "Log in as a different account" option in ⚙️ Settings > Account for every account, leading to the join screen (name + password). For a password-free account, warn clearly that it can't be got back after logging out (or offer to set a password first)

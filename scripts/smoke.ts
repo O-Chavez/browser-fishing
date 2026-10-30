@@ -177,7 +177,14 @@ async function pondChecks(): Promise<void> {
 
   // Night: lamps, windows and torches must still be on meshes that are drawn.
   await page.evaluate(() => { window.__game.day(0.7); window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.15); });
-  await sleep(600);
+  // Real lights fade in (`LightPool`): one near the plaza waits for a far one to dim before taking its
+  // slot, and slow headless frames stretch that well past a fixed sleep.
+  const litStart = Date.now();
+  await page.waitForFunction(() => {
+    const w = window.__game.world as any;
+    return w.hub.lampLights.some((l: any) => l.intensity > 1) && w.town.lights.some((l: any) => l.intensity > 1);
+  }, { timeout: 5000 }).catch(() => null);
+  const litMs = Date.now() - litStart;
   const night = await page.evaluate(() => {
     const w = window.__game.world as any;
     const used = window.__smoke.materialsInScene();
@@ -189,8 +196,8 @@ async function pondChecks(): Promise<void> {
       windows: used.has(w.town.windowMat),
     };
   });
-  check('pond night: hub lamps lit and their bulbs drawn', night.hubLamps && night.hubLampMats);
-  check('pond night: town lamps lit, lanterns and windows drawn', night.townLamps && night.townLampMats && night.windows);
+  check('pond night: hub lamps lit and their bulbs drawn', night.hubLamps && night.hubLampMats, `lit after ${litMs} ms`);
+  check('pond night: town lamps lit, lanterns and windows drawn', night.townLamps && night.townLampMats && night.windows, `lit after ${litMs} ms`);
   await page.screenshot({ path: `${SHOTS}/pond-plaza-night.png` });
 
   const anim = await page.evaluate(async () => {

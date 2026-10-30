@@ -6,7 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] `npm run smoke` fails "pond night: town lamps lit, lanterns and windows drawn" on `main` (seen 2026-10-22). Probably since the night glow made real lights fade in: the check reads `intensity > 1` only 600 ms after switching to night. Fix the check (or the fade) so smoke is green again
 - [ ] `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
 - [ ] 💬 Other players' catch alert shows the base value, not the charm-boosted one (from `/idea`, Oscar C, 2026-10-29). The server's `hold` act (`Room.land`, `server/room.ts:512`) sends only fish, size and shiny, and the toast (`onAct`, `src/game/game.ts:304`) uses plain `sellValue`, while the catch itself stores `mult: 1 + charmBonus` (`applyCatch`, `src/game/economy.ts:392`). Send the multiplier (or the final value) in the act and show that
 - [ ] 💬 Show rod prices in the shop even when the rod is owned or still level-locked (from `/idea`, Oscar C, 2026-10-29). The tile label in `gearShopHtml` (`src/game/game.ts:3034`) replaces the price with "Owned" or "🔒 Lv N"; show the price alongside those instead, and check the bait tiles and the Bag tiles (`game.ts:2802`) the same way
