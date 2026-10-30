@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BAITS, FISH, RODS, byId } from '../data/content';
-import { FLAT_LEVEL, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, eligibleFish, grantRanks, levelGifts, nextGoal, pickFish, reelDifficulty, rollSize, sellValue, welcomeText, xpForNextLevel } from './progression';
+import { FLAT_LEVEL, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, earnedXp, xpPastFlat, eligibleFish, grantRanks, levelGifts, nextGoal, pickFish, reelDifficulty, rollSize, sellValue, welcomeText, xpForNextLevel } from './progression';
 
 const twig = byId(RODS, 'twig');
 const graphite = byId(RODS, 'graphite');
@@ -235,6 +235,15 @@ describe('levels past 50 and ranks', () => {
     const eel = byId(FISH, 'constellation');
     const n = 2000;
     const mid = catchXp(eel, (eel.minSize + eel.maxSize) / 2, false);
-    expect(backPayXp({ [eel.id]: { count: n } })).toBe(n * mid - XP_TO_FLAT);
+    // Daytime shinies triple 5% of catches, and the first catch is double.
+    const earned = Math.round(n * mid * 1.1 + mid);
+    expect(earnedXp({ [eel.id]: { count: n } })).toBe(earned);
+    expect(backPayXp({ [eel.id]: { count: n } })).toBe(earned - XP_TO_FLAT);
+    expect(backPayXp({ [eel.id]: { count: n } }, 5000)).toBe(earned - XP_TO_FLAT - 5000);
+  });
+  it('counts XP past 50 only for saves past it', () => {
+    expect(xpPastFlat({ level: 49, xp: 900 })).toBe(0);
+    expect(xpPastFlat({ level: 50, xp: 900 })).toBe(900);
+    expect(xpPastFlat({ level: 52, xp: 10 })).toBe(2 * xpForNextLevel(50) + 10);
   });
 });

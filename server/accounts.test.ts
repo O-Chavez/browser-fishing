@@ -191,7 +191,8 @@ describe('back pay for the old level cap', () => {
     const store = new AccountStore({ ann: { name: 'Ann', tokens: ['x'], save: vet() }, bob: { name: 'Bob', tokens: ['y'], save: { ...newSave(), level: 12 } } });
     const preview = store.backPay(false);
     expect(preview.paid).toEqual([]);
-    expect(preview.lines[0]).toMatch(/^Ann: Lv 50 → \d+ \(\+[\d,]+ XP\)$/);
+    expect(preview.lines[0]).toMatch(/^Ann: Lv 50 → \d+ \(\+[\d,]+ XP\) · 3,000 catches ≈ [\d,]+ XP in all$/);
+    expect(preview.lines[1]).toContain('Reaching 50 takes');
     expect(preview.lines.at(-1)).toContain('1 account owed');
     const ann = store.all().find((a) => a.name === 'Ann')!;
     expect(ann.save.level).toBe(50);

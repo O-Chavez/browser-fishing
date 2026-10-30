@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as eco from './economy';
 import { SLOT_COUNT, migrate, newSave, type SaveData } from './state';
 import { FISH, byId } from '../data/content';
-import { FLAT_LEVEL, backPayXp, xpForNextLevel } from './progression';
+import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, xpForNextLevel } from './progression';
 import { Drops } from './drops';
 import { COSMETICS, COS_SLOTS, cosById, isFace } from '../data/cosmetics';
 
@@ -518,7 +518,7 @@ describe('ranks, titles and back pay', () => {
     delete old.backPay;
     delete old.titles;
     const s = migrate(old);
-    expect(s.backPay).toEqual({ xp: backPayXp(dex), paid: false });
+    expect(s.backPay).toEqual({ xp: backPayXp(dex), paid: false, v: BACKPAY_VERSION });
     expect(s.titles).toContain('admiral');
     expect(s.owned).toContain('bicorne');
     // Later loads keep the first estimate, even after more catches.
@@ -530,6 +530,13 @@ describe('ranks, titles and back pay', () => {
     expect(s.gifts).toEqual(eco.BACKPAY_GIFTS);
     expect(s.titles).toContain('fleetadmiral');
     expect(eco.payBack(s).levels).toBe(0);
+  });
+  it('redoes an unpaid estimate from an older version, less the XP earned past 50 since', () => {
+    const dex = { [eel.id]: { count: 3000, best: 250 } };
+    const s = migrate({ ...newSave(), level: FLAT_LEVEL + 2, xp: 100, dex, backPay: { xp: 7, paid: false } });
+    expect(s.backPay).toEqual({ xp: backPayXp(dex, 2 * xpForNextLevel(FLAT_LEVEL) + 100), paid: false, v: BACKPAY_VERSION });
+    // A paid one is never redone.
+    expect(migrate({ ...newSave(), level: FLAT_LEVEL, dex, backPay: { xp: 7, paid: true } }).backPay).toEqual({ xp: 7, paid: true });
   });
   it('owes nothing to saves below 50 or new ones', () => {
     const old = { ...newSave(), level: 30 } as Partial<SaveData>;
