@@ -6,9 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] Cosmetics preview starts on what the player is wearing, most noticeable at the cosmetics stall by the dock and the Casino Cove Prize Counter
-  - Opening either shop picks the first cosmetic you don't own (`cosShopHtml`, `src/game/game.ts:3293`) and `previewLook` (`game.ts:2869`) puts it on the spinning character, so the preview shows an outfit you aren't wearing. Show your current look until you click or hover a tile (`tryOn`, `game.ts:1204`, already restores it on mouse-out), and decide what the detail panel shows before anything is picked (e.g. a worn item, or a "pick an item" hint)
-
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
