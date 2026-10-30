@@ -64,6 +64,8 @@ export type ClientMsg =
   /** Turn the fish in slot i in at the prize shop for chips. */
   | { t: 'cashout'; i: number }
   | { t: 'buyperk'; id: string }
+  /** Switch the Shiny Lure on or off (off saves its charges). */
+  | { t: 'lure'; on: boolean }
   /** A new-player tip was shown, so it isn't shown again. */
   | { t: 'tip'; id: string }
   /** A global chat line. */

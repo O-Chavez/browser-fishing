@@ -341,6 +341,20 @@ describe('shinies & fishing spots', () => {
     const rows = last(b.c, 'hall').rows;
     expect(rows.map((r) => r.name)).toEqual(['Bob', 'Ann']);
   });
+  it('rolls the Shiny Lure on the server only while the player has it on', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    a.acct.save.lure = 2;
+    room.handle(a.id, { t: 'lure', on: false });
+    expect(last(a.c, 'state').save.lureOff).toBe(true);
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(last(a.c, 'castok').shiny).toBe(false);
+    expect(a.acct.save.lure).toBe(2);
+    room.handle(a.id, { t: 'lure', on: true });
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(last(a.c, 'castok').shiny).toBe(true);
+    expect(a.acct.save.lure).toBe(1);
+  });
   it('flags a perfect cast in the roll', () => {
     const { room, join } = setup() as ReturnType<typeof setup>;
     const a = join('Ann');

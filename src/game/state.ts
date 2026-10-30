@@ -55,6 +55,8 @@ export interface SaveData {
   perks: string[];
   /** Shiny Lure casts left. */
   lure: number;
+  /** The player switched the Shiny Lure off to save its charges for later. */
+  lureOff: boolean;
   /** New-player tips already shown (see `TIP_IDS`). */
   tips: string[];
 }
@@ -87,6 +89,7 @@ export const newSave = (): SaveData => ({
   chips: 0,
   perks: [],
   lure: 0,
+  lureOff: false,
   tips: [],
 });
 
@@ -172,6 +175,7 @@ export function migrate(raw: object): SaveData {
   if (!Array.isArray(out.perks)) out.perks = [];
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
+  out.lureOff = out.lureOff === true;
   // Saves from before the tips only get them if they haven't started playing yet.
   out.tips = Array.isArray(data.tips) ? data.tips.filter(isTip) : isFreshSave(out) ? [] : [...TIP_IDS];
   if (!Number.isInteger(out.held) || out.held < 0 || out.held >= out.slots.length) out.held = 0;

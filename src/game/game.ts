@@ -123,6 +123,7 @@ export class Game {
   private castSpot: SpotId = 'prime';
   private spotShown = '';
   private nightShown = '';
+  private lureShown = '';
   /** The dev console's /time froze this player's sky (the screenshot scripts' own override doesn't count). */
   private devTime = false;
   private timer = 0;
@@ -918,6 +919,7 @@ export class Game {
     else if (act === 'equip') this.equip(btn.dataset.slot as CosSlot, id || null);
     else if (act === 'color') this.recolor(Number(id));
     else if (act === 'face') this.reface(id!);
+    else if (act === 'lure') this.switchLure();
     else if (act === 'reset') this.confirmReset = true;
     else if (act === 'resetno') this.confirmReset = false;
     else if (act === 'resetyes') this.resetAccount();
@@ -1177,6 +1179,13 @@ export class Game {
   private reface(face: string): void {
     if (!eco.setFace(this.s, face)) return;
     this.net.send({ t: 'face', id: face });
+    this.persist();
+  }
+
+  private switchLure(): void {
+    const on = !eco.lureOn(this.s);
+    if (!eco.setLure(this.s, on)) return;
+    this.net.send({ t: 'lure', on });
     this.persist();
   }
 
@@ -2201,6 +2210,15 @@ export class Game {
     $('nightchip').textContent = text;
   }
 
+  /** A reminder while the Shiny Lure is on, since every fish hooked spends a charge. */
+  private updateLure(): void {
+    const n = this.s.lure;
+    const text = eco.lureOn(this.s) ? `✨ Shiny Lure on · ${n} cast${n === 1 ? '' : 's'} left` : '';
+    if (text === this.lureShown) return;
+    this.lureShown = text;
+    $('lurechip').textContent = text;
+  }
+
   private updateSpot(): void {
     if (this.phase !== 'idle' && this.phase !== 'charging') return;
     if (this.map.casino) {
@@ -2242,6 +2260,7 @@ export class Game {
     this.updateContext();
     this.updateSpot();
     this.updateNight();
+    this.updateLure();
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
     this.avatars.update(dt, this.world.time, this.net.players, this.player.x, this.player.z);
     this.syncBystanders();
@@ -2778,12 +2797,13 @@ export class Game {
         else if (i === BAIT_SLOT) body = '<span class="ic ghost">🪱</span>';
       }
       body += tag;
+      if (i === BAIT_SLOT && eco.lureOn(s)) body += `<b class="lure">✨${s.lure}</b>`;
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
       if (sellable) cls += ' sellable';
       const sell = sellable ? `Sell · ${eco.sellPrice(this.s, sl)} ${COIN}` : '';
       const name = sl?.k === 'fish' ? byId(FISH, sl.fishId).name + (i >= size ? ' · extra slot until it is sold' : '')
         : i === ROD_SLOT ? 'Rod slot: swap rods in your Bag (Tab)'
-        : i === BAIT_SLOT ? 'Bait slot: swap bait in your Bag (Tab)' : '';
+        : i === BAIT_SLOT ? `Bait slot: swap bait in your Bag (Tab)${eco.lureOn(s) ? ` · Shiny Lure on: the next ${s.lure} fish hooked will be shiny` : ''}` : '';
       const c = el.children[i] as HTMLElement;
       const key = [cls, body, sell, name, ring].join('|');
       if (c.dataset.h === key) return;
@@ -2957,7 +2977,13 @@ export class Game {
   private perksHtml(): string {
     const perks = eco.activePerks(this.s);
     const body = perks.length
-      ? `<div class="perks">${perks.map((p) => `<div class="perk" data-tip="${this.esc(p.name)}"><span class="ic">${p.icon}</span><b>${p.effect}</b></div>`).join('')}</div>`
+      ? `<div class="perks">${perks.map((p) => {
+        const inner = `<span class="ic">${p.icon}</span><b>${p.effect}</b>`;
+        if (p.id !== 'lure') return `<div class="perk" data-tip="${this.esc(p.name)}">${inner}</div>`;
+        // The Shiny Lure switches off to save its charges for a better fish.
+        const on = eco.lureOn(this.s);
+        return `<button class="perk lure${on ? '' : ' off'}" data-act="lure" data-tip="${p.name} · click to turn ${on ? 'off' : 'on'}">${inner}<span class="sw"></span></button>`;
+      }).join('')}</div>`
       : `<p class="empty">None yet. Win chips at Casino Cove and trade them for charms at the Prize Counter.</p>`;
     return `<h4 class="perks-h">Charms &amp; perks · active bonuses</h4>${body}`;
   }

@@ -6,9 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] 🎨 Show when a Shiny Lure is on, and let players turn it off in the Bag
-  - Today a bought lure is always on: the server spends a charge on the next cast that hooks a fish (`rollCast`, `src/game/economy.ts:362`), and the only sign is a line under "Charms & perks" in the Bag (`activePerks`, `economy.ts:202`; `perksHtml`, `src/game/game.ts:2879`). Add something visible while fishing, e.g. "✨ Shiny Lure on · 2 casts left" near the hotbar or HUD; propose the look first
-  - An on/off toggle on the lure in the Bag, so players can save charges for a better fish. Store it in the save (`SaveData`, `src/game/state.ts:48`) and have the server check it in `rollCast`, not just the client
 - [ ] 🎨 Improve the welcome screen, and let players know there they can log out or switch accounts, without making it overbearing
   - The welcome-back banner (`Game.welcome`, `src/game/game.ts:519`; text from `welcomeText`, `src/game/progression.ts:163`) shows for 4.2 s with the level, coins and next goal, plus a 🔒 password nudge from level 3. Logging out lives only in ⚙️ Settings > Account ("Log in as a different account…", finished item in DONE.md), and the join card's "Not you? Switch account" link (`#join-switch`, `index.html:99`) only shows when the browser remembers a name
   - E.g. a small "Not you? Switch account in ⚙️ Settings" line on the banner, a one-time tip, or a quiet link on the join card. Taste-driven: ask what else should change on the welcome screen, then propose options
@@ -44,6 +41,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Casino
 
+- A Shiny Lure charge is spent when the fish bites (`rollCast`, `src/game/economy.ts`), so a shiny that snaps the line or gets away still uses one up. Maybe refund the charge when the catch fails, or only spend it on a landed fish (the server would have to track that the hooked fish came from the lure)
 - 🎨 Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%). Each account already keeps its own biggest win and loss (`Account.casino`, `server/accounts.ts`), which a stats panel could show
 - 🎨 Announce a broken casino record in chat ("🎰 Ann just won 12,000 🪙 at blackjack, a casino record!"), a server-wide `sys` line from `Room.gambled` (`server/room.ts`). Left out of the record board because blackjack settles on the server the moment the last card is drawn, so with a paced client-side reveal the line could spoil the hand for the player; send it after the reveal or delay it by the deal's length
 
