@@ -1,4 +1,4 @@
-import type { CasinoRecord, CasinoRecords, Gamble, HallRow } from '../src/net/protocol';
+import { RENAME_COOLDOWN_MS, waitText, type CasinoRecord, type CasinoRecords, type Gamble, type HallRow } from '../src/net/protocol';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { payBack } from '../src/game/economy';
@@ -23,6 +23,10 @@ export interface Account {
   supporter?: number;
   /** The player's biggest single casino win and loss, for the casino record board. Kept outside the save so a reset keeps it. */
   casino?: { win?: Gamble; loss?: Gamble };
+  /** When the name last changed, for the rename cooldown. */
+  renamed?: number;
+  /** The name before the last change, lowercase, so browsers that still have it saved follow the account. */
+  prev?: string;
 }
 
 interface PassHash {
@@ -74,13 +78,16 @@ export class AccountStore {
   private recordRows: CasinoRecords | null = null;
   private lock: Lockout;
 
-  constructor(raw: Record<string, unknown> = {}, now: () => number = Date.now) {
+  constructor(
+    raw: Record<string, unknown> = {},
+    private now: () => number = Date.now,
+  ) {
     this.lock = new Lockout(5, 50, 15 * 60_000, now);
-    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; casino?: Account['casino']; save: unknown };
+    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; casino?: Account['casino']; renamed?: number; prev?: string; save: unknown };
     for (const [k, a] of Object.entries(raw) as [string, Stored][]) {
       // Older saves kept a single token `hash`.
       const tokens = Array.isArray(a?.tokens) ? a.tokens : a?.hash ? [a.hash] : null;
-      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), ...(a.casino ? { casino: a.casino } : {}), save: migrate(a.save as SaveData), online: false });
+      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...pick(a), save: migrate(a.save as SaveData), online: false });
     }
   }
 
@@ -89,6 +96,10 @@ export class AccountStore {
     const p = parse(name, token);
     if ('msg' in p) return { ok: false, msg: p.msg };
     let acct = this.accounts.get(p.key);
+    if (!acct?.tokens.includes(p.h)) {
+      const moved = this.renamedFrom(p.key, p.h);
+      if (moved) return { ok: true, account: moved, created: false };
+    }
     const created = !acct;
     if (!acct) {
       // Only new claims: an account that already has such a name keeps logging in. The cut to 16
@@ -108,7 +119,7 @@ export class AccountStore {
   async login(name: string, token: string, pass: unknown): Promise<AuthResult> {
     const p = parse(name, token);
     const acct = 'key' in p ? this.accounts.get(p.key) : undefined;
-    if (!('key' in p) || !acct?.pw || acct.tokens.includes(p.h)) return this.auth(name, token);
+    if (!('key' in p) || !acct?.pw || acct.tokens.includes(p.h) || this.renamedFrom(p.key, p.h)) return this.auth(name, token);
     if (this.lock.blocked(p.key)) return { ok: false, need: 'password', msg: 'Too many wrong passwords. Try again later.' };
     if (typeof pass !== 'string' || pass.length > PASS_MAX || !(await checkPass(pass, acct.pw))) {
       this.lock.fail(p.key);
@@ -143,6 +154,40 @@ export class AccountStore {
       this.recordRows = null;
     }
     this.touch();
+  }
+
+  /** The account this browser knew by the name `key` before it was changed, if any. */
+  private renamedFrom(key: string, h: string): Account | undefined {
+    for (const a of this.accounts.values()) if (a.prev === key && a.tokens.includes(h)) return a;
+  }
+
+  /** Milliseconds until the account may change its name again (0 if it may now). */
+  renameWait(acct: Account): number {
+    return Math.max(0, (acct.renamed ?? -Infinity) + RENAME_COOLDOWN_MS - this.now());
+  }
+
+  /** Changes the account's name and frees the old one. Returns why it was refused, or null. */
+  rename(acct: Account, name: unknown): string | null {
+    const clean = typeof name === 'string' ? cleanName(name) : '';
+    if (clean.length < 2) return 'Name must be 2-16 letters, numbers, spaces or dashes.';
+    if (clean === acct.name) return `Your name is already ${clean}.`;
+    if (rudeName(name as string) || rudeName(clean)) return `The name "${clean}" isn't allowed. Please pick another.`;
+    const wait = this.renameWait(acct);
+    if (wait) return `You can change your name again in ${waitText(wait)}.`;
+    const key = clean.toLowerCase();
+    const old = nameKey(acct.name);
+    // Changing only the capitals keeps the same key.
+    if (key !== old && this.accounts.has(key)) return `The name "${clean}" is taken.`;
+    this.accounts.delete(old);
+    if (key !== old) acct.prev = old;
+    acct.name = clean;
+    acct.renamed = this.now();
+    this.accounts.set(key, acct);
+    this.hallRows = null;
+    this.supporterNames = null;
+    this.recordRows = null;
+    this.touch();
+    return null;
   }
 
   /** Dev console: give a locked-out player a new password. Every remembered browser is signed out. */
@@ -259,7 +304,7 @@ export class AccountStore {
       [...this.accounts].map(([k, a]) => [
         k,
         // `hash` is still written so an older server, after a rollback, keeps the account (it skips ones without).
-        { name: a.name, hash: a.tokens[0] ?? '-', tokens: a.tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), ...(a.casino ? { casino: a.casino } : {}), save: a.save },
+        { name: a.name, hash: a.tokens[0] ?? '-', tokens: a.tokens, ...pick(a), save: a.save },
       ]),
     );
   }
@@ -275,6 +320,15 @@ export class AccountStore {
     this.dirty = true;
   }
 }
+
+/** The optional account fields, left out when unset so the saved JSON stays small. */
+const pick = (a: Pick<Account, 'pw' | 'supporter' | 'casino' | 'renamed' | 'prev'>) => ({
+  ...(a.pw ? { pw: a.pw } : {}),
+  ...(a.supporter ? { supporter: a.supporter } : {}),
+  ...(a.casino ? { casino: a.casino } : {}),
+  ...(a.renamed ? { renamed: a.renamed } : {}),
+  ...(a.prev ? { prev: a.prev } : {}),
+});
 
 const cleanName = (name: string) => String(name ?? '').replace(/[^\w \-]/g, '').trim().slice(0, 16);
 const nameKey = (name: string) => cleanName(name).toLowerCase();

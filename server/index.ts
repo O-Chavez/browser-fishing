@@ -132,6 +132,7 @@ function room(name: string): Room {
     r.recordGamble = (acct, win, g) => accounts.gambled(acct, win, g);
     r.records = () => accounts.records();
     r.setSupporter = setSupporter;
+    r.renameWait = (a) => accounts.renameWait(a);
     r.backPay = backPay;
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
@@ -271,6 +272,18 @@ wss.on('connection', (ws, req) => {
           rooms.forEach((r) => r.broadcast(msg));
         }
         return ws.close();
+      }
+      if (msg.t === 'rename') {
+        const old = acct.name;
+        const bad = accounts.rename(acct, msg.name);
+        if (bad) return send({ t: 'account', hasPass: !!acct.pw, msg: bad });
+        r.renamed(id, old);
+        // The 💗 lists hold names, so a supporter's new name has to reach everyone.
+        if (acct.supporter) rooms.forEach((o) => o.broadcast({ t: 'supporters', names: accounts.supporters() }));
+        // So does the casino record board, if they hold a record.
+        const rec = accounts.records();
+        if (rec.win?.name === acct.name || rec.loss?.name === acct.name) rooms.forEach((o) => o.broadcast({ t: 'records', records: rec }));
+        return;
       }
       return r.handle(id, msg);
     }

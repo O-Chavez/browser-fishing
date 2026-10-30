@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { MAPS } from '../src/data/maps';
 import { newSave } from '../src/game/state';
 import type { ServerMsg } from '../src/net/protocol';
+import { RENAME_COOLDOWN_MS } from '../src/net/protocol';
 import { AccountStore, MAX_DEVICES } from './accounts';
 import { DevGate } from './dev';
 import { Room } from './room';
@@ -178,6 +179,116 @@ describe('accounts', () => {
     const again: ServerMsg[] = [];
     room.join({ send: (m) => again.push(m) }, acct);
     expect(again.find((m) => m.t === 'welcome')).toMatchObject({ hasPass: true });
+  });
+});
+
+describe('renaming', () => {
+  const C = 'c'.repeat(20);
+  const DAY = 24 * 60 * 60_000;
+  const setup = () => {
+    let t = 1_000_000;
+    const store = new AccountStore({}, () => t);
+    const res = store.auth('Ann', A);
+    if (!res.ok) throw new Error(res.msg);
+    return { store, acct: res.account, later: (ms: number) => (t += ms) };
+  };
+
+  it('moves the account to the new name and frees the old one', async () => {
+    const { store, acct } = setup();
+    await store.setPass(acct, A, 'trout-lake');
+    acct.save.best = { fishId: 'trout', size: 40, value: 99 };
+    store.setSupporter('Ann', true);
+    store.gambled(acct, true, { amount: 500, game: 'roulette', fishId: 'trout', at: 1 });
+    expect(store.records().win?.name).toBe('Ann');
+    expect(store.rename(acct, '  Bea!! ')).toBeNull();
+    expect(acct.name).toBe('Bea');
+    expect(store.names()).toEqual(['Bea']);
+    expect(store.hall()[0].name).toBe('Bea');
+    expect(store.supporters()).toEqual(['Bea']);
+    expect(store.records().win?.name).toBe('Bea');
+    expect(store.auth('Bea', A)).toMatchObject({ ok: true, account: acct });
+    expect((await store.login('bea', B, 'trout-lake')).ok).toBe(true);
+    expect(store.auth('Ann', C)).toMatchObject({ ok: true, created: true });
+  });
+
+  it('refuses bad, unchanged and taken names', () => {
+    const { store, acct } = setup();
+    store.auth('Cy', B);
+    expect(store.rename(acct, 'x')).toContain('2-16');
+    expect(store.rename(acct, { name: 'Bea' })).toContain('2-16');
+    expect(store.rename(acct, 'Ann')).toContain('already');
+    expect(store.rename(acct, 'cy')).toBe('The name "cy" is taken.');
+    expect(store.rename(acct, 'Ass99')).toContain("isn't allowed");
+    expect(acct.name).toBe('Ann');
+  });
+
+  it('allows one change every 7 days, including a change of capitals only', () => {
+    const { store, acct, later } = setup();
+    expect(store.renameWait(acct)).toBe(0);
+    expect(store.rename(acct, 'ANN')).toBeNull();
+    expect(store.auth('ann', A)).toMatchObject({ ok: true, account: acct });
+    expect(store.renameWait(acct)).toBe(RENAME_COOLDOWN_MS);
+    later(DAY / 2);
+    expect(store.rename(acct, 'Bea')).toBe('You can change your name again in 7 days.');
+    later(6 * DAY + 1);
+    expect(store.rename(acct, 'Bea')).toBe('You can change your name again in 12 hours.');
+    later(DAY / 2);
+    expect(store.rename(acct, 'Bea')).toBeNull();
+  });
+
+  it("logs browsers that still have the old name saved into the renamed account, even once it's claimed", async () => {
+    const { store, acct, later } = setup();
+    await store.setPass(acct, A, 'trout-lake');
+    await store.login('Ann', B, 'trout-lake');
+    store.rename(acct, 'Bea');
+    expect(store.auth('Ann', B)).toMatchObject({ ok: true, account: acct, created: false });
+    // Someone else takes the old name, with a password, and the remembered browser still follows the account.
+    const other = store.auth('Ann', C);
+    if (!other.ok) throw new Error(other.msg);
+    await store.setPass(other.account, C, 'pike-river');
+    expect(store.auth('Ann', B)).toMatchObject({ ok: true, account: acct });
+    expect(await store.login('Ann', B, 'whatever')).toMatchObject({ ok: true, account: acct });
+    expect(store.auth('Ann', C)).toMatchObject({ ok: true, account: other.account });
+    // A browser that never knew the account gets no way in.
+    expect(store.auth('Ann', 'd'.repeat(20))).toMatchObject({ ok: false, need: 'password' });
+    // Only the last old name is followed: "Ann" is the other account's again.
+    later(RENAME_COOLDOWN_MS);
+    store.rename(acct, 'Cat');
+    expect(store.auth('Bea', B)).toMatchObject({ ok: true, account: acct });
+    expect(store.auth('Ann', B)).toMatchObject({ ok: false, need: 'password' });
+  });
+
+  it('keeps the new name, cooldown and old name across a reload', () => {
+    const { store, acct } = setup();
+    store.rename(acct, 'Bea');
+    const back = new AccountStore(JSON.parse(JSON.stringify(store.snapshot())), () => 1_000_000 + 1000);
+    const res = back.auth('Bea', A);
+    if (!res.ok) throw new Error(res.msg);
+    expect(back.renameWait(res.account)).toBe(RENAME_COOLDOWN_MS - 1000);
+    expect(back.auth('Ann', A)).toMatchObject({ ok: true, account: res.account });
+  });
+
+  it('tells the room and the whole server, and the player when they can rename again', () => {
+    const { store, acct } = setup();
+    const room = new Room('r', MAPS);
+    room.renameWait = (a) => store.renameWait(a);
+    const log: ServerMsg[] = [];
+    const other: ServerMsg[] = [];
+    const id = room.join({ send: (m) => log.push(m) }, acct);
+    const cy = store.auth('Cy', B);
+    if (!cy.ok) throw new Error(cy.msg);
+    room.join({ send: (m) => other.push(m) }, cy.account);
+    expect(log.find((m) => m.t === 'welcome')).toMatchObject({ name: 'Ann', renameIn: 0 });
+    store.rename(acct, 'Bea');
+    room.renamed(id, 'Ann');
+    for (const l of [log, other]) {
+      expect(l).toContainEqual({ t: 'named', id, name: 'Bea' });
+      expect(l).toContainEqual({ t: 'sys', text: 'Ann is now Bea' });
+    }
+    const again: ServerMsg[] = [];
+    room.join({ send: (m) => again.push(m) }, acct);
+    expect(again.find((m) => m.t === 'welcome')).toMatchObject({ name: 'Bea', renameIn: RENAME_COOLDOWN_MS });
+    expect(again.find((m) => m.t === 'welcome')).toMatchObject({ players: expect.arrayContaining([expect.objectContaining({ id, name: 'Bea' })]) });
   });
 });
 

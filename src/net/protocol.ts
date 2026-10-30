@@ -79,16 +79,21 @@ export type ClientMsg =
   /** Set or change the account password; every other browser is signed out. */
   | { t: 'setpass'; pass: string }
   /** Log out: this browser stops logging in by itself. An account without a password is deleted. */
-  | { t: 'forget' };
+  | { t: 'forget' }
+  /** Change the account's name, at most once per `RENAME_COOLDOWN_MS`. */
+  | { t: 'rename'; name: string };
 
 export type ServerMsg =
-  /** `now` is the server's clock (ms), so every player's sky follows the same day instead of their device's clock. */
-  | { t: 'welcome'; id: number; room: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean; now: number }
+  /**
+   * `name` is the account's current name, which differs from the joined one after a rename; `renameIn` is ms until it can change again.
+   * `now` is the server's clock (ms), so every player's sky follows the same day instead of their device's clock.
+   */
+  | { t: 'welcome'; id: number; room: string; name: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean; renameIn: number; now: number }
   /** The server's clock again (every CLOCK_MS), in case the device's clock jumps mid-session. */
   | { t: 'clock'; now: number }
   /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
   | { t: 'error'; msg: string; need?: 'password' }
-  /** Reply to `setpass`: `msg` is set if it was refused. */
+  /** Reply to `setpass` (and a refused `rename`): `msg` is set if it was refused. */
   | { t: 'account'; hasPass: boolean; msg?: string }
   /** A plain message for the player (a refused bet, a locked gate). */
   | { t: 'notice'; msg: string }
@@ -108,6 +113,8 @@ export type ServerMsg =
   /** Player `id` jumped (sent to the others on their map). */
   | { t: 'jump'; id: number }
   | { t: 'look'; id: number; look: Look }
+  /** Player `id` (possibly the receiver) changed their name. */
+  | { t: 'named'; id: number; name: string }
   /** Player `id` now wears this title id (or none). */
   | { t: 'title'; id: number; title: string | null }
   /** Coins per player id, for the leaderboard. */
@@ -137,3 +144,12 @@ export interface CasinoRecord extends Gamble { name: string }
 export interface CasinoRecords { win: CasinoRecord | null; loss: CasinoRecord | null }
 
 export const SERVER_PORT = 8787;
+
+/** How long after a name change before the next one. */
+export const RENAME_COOLDOWN_MS = 7 * 24 * 60 * 60_000;
+
+/** "3 days" or "5 hours", rounded up, for how long until the next name change. */
+export function waitText(ms: number): string {
+  const [n, unit] = ms > 24 * 60 * 60_000 ? [Math.ceil(ms / (24 * 60 * 60_000)), 'day'] : [Math.max(1, Math.ceil(ms / (60 * 60_000))), 'hour'];
+  return `${n} ${unit}${n === 1 ? '' : 's'}`;
+}

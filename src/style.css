@@ -502,9 +502,9 @@ body.touch #join { backdrop-filter: none; }
 #join .grow { flex: 1; min-width: 0; }
 #join-preview canvas.preview { width: 240px; height: 300px; }
 #join label { display: block; margin: 10px 0 6px; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
-#join-name, #join-pass, #acct-pass, #fb-text { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
-#join-name:focus, #join-pass:focus, #acct-pass:focus, #fb-text:focus { border-color: var(--gold-dark); }
-#acct-pass, #fb-text { font-size: 15px; padding: 8px 10px; }
+#join-name, #join-pass, #acct-pass, #acct-name, #fb-text { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
+#join-name:focus, #join-pass:focus, #acct-pass:focus, #acct-name:focus, #fb-text:focus { border-color: var(--gold-dark); }
+#acct-pass, #acct-name, #fb-text { font-size: 15px; padding: 8px 10px; }
 #fb-text { display: block; resize: vertical; min-height: 88px; }
 #fb-text:read-only { opacity: .7; }
 .detail p.acct-msg, .detail p.fb-msg.error { color: var(--bad); }

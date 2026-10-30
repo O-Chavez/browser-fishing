@@ -41,6 +41,7 @@ class Avatar {
   private rod: THREE.Mesh;
   private char: Character;
   private plate: THREE.Sprite;
+  private name: string;
   private sup = false;
   /** The worn title's display name, or null. */
   private titled: string | null = null;
@@ -58,6 +59,7 @@ class Avatar {
     this.rod.position.set(-0.3, 1.2, 0.55);
     this.rod.rotation.x = 0.9;
     this.tip.position.set(-0.3, 1.2 + 0.8 * Math.cos(0.9), 0.55 + 0.8 * Math.sin(0.9));
+    this.name = info.name;
     this.plate = this.nameplate(info.name);
     this.setPlate(info.name, false, info.title);
     this.group.add(this.char.group, this.rod, this.tip, this.plate);
@@ -115,10 +117,11 @@ class Avatar {
     return tex;
   }
 
-  /** Redraws the name tag when the 💗 or the title changed. The name stays put; the title hangs below it. */
+  /** Redraws the name tag after a rename, or when the 💗 or the title changed. The name stays put; the title hangs below it. */
   setPlate(name: string, sup: boolean, titleId: string | null | undefined): void {
     const title = titleName(titleId);
-    if (sup === this.sup && title === this.titled) return;
+    if (name === this.name && sup === this.sup && title === this.titled) return;
+    this.name = name;
     this.sup = sup;
     this.titled = title;
     this.plate.material.map?.dispose();
