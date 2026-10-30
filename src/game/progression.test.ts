@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BAITS, FISH, RODS, byId } from '../data/content';
-import { applyXp, canCatch, eligibleFish, pickFish, reelDifficulty, rollSize, sellValue, welcomeText, xpForNextLevel } from './progression';
+import { FLAT_LEVEL, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, eligibleFish, grantRanks, levelGifts, nextGoal, pickFish, reelDifficulty, rollSize, sellValue, welcomeText, xpForNextLevel } from './progression';
 
 const twig = byId(RODS, 'twig');
 const graphite = byId(RODS, 'graphite');
@@ -193,10 +193,48 @@ describe('welcome banner', () => {
     expect(t.title).toBe('~ Welcome back, Ana ~');
     expect(t.line).toBe('Lv 12 · 1,240 coins · next goal: Lv 15 casino');
   });
-  it('counts the missing Fishdex species once the casino is open', () => {
+  it('names the next rank once the casino is open', () => {
     const t = welcomeText('Ana', { level: 20, xp: 0, coins: 5, dex: { [FISH[0].id]: {} } });
-    expect(t.line).toBe(`Lv 20 · 5 coins · next goal: ${FISH.length - 1} more Fishdex species`);
+    expect(t.line).toBe('Lv 20 · 5 coins · next goal: Lv 25 Bosun');
+  });
+  it('counts the missing Fishdex species past the last rank', () => {
+    const t = welcomeText('Ana', { level: 200, xp: 0, coins: 5, dex: { [FISH[0].id]: {} } });
+    expect(t.line).toBe(`Lv 200 · 5 coins · next goal: ${FISH.length - 1} more Fishdex species`);
     const all = Object.fromEntries(FISH.map((f) => [f.id, {}]));
-    expect(welcomeText('Ana', { level: 20, xp: 0, coins: 5, dex: all }).line).toContain('Fishdex complete');
+    expect(welcomeText('Ana', { level: 200, xp: 0, coins: 5, dex: all }).line).toContain('Fishdex complete');
+  });
+});
+
+describe('levels past 50 and ranks', () => {
+  it('has no cap: every level from 50 on costs the same', () => {
+    const step = xpForNextLevel(FLAT_LEVEL);
+    expect(xpForNextLevel(80)).toBe(step);
+    expect(xpForNextLevel(49)).toBeLessThan(step);
+    expect(applyXp(FLAT_LEVEL, 0, step * 3 + 7)).toEqual({ level: FLAT_LEVEL + 3, xp: 7, leveledUp: true });
+  });
+  it('gives a provision every level past 50 and a fare every 5th', () => {
+    expect(levelGifts(10, 50)).toEqual({ provisions: 0, fares: 0 });
+    expect(levelGifts(49, 61)).toEqual({ provisions: 11, fares: 2 });
+    expect(levelGifts(54, 55)).toEqual({ provisions: 1, fares: 1 });
+  });
+  it('gives each rank title and outfit once', () => {
+    const s = { level: 37, titles: [] as string[], owned: ['cap'] };
+    expect(grantRanks(s).map((r) => r.id)).toEqual(['deckhand', 'bosun', 'firstmate', 'skipper']);
+    expect(s.owned).toEqual(['cap', 'souwester', 'slicker']);
+    expect(grantRanks(s)).toEqual([]);
+    s.level = 40;
+    expect(grantRanks(s).map((r) => r.id)).toEqual(['captain']);
+  });
+  it('points at the next rank and its outfit after the last rod', () => {
+    expect(nextGoal(20)).toBe("Level 25: Bosun + Oilskin Sou'wester");
+    expect(nextGoal(25)).toBe('Level 30: First Mate');
+    expect(nextGoal(50)).toBe('Level 60: Fleet Admiral');
+  });
+  it('estimates thrown-away XP from Fishdex counts, low and never negative', () => {
+    expect(backPayXp({ [FISH[0].id]: { count: 10 } })).toBe(0);
+    const eel = byId(FISH, 'constellation');
+    const n = 2000;
+    const mid = catchXp(eel, (eel.minSize + eel.maxSize) / 2, false);
+    expect(backPayXp({ [eel.id]: { count: n } })).toBe(n * mid - XP_TO_FLAT);
   });
 });

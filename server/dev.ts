@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { BAITS, FISH, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
 import * as eco from '../src/game/economy';
-import { MAX_LEVEL } from '../src/game/progression';
+import { grantRanks } from '../src/game/progression';
 import type { SaveData } from '../src/game/state';
 import { Lockout } from './lockout';
 
@@ -61,8 +61,11 @@ export const HELP = [
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /time day|dusk|night|dawn|auto',
   '/dig (reset worm cooldown) · /resetpass <name> <new password>',
-  '/supporter <name> [off] (Ko-fi 💗) · /logout',
+  '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
 ];
+
+/** There is no level cap; this only keeps `/level` typos sane. */
+const MAX_DEV_LEVEL = 999;
 
 const int = (v: string | undefined, lo: number, hi: number): number | null => {
   const n = Number(v);
@@ -86,10 +89,12 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       return ok(`${cmd === 'coins' ? 'Coins' : 'Chips'} set to ${n}.`);
     }
     case 'level': {
-      const n = int(args[0], 1, MAX_LEVEL);
-      if (n === null) return say(`Usage: /level 1-${MAX_LEVEL}`);
+      const n = int(args[0], 1, MAX_DEV_LEVEL);
+      if (n === null) return say(`Usage: /level 1-${MAX_DEV_LEVEL}`);
       s.level = n;
       s.xp = 0;
+      // Ranks up to the new level come with it; the gifts for skipped levels don't.
+      grantRanks(s);
       return ok(`Level set to ${n}.`);
     }
     case 'bait': {

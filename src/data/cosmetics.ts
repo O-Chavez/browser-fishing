@@ -2,8 +2,8 @@ export type CosSlot = 'hat' | 'shirt' | 'jewelry';
 
 export const COS_SLOTS: CosSlot[] = ['hat', 'shirt', 'jewelry'];
 
-/** Where an item is sold: Marlow's stall (coins) or the casino prize counter (chips only). */
-export type CosShop = 'stall' | 'casino';
+/** Where an item comes from: Marlow's stall (coins), the casino prize counter (chips only), or a level rank (never sold). */
+export type CosShop = 'stall' | 'casino' | 'earned';
 
 export interface Cosmetic {
   id: string;
@@ -18,6 +18,8 @@ export interface Cosmetic {
   shop: CosShop;
   /** One line for the details panel. */
   blurb: string;
+  /** Earned items: the level whose rank gives it. */
+  level?: number;
 }
 
 /** Rarity names and colours for cosmetic tiers 0-5. Tier 5 also gets a shimmer in the UI and sparkles in 3D. */
@@ -36,6 +38,11 @@ export interface Look {
 
 const c = (id: string, slot: CosSlot, name: string, price: number, tier: number, color: number, accent: number, blurb: string, shop: CosShop = 'stall'): Cosmetic => ({
   id, slot, name, price, tier, color, accent, shop, blurb,
+});
+/** A rank reward: free, never sold, given at `level` (see `RANKS`, `src/data/ranks.ts`). */
+const earned = (id: string, slot: CosSlot, name: string, level: number, tier: number, color: number, accent: number, blurb: string): Cosmetic => ({
+  ...c(id, slot, name, 0, tier, color, accent, blurb, 'earned'),
+  level,
 });
 const casino = (id: string, slot: CosSlot, name: string, chips: number, tier: number, color: number, accent: number, blurb: string): Cosmetic =>
   c(id, slot, name, chips, tier, color, accent, blurb, 'casino');
@@ -71,6 +78,11 @@ export const COSMETICS: Cosmetic[] = [
   casino('dealer', 'shirt', "Croupier's Waistcoat", 40, 2, 0xc4262e, 0x1b1b24, 'Red waistcoat, crisp white shirt and a black bow tie.'),
   casino('tux', 'shirt', 'Jackpot Tuxedo', 200, 4, 0x1b1b24, 0xe0b441, 'Gold lapels and a glowing pink bow tie. Dressed to win.'),
   casino('dice', 'jewelry', 'Lucky Dice Chain', 75, 3, 0xe0b441, 0xc4262e, 'A pair of red dice that always land on seven.'),
+  earned('souwester', 'hat', "Oilskin Sou'wester", 25, 2, 0xe8b830, 0x3a3a3a, 'Waxed canvas that sheds sea spray. Captain Reed swears by his.'),
+  earned('slicker', 'shirt', 'Storm Slicker', 35, 3, 0xe8b830, 0xf4f4f4, 'A yellow storm coat with wooden toggles. Rain rolls right off it.'),
+  earned('compass', 'jewelry', 'Brass Compass', 45, 4, 0xc9a24a, 0xff4a3d, 'Its red needle always swings toward deep water.'),
+  earned('bicorne', 'hat', "Admiral's Bicorne", 50, 5, 0x14213d, 0xffc933, 'Navy and gold, with a star on the rosette. Worn by the Admiral of Lakeside.'),
+
   casino('jackpot', 'jewelry', 'Jackpot Medallion', 450, 5, 0xe0b441, 0xff4f9a, 'A giant golden chip that glows like the casino sign. The ultimate flex.'),
 ];
 

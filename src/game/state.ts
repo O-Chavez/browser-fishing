@@ -1,10 +1,16 @@
 import { BAITS, FISH, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
-import { isFreshSave } from './progression';
+import { TITLES } from '../data/ranks';
+import { FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
 
-export interface DexEntry { count: number; best: number }
+export interface DexEntry {
+  count: number;
+  best: number;
+  /** Shinies of this species caught (counted from the level-cap update on). */
+  shiny?: number;
+}
 
 export const SLOT_COUNT = 5;
 /** Hotbar size: the base five, plus the Tackle Vest's extra slots. */
@@ -59,6 +65,16 @@ export interface SaveData {
   lureOff: boolean;
   /** New-player tips already shown (see `TIP_IDS`). */
   tips: string[];
+  /** Titles earned (ids from `TITLES`), and the one worn under the name tag. */
+  titles: string[];
+  title: string | null;
+  /** Rewards for levels past 50, kept until the Smokehouse and the charters can use them. */
+  gifts: Gifts;
+  /**
+   * XP thrown away at the old level-50 cap, estimated once from the Fishdex when the cap was lifted.
+   * The dev console's `/backpay` pays it out; `paid` keeps it from being paid twice.
+   */
+  backPay: { xp: number; paid: boolean };
 }
 
 export interface BestCatch {
@@ -91,6 +107,10 @@ export const newSave = (): SaveData => ({
   lure: 0,
   lureOff: false,
   tips: [],
+  titles: [],
+  title: null,
+  gifts: { provisions: 0, fares: 0 },
+  backPay: { xp: 0, paid: true },
 });
 
 /**
@@ -140,6 +160,7 @@ function layoutSlots(out: SaveData, size: number): void {
 export function migrate(raw: object): SaveData {
   const data = raw as Partial<SaveData> & Record<string, unknown>;
   const out = { ...newSave(), ...data } as SaveData & Record<string, unknown>;
+  if (!out.dex || typeof out.dex !== 'object') out.dex = {};
   const hasRods = Array.isArray(data.slots) && data.slots.some((x) => x?.k === 'rod');
   if (!Array.isArray(data.slots) || !hasRods) {
     const rods: Slot[] = ((data.ownedRods as string[] | undefined) ?? [data.rod ?? 'twig']).map((id) => ({ k: 'rod', id }));
@@ -185,6 +206,17 @@ export function migrate(raw: object): SaveData {
   out.locker = { rods: (lk.rods ?? []).filter((id) => RODS.some((r) => r.id === id)), bait };
   layoutSlots(out, slotCount(out));
   if (!Array.isArray(out.owned)) out.owned = [];
+  out.titles = Array.isArray(data.titles) ? data.titles.filter((id) => TITLES.some((t) => t.id === id)) : [];
+  grantRanks(out);
+  if (!out.titles.includes(out.title as string)) out.title = null;
+  const g = (data.gifts ?? {}) as Partial<Gifts>;
+  const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
+  out.gifts = { provisions: count(g.provisions), fares: count(g.fares) };
+  // Saves from before the cap was lifted: a level-50 player's thrown-away XP is estimated now,
+  // before any new catches land in the Fishdex, and waits for the dev console to pay it.
+  const bp = data.backPay as Partial<SaveData['backPay']> | undefined;
+  out.backPay = bp ? { xp: count(bp.xp), paid: bp.paid === true } : out.level >= FLAT_LEVEL ? { xp: backPayXp(out.dex), paid: false } : { xp: 0, paid: true };
+  for (const e of Object.values(out.dex)) if (e && e.shiny !== undefined) e.shiny = count(e.shiny);
   // Accounts from before faces get a random one.
   if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
   out.look = cleanLook(out.look, out.owned);

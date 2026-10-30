@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as eco from './economy';
 import { SLOT_COUNT, migrate, newSave, type SaveData } from './state';
-import { FISH } from '../data/content';
+import { FISH, byId } from '../data/content';
+import { FLAT_LEVEL, backPayXp, xpForNextLevel } from './progression';
 import { Drops } from './drops';
 import { COSMETICS, COS_SLOTS, cosById, isFace } from '../data/cosmetics';
 
@@ -464,5 +465,83 @@ describe('cosmetics shops', () => {
     expect(eco.buyCosmetic(s, 'cap', 'stall')).toBe(true);
     expect(s.coins).toBe(1_000_000 - cosById('cap')!.price);
     expect(s.owned).toEqual(['visor', 'cap']);
+  });
+});
+
+describe('ranks, titles and back pay', () => {
+  const eel = byId(FISH, 'constellation');
+  it('reaching a rank on a catch gives its title and outfit and says so', () => {
+    const s = newSave();
+    s.level = 24;
+    s.xp = xpForNextLevel(24) - 1;
+    const res = eco.applyCatch(s, eel, 250);
+    expect(res.leveledUp).toBe(true);
+    expect(res.ranks.map((r) => r.id)).toEqual(['deckhand', 'bosun']);
+    expect(s.titles).toEqual(['deckhand', 'bosun']);
+    expect(s.owned).toContain('souwester');
+  });
+  it('counts shinies per species', () => {
+    const s = newSave();
+    eco.applyCatch(s, eel, 250, true);
+    eco.applyCatch(s, eel, 250);
+    eco.applyCatch(s, eel, 250, true);
+    expect(s.dex[eel.id]).toMatchObject({ count: 3, shiny: 2 });
+  });
+  it('keeps levelling past 50 and banks the gifts', () => {
+    const s = newSave();
+    s.level = FLAT_LEVEL + 4;
+    s.xp = xpForNextLevel(FLAT_LEVEL) - 1;
+    eco.applyCatch(s, eel, 250);
+    expect(s.level).toBe(FLAT_LEVEL + 5);
+    expect(s.gifts).toEqual({ provisions: 1, fares: 1 });
+  });
+  it('wears only an earned title', () => {
+    const s = newSave();
+    expect(eco.setTitle(s, 'admiral')).toBe(false);
+    s.titles = ['bosun'];
+    expect(eco.setTitle(s, 'bosun')).toBe(true);
+    expect(s.title).toBe('bosun');
+    expect(eco.setTitle(s, null)).toBe(true);
+    expect(s.title).toBe(null);
+    expect(eco.setTitle(s, 42)).toBe(false);
+  });
+  it('never sells an earned outfit', () => {
+    const s = newSave();
+    s.coins = 1e9;
+    s.chips = 1e9;
+    for (const at of ['stall', 'casino', 'earned'] as const) expect(eco.buyCosmetic(s, 'bicorne', at)).toBe(false);
+    expect(s.owned).not.toContain('bicorne');
+  });
+  it('estimates back pay once for saves from before the cap was lifted, and pays it once', () => {
+    const dex = { [eel.id]: { count: 3000, best: 250 } };
+    const old = { ...newSave(), level: FLAT_LEVEL, xp: 0, dex } as Partial<SaveData>;
+    delete old.backPay;
+    delete old.titles;
+    const s = migrate(old);
+    expect(s.backPay).toEqual({ xp: backPayXp(dex), paid: false });
+    expect(s.titles).toContain('admiral');
+    expect(s.owned).toContain('bicorne');
+    // Later loads keep the first estimate, even after more catches.
+    s.dex[eel.id].count += 500;
+    expect(migrate(JSON.parse(JSON.stringify(s))).backPay).toEqual(s.backPay);
+    const { levels } = eco.payBack(s);
+    expect(levels).toBeGreaterThan(10);
+    expect(s.level).toBe(FLAT_LEVEL + levels);
+    expect(s.gifts).toEqual(eco.BACKPAY_GIFTS);
+    expect(s.titles).toContain('fleetadmiral');
+    expect(eco.payBack(s).levels).toBe(0);
+  });
+  it('owes nothing to saves below 50 or new ones', () => {
+    const old = { ...newSave(), level: 30 } as Partial<SaveData>;
+    delete old.backPay;
+    expect(migrate(old).backPay).toEqual({ xp: 0, paid: true });
+    expect(newSave().backPay.paid).toBe(true);
+  });
+  it('survives a save with a broken Fishdex', () => {
+    expect(migrate({ ...newSave(), level: 60, dex: null } as unknown as SaveData).dex).toEqual({});
+  });
+  it('drops a worn title the save does not have', () => {
+    expect(migrate({ ...newSave(), level: 10, title: 'admiral' }).title).toBe(null);
+    expect(migrate({ ...newSave(), level: 26, title: 'bosun' }).title).toBe('bosun');
   });
 });

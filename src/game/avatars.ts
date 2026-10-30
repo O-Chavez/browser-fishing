@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FISH } from '../data/content';
 import { defaultLook } from '../data/cosmetics';
+import { titleName } from '../data/ranks';
 import type { Activity, PlayerInfo } from '../net/protocol';
 import { Character } from './character';
 import { standHeight } from './env';
@@ -41,6 +42,8 @@ class Avatar {
   private char: Character;
   private plate: THREE.Sprite;
   private sup = false;
+  /** The worn title's display name, or null. */
+  private titled: string | null = null;
   private bubble: { sprite: THREE.Sprite; until: number } | null = null;
 
   constructor(
@@ -56,6 +59,7 @@ class Avatar {
     this.rod.rotation.x = 0.9;
     this.tip.position.set(-0.3, 1.2 + 0.8 * Math.cos(0.9), 0.55 + 0.8 * Math.sin(0.9));
     this.plate = this.nameplate(info.name);
+    this.setPlate(info.name, false, info.title);
     this.group.add(this.char.group, this.rod, this.tip, this.plate);
     this.group.visible = false;
 
@@ -71,18 +75,18 @@ class Avatar {
   }
 
   private nameplate(name: string): THREE.Sprite {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.plateTexture(name, false), depthTest: false, transparent: true }));
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.plateTexture(name, false, null), depthTest: false, transparent: true }));
     s.scale.set(1.4, 0.35, 1);
     s.position.y = 2.25;
     s.renderOrder = 10;
     return s;
   }
 
-  /** The name, with a 💗 in front for a Ko-fi supporter. */
-  private plateTexture(name: string, sup: boolean): THREE.CanvasTexture {
+  /** The name, with a 💗 in front for a Ko-fi supporter and the worn title in smaller type under it. */
+  private plateTexture(name: string, sup: boolean, title: string | null): THREE.CanvasTexture {
     const c = document.createElement('canvas');
     c.width = 256;
-    c.height = 64;
+    c.height = title ? 96 : 64;
     const g = c.getContext('2d')!;
     g.font = 'bold 32px system-ui, sans-serif';
     g.textAlign = 'center';
@@ -98,16 +102,30 @@ class Avatar {
       g.textAlign = 'right';
       g.fillText('💗', Math.max(30, left - 4), 40);
     }
+    if (title) {
+      g.font = '600 24px system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.lineWidth = 5;
+      g.strokeText(title, 128, 76);
+      g.fillStyle = '#ffd98a';
+      g.fillText(title, 128, 76);
+    }
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }
 
-  setSupporter(name: string, sup: boolean): void {
-    if (sup === this.sup) return;
+  /** Redraws the name tag when the 💗 or the title changed. The name stays put; the title hangs below it. */
+  setPlate(name: string, sup: boolean, titleId: string | null | undefined): void {
+    const title = titleName(titleId);
+    if (sup === this.sup && title === this.titled) return;
     this.sup = sup;
+    this.titled = title;
     this.plate.material.map?.dispose();
-    this.plate.material.map = this.plateTexture(name, sup);
+    this.plate.material.map = this.plateTexture(name, sup, title);
+    this.plate.material.needsUpdate = true;
+    this.plate.scale.set(1.4, title ? 0.525 : 0.35, 1);
+    this.plate.position.y = title ? 2.1625 : 2.25;
   }
 
   /** Shows a short speech bubble above the head; a new line replaces the old one. */
@@ -287,7 +305,7 @@ export class Avatars {
         this.list.set(p.id, a);
       }
       a.setLook(p.look);
-      a.setSupporter(p.name, this.supporter(p.name));
+      a.setPlate(p.name, this.supporter(p.name), p.title);
       a.setVisible(p.map === map);
     }
   }

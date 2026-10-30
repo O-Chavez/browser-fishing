@@ -28,6 +28,7 @@ import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
 import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
+import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
 import { COIN, coinText, escapeHtml, shortCoins, withCoins } from './format';
@@ -43,8 +44,8 @@ import {
 import { carryScale, hangLen, hangPitch, heldScale, waterScale } from './fishscale';
 import type { LeaderRow } from './hub';
 import { buildTin } from './itemmodels';
+import { rankUp, type RankUp } from './rankup';
 import {
-  MAX_LEVEL,
   fishWeight,
   formatWeight,
   nextGoal,
@@ -209,6 +210,8 @@ export class Game {
   /** Why the server dropped us, shown with the "playing offline" toast. */
   private offlineWhy: string | undefined;
   private bannerTimer = 0;
+  /** The rank the latest catch reached, for the catch card's [Wear title] / [Wear it] buttons. */
+  private rankCard: RankUp | null = null;
   /** A wheel is spinning or cards are being dealt: other actions wait until the result has landed. */
   private spin = false;
   /** Timers of the reveal in progress; the exit gate waits for them. */
@@ -525,6 +528,7 @@ export class Game {
     this.setMenu(false);
     const { title, line } = welcomeText(name, this.s);
     const el = $('banner');
+    el.classList.remove('rank');
     el.classList.add('welcome');
     el.style.color = '';
     // Returning players learn where to switch accounts, and those who could lose theirs with this
@@ -786,6 +790,7 @@ export class Game {
       if (i >= 0 && i < this.s.slots.length && this.phase === 'idle') this.takeSlot(i);
       else if (e.code === 'KeyG' && this.phase === 'idle') this.dropHeld();
       else if (e.code === 'Space' && this.active && this.phase === 'idle') { e.preventDefault(); this.jump(); }
+      else if ((e.code === 'KeyT' || e.code === 'KeyO') && this.phase === 'result') this.useRankButton(e.code === 'KeyT' ? 'title' : 'outfit');
       else if (e.code === 'KeyM' && !e.repeat) this.toast(audio.toggleMusic() ? '🎵 Music on' : '🔇 Music off');
     });
   }
@@ -869,7 +874,9 @@ export class Game {
     $('prompt').addEventListener('click', () => {
       if (this.active && this.phase === 'idle') this.interact();
     });
-    $('catch').addEventListener('click', () => {
+    $('catch').addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-rank]');
+      if (btn) return this.useRankButton(btn.dataset.rank as 'title' | 'outfit');
       if (this.phase === 'result' && !this.dbgLock) this.dismissCatch();
     });
     // iOS Safari ignores touch-action for pinch zoom; this stops it zooming the page mid-game.
@@ -917,6 +924,7 @@ export class Game {
     if (!btn || btn.disabled) return;
     const { tab, shop, prize, pick, act, id } = btn.dataset;
     if (act === 'close') return this.closeMenu();
+    if (act === 'locked') return;
     if (tab) this.tab = tab;
     else if (shop) this.shopTab = shop as 'cosmetics' | 'gear';
     else if (prize) this.prizeTab = prize as 'perks' | 'cosmetics';
@@ -931,6 +939,7 @@ export class Game {
     else if (act === 'equip') this.equip(btn.dataset.slot as CosSlot, id || null);
     else if (act === 'color') this.recolor(Number(id));
     else if (act === 'face') this.reface(id!);
+    else if (act === 'title') this.wearTitle(id || null);
     else if (act === 'lure') this.switchLure();
     else if (act === 'reset') this.confirmReset = true;
     else if (act === 'resetno') this.confirmReset = false;
@@ -1194,6 +1203,12 @@ export class Game {
     this.persist();
   }
 
+  private wearTitle(id: string | null): void {
+    if (!eco.setTitle(this.s, id)) return;
+    this.net.send({ t: 'title', id });
+    this.persist();
+  }
+
   private switchLure(): void {
     const on = !eco.lureOn(this.s);
     if (!eco.setLure(this.s, on)) return;
@@ -1235,21 +1250,21 @@ export class Game {
   }
 
   /** Everyone online with their level, highest first. */
-  private leaders(): { name: string; level: number; color: number; face: FaceId; me: boolean }[] {
+  private leaders(): { name: string; level: number; color: number; face: FaceId; me: boolean; title: string | null }[] {
     const face = (f: string) => (isFace(f) ? f : 'smile');
-    const rows = [{ name: this.net.name, level: this.s.level, color: this.s.look.color, face: face(this.s.look.face), me: true }];
-    for (const p of this.net.players.values()) rows.push({ name: p.name, level: p.level ?? 1, color: p.look.color, face: face(p.look.face), me: false });
+    const rows = [{ name: this.net.name, level: this.s.level, color: this.s.look.color, face: face(this.s.look.face), me: true, title: titleName(this.s.title) }];
+    for (const p of this.net.players.values()) rows.push({ name: p.name, level: p.level ?? 1, color: p.look.color, face: face(p.look.face), me: false, title: titleName(p.title) });
     return rows.sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
   }
 
   /** Online players ranked by their most valuable catch, for the physical board. */
   private anglers(): LeaderRow[] {
-    type Row = { name: string; level: number; best: SaveData['best']; coins: number };
+    type Row = { name: string; level: number; best: SaveData['best']; coins: number; title: string | null };
     let all: Row[];
     if (this.net.connected) {
-      all = this.net.hall.map((h) => ({ name: h.name, level: h.level, best: h.best, coins: 0 }));
+      all = this.net.hall.map((h) => ({ name: h.name, level: h.level, best: h.best, coins: 0, title: titleName(h.title) }));
     } else {
-      all = [{ name: this.net.name, level: this.s.level, best: this.s.best, coins: this.s.coins }];
+      all = [{ name: this.net.name, level: this.s.level, best: this.s.best, coins: this.s.coins, title: titleName(this.s.title) }];
     }
     return all
       .sort((a, b) => (b.best?.value ?? 0) - (a.best?.value ?? 0) || b.coins - a.coins)
@@ -1263,6 +1278,7 @@ export class Game {
           tier: f?.tier ?? 0,
           color: this.tierColor(f?.tier ?? 0),
           shiny: p.best?.shiny,
+          title: p.title,
         };
       });
   }
@@ -1900,7 +1916,7 @@ export class Game {
   private topTierBanner(fish: { tier: number }, verb: string, shiny: boolean): void {
     if (fish.tier !== this.bait.tier) return;
     const el = $('banner');
-    el.classList.remove('welcome');
+    el.classList.remove('welcome', 'rank');
     const name = tierName(fish.tier);
     el.style.color = this.tierColor(fish.tier);
     el.innerHTML = `${shiny ? '✨ Shiny ' : ''}${name} fish ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
@@ -1910,6 +1926,53 @@ export class Game {
     el.style.animation = '';
     clearTimeout(this.bannerTimer);
     this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), 3200);
+  }
+
+  /** The big gold "⚓ BOSUN ⚓" over what the rank gave. */
+  private rankBanner(r: RankUp): void {
+    const el = $('banner');
+    el.classList.remove('welcome');
+    el.classList.add('rank');
+    el.style.color = '';
+    el.innerHTML = `${escapeHtml(r.title)}<small>${escapeHtml(r.line)}</small>`;
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), 4600);
+    window.setTimeout(() => audio.jingle('legendary'), 450);
+  }
+
+  /** [Wear title] and [Wear it] under the LEVEL UP line. The mouse is locked to the game on desktop, so they also have keys. */
+  private rankButtons(): string {
+    const r = this.rankCard;
+    if (!r) return '';
+    const key = (k: string) => (this.touch ? '' : `<kbd>${k}</kbd> `);
+    const title = `<button class="btn mini" data-rank="title"${this.s.title === r.titleId ? ' disabled' : ''}>${key('T')}Wear title</button>`;
+    const outfit = r.outfit ? `<button class="btn mini" data-rank="outfit"${this.wearing(r.outfit) ? ' disabled' : ''}>${key('O')}Wear it</button>` : '';
+    return `<div class="rank-acts">${title}${outfit}</div>`;
+  }
+
+  private wearing(outfit: string): boolean {
+    const c = cosById(outfit);
+    return !!c && this.s.look[c.slot] === outfit;
+  }
+
+  /** Same code paths as the Wardrobe; the button turns into a check once used. */
+  private useRankButton(which: 'title' | 'outfit'): void {
+    const r = this.rankCard;
+    if (!r || this.phase !== 'result') return;
+    if (which === 'title') this.wearTitle(r.titleId);
+    else {
+      const c = r.outfit ? cosById(r.outfit) : undefined;
+      if (c && this.s.owned.includes(c.id)) this.equip(c.slot, c.id);
+    }
+    const btn = $('catch').querySelector<HTMLButtonElement>(`[data-rank="${which}"]`);
+    if (btn && (which === 'title' ? this.s.title === r.titleId : !!r.outfit && this.wearing(r.outfit))) {
+      btn.disabled = true;
+      btn.textContent = which === 'title' ? '✓ Title worn' : '✓ Wearing it';
+    }
   }
 
   private startReel(): void {
@@ -1990,7 +2053,7 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level } = eco.applyCatch(this.s, fish, size, this.hookedShiny);
+    const { stored, first, record, gained, leveledUp, level, ranks } = eco.applyCatch(this.s, fish, size, this.hookedShiny);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch' });
     this.caughtTier = fish.tier;
@@ -2005,13 +2068,14 @@ export class Game {
     el.style.setProperty('--glow', RARITY_COLOR[fish.rarity]);
     el.dataset.tier = String(fish.tier);
     const shiny = this.hookedShiny;
+    this.rankCard = rankUp(ranks);
     el.innerHTML = `<div class="muted">${shiny ? '<b style="color:#ffd23a">✨ SHINY! ✨</b> ' : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
       <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * (1 + eco.charmBonus(this.s))).toLocaleString()}</div>
       <div>${this.tierBadge(fish.tier)} ${TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
-      <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>
+      <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
     // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
@@ -2019,7 +2083,9 @@ export class Game {
     void el.offsetWidth;
     el.style.animation = '';
     audio.jingle(shiny ? 'legendary' : fish.rarity);
-    this.topTierBanner(fish, 'caught', shiny);
+    // A new rank takes the banner from the tier banner, and its jingle follows the catch's.
+    if (this.rankCard) this.rankBanner(this.rankCard);
+    else this.topTierBanner(fish, 'caught', shiny);
     this.catchMoment(fish, shiny);
 
     this.held = this.fish;
@@ -2702,9 +2768,13 @@ export class Game {
       purse.classList.add('bump');
     }
     // XP fills the ring around the level badge (circumference 2π·25).
-    const xp = s.level >= MAX_LEVEL ? 1 : Math.min(1, s.xp / xpForNextLevel(s.level));
+    const xp = Math.min(1, s.xp / xpForNextLevel(s.level));
     $('xpring').style.strokeDasharray = `${(xp * 157.08).toFixed(1)} 157.08`;
-    $('lvl').title = s.level >= MAX_LEVEL ? `Level ${s.level} (max)` : `Level ${s.level} · ${s.xp} / ${xpForNextLevel(s.level)} XP`;
+    const rank = rankAt(s.level);
+    $('lvl').title = `Level ${s.level} · ${rank ? `${rank.title} · ` : ''}${s.xp.toLocaleString()} / ${xpForNextLevel(s.level).toLocaleString()} XP`;
+    const tier = pillTier(s.level);
+    if (tier) $('lvl').dataset.pill = tier;
+    else delete $('lvl').dataset.pill;
     // Chips only matter inside the casino.
     $('chips').textContent = this.chipsText(s.chips);
     $('chipbox').classList.toggle('hidden', !this.map.casino);
@@ -3064,6 +3134,18 @@ export class Game {
     ).join('');
   }
 
+  /** The title picker: None, the titles earned, and the ranks still ahead greyed with their level. */
+  private titlesHtml(): string {
+    const worn = this.s.title;
+    const chip = (label: string, on: boolean, attrs: string, extra = '') => `<button class="ttl-chip${on ? ' on' : ''}${extra}" ${attrs}>${label}</button>`;
+    const chips = TITLES.map((t) => {
+      if (this.s.titles.includes(t.id)) return chip(t.name, worn === t.id, `data-act="title" data-id="${worn === t.id ? '' : t.id}" data-tip="${worn === t.id ? 'Click to take off' : 'Click to wear'}"`);
+      const lv = RANKS.find((r) => r.id === t.id)?.level;
+      return chip(`${t.name} <small>🔒 Level ${lv}</small>`, false, 'data-act="locked"', ' locked');
+    });
+    return `<div class="titles">${chip('None', !worn, `data-act="title" data-id=""`)}${chips.join('')}</div>`;
+  }
+
   private wardrobeHtml(): string {
     const sections = COS_SLOTS.map((slot) => {
       const worn = this.s.look[slot];
@@ -3074,11 +3156,16 @@ export class Game {
           return this.itemTile({ ...this.cosLook(c), name: c.name, sub: on ? 'Wearing' : COS_RARITY[c.tier], tier: c.tier + 1, on, check: on, attrs: `data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}"`, tip: on ? 'Click to take off' : 'Click to wear' });
         })
         .join('');
+      // Rank rewards not earned yet, greyed with their level; hovering still tries them on.
+      const locked = COSMETICS.filter((c) => c.slot === slot && c.shop === 'earned' && !this.s.owned.includes(c.id))
+        .sort((a, b) => a.level! - b.level!)
+        .map((c) => this.itemTile({ ...this.cosLook(c), name: c.name, sub: `🔒 Level ${c.level}`, tier: c.tier + 1, ghost: true, attrs: `data-act="locked" data-try="${slot}:${c.id}"` }))
+        .join('');
       const title = this.slotTitle(slot);
-      return `<h4>${title}</h4><div class="tiles">${cards || `<p class="empty">Nothing yet - ${this.map.vendor.name}'s stall sells ${title.toLowerCase()}.</p>`}</div>`;
+      return `<h4>${title}</h4><div class="tiles">${cards + locked || `<p class="empty">Nothing yet - ${this.map.vendor.name}'s stall sells ${title.toLowerCase()}.</p>`}</div>`;
     }).join('');
     return `<div class="cols wardrobe"><div class="side"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><h4>Colour</h4><div class="swatches">${this.swatchHtml()}</div></div>
-      <div class="main"><h4>Face</h4><div class="faces">${this.facesHtml()}</div>${sections}</div></div>`;
+      <div class="main"><h4>Face</h4><div class="faces">${this.facesHtml()}</div><h4>Title</h4>${this.titlesHtml()}${sections}</div></div>`;
   }
 
   // ---------- Casino poster ----------
@@ -3127,7 +3214,7 @@ export class Game {
     const rows = this.leaders()
       .map(
         (p, i) =>
-          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><b>${escapeHtml(p.name)}${this.heart(p.name)}</b>${p.me ? '<span class="you">you</span>' : ''}<span class="lv">Lv ${p.level}</span></div>`,
+          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><div class="who2"><b>${escapeHtml(p.name)}${this.heart(p.name)}${p.me ? ' <span class="you">you</span>' : ''}</b>${p.title ? `<span class="ttl">${p.title}</span>` : ''}</div><span class="lv">Lv ${p.level}</span></div>`,
       )
       .join('');
     const head = this.net.connected ? `<b>${this.net.players.size + 1}</b> online now` : 'Playing offline - join a server to fish with others.';
@@ -3138,7 +3225,7 @@ export class Game {
       .map((a, i) => {
         const f = FISH.find((x) => x.name === a.fish);
         const me = a.name === this.net.name;
-        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}${this.heart(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span></div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
+        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}${this.heart(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span>${a.title ? `<span class="ttl">${a.title}</span>` : ''}</div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
       })
       .join('');
     return `<div class="cols anglers-cols">

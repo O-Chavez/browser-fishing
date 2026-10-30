@@ -69,6 +69,12 @@ function setSupporter(name: string, on: boolean): string {
   rooms.forEach((r) => r.supportersChanged(acct, on, names));
   return on ? `💗 ${acct.name} is a supporter.` : `${acct.name} is no longer shown as a supporter.`;
 }
+/** Dev console `/backpay`: previews or pays the old level cap's back pay, then tells online players. */
+function backPay(apply: boolean): string[] {
+  const res = accounts.backPay(apply);
+  for (const { acct, levels } of res.paid) rooms.forEach((r) => r.paidBack(acct, levels));
+  return res.lines;
+}
 /** Ko-fi retries a webhook it thinks failed; remembered ids keep a retry from posting twice. */
 const seenTips = new Set<string>();
 function onTip(body: string): number {
@@ -126,6 +132,7 @@ function room(name: string): Room {
     r.recordGamble = (acct, win, g) => accounts.gambled(acct, win, g);
     r.records = () => accounts.records();
     r.setSupporter = setSupporter;
+    r.backPay = backPay;
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }
