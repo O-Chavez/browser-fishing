@@ -6,7 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] 🎨💬 NPCs wander too far and end up on top of players, "kind of jump scares" (from `/idea`, Oscar C, 2026-10-29). Probably the walk-on rule in `NpcWalker` (`src/game/npcwalk.ts`): after 10 s beside a player who stays put they walk on, and since NPCs are walk-through their route can pass straight through the player (e.g. Old Salty on the pier). Options: shorter routes, re-route or wait instead of passing within ~1.5 m of a player, or keep them stopped while someone is fishing nearby
 - [ ] 🎨💬 Make night slightly brighter overall so it's easier to see, while keeping the cozy feel (from `/idea`, Oscar C, 2026-10-29). Night ambient/sky levels live in `World.updateDaylight`; taste-driven, so propose a few brightness levels side by side first
 - [ ] 🎨 Make new chat messages easier to notice, including on mobile
   - The chat sits at 50% opacity while not typing (`#chat`, `src/style.css:91`) and a new line just appears (`ChatBox.add`, `src/game/chatbox.ts:157`), so it's easy to miss. Ideas: briefly show a new line at full opacity or with a highlight/slide-in that fades back, maybe a soft sound for messages from other players. Taste-driven: propose options first
