@@ -230,6 +230,9 @@ export class Room {
       case 'tip':
         changed = markTip(s, msg.id);
         break;
+      case 'lure':
+        changed = eco.setLure(s, msg.on);
+        break;
       case 'reset':
         m.pending = null;
         this.resetAccount(m);

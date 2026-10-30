@@ -412,6 +412,25 @@ describe('charms & perks summary', () => {
     expect(list.map((p) => p.id)).toEqual(['charm2', 'gloves', 'vest', 'lure']);
     expect(list[0].effect).toBe('Fish worth +10%');
     expect(list[3].effect).toBe('2 shiny casts left');
+    s.lureOff = true;
+    expect(eco.activePerks(s)[3].effect).toBe('Shiny Lure off · 2 saved');
+  });
+
+  it('saves Shiny Lure charges while it is switched off', () => {
+    const s = newSave();
+    s.lure = 2;
+    // 0.99 never rolls a shiny on its own, so a shiny here comes from the lure.
+    const rng = () => 0.99;
+    expect(eco.setLure(s, false)).toBe(true);
+    expect(eco.setLure(s, false)).toBe(false);
+    expect(eco.lureOn(s)).toBe(false);
+    expect(eco.rollCast(s, 'pond', rng).shiny).toBe(false);
+    expect(s.lure).toBe(2);
+    expect(eco.setLure(s, 'yes')).toBe(false);
+    expect(eco.setLure(s, true)).toBe(true);
+    expect(eco.rollCast(s, 'pond', rng).shiny).toBe(true);
+    expect(s.lure).toBe(1);
+    expect(migrate({ ...s, lureOff: undefined } as unknown as SaveData).lureOff).toBe(false);
   });
 });
 

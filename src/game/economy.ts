@@ -167,7 +167,7 @@ export const sellPrice = (_s: Pick<SaveData, 'perks'>, item: { fishId: string; s
   Math.round(fishValue(item));
 
 /** The perks that are actually working for this player, with what each one does right now. */
-export function activePerks(s: Pick<SaveData, 'perks' | 'lure'>): { id: string; icon: string; name: string; effect: string }[] {
+export function activePerks(s: Pick<SaveData, 'perks' | 'lure' | 'lureOff'>): { id: string; icon: string; name: string; effect: string }[] {
   const out: { id: string; icon: string; name: string; effect: string }[] = [];
   const add = (id: string, effect: string) => {
     const p = perkById(id)!;
@@ -179,8 +179,18 @@ export function activePerks(s: Pick<SaveData, 'perks' | 'lure'>): { id: string; 
   if (s.perks.includes('gloves')) add('gloves', `Fights ×${GLOVES_CONTROL} easier`);
   if (s.perks.includes('lantern')) add('lantern', `Night luck ×${LANTERN_NIGHT_LUCK}`);
   if (s.perks.includes('vest')) add('vest', `+${VEST_SLOTS} hotbar slots`);
-  if (s.lure > 0) add('lure', `${s.lure} shiny cast${s.lure === 1 ? '' : 's'} left`);
+  if (s.lure > 0) add('lure', s.lureOff ? `Shiny Lure off · ${s.lure} saved` : `${s.lure} shiny cast${s.lure === 1 ? '' : 's'} left`);
   return out;
+}
+
+/** The next cast that hooks a fish spends a Shiny Lure charge, unless the player switched it off. */
+export const lureOn = (s: Pick<SaveData, 'lure' | 'lureOff'>): boolean => s.lure > 0 && !s.lureOff;
+
+/** Switches the Shiny Lure on or off; its charges stay either way. */
+export function setLure(s: SaveData, on: unknown): boolean {
+  if (typeof on !== 'boolean' || s.lureOff === !on) return false;
+  s.lureOff = !on;
+  return true;
 }
 
 /** Rod control with the Quick-Reel Gloves on. */
@@ -375,7 +385,7 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
   const rod = byId(RODS, s.rod);
   const bait = byId(BAITS, s.bait);
   const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1);
-  const lure = !!fish && s.lure > 0;
+  const lure = !!fish && lureOn(s);
   if (lure) s.lure--;
   return {
     perfect,
