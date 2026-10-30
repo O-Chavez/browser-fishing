@@ -1,3 +1,5 @@
+import { coinText, escapeHtml as esc } from './format';
+
 /** Lines leave the window this long after they arrive. */
 export const CHAT_TTL_MS = 5 * 60_000;
 /** A new line shows at full strength this long before it's back to the faded look (`.chat-line.fresh` in style.css). */
@@ -53,8 +55,6 @@ export const typedCommand = (text: string): Command | undefined => {
   const m = /^\/(\w+)\s/.exec(text);
   return m ? COMMANDS.find((c) => c.cmd === m[1].toLowerCase()) : undefined;
 };
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /**
  * The global chat window in the top right: a short log, a "Press Enter to chat" hint, and an
@@ -188,9 +188,9 @@ export class ChatBox {
     };
     this.log.innerHTML = shownLines(this.lines, this.onlyHere ? here : null)
       .map((l) => {
-        if (l.system) return `${open(l, ' sys')}${esc(l.text)}</div>`;
+        if (l.system) return `${open(l, ' sys')}${coinText(l.text)}</div>`;
         const tag = !this.onlyHere && l.map !== here ? `<span class="chat-tag">${esc(this.opts.mapName(l.map))}</span> ` : '';
-        return `${open(l, l.self ? ' self' : '')}${tag}<b>${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${esc(l.text)}</div>`;
+        return `${open(l, l.self ? ' self' : '')}${tag}<b>${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${coinText(l.text)}</div>`;
       })
       .join('');
     this.renderHint();

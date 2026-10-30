@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { COIN } from './format';
 import { migrate, newSave } from './state';
 import { TIP_IDS, markTip, rodHintText, rodUpgrade, tipText } from './tips';
 
@@ -67,7 +68,7 @@ describe('rod upgrade hint', () => {
     s.locker.rods.push('fiberglass');
     const text = rodHintText('snapped', rodUpgrade(s)!, 'Marlow');
     expect(text).toContain('<b>Graphite Rod</b>');
-    expect(text).toContain("Marlow's stall (1,200 🪙)");
+    expect(text).toContain(`Marlow's stall (1,200 ${COIN})`);
     expect(rodHintText('tough', rodUpgrade(s)!, 'Marlow')).toMatch(/^Tough fight!/);
   });
 });

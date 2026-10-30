@@ -30,7 +30,7 @@ import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
-import { shortCoins } from './format';
+import { COIN, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { Player } from './player';
 import {
   animateFish,
@@ -88,7 +88,6 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
-const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const CAMP_TIPS = [
   'Tip: hold the cast longer for a farther throw.',
@@ -1085,8 +1084,8 @@ export class Game {
     const el = $('wheelres');
     el.className = `show ${win ? 'win' : 'lose'}`;
     el.innerHTML = win
-      ? `<b>DOUBLED!</b><span>${name} is now worth ${value * 2} 🪙 <small>(+${value})</small></span>`
-      : `<b>LOST!</b><span>${name} (${value} 🪙) is gone</span>`;
+      ? `<b>DOUBLED!</b><span>${name} is now worth ${value * 2} ${COIN} <small>(+${value})</small></span>`
+      : `<b>LOST!</b><span>${name} (${value} ${COIN}) is gone</span>`;
     if (win) audio.jingle('epic');
     else audio.snap();
     setTimeout(() => el.classList.remove('show'), 2600);
@@ -1397,9 +1396,9 @@ export class Game {
       this.endReveal();
       const win = r.factor > 0;
       this.casinoMsg = win
-        ? `<b class="win">${r.color.toUpperCase()}! You win</b> ${name} is now worth ${Math.round(after)} 🪙`
-        : `<b class="lose">${r.color.toUpperCase()}.</b> ${name} (${Math.round(before)} 🪙) is gone`;
-      this.showResult(win ? 'win' : 'lose', win ? `${r.color.toUpperCase()}! YOU WIN` : `${r.color.toUpperCase()}. YOU LOSE`, win ? `${name} is now worth ${Math.round(after)} 🪙` : `${name} is gone`);
+        ? `<b class="win">${r.color.toUpperCase()}! You win</b> ${name} is now worth ${Math.round(after)} ${COIN}`
+        : `<b class="lose">${r.color.toUpperCase()}.</b> ${name} (${Math.round(before)} ${COIN}) is gone`;
+      this.showResult(win ? 'win' : 'lose', win ? `${r.color.toUpperCase()}! YOU WIN` : `${r.color.toUpperCase()}. YOU LOSE`, win ? `${name} is now worth ${Math.round(after)} ${COIN}` : `${name} is gone`);
       if (win) audio.jingle('epic');
       else audio.snap();
       if (this.menuOpen) this.renderMenu();
@@ -1446,7 +1445,7 @@ export class Game {
   private showResult(kind: 'win' | 'lose' | 'push', title: string, sub: string): void {
     const el = $('tableresult');
     el.className = kind;
-    el.innerHTML = `${title}<small>${sub}</small>`;
+    el.innerHTML = `${title}<small>${withCoins(sub)}</small>`;
     el.style.animation = 'none';
     void el.offsetWidth;
     el.style.animation = '';
@@ -1550,7 +1549,7 @@ export class Game {
     }
     lines.push(
       fish
-        ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${Math.round(eco.fishValue(fish))} 🪙`
+        ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${Math.round(eco.fishValue(fish))} ${COIN}`
         : `Hold a fish (${this.fishKeys}) to bet it.`,
     );
     const g = this.bjShown;
@@ -1575,7 +1574,7 @@ export class Game {
 
   private aimLabel(a: { k: string; id: string }): string {
     if (a.k === 'rbet') return `bet on ${a.id} · ×${ROULETTE_PAY[a.id as RouletteBet]}`;
-    if (a.id === 'double') return `double down · ${doubleCost(this.s, this.betSlot)} 🪙`;
+    if (a.id === 'double') return `double down · ${doubleCost(this.s, this.betSlot)} ${COIN}`;
     return { deal: 'deal a hand', hit: 'hit', stand: 'stand' }[a.id] ?? a.id;
   }
 
@@ -1688,7 +1687,7 @@ export class Game {
         const held = this.s.slots[this.s.held];
         if (held?.k === 'fish') {
           const f = byId(FISH, held.fishId);
-          spots.push({ d: -30, label: `Sell ${f.name} · ${eco.sellPrice(this.s, held)} 🪙`, act: () => this.sellHeld() });
+          spots.push({ d: -30, label: `Sell ${f.name} · ${eco.sellPrice(this.s, held)} ${COIN}`, act: () => this.sellHeld() });
         }
         spots.push({
           d: dv,
@@ -1701,7 +1700,7 @@ export class Game {
         const wh = this.s.slots[this.s.held];
         spots.push(
           wh?.k === 'fish'
-            ? { d: -40, label: `Spin the wheel with ${byId(FISH, wh.fishId).name} · 2× or nothing (${Math.round(eco.fishValue(wh))} 🪙)`, act: () => this.gamble() }
+            ? { d: -40, label: `Spin the wheel with ${byId(FISH, wh.fishId).name} · 2× or nothing (${Math.round(eco.fishValue(wh))} ${COIN})`, act: () => this.gamble() }
             : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast(`Hold a fish (${this.fishKeys}), then press E to spin.`) },
         );
       }
@@ -2538,7 +2537,7 @@ export class Game {
 
   private toast(msg: string, secs = 2): void {
     const t = $('toast');
-    t.textContent = msg;
+    t.innerHTML = coinText(msg);
     t.classList.add('show');
     this.toastTimer = secs;
   }
@@ -2781,7 +2780,7 @@ export class Game {
       body += tag;
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
       if (sellable) cls += ' sellable';
-      const sell = sellable ? `Sell · ${eco.sellPrice(this.s, sl)} 🪙` : '';
+      const sell = sellable ? `Sell · ${eco.sellPrice(this.s, sl)} ${COIN}` : '';
       const name = sl?.k === 'fish' ? byId(FISH, sl.fishId).name + (i >= size ? ' · extra slot until it is sold' : '')
         : i === ROD_SLOT ? 'Rod slot: swap rods in your Bag (Tab)'
         : i === BAIT_SLOT ? 'Bait slot: swap bait in your Bag (Tab)' : '';
@@ -2816,8 +2815,8 @@ export class Game {
     const sl = this.s.slots[this.s.held];
     const el = $('heldname');
     if (!sl) return el.classList.remove('show');
-    el.textContent =
-      sl.k === 'fish' ? `${sl.shiny ? '✨ ' : ''}${byId(FISH, sl.fishId).name} · ${Math.round(eco.fishValue(sl))} 🪙`
+    el.innerHTML =
+      sl.k === 'fish' ? `${sl.shiny ? '✨ ' : ''}${byId(FISH, sl.fishId).name} · ${Math.round(eco.fishValue(sl))} ${COIN}`
       : sl.k === 'rod' ? byId(RODS, sl.id).name
       : `${byId(BAITS, sl.id).name} ×${sl.n}`;
     el.classList.remove('show');
@@ -3231,8 +3230,8 @@ export class Game {
       const action = lvl
         ? this.btn(`Unlocks at level ${b.unlockLevel} · ${this.baitPackPrice(b)}`, '', 'plain', true)
         : s.coins < cost
-          ? this.btn(`Need ${cost.toLocaleString()} 🪙`, '', 'plain', true)
-          : this.btn(`Buy ${eco.BAIT_PACK} for ${cost.toLocaleString()} 🪙`, `data-act="buybait" data-id="${b.id}"`);
+          ? this.btn(`Need ${cost.toLocaleString()} ${COIN}`, '', 'plain', true)
+          : this.btn(`Buy ${eco.BAIT_PACK} for ${cost.toLocaleString()} ${COIN}`, `data-act="buybait" data-id="${b.id}"`);
       return this.detail({
         icon: BAIT_ICON[b.id] ?? '🪱',
         name: b.name,
@@ -3250,8 +3249,8 @@ export class Game {
       : lvl
         ? this.btn(`Unlocks at level ${r.unlockLevel} · ${this.rodPrice(r)}`, '', 'plain', true)
         : s.coins < r.price
-          ? this.btn(`Need ${r.price.toLocaleString()} 🪙`, '', 'plain', true)
-          : this.btn(r.price ? `Buy for ${r.price.toLocaleString()} 🪙` : 'Take it (free)', `data-act="buyrod" data-id="${r.id}"`);
+          ? this.btn(`Need ${r.price.toLocaleString()} ${COIN}`, '', 'plain', true)
+          : this.btn(r.price ? `Buy for ${r.price.toLocaleString()} ${COIN}` : 'Take it (free)', `data-act="buyrod" data-id="${r.id}"`);
     return this.detail({
       icon: rodIcon(r.tier),
       name: r.name,
@@ -3263,12 +3262,12 @@ export class Game {
   }
 
   private rodPrice(r: Rod): string {
-    return r.price ? `${r.price.toLocaleString()} 🪙` : 'Free';
+    return r.price ? `${r.price.toLocaleString()} ${COIN}` : 'Free';
   }
 
   /** What one pack of this bait costs at the stall. */
   private baitPackPrice(b: Bait): string {
-    return `${(b.price * eco.BAIT_PACK).toLocaleString()} 🪙`;
+    return `${(b.price * eco.BAIT_PACK).toLocaleString()} ${COIN}`;
   }
 
   private cosmeticsShopHtml(): string {
@@ -3286,7 +3285,7 @@ export class Game {
   }
 
   private cosPrice(c: Cosmetic): string {
-    return c.shop === 'casino' ? `${c.price.toLocaleString()} chips` : `${c.price.toLocaleString()} 🪙`;
+    return c.shop === 'casino' ? `${c.price.toLocaleString()} chips` : `${c.price.toLocaleString()} ${COIN}`;
   }
 
   /** The cosmetics for sale at one counter: Marlow's stall (coins) or the casino prize counter (chips). */
@@ -3343,9 +3342,9 @@ export class Game {
   private sellStrip(): string {
     const fish = this.s.slots.filter((x): x is Extract<SaveData['slots'][number], { k: 'fish' }> => x?.k === 'fish');
     if (this.tab === 'casino')
-      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> click one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} 🪙 of fish value.</span></div>`;
+      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> click one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} ${COIN} of fish value.</span></div>`;
     const total = fish.reduce((a, f) => a + eco.sellPrice(this.s, f), 0);
-    const all = fish.length ? this.btn(`Sell all ${fish.length} · ${total.toLocaleString()} 🪙`, 'data-act="sellall"', 'ok') : '';
+    const all = fish.length ? this.btn(`Sell all ${fish.length} · ${total.toLocaleString()} ${COIN}`, 'data-act="sellall"', 'ok') : '';
     return `<div class="strip"><span>🐟 <b>Sell fish:</b> click one in your hotbar below${fish.length ? '' : ' (you have none right now)'}.</span>${all}</div>`;
   }
 }
