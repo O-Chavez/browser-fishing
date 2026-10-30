@@ -461,6 +461,9 @@ async function casinoChecks(): Promise<void> {
     return { spun, slot: JSON.stringify((g.s as any).slots[2]) };
   });
   check('casino: roulette bet spins the wheel', roul.spun, `slot after: ${roul.slot}`);
+  // The server is fresh, so the first settled spin, won or lost, is a casino record.
+  const board = await page.evaluate(() => (window.__game.world as any).hall.records.shown as string);
+  check('casino: a settled spin goes up on the record board', board.includes('"name":"Smoke"') && board.includes('"game":"roulette"'), board);
 
   // Blackjack: deal, see cards and buttons, stand.
   await page.keyboard.press('4');
@@ -782,7 +785,7 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
       },
       hall: () => {
         const h = w.hall;
-        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh],
+        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh], ['record board', h.records?.face.mesh],
           ...h.picks.map((o: any) => [`clickable ${o.userData.tag.k}:${o.userData.tag.id}`, o])];
       },
     };

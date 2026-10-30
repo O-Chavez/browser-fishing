@@ -104,6 +104,21 @@ describe('accounts', () => {
     expect(store.auth('Ann', B)).toMatchObject({ ok: true, created: true });
   });
 
+  it('deleting a password-free account takes its casino records with it, and the next biggest moves up', () => {
+    const { store, acct } = claimed();
+    const bob = store.auth('Bob', B);
+    if (!bob.ok) throw new Error(bob.msg);
+    const g = { game: 'roulette', fishId: 'trout' } as const;
+    expect(store.gambled(bob.account, true, { ...g, amount: 500, at: 1 })).toBe(true);
+    expect(store.gambled(acct, true, { ...g, amount: 900, at: 2 })).toBe(true);
+    expect(store.gambled(acct, false, { ...g, amount: 300, at: 3 })).toBe(true);
+    // Bob's smaller win is still his own best, ready for when Ann's goes.
+    expect(store.gambled(bob.account, true, { ...g, amount: 400, at: 4 })).toBe(false);
+    expect(store.records()).toMatchObject({ win: { name: 'Ann', amount: 900 }, loss: { name: 'Ann', amount: 300 } });
+    store.forget(acct, A);
+    expect(store.records()).toEqual({ win: { name: 'Bob', amount: 500, ...g, at: 1 }, loss: null });
+  });
+
   it('loads saves from before passwords, and keeps passwords and devices across a reload', async () => {
     const old = claimed();
     const legacy = Object.fromEntries(Object.entries(old.store.snapshot()).map(([k, v]) => [k, { name: (v as { name: string }).name, hash: (v as { hash: string }).hash, save: (v as { save: unknown }).save }]));

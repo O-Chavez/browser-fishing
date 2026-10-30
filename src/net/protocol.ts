@@ -106,6 +106,8 @@ export type ServerMsg =
   | { t: 'hall'; rows: HallRow[] }
   /** Every Ko-fi supporter's name, newest first, for the 💗 by their names and the thank-you board. */
   | { t: 'supporters'; names: string[] }
+  /** The casino's all-time biggest single win and loss, sent on join and whenever one is beaten. */
+  | { t: 'records'; records: CasinoRecords }
   /** A chat line from anyone on the server; `room` and `id` let same-room clients show a bubble. */
   | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
   /** A server-wide notice for the chat window ("Ann has joined"). */
@@ -117,5 +119,11 @@ export type ServerMsg =
   | { t: 'dev'; lines: string[]; time?: number | null; sent?: boolean };
 
 export interface HallRow { name: string; level: number; best: BestCatch }
+
+export type CasinoGame = 'blackjack' | 'roulette' | 'wheel';
+/** One settled hand or spin: the coins it won or lost, and the fish that was bet. */
+export interface Gamble { amount: number; game: CasinoGame; fishId: string; shiny?: boolean; at: number }
+export interface CasinoRecord extends Gamble { name: string }
+export interface CasinoRecords { win: CasinoRecord | null; loss: CasinoRecord | null }
 
 export const SERVER_PORT = 8787;

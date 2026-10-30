@@ -1,4 +1,4 @@
-import type { HallRow } from '../src/net/protocol';
+import type { CasinoRecord, CasinoRecords, Gamble, HallRow } from '../src/net/protocol';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { migrate, newSave, type SaveData } from '../src/game/state';
@@ -14,6 +14,8 @@ export interface Account {
   online: boolean;
   /** When the player first tipped on Ko-fi (or Oscar gave them the heart). Kept outside the save so a reset keeps it. */
   supporter?: number;
+  /** The player's biggest single casino win and loss, for the casino record board. Kept outside the save so a reset keeps it. */
+  casino?: { win?: Gamble; loss?: Gamble };
 }
 
 interface PassHash {
@@ -62,15 +64,16 @@ export class AccountStore {
   private dirty = false;
   private hallRows: HallRow[] | null = null;
   private supporterNames: string[] | null = null;
+  private recordRows: CasinoRecords | null = null;
   private lock: Lockout;
 
   constructor(raw: Record<string, unknown> = {}, now: () => number = Date.now) {
     this.lock = new Lockout(5, 50, 15 * 60_000, now);
-    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; save: unknown };
+    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; casino?: Account['casino']; save: unknown };
     for (const [k, a] of Object.entries(raw) as [string, Stored][]) {
       // Older saves kept a single token `hash`.
       const tokens = Array.isArray(a?.tokens) ? a.tokens : a?.hash ? [a.hash] : null;
-      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), save: migrate(a.save as SaveData), online: false });
+      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), ...(a.casino ? { casino: a.casino } : {}), save: migrate(a.save as SaveData), online: false });
     }
   }
 
@@ -127,6 +130,7 @@ export class AccountStore {
       this.accounts.delete(nameKey(acct.name));
       this.hallRows = null;
       this.supporterNames = null;
+      this.recordRows = null;
     }
     this.touch();
   }
@@ -178,6 +182,33 @@ export class AccountStore {
       .map((a) => a.name));
   }
 
+  /**
+   * Keeps a settled hand or spin as the player's biggest win (or loss) if it beats theirs. True when
+   * it is also the casino's new all-time record, so every room can be told.
+   */
+  gambled(acct: Account, win: boolean, g: Gamble): boolean {
+    const kind = win ? 'win' : 'loss';
+    if (!(g.amount > 0) || g.amount <= (acct.casino?.[kind]?.amount ?? 0)) return false;
+    const top = this.records()[kind];
+    (acct.casino ??= {})[kind] = g;
+    this.recordRows = null;
+    this.touch();
+    return !top || g.amount > top.amount;
+  }
+
+  /** The biggest single win and loss across every account, online or not; the earlier one keeps a tie. Cached until one changes. */
+  records(): CasinoRecords {
+    const top = (kind: 'win' | 'loss'): CasinoRecord | null => {
+      let best: CasinoRecord | null = null;
+      for (const a of this.accounts.values()) {
+        const g = a.casino?.[kind];
+        if (g && (!best || g.amount > best.amount || (g.amount === best.amount && g.at < best.at))) best = { name: a.name, ...g };
+      }
+      return best;
+    };
+    return (this.recordRows ??= { win: top('win'), loss: top('loss') });
+  }
+
   /** Call when a player's level or best catch may have changed, so the next `hall` re-ranks. */
   hallStale(): void {
     this.hallRows = null;
@@ -192,7 +223,7 @@ export class AccountStore {
       [...this.accounts].map(([k, a]) => [
         k,
         // `hash` is still written so an older server, after a rollback, keeps the account (it skips ones without).
-        { name: a.name, hash: a.tokens[0] ?? '-', tokens: a.tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), save: a.save },
+        { name: a.name, hash: a.tokens[0] ?? '-', tokens: a.tokens, ...(a.pw ? { pw: a.pw } : {}), ...(a.supporter ? { supporter: a.supporter } : {}), ...(a.casino ? { casino: a.casino } : {}), save: a.save },
       ]),
     );
   }

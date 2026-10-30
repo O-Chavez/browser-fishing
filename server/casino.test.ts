@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MAPS, arrivalSpot } from '../src/data/maps';
 import { FISH } from '../src/data/content';
-import { CASINO_LEVEL } from '../src/data/casino';
+import { CASINO_LEVEL, ROULETTE_MS } from '../src/data/casino';
 import { cosById } from '../src/data/cosmetics';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
-import { Room } from './room';
+import { fishValue } from '../src/game/economy';
+import { Room, SPIN_MS } from './room';
 
 const conn = () => {
   const log: ServerMsg[] = [];
@@ -17,6 +18,8 @@ const setup = () => {
   let roll = 0.5;
   const store = new AccountStore();
   const room = new Room('r', MAPS, () => {}, () => now, () => roll);
+  room.recordGamble = (a, win, g) => store.gambled(a, win, g);
+  room.records = () => store.records();
   const join = (name: string, location = 'pond') => {
     const res = store.auth(name, 'token-token-token-' + name);
     if (!res.ok) throw new Error(res.msg);
@@ -25,7 +28,7 @@ const setup = () => {
     const id = room.join(c, res.account);
     return { c, id, acct: res.account };
   };
-  return { room, join, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
+  return { room, store, join, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
 };
 
 const casino = MAPS.find((m) => m.id === 'casino')!;
@@ -229,5 +232,138 @@ describe('casino tables', () => {
     expect(p.acct.save.chips).toBe(10);
     room.handle(p.id, { t: 'equip', slot: 'hat', id: 'tophat' });
     expect(p.acct.save.look.hat).toBe('tophat');
+  });
+});
+
+describe('casino records', () => {
+  type Fish = { k: 'fish'; fishId: string; size: number; shiny?: boolean; mult?: number };
+  const records = (log: ServerMsg[]) => log.filter((m): m is Extract<ServerMsg, { t: 'records' }> => m.t === 'records').map((m) => m.records);
+  /** A player in the casino holding a fish worth about `value` coins in slot 2. */
+  const seat = (ctx: ReturnType<typeof setup>, name: string, value = 1000, shiny = false) => {
+    const p = ctx.join(name, 'casino');
+    const fish: Fish = { k: 'fish', fishId: dear.id, size: dear.maxSize, ...(shiny ? { shiny } : {}) };
+    fish.mult = value / fishValue(fish);
+    p.acct.save.slots[2] = fish;
+    p.acct.save.held = 2;
+    return { ...p, fish };
+  };
+  const spin = (ctx: ReturnType<typeof setup>, p: { id: number }, bet: 'red' | 'black' | 'green', roll: number) => {
+    goTo(ctx.room, p.id, casino.casino!.roulette);
+    ctx.setRoll(roll);
+    ctx.room.handle(p.id, { t: 'roulette', bet, i: 2 });
+    ctx.advance(ROULETTE_MS);
+    ctx.room.snapshot();
+  };
+  const hand = (ctx: ReturnType<typeof setup>, p: { id: number; c: { log: ServerMsg[] } }, roll: number, a?: 'stand' | 'double') => {
+    goTo(ctx.room, p.id, casino.casino!.blackjack);
+    ctx.setRoll(roll);
+    ctx.room.handle(p.id, { t: 'bj', a: 'deal', i: 2 });
+    if (a) ctx.room.handle(p.id, { t: 'bj', a });
+    return ([...p.c.log].reverse().find((m) => m.t === 'bj') as Extract<ServerMsg, { t: 'bj' }>).view!;
+  };
+
+  it('starts empty and is sent on join', () => {
+    const ctx = setup();
+    const a = ctx.join('Ann', 'casino');
+    expect(records(a.c.log)).toEqual([{ win: null, loss: null }]);
+  });
+
+  it('records a roulette win when the spin is applied, not when it is rolled, and tells everyone', () => {
+    const ctx = setup();
+    const a = seat(ctx, 'Ann', 1000, true);
+    const b = ctx.join('Bob');
+    goTo(ctx.room, a.id, casino.casino!.roulette);
+    ctx.setRoll(0.03); // red
+    ctx.room.handle(a.id, { t: 'roulette', bet: 'red', i: 2 });
+    expect(ctx.store.records().win).toBeNull();
+    ctx.advance(ROULETTE_MS);
+    ctx.room.snapshot();
+    const win = { name: 'Ann', amount: 1000, game: 'roulette', fishId: dear.id, shiny: true, at: expect.any(Number) };
+    expect(ctx.store.records()).toEqual({ win, loss: null });
+    expect(records(b.c.log).at(-1)).toEqual({ win, loss: null });
+  });
+
+  it('records a green win at its full payout, and a roulette loss as the fish value', () => {
+    const ctx = setup();
+    const a = seat(ctx, 'Ann', 500);
+    spin(ctx, a, 'green', 0);
+    expect(ctx.store.records().win).toMatchObject({ amount: 500 * 15, game: 'roulette' });
+    spin(ctx, a, 'red', 0.06); // black: the 8,000 coin fish is gone
+    expect(a.acct.save.slots[2]).toBeNull();
+    expect(ctx.store.records().loss).toMatchObject({ name: 'Ann', amount: 8000, game: 'roulette' });
+  });
+
+  it('records the Lucky Wheel', () => {
+    const ctx = setup();
+    const w = MAPS[0].wheel;
+    const a = seat(ctx, 'Ann', 300);
+    goTo(ctx.room, a.id, w);
+    ctx.setRoll(0.1);
+    ctx.room.handle(a.id, { t: 'gamble' });
+    ctx.advance(SPIN_MS);
+    ctx.room.snapshot();
+    expect(ctx.store.records().win).toMatchObject({ amount: 300, game: 'wheel', fishId: dear.id });
+    ctx.setRoll(0.9);
+    ctx.room.handle(a.id, { t: 'gamble' });
+    ctx.advance(SPIN_MS);
+    ctx.room.snapshot();
+    expect(ctx.store.records().loss).toMatchObject({ amount: 600, game: 'wheel' });
+  });
+
+  it('counts blackjack, with a double down net of the coins it cost', () => {
+    const ctx = setup();
+    const a = seat(ctx, 'Ann', 1000);
+    a.acct.save.coins = 5000;
+    // A fixed roll deals the same hand every time: 0.31 wins a double down, 0.3 busts one.
+    expect(hand(ctx, a, 0.31, 'double')).toMatchObject({ result: 'win', stake: 1000, factor: 4 });
+    // The fish went from 1,000 to 4,000 but the double down cost 1,000 coins: 2,000 gained.
+    expect(a.acct.save.coins).toBe(4000);
+    expect(ctx.store.records().win).toMatchObject({ amount: 2000, game: 'blackjack' });
+    expect(hand(ctx, a, 0.3, 'double')).toMatchObject({ result: 'bust', stake: 4000 });
+    // The 4,000 coin fish and the 4,000 coin stake.
+    expect(ctx.store.records().loss).toMatchObject({ amount: 8000, game: 'blackjack' });
+  });
+
+  it('counts a natural blackjack and a plain win, and ignores a push', () => {
+    const ctx = setup();
+    const a = seat(ctx, 'Ann', 1000);
+    expect(hand(ctx, a, 0.19, 'stand')).toMatchObject({ result: 'push' });
+    expect(ctx.store.records()).toEqual({ win: null, loss: null });
+    expect(hand(ctx, a, 0.04, 'stand')).toMatchObject({ result: 'win' });
+    expect(ctx.store.records().win).toMatchObject({ amount: 1000 });
+    expect(hand(ctx, a, 0.01)).toMatchObject({ result: 'blackjack' });
+    expect(ctx.store.records().win).toMatchObject({ amount: 4000 });
+  });
+
+  it('keeps the record when a smaller or equal result comes in, and only tells rooms when it falls', () => {
+    const ctx = setup();
+    const a = seat(ctx, 'Ann', 1000);
+    spin(ctx, a, 'red', 0.03);
+    const b = seat(ctx, 'Bob', 400);
+    const sent = records(b.c.log).length;
+    spin(ctx, b, 'red', 0.03);
+    expect(ctx.store.records().win).toMatchObject({ name: 'Ann', amount: 1000 });
+    expect(records(b.c.log)).toHaveLength(sent);
+    // A tie leaves it with whoever got there first.
+    b.acct.save.slots[2] = { ...b.fish, mult: 1000 / fishValue({ ...b.fish, mult: 1 }) };
+    spin(ctx, b, 'red', 0.03);
+    expect(ctx.store.records().win).toMatchObject({ name: 'Ann' });
+    expect(records(b.c.log)).toHaveLength(sent);
+    spin(ctx, b, 'red', 0.03);
+    expect(ctx.store.records().win).toMatchObject({ name: 'Bob', amount: 2000 });
+    expect(records(a.c.log).at(-1)!.win).toMatchObject({ name: 'Bob', amount: 2000 });
+  });
+
+  it('survives a reload and a progress reset', () => {
+    const ctx = setup();
+    const a = seat(ctx, 'Ann', 1000);
+    spin(ctx, a, 'red', 0.03);
+    spin(ctx, a, 'red', 0.06);
+    const before = ctx.store.records();
+    ctx.room.handle(a.id, { t: 'reset' });
+    expect(ctx.store.records()).toEqual(before);
+    const back = new AccountStore(JSON.parse(JSON.stringify(ctx.store.snapshot())));
+    expect(back.records()).toEqual(before);
+    expect(before).toMatchObject({ win: { name: 'Ann', amount: 1000 }, loss: { name: 'Ann', amount: 2000 } });
   });
 });

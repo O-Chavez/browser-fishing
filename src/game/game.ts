@@ -297,6 +297,7 @@ export class Game {
         this.avatars.sync(this.net.players, this.net.id, this.map.id);
         if (this.menuOpen && (this.tab === 'players' || this.tab === 'settings')) this.renderMenu();
       },
+      onRecords: () => this.world.hall?.records.set(this.net.records),
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
         else if (this.pendingWelcome) {
@@ -1292,6 +1293,7 @@ export class Game {
     // A new hub starts with an empty board, and the server only resends it when someone's stats change.
     this.world.hub?.setLeaders(this.anglers());
     this.world.hub?.setSupporters(this.net.supporters);
+    this.world.hall?.records.set(this.net.records);
   }
 
   // ---------- walking & interaction ----------
