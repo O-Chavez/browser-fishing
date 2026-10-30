@@ -113,7 +113,7 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       if (!f) return say(`Fish ids: ${ids(FISH)}`);
       const size = int(args[1], f.minSize, f.maxSize) ?? Math.round((f.minSize + f.maxSize) / 2);
       const shiny = args.includes('shiny');
-      if (!eco.takeItem(s, { k: 'fish', fishId: f.id, size, ...(shiny ? { shiny } : {}) })) return say('Your hotbar is full.');
+      if (!eco.takeItem(s, { k: 'fish', fishId: f.id, size, ...(shiny ? { shiny } : {}) })) return say('Your fish slots are full.');
       return ok(`Added a ${shiny ? 'shiny ' : ''}${size} cm ${f.name}.`);
     }
     case 'tp': {

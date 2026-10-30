@@ -63,7 +63,7 @@ import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
-import { load, newSave, save, type SaveData } from './state';
+import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
@@ -917,7 +917,6 @@ export class Game {
     else if (act === 'sellall') return this.sellAll();
     else if (act === 'equiprod') this.equipRod(id!);
     else if (act === 'equipbait') this.equipBait(id!);
-    else if (act === 'stow') this.stow(Number(id));
     else if (act === 'buycos') this.buyCosmetic(id!);
     else if (act === 'equip') this.equip(btn.dataset.slot as CosSlot, id || null);
     else if (act === 'color') this.recolor(Number(id));
@@ -944,6 +943,11 @@ export class Game {
     this.persist();
     this.refreshHud();
     this.renderMenu();
+  }
+
+  /** The number keys for fish slots, for hints: "3-5", or more with the Tackle Vest. */
+  private get fishKeys(): string {
+    return `${FISH_SLOT + 1}-${Math.min(9, this.s.slots.length)}`;
   }
 
   /** Number keys: take that hotbar slot in hand. */
@@ -974,7 +978,10 @@ export class Game {
 
   private pickUp(d: Drop): void {
     if (this.spin) return;
-    if (!eco.takeItem(this.s, d.item)) return this.toast('Your hotbar is full.');
+    if (!eco.takeItem(this.s, d.item)) {
+      const it = d.item;
+      return this.toast(it.k === 'fish' ? 'Your fish slots are full.' : it.k === 'rod' ? `You already have the ${byId(RODS, it.id).name}.` : 'Your locker is full of that bait.');
+    }
     if (this.net.connected) this.net.send({ t: 'pickup', id: d.id });
     else {
       this.localDrops.remove(d.id);
@@ -1011,21 +1018,15 @@ export class Game {
   }
 
   private equipRod(id: string): void {
-    if (!eco.equipRod(this.s, id)) return this.toast('Free a hotbar slot first (stow or drop something).');
+    if (!eco.equipRod(this.s, id)) return;
     this.net.send({ t: 'equiprod', id });
     this.toast(`Equipped the ${byId(RODS, id).name}`);
   }
 
   private equipBait(id: string): void {
-    if (!eco.equipBait(this.s, id)) return this.toast('Free a hotbar slot first (stow or drop something).');
+    if (!eco.equipBait(this.s, id)) return;
     this.net.send({ t: 'equipbait', id });
     this.toast(`Equipped ${byId(BAITS, id).name}`);
-  }
-
-  private stow(i: number): void {
-    if (!eco.stowSlot(this.s, i)) return;
-    this.net.send({ t: 'stow', i });
-    this.toast('Stored in your tackle locker');
   }
 
   /** Wheel: online the server rolls; offline we roll locally. */
@@ -1483,7 +1484,7 @@ export class Game {
     lines.push(
       fish
         ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${Math.round(eco.fishValue(fish))} 🪙`
-        : 'Hold a fish (1-5) to bet it.',
+        : `Hold a fish (${this.fishKeys}) to bet it.`,
     );
     const g = this.bj;
     if (t === 'blackjack' && g) {
@@ -1517,7 +1518,7 @@ export class Game {
     if (this.table === 'prizes') {
       if (a?.k === 'shop') this.openPrizes();
       else if (a?.k === 'cash') {
-        if (this.s.slots[this.s.held]?.k !== 'fish') return this.toast('Hold a fish (1-5) to turn it in.');
+        if (this.s.slots[this.s.held]?.k !== 'fish') return this.toast(`Hold a fish (${this.fishKeys}) to turn it in.`);
         this.casinoSend({ t: 'cashout', i: this.s.held });
       }
       return;
@@ -1525,7 +1526,7 @@ export class Game {
     if (!a || this.spin) return;
     const it = this.s.slots[this.betSlot];
     const needsFish = a.k === 'rbet' || a.id === 'deal';
-    if (needsFish && it?.k !== 'fish') return this.toast('Hold a fish (1-5) to bet it.');
+    if (needsFish && it?.k !== 'fish') return this.toast(`Hold a fish (${this.fishKeys}) to bet it.`);
     if (a.k === 'rbet') this.rouletteBet(a.id as RouletteBet);
     else this.blackjackAct(a.id as 'deal' | 'hit' | 'stand' | 'double');
   }
@@ -1551,8 +1552,7 @@ export class Game {
     if (n <= 0) return;
     this.dugAt = performance.now();
     this.net.send({ t: 'dig' });
-    const ready = this.s.slots.some((sl) => sl?.k === 'bait');
-    this.toast(ready ? `🪱 You dig up ${n} worms. Hold your rod and cast!` : `🪱 You dig up ${n} worms. Free a hotbar slot, then equip them from your Bag (Tab).`, 4);
+    this.toast(`🪱 You dig up ${n} worms. Hold your rod and cast!`, 4);
     audio.splash(0.3);
     this.persist();
     this.refreshHud();
@@ -1635,7 +1635,7 @@ export class Game {
         spots.push(
           wh?.k === 'fish'
             ? { d: -40, label: `Spin the wheel with ${byId(FISH, wh.fishId).name} · 2× or nothing (${Math.round(eco.fishValue(wh))} 🪙)`, act: () => this.gamble() }
-            : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast('Hold a fish (1-5), then press E to spin.') },
+            : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast(`Hold a fish (${this.fishKeys}), then press E to spin.`) },
         );
       }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
@@ -2679,33 +2679,43 @@ export class Game {
     // The newly held slot gets a one-off pop; later re-renders leave it still.
     const moved = this.hotbarHeld !== s.held;
     this.hotbarHeld = s.held;
-    const activeBait = eco.activeSlot(s);
-    // Slots are updated in place rather than rebuilt, so switching slots (or the bait marker moving)
-    // doesn't replace them: the old slot glides back down while the new one bounces up.
+    const size = slotCount(s);
+    // Slots are updated in place rather than rebuilt, so switching slots doesn't replace them:
+    // the old slot glides back down while the new one bounces up.
     const el = $('hotbar');
     if (el.children.length !== s.slots.length) el.innerHTML = s.slots.map(() => '<div></div>').join('');
     s.slots.forEach((sl, i) => {
-      // Icon, a short label underneath, and a corner badge for bait stack size.
+      // Icon, a short label underneath, and a corner badge for bait stack size. The rod and bait
+      // slots get a tinted frame and a tag naming what goes there, so an empty one still reads.
       let body = '';
       let cls = 'slot';
       let ring = '';
+      if (i === ROD_SLOT || i === BAIT_SLOT) cls += ` gear ${i === ROD_SLOT ? 'rodslot' : 'baitslot'}`;
+      const tag = i === ROD_SLOT ? '<span class="tag">Rod</span>' : i === BAIT_SLOT ? '<span class="tag">Bait</span>' : '';
       if (sl?.k === 'bait') {
         body = `<span class="q">×${sl.n}</span><span class="ic">${BAIT_ICON[sl.id] ?? '🪱'}</span><span class="nm">${byId(BAITS, sl.id).name}</span>`;
-        if (i === activeBait) cls += ' use';
       } else if (sl?.k === 'rod') {
         body = `<span class="ic">${rodIcon(byId(RODS, sl.id).tier)}</span><span class="nm">${shortRod(byId(RODS, sl.id).name)}</span>`;
-        if (sl.id === s.rod) cls += ' use';
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
         ring = sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity];
         // Just the total value: a wheel or table multiplier is already folded into it.
         body = `<span class="ic">${fishIcon(f.id, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
         cls += ' fish';
-      } else cls += ' empty';
+        // Past the hotbar size: a fish left over from before the rod and bait slots, until it's sold.
+        if (i >= size) cls += ' extra';
+      } else {
+        cls += ' empty';
+        if (i === ROD_SLOT) body = `<span class="ic ghost">${rodIcon(1)}</span>`;
+        else if (i === BAIT_SLOT) body = '<span class="ic ghost">🪱</span>';
+      }
+      body += tag;
       const sellable = sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino');
       if (sellable) cls += ' sellable';
       const sell = sellable ? `Sell · ${eco.sellPrice(this.s, sl)} 🪙` : '';
-      const name = sl?.k === 'fish' ? byId(FISH, sl.fishId).name : '';
+      const name = sl?.k === 'fish' ? byId(FISH, sl.fishId).name + (i >= size ? ' · extra slot until it is sold' : '')
+        : i === ROD_SLOT ? 'Rod slot: swap rods in your Bag (Tab)'
+        : i === BAIT_SLOT ? 'Bait slot: swap bait in your Bag (Tab)' : '';
       const c = el.children[i] as HTMLElement;
       const key = [cls, body, sell, name, ring].join('|');
       if (c.dataset.h === key) return;
@@ -2840,7 +2850,7 @@ export class Game {
     const reach = bait.tier;
     let hint: string;
     if (eco.canDig(s)) hint = eco.DIG_HINT;
-    else if (have <= 0) hint = 'No bait in your hotbar - equip some below.';
+    else if (have <= 0) hint = 'Your bait slot is empty - equip some below.';
     else if (rod.tier < bait.tier) hint = `Your rod is lower tier than your bait, so those fish fight hard. Upgrade your rod.`;
     else if (bait.tier < rod.tier) hint = `Your bait is holding you back - better bait reaches rarer fish.`;
     else if (reach < 5) hint = `${BAITS.find((b) => b.tier === reach + 1)!.name} bait unlocks ${tierName(reach + 1)} fish.`;
@@ -2858,7 +2868,7 @@ export class Game {
     }).join('');
     const baits = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
-      const equipped = s.bait === b.id && s.slots.some((x) => x?.k === 'bait' && x.id === b.id);
+      const equipped = s.bait === b.id && eco.activeSlot(s) >= 0;
       const sub = n > 0 ? `×${n}` : s.level < b.unlockLevel ? `🔒 Lv ${b.unlockLevel}` : `At ${vendor}'s`;
       return this.itemTile({ icon: BAIT_ICON[b.id] ?? '🪱', name: b.name, sub, price: `${this.baitPackPrice(b)} / ${eco.BAIT_PACK}`, tier: b.tier, on: sel === `bait:${b.id}`, check: equipped, ghost: n <= 0, attrs: `data-pick="bag" data-id="bait:${b.id}"` });
     }).join('');
@@ -2871,7 +2881,7 @@ export class Game {
         <h4>Rods</h4><div class="tiles">${rods}</div>
         <h4>Bait</h4><div class="tiles">${baits}</div>
         ${this.perksHtml()}
-        <p class="foot">Your hotbar holds the rod and bait you fish with; everything else waits in your tackle locker.</p>
+        <p class="foot">Hotbar slot 1 holds the rod you fish with and slot 2 your bait; the rest are for fish. Everything else waits in your tackle locker: pick it here to swap it in.</p>
       </div>${this.bagDetail(sel)}</div>`;
   }
 
@@ -2891,11 +2901,10 @@ export class Game {
     if (kind === 'bait') {
       const b = byId(BAITS, id);
       const n = eco.baitCount(s, b.id);
-      const slot = s.slots.findIndex((x) => x?.k === 'bait' && x.id === b.id);
-      const equipped = s.bait === b.id && slot >= 0;
+      const equipped = s.bait === b.id && eco.activeSlot(s) >= 0;
       const lvl = s.level < b.unlockLevel;
       const actions = equipped
-        ? this.btn('In your hotbar ✓', '', 'ok', true) + this.btn('Put away in locker', `data-act="stow" data-id="${slot}"`, 'plain')
+        ? this.btn('In your bait slot ✓', '', 'ok', true)
         : n > 0 && !lvl
           ? this.btn('Equip', `data-act="equipbait" data-id="${b.id}"`)
           : this.btn(`${lvl ? `Unlocks at level ${b.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.baitPackPrice(b)} / ${eco.BAIT_PACK}`, '', 'plain', true);
@@ -2911,9 +2920,8 @@ export class Game {
     const r = byId(RODS, id);
     const owned = eco.ownsRod(s, r.id);
     const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
-    const hotRod = s.slots.findIndex((x) => x?.k === 'rod' && x.id === r.id);
     const actions = equipped
-      ? this.btn('Equipped ✓', '', 'ok', true) + this.btn('Put away in locker', `data-act="stow" data-id="${hotRod}"`, 'plain')
+      ? this.btn('Equipped ✓', '', 'ok', true)
       : owned
         ? this.btn('Equip', `data-act="equiprod" data-id="${r.id}"`)
         : this.btn(`${s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.rodPrice(r)}`, '', 'plain', true);
@@ -3033,7 +3041,7 @@ export class Game {
     const keys: [string, string][] = [
       ['W A S D', 'Walk'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Talk / interact'],
       ['Hold click', 'Charge a cast - let go in the gold zone for a perfect cast'], ['Click', 'Hook when the ! appears'],
-      ['Hold click', 'Reel - let go when the fish surges'], ['1-5 / Scroll', 'Take an item in hand'], ['G', 'Drop the item in hand'],
+      ['Hold click', 'Reel - let go when the fish surges'], ['1-5 / Scroll', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['G', 'Drop the item in hand'],
       ['Tab', 'Open your bag'], ['Enter', 'Chat'], ['M', 'Music on / off'], ['Esc', 'Menu / close'],
     ];
     const controls = keys.map(([k, v]) => `<div class="key">${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</div><div>${v}</div>`).join('');

@@ -1,5 +1,5 @@
 import { CHIP_COINS, ROULETTE_PAY, ROULETTE_POCKETS, type RouletteBet } from '../data/casino';
-import { fishValue } from './economy';
+import { clearSlot, fishValue } from './economy';
 import type { SaveData } from './state';
 
 /** Pure casino rules. The server runs these; nothing here touches the network or the DOM. */
@@ -21,7 +21,7 @@ export function settleBet(s: SaveData, i: number, factor: number): { before: num
   if (it?.k !== 'fish') return { before: 0, after: 0 };
   const before = fishValue(it);
   if (factor <= 0) {
-    s.slots[i] = null;
+    clearSlot(s, i);
     return { before, after: 0 };
   }
   if (factor > 1) it.mult = (it.mult ?? 1) * factor;
@@ -46,7 +46,7 @@ export function cashOut(s: SaveData, i: number): number {
   if (it?.k !== 'fish') return 0;
   const chips = chipsFor(fishValue(it));
   s.chips = Math.round((s.chips + chips) * 10) / 10;
-  s.slots[i] = null;
+  clearSlot(s, i);
   return chips;
 }
 

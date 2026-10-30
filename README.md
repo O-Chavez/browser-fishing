@@ -68,7 +68,7 @@ Lakeside is free with no ads, made by one person. If you enjoy it, you can leave
 | Click | Hook a bite |
 | Hold click | Reel (let go when the fish surges) |
 | E | Talk / interact |
-| 1-5 / scroll | Pick a hotbar item |
+| 1-5 / scroll | Pick a hotbar item (1 rod, 2 bait, 3+ fish) |
 | G | Drop the item in your hand |
 | Tab | Bag and player list |
 | Enter | Chat |
