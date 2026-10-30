@@ -6,7 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
 - [ ] 💬 Other players' catch alert shows the base value, not the charm-boosted one (from `/idea`, Oscar C, 2026-10-29). The server's `hold` act (`Room.land`, `server/room.ts:512`) sends only fish, size and shiny, and the toast (`onAct`, `src/game/game.ts:304`) uses plain `sellValue`, while the catch itself stores `mult: 1 + charmBonus` (`applyCatch`, `src/game/economy.ts:392`). Send the multiplier (or the final value) in the act and show that
 - [ ] 💬 Show rod prices in the shop even when the rod is owned or still level-locked (from `/idea`, Oscar C, 2026-10-29). The tile label in `gearShopHtml` (`src/game/game.ts:3034`) replaces the price with "Owned" or "🔒 Lv N"; show the price alongside those instead, and check the bait tiles and the Bag tiles (`game.ts:2802`) the same way
 - [ ] 🎨💬 NPCs wander too far and end up on top of players, "kind of jump scares" (from `/idea`, Oscar C, 2026-10-29). Probably the walk-on rule in `NpcWalker` (`src/game/npcwalk.ts`): after 10 s beside a player who stays put they walk on, and since NPCs are walk-through their route can pass straight through the player (e.g. Old Salty on the pier). Options: shorter routes, re-route or wait instead of passing within ~1.5 m of a player, or keep them stopped while someone is fishing nearby
