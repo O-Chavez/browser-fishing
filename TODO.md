@@ -7,9 +7,6 @@ Finished items move to [DONE.md](DONE.md).
 ## Up next
 
 - [ ] 🎨💬 Make night slightly brighter overall so it's easier to see, while keeping the cozy feel (from `/idea`, Oscar C, 2026-10-29). Night ambient/sky levels live in `World.updateDaylight`; taste-driven, so propose a few brightness levels side by side first
-- [ ] 🎨 Make new chat messages easier to notice, including on mobile
-  - The chat sits at 50% opacity while not typing (`#chat`, `src/style.css:91`) and a new line just appears (`ChatBox.add`, `src/game/chatbox.ts:157`), so it's easy to miss. Ideas: briefly show a new line at full opacity or with a highlight/slide-in that fades back, maybe a soft sound for messages from other players. Taste-driven: propose options first
-  - Touch mode: check the chat is readable on a real phone (`body.touch #chat`, `style.css:449`, under the scaled 1400px layout) and that new messages get noticed, e.g. an unread badge on the 💬 button (`src/game/touch.ts:47`)
 - [ ] 🎨 Feedback discoverability: today the only pointer to `/bug` and `/idea` is the chat input placeholder. A Bug/Idea button (settings tab or pause menu) would reach players who never open chat. Taste-driven: propose options first
 - [ ] Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
 
@@ -57,4 +54,5 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Mobile
 
+- 🎨 Chat on a real phone: check it's readable (`body.touch #chat`, `src/style.css:468`, under the scaled 1400px layout) and that new messages get noticed beyond the full-strength flash every new line now gets, e.g. an unread badge on the 💬 button (`src/game/touch.ts:50`). Split off the "easier to notice" chat item (2026-10-30)
 - 📋 Full mobile support, building on the touch test build and the mobile spec (https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv): answer the spec's five open decisions first, then full-screen menus with tap-to-select and a detail bar instead of hover tooltips, quick-chat chips, long-press to drop, and touch wording in the remaining key/click text (casino table hints, toasts like "Hold a fish (1-5)"). Remove the FPS readout (dev-only today) and decide whether touch mode should skip the desktop-only notice

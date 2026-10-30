@@ -98,20 +98,26 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #gauge.surge { animation: jitter .12s linear infinite; }
 @keyframes jitter { 0% { transform: translate(-1.5px, 0); } 50% { transform: translate(1.5px, 1px); } 100% { transform: translate(0, -1px); } }
 
-#chat { position: absolute; top: 16px; right: 16px; width: min(360px, 40vw); font-size: 14px; display: flex; flex-direction: column; gap: 4px; opacity: .5; transition: opacity .2s; }
-/* Faded while playing so it doesn't compete with the game; full strength while typing. */
-#chat.typing { opacity: 1; }
+/* Faded while playing so it doesn't compete with the game; full strength while typing. The fade is
+   per line (--fade) rather than on the window, so a new line can flash at full strength. */
+#chat { --fade: .5; position: absolute; top: 16px; right: 16px; width: min(360px, 40vw); font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+#chat.typing { --fade: 1; }
 .chat-log { display: flex; flex-direction: column; gap: 2px; }
-.chat-line { padding: 4px 10px; background: var(--hud-bg); border-radius: 8px; overflow-wrap: anywhere; line-height: 1.3; }
+.chat-line { --hi: 1; padding: 4px 10px; background: var(--hud-bg); border-radius: 8px; overflow-wrap: anywhere; line-height: 1.3; opacity: var(--fade); transition: opacity .2s; }
+/* A new line holds at full strength with a soft gold edge, then fades back (FLASH_MS in chatbox.ts). */
+.chat-line.fresh { animation: chat-fresh 4s; }
+@keyframes chat-fresh { 0%, 75% { opacity: var(--hi); box-shadow: inset 0 0 0 2px rgba(255,217,138,.5), 0 0 10px rgba(255,201,51,.3); } }
+@keyframes chat-fresh-hold { 0%, 100% { opacity: var(--hi); box-shadow: inset 0 0 0 2px rgba(255,217,138,.5), 0 0 10px rgba(255,201,51,.3); } }
+@media (prefers-reduced-motion: reduce) { .chat-line.fresh { animation: chat-fresh-hold 2.5s; } }
 .chat-line b { color: #ffd98a; }
 .chat-line .sup { margin-right: 3px; font-size: .9em; }
 .chat-line.self b { color: #9fd8ff; }
-.chat-line.sys { font-style: italic; opacity: .75; }
+.chat-line.sys { --hi: .75; font-style: italic; opacity: calc(var(--fade) * .75); }
 .chat-tag { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(255,255,255,.18); opacity: .8; }
 .chat-input { pointer-events: auto; font: inherit; padding: 8px 12px; color: var(--ink); background: var(--paper-3); border: 3px solid var(--wood-600); border-radius: 12px; outline: none; }
 .chat-input::placeholder { color: var(--ink-muted); }
 .chat-input.hidden { display: none; }
-.chat-hint { font-size: 12px; opacity: .75; text-align: right; text-shadow: 0 1px 3px #000; }
+.chat-hint { font-size: 12px; opacity: calc(var(--fade) * .75); text-align: right; text-shadow: 0 1px 3px #000; transition: opacity .2s; }
 .chat-hint b { opacity: 1; }
 .chat-cmd { font-weight: 800; color: #ffd98a; }
 .chat-cmd.on { padding: 0 4px; border-radius: 4px; background: rgba(255,217,138,.25); }
