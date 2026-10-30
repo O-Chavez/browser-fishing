@@ -16,6 +16,9 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] 🎨 Show when a Shiny Lure is on, and let players turn it off in the Bag
   - Today a bought lure is always on: the server spends a charge on the next cast that hooks a fish (`rollCast`, `src/game/economy.ts:362`), and the only sign is a line under "Charms & perks" in the Bag (`activePerks`, `economy.ts:202`; `perksHtml`, `src/game/game.ts:2879`). Add something visible while fishing, e.g. "✨ Shiny Lure on · 2 casts left" near the hotbar or HUD; propose the look first
   - An on/off toggle on the lure in the Bag, so players can save charges for a better fish. Store it in the save (`SaveData`, `src/game/state.ts:48`) and have the server check it in `rollCast`, not just the client
+- [ ] 🎨 Improve the welcome screen, and let players know there they can log out or switch accounts, without making it overbearing
+  - The welcome-back banner (`Game.welcome`, `src/game/game.ts:519`; text from `welcomeText`, `src/game/progression.ts:163`) shows for 4.2 s with the level, coins and next goal, plus a 🔒 password nudge from level 3. Logging out lives only in ⚙️ Settings > Account ("Log in as a different account…", finished item in DONE.md), and the join card's "Not you? Switch account" link (`#join-switch`, `index.html:99`) only shows when the browser remembers a name
+  - E.g. a small "Not you? Switch account in ⚙️ Settings" line on the banner, a one-time tip, or a quiet link on the join card. Taste-driven: ask what else should change on the welcome screen, then propose options
 
 ## Ideas
 
