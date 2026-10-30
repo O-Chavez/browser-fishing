@@ -170,6 +170,9 @@ describe('casino tables', () => {
     }
     const final = [...p.c.log].reverse().find((m) => m.t === 'bj') as Extract<ServerMsg, { t: 'bj' }>;
     expect(final.view!.done).toBe(true);
+    // The finished hand goes out before the save that pays it, so the client can hold that save back while it deals.
+    const last = (t: ServerMsg['t']) => p.c.log.map((m) => m.t).lastIndexOf(t);
+    expect(last('bj')).toBeLessThan(last('state'));
     const item = p.acct.save.slots[2] as { mult?: number } | null;
     expect(final.view!.factor === 0 ? item === null : item !== null).toBe(true);
   });

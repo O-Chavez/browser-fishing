@@ -45,7 +45,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Casino
 
-- 🎨💬 Make gambling feel more suspenseful; today it "feels a bit disconnected" (from `/idea`, Oscar C, 2026-10-29). Taste-driven: first ask which games and moments feel flat, then propose options (e.g. a slower reveal, a short drumroll before the result, camera or sound cues on the big moment)
 - 🎨💬 Casino scoreboard for the biggest win and biggest loss in a single hand or spin (from `/idea`, Oscar C, 2026-10-29), maybe a board on the casino wall like Top Anglers (`buildLeaderboard`, `src/game/hub.ts:384`). Decide whether it's all-time or daily, and record results on the server where hands settle (`Room.bjAct`, `server/room.ts`), not from the client. Pairs well with the hand-history item below
 - 🎨 Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%)
 
