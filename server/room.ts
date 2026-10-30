@@ -4,10 +4,10 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
-import type { ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
+import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
-import { newSave } from '../src/game/state';
+import { newSave, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
@@ -56,6 +56,7 @@ export const SPIN_MS = 3800;
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
 export const BOARD_MS = 1000;
 const NO_HALL: HallRow[] = [];
+const NO_RECORDS: CasinoRecords = { win: null, loss: null };
 
 /** One lobby: its players and their shared drops. Economy actions are validated here. */
 export class Room {
@@ -88,7 +89,11 @@ export class Room {
   setSupporter: (name: string, on: boolean) => string = () => 'No account store.';
   /** Dev console `/resetpass`; the server points this at the account store. */
   resetPass: (name: string, pass: string) => Promise<string> = async () => 'No account store.';
-  /** Delivers chat lines and notices; the server points this at every room. */
+  /** Keeps a settled hand or spin on the account; true when it beat a casino record. The server points this at the account store. */
+  recordGamble: (acct: Account, win: boolean, g: Gamble) => boolean = () => false;
+  /** The casino's all-time biggest win and loss; the server points this at the account store. */
+  records: () => CasinoRecords = () => NO_RECORDS;
+  /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
   constructor(
@@ -131,6 +136,7 @@ export class Room {
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
     conn.send({ t: 'supporters', names: this.supporters() });
+    conn.send({ t: 'records', records: this.records() });
     this.broadcast({ t: 'joined', player: info });
     // Before adding the member, so everyone else on the server hears it but not the joiner.
     this.say({ t: 'sys', text: `${acct.name} has joined` });
@@ -288,7 +294,17 @@ export class Room {
     const held = m.acct.save.slots[m.acct.save.held];
     if (!w || held?.k !== 'fish' || Math.hypot(m.info.x - w.x, m.info.z - w.z) > eco.WHEEL_RANGE) return;
     const win = this.rng() < eco.WHEEL_WIN;
-    m.spin = { at: this.now() + SPIN_MS, run: () => eco.applyWheel(m.acct.save, win) };
+    m.spin = {
+      at: this.now() + SPIN_MS,
+      run: () => {
+        const s = m.acct.save;
+        const fish = s.slots[s.held];
+        if (fish?.k !== 'fish') return;
+        const before = eco.fishValue(fish);
+        eco.applyWheel(s, win);
+        this.gambled(m, 'wheel', fish, cas.netWin(before, win ? eco.fishValue(fish) : 0));
+      },
+    };
     m.conn.send({ t: 'wheel', win, ms: SPIN_MS });
   }
 
@@ -417,7 +433,15 @@ export class Room {
     const bad = cas.betError(m.acct.save, i);
     if (bad) return m.conn.send({ t: 'notice', msg: bad });
     const r = cas.spinRoulette(bet, this.rng);
-    m.spin = { at: this.now() + ROULETTE_MS, run: () => { cas.settleBet(m.acct.save, i, r.factor); this.syncCarry(m); } };
+    m.spin = {
+      at: this.now() + ROULETTE_MS,
+      run: () => {
+        const fish = m.acct.save.slots[i];
+        const { before, after } = cas.settleBet(m.acct.save, i, r.factor);
+        if (fish?.k === 'fish') this.gambled(m, 'roulette', fish, cas.netWin(before, after));
+        this.syncCarry(m);
+      },
+    };
     m.conn.send({ t: 'roulette', ...r, ms: ROULETTE_MS });
   }
 
@@ -458,10 +482,19 @@ export class Room {
     const g = m.bj;
     if (!g?.done) return;
     m.bj = null;
-    cas.settleBlackjack(m.acct.save, g);
+    const fish = m.acct.save.slots[g.slot];
+    const net = cas.settleBlackjack(m.acct.save, g);
+    if (fish?.k === 'fish') this.gambled(m, 'blackjack', fish, net);
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: m.acct.save });
+  }
+
+  /** Hands a settled hand or spin to the casino record board, and tells every room when a record falls. */
+  private gambled(m: Member, game: CasinoGame, fish: Extract<Slot, { k: 'fish' }>, net: number): void {
+    if (!net) return;
+    const g: Gamble = { amount: Math.abs(net), game, fishId: fish.fishId, ...(fish.shiny ? { shiny: true } : {}), at: this.now() };
+    if (this.recordGamble(m.acct, net > 0, g)) this.say({ t: 'records', records: this.records() });
   }
 
   private dig(m: Member): boolean {

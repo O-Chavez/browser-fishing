@@ -487,7 +487,11 @@ async function casinoChecks(): Promise<void> {
     while (performance.now() - t0 < 3000 && !spun) { spun = !!h.anim; await new Promise((r) => setTimeout(r, 50)); }
     const start = performance.now();
     w.__ticks.slots = [];
+    const before = h.records.shown;
+    let boardAt = NaN;
+    const poll = setInterval(() => { if (isNaN(boardAt) && h.records.shown !== before) boardAt = performance.now(); }, 10);
     await new Promise((r) => setTimeout(r, 5500));
+    clearInterval(poll);
     const pegs: number[] = w.__ticks.peg;
     const gaps = pegs.slice(1).map((t, i) => t - pegs[i]);
     return {
@@ -499,11 +503,16 @@ async function casinoChecks(): Promise<void> {
       quiet: Math.round(w.__ticks.result[0] - pegs[pegs.length - 1]),
       result: Math.round(w.__ticks.result[0] - start),
       slotsAt: (w.__ticks.slots as number[]).map((t) => Math.round(t - w.__ticks.result[0])),
+      boardAt: Math.round(boardAt - w.__ticks.result[0]),
     };
   });
   check('casino: roulette bet spins the wheel', roul.spun, `slot after: ${roul.slot}`);
   // Pockets tick past the pointer, slowing with the wheel; a beat of quiet, then the result, and only then the hotbar.
   check('casino: roulette ticks slow down, then a beat before the result', roul.pegs > 40 && roul.lastGap > roul.firstGap * 4 && roul.quiet >= RESULT_BEAT_MS - 50 && roul.slotsAt.every((t) => t >= -30), JSON.stringify(roul));
+  // The server is fresh, so the first settled spin, won or lost, is a casino record.
+  const board = await page.evaluate(() => (window.__game.world as any).hall.records.shown as string);
+  check('casino: a settled spin goes up on the record board', board.includes('"name":"Smoke"') && board.includes('"game":"roulette"'), board);
+  check('casino: the record board waits for the result', roul.boardAt >= -30, `board changed ${roul.boardAt} ms after the result`);
 
   // Blackjack: deal, see the cards dealt one at a time, then the buttons.
   await page.keyboard.press('4');
@@ -838,7 +847,7 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
       },
       hall: () => {
         const h = w.hall;
-        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh],
+        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh], ['record board', h.records?.face.mesh],
           ...h.picks.map((o: any) => [`clickable ${o.userData.tag.k}:${o.userData.tag.id}`, o])];
       },
     };

@@ -12,7 +12,7 @@ Finished items move to [DONE.md](DONE.md).
   - Also check the dev `/time` override (`m.dayFrac` in `server/room.ts`, `dayOverride` set in `src/game/game.ts:285`) only affects the player who typed it, and that it stays obvious when it's on
 - [ ] Use the HUD's gold coin everywhere a price or coin amount is shown, in the shops and the rest of the UI
   - The top-left coin count draws a CSS coin (`.coin`, `src/style.css:59`, with `.sm`/`.xs` sizes), but most prices use the 🪙 emoji instead (about 34 places: `src/game/game.ts` shop, bag and casino tiles and detail panels, `casino.ts`, `tips.ts`), which looks different on every platform. Swap the HTML ones for the `.coin` span at a size that sits on the text line
-  - Plain-text spots can't hold a span: toasts (e.g. the catch toast, `game.ts:316`), chat lines, and the canvas-drawn Top Anglers board (`hub.ts:438`). Decide per spot: draw a matching coin on the canvas, allow HTML in toasts, or keep the emoji there
+  - Plain-text spots can't hold a span: toasts (e.g. the catch toast, `game.ts:316`), chat lines, and the canvas-drawn Top Anglers board (`hub.ts:438`) and casino record board (`src/game/casinorecords.ts`). Decide per spot: draw a matching coin on the canvas, allow HTML in toasts, or keep the emoji there
 - [ ] 🎨 Show when a Shiny Lure is on, and let players turn it off in the Bag
   - Today a bought lure is always on: the server spends a charge on the next cast that hooks a fish (`rollCast`, `src/game/economy.ts:362`), and the only sign is a line under "Charms & perks" in the Bag (`activePerks`, `economy.ts:202`; `perksHtml`, `src/game/game.ts:2879`). Add something visible while fishing, e.g. "✨ Shiny Lure on · 2 casts left" near the hotbar or HUD; propose the look first
   - An on/off toggle on the lure in the Bag, so players can save charges for a better fish. Store it in the save (`SaveData`, `src/game/state.ts:48`) and have the server check it in `rollCast`, not just the client
@@ -45,8 +45,8 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Casino
 
-- 🎨💬 Casino scoreboard for the biggest win and biggest loss in a single hand or spin (from `/idea`, Oscar C, 2026-10-29), maybe a board on the casino wall like Top Anglers (`buildLeaderboard`, `src/game/hub.ts:384`). Decide whether it's all-time or daily, and record results on the server where hands settle (`Room.bjAct`, `server/room.ts`), not from the client. Pairs well with the hand-history item below
-- 🎨 Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%)
+- 🎨 Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%). Each account already keeps its own biggest win and loss (`Account.casino`, `server/accounts.ts`), which a stats panel could show
+- 🎨 Announce a broken casino record in chat ("🎰 Ann just won 12,000 🪙 at blackjack, a casino record!"), a server-wide `sys` line from `Room.gambled` (`server/room.ts`). Left out of the record board because blackjack settles on the server the moment the last card is drawn, so with a paced client-side reveal the line could spoil the hand for the player; send it after the reveal or delay it by the deal's length
 
 ### World, NPCs and visuals
 

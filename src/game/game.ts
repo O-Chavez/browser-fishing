@@ -285,6 +285,10 @@ export class Game {
         this.avatars.sync(this.net.players, this.net.id, this.map.id);
         if (this.menuOpen && (this.tab === 'players' || this.tab === 'settings')) this.renderMenu();
       },
+      onRecords: () => {
+        // A record from your own bet arrives as it settles; the board waits for the reveal like the hotbar.
+        if (!this.revealTimers.length) this.world.hall?.records.set(this.net.records);
+      },
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
         else if (this.pendingWelcome) {
@@ -1042,6 +1046,7 @@ export class Game {
     const save = this.heldSave;
     this.heldSave = null;
     if (save) this.applyState(save);
+    this.world.hall?.records.set(this.net.records);
   }
 
   /** Wheel: online the server rolls; offline we roll locally. */
@@ -1310,6 +1315,7 @@ export class Game {
     // A new hub starts with an empty board, and the server only resends it when someone's stats change.
     this.world.hub?.setLeaders(this.anglers());
     this.world.hub?.setSupporters(this.net.supporters);
+    this.world.hall?.records.set(this.net.records);
   }
 
   // ---------- walking & interaction ----------

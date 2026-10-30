@@ -123,6 +123,8 @@ function room(name: string): Room {
     r.report = (rep) => void sendFeedback(rep);
     r.resetPass = (name, pass) => accounts.resetPass(name, pass);
     r.supporters = () => accounts.supporters();
+    r.recordGamble = (acct, win, g) => accounts.gambled(acct, win, g);
+    r.records = () => accounts.records();
     r.setSupporter = setSupporter;
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
@@ -256,6 +258,11 @@ wss.on('connection', (ws, req) => {
         endSession();
         // A deleted supporter's 💗 goes from everyone's list.
         if (!gone.pw && gone.supporter) rooms.forEach((r) => r.supportersChanged(gone, false, accounts.supporters()));
+        // So does a deleted player's casino record; the next biggest takes its place.
+        if (!gone.pw && gone.casino) {
+          const msg = { t: 'records', records: accounts.records() } as const;
+          rooms.forEach((r) => r.broadcast(msg));
+        }
         return ws.close();
       }
       return r.handle(id, msg);

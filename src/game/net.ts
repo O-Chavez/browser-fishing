@@ -1,4 +1,4 @@
-import type { Activity, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
+import type { Activity, CasinoRecords, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Drop } from './drops';
@@ -14,6 +14,8 @@ export interface NetEvents {
   onBoard(): void;
   /** The list of Ko-fi supporters changed. */
   onSupporters(): void;
+  /** The casino's biggest win or loss changed. */
+  onRecords(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
   onJump(id: number): void;
   onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }): void;
@@ -47,6 +49,8 @@ export class NetClient {
   /** Supporter names, newest first; `isSupporter` checks a name. */
   supporters: string[] = [];
   private supporterKeys = new Set<string>();
+  /** The casino's all-time biggest single win and loss. */
+  records: CasinoRecords = { win: null, loss: null };
   color: number | undefined;
   /** Sent with the next join only, to log in on a browser the account doesn't know yet. */
   pass: string | undefined;
@@ -201,6 +205,10 @@ export class NetClient {
         this.supporters = m.names;
         this.supporterKeys = new Set(m.names.map((n) => n.toLowerCase()));
         this.events.onSupporters();
+        break;
+      case 'records':
+        this.records = m.records;
+        this.events.onRecords();
         break;
       case 'board':
         this.coins = new Map(Object.entries(m.coins).map(([k, v]) => [Number(k), v]));

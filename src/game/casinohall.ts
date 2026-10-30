@@ -6,6 +6,7 @@ import { groundHeight } from './env';
 import { DARK, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
 import { buildRoom, neonSign } from './casinoroom';
+import { RecordsBoard } from './casinorecords';
 import { mergeStatic } from './merge';
 import { boxUV, feltTexture, grainTexture, panelTexture } from './textures';
 import { pegTicks, spinEase, type DealStep } from './tablepace';
@@ -120,6 +121,8 @@ export class CasinoHall {
   private hover: THREE.Object3D | null = null;
   private ray = new THREE.Raycaster();
   private texCache = new Map<string, THREE.CanvasTexture>();
+  /** The biggest win and loss board on the back wall. */
+  readonly records: RecordsBoard;
 
   constructor(def: NonNullable<MapDef['casino']>) {
     buildRoom(
@@ -142,6 +145,9 @@ export class CasinoHall {
     // separate. Clickable pieces are baked on their own so raycasts still find them.
     for (const p of this.picks) mergeStatic(p, []);
     mergeStatic(this.group, [this.wheel, this.cards, ...this.picks, ...(this.chipBoard ? [this.chipBoard.mesh] : [])]);
+    // Bakes its own frame, so it is added after.
+    this.records = new RecordsBoard(def.records);
+    this.group.add(this.records.group);
   }
 
   private place(obj: THREE.Object3D, s: Spot, r: number): void {

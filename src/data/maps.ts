@@ -97,7 +97,7 @@ export interface MapDef {
   radius: number;
   town: TownDef;
   /** Casino maps: where the tables and prize counter stand. */
-  casino?: { roulette: Spot; blackjack: Spot; prizes: Spot; mirror: Spot; hall: { x: number; z: number; w: number; d: number } };
+  casino?: { roulette: Spot; blackjack: Spot; prizes: Spot; mirror: Spot; records: Spot; hall: { x: number; z: number; w: number; d: number } };
   /** Player level needed to travel here. */
   minLevel?: number;
 }
@@ -267,6 +267,8 @@ MAPS.push({
     blackjack: { x: 9, z: 43, facing: toward(9, 43) },
     prizes: { x: 0, z: 56.4, facing: toward(0, 56.4) },
     mirror: { x: -15.4, z: 31, facing: Math.PI / 2 },
+    // The record board hangs on the back wall between the blackjack-side painting and the corner.
+    records: { x: 14.4, z: 59.94, facing: Math.PI },
   },
   town: {
     square: { x: 0, z: 43, r: 0 },

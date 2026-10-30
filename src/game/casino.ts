@@ -28,6 +28,12 @@ export function settleBet(s: SaveData, i: number, factor: number): { before: num
   return { before, after: fishValue(it) };
 }
 
+/**
+ * What a settled bet really won (+) or lost (-) in coins, in the rounded values players see: the
+ * fish's value after less before, less any coins staked alongside it that didn't come back.
+ */
+export const netWin = (before: number, after: number, stake = 0): number => Math.round(after) - Math.round(before) - stake;
+
 // ---------- prize shop ----------
 
 /** Chips a fish is worth, in tenths. Nothing below one chip can be turned in. */
@@ -171,10 +177,16 @@ export function doubleDown(s: SaveData, g: Blackjack): string | null {
   return null;
 }
 
-/** Pays out a finished hand: the fish wins, survives or is lost, and a push refunds the double-down stake. */
-export function settleBlackjack(s: SaveData, g: Blackjack): void {
-  settleBet(s, g.slot, blackjackFactor(g));
-  if (g.result === 'push') s.coins += g.stake;
+/**
+ * Pays out a finished hand: the fish wins, survives or is lost, and a push refunds the double-down
+ * stake. Returns the hand's `netWin`: a double down's coins are spent on a win and lost on a loss,
+ * so a doubled win nets about twice the fish's value and a doubled loss costs the fish plus the stake.
+ */
+export function settleBlackjack(s: SaveData, g: Blackjack): number {
+  const { before, after } = settleBet(s, g.slot, blackjackFactor(g));
+  const refund = g.result === 'push' ? g.stake : 0;
+  s.coins += refund;
+  return netWin(before, after, g.stake - refund);
 }
 
 /** The multiplier a finished hand pays: 0 destroys the fish, 1 returns it unchanged. */
