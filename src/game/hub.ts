@@ -72,6 +72,37 @@ export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#
   ctx.fillText(text, w / 2, h / 2 + 3);
 }
 
+/** The HUD's gold coin (`.coin` in style.css) on a canvas: `size` px across, centred on (x, y). */
+export function drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const r = size / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.clip();
+  // The darker rim along the bottom, like the CSS coin's inset shadow.
+  ctx.fillStyle = '#a8730d';
+  ctx.fillRect(x - r, y - r, size, size);
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x - r * 0.3, y - r * 0.3, r * 1.84);
+  g.addColorStop(0, '#fff3b0');
+  g.addColorStop(0.45, '#ffc933');
+  g.addColorStop(1, '#c58a12');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y - size * 0.08, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Draws an amount followed by the gold coin, right-aligned at `right` on baseline `y`, in the current `px`-sized font; returns the width. */
+export function fillCoinAmount(ctx: CanvasRenderingContext2D, text: string, right: number, y: number, px: number): number {
+  const d = Math.round(px * 0.8);
+  const gap = Math.round(px * 0.22);
+  ctx.textAlign = 'right';
+  ctx.fillText(text, right - d - gap, y);
+  drawCoin(ctx, right - d / 2, y - px * 0.36, d);
+  return ctx.measureText(text).width + gap + d;
+}
+
 const WHEEL_WEDGES = 8;
 
 export interface LeaderRow {
@@ -435,7 +466,8 @@ export class Hub {
       ctx.textAlign = 'right';
       ctx.font = '800 32px system-ui, sans-serif';
       ctx.fillStyle = r.value ? '#ffd23a' : '#6f8aa3';
-      ctx.fillText(r.value ? `${r.value.toLocaleString()} 🪙` : '—', w - 34, y);
+      if (r.value) fillCoinAmount(ctx, r.value.toLocaleString(), w - 34, y, 32);
+      else ctx.fillText('—', w - 34, y);
       if (r.value) {
         ctx.textAlign = 'left';
         ctx.font = '600 24px system-ui, sans-serif';

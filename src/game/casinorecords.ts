@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FISH } from '../data/content';
 import type { Spot } from '../data/maps';
 import type { CasinoGame, CasinoRecord, CasinoRecords } from '../net/protocol';
-import { rbox, textPlane } from './hub';
+import { fillCoinAmount, rbox, textPlane } from './hub';
 import { mergeStatic } from './merge';
 
 const GOLD = 0xe0b441;
@@ -85,12 +85,11 @@ export class RecordsBoard {
     ctx.font = '600 20px system-ui, sans-serif';
     ctx.fillStyle = '#b58aa0';
     ctx.fillText(new Date(rec.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }), R, y + 30);
-    const amount = `${kind === 'win' ? '+' : '−'}${rec.amount.toLocaleString()} 🪙`;
     ctx.font = '800 38px system-ui, sans-serif';
     ctx.fillStyle = kind === 'win' ? '#ffd23a' : '#ff9a9a';
-    ctx.fillText(amount, R, y + 80);
+    const amountW = fillCoinAmount(ctx, `${kind === 'win' ? '+' : '−'}${rec.amount.toLocaleString()}`, R, y + 80, 38);
     // Long names shrink to fit beside the amount.
-    const room = R - L - ctx.measureText(amount).width - 16;
+    const room = R - L - amountW - 16;
     let px = 34;
     ctx.font = `700 ${px}px system-ui, sans-serif`;
     while (ctx.measureText(rec.name).width > room && px > 16) ctx.font = `700 ${--px}px system-ui, sans-serif`;

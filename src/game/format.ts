@@ -5,3 +5,14 @@ export function shortCoins(n: number): string {
   const r = Math.round(n);
   return r < 1000 ? String(r) : r < 1e6 ? f(r / 1e3, 'k') : f(r / 1e6, 'M');
 }
+
+export const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** The HUD's gold coin, sized to sit on a line of text. Prices use it instead of the 🪙 emoji, which looks different on every platform. */
+export const COIN = '<span class="coin t"></span>';
+
+/** HTML with every 🪙 swapped for the gold coin: for text that also travels as plain text (server notices, casino results). */
+export const withCoins = (html: string): string => html.replaceAll('🪙', COIN);
+
+/** Plain text (a toast, a chat line) as HTML, with the gold coin in place of 🪙. */
+export const coinText = (text: string): string => withCoins(escapeHtml(text));
