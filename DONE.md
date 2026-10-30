@@ -2,6 +2,11 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 Log out of a password-free account and log in as another one
+  - E.g. a player who started a throwaway account on one device wants to switch to their main account there. Today "Log out of this device" only appears once a password is set (`acctForm` in `src/game/game.ts:2971-2974`) and the server refuses `forget` without one (`server/index.ts:252`), so the only way to switch is clearing site data
+  - Add a "Log in as a different account" option in ⚙️ Settings > Account for every account, leading to the join screen (name + password). For a password-free account, warn clearly that it can't be got back after logging out (or offer to set a password first)
+  - Also asked for in-game via `/idea` (Oscar C, 2026-10-29), together with changing your name (Ideas > Accounts and server)
+  - Done (2026-10-29): ⚙️ Settings > Account shows "Log in as a different account…" for every account; logging out clears the saved name and token and reloads to the join screen. Oscar chose to delete a password-free account on logout rather than leave it unreachable: the confirm step says in red that the account and all its progress are lost for good and the name freed, and offers "Set a password first…" next to "Delete <name> and log out". With a password, only this browser is forgotten as before. The server's `forget` deletes the account (and refreshes the hall of fame and supporter lists, broadcasting the latter if a supporter left) instead of refusing. Tests in `accounts.test.ts`; checked in headless Chrome: delete, another browser claiming the freed name, and the password path asking for the password on rejoin. Smoke not run
 - [x] Make it obvious when you're playing offline, with a way to reconnect
   - Today a dropped connection or "play offline" only shows a one-off toast ("Disconnected - playing offline.", `src/game/game.ts:324`; also `game.ts:305`), plus a line in the players panel (`game.ts:2917`), so it's easy to miss that progress isn't reaching the server
   - Show a small persistent badge/banner while offline, e.g. "Offline - refresh to connect" (or a "Reconnect" button that reloads/rejoins). Taste-driven: propose options first

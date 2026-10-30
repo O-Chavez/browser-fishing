@@ -9,10 +9,6 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] 🎨 Make new chat messages easier to notice, including on mobile
   - The chat sits at 50% opacity while not typing (`#chat`, `src/style.css:91`) and a new line just appears (`ChatBox.add`, `src/game/chatbox.ts:157`), so it's easy to miss. Ideas: briefly show a new line at full opacity or with a highlight/slide-in that fades back, maybe a soft sound for messages from other players. Taste-driven: propose options first
   - Touch mode: check the chat is readable on a real phone (`body.touch #chat`, `style.css:449`, under the scaled 1400px layout) and that new messages get noticed, e.g. an unread badge on the 💬 button (`src/game/touch.ts:47`)
-- [ ] 💬 Log out of a password-free account and log in as another one
-  - E.g. a player who started a throwaway account on one device wants to switch to their main account there. Today "Log out of this device" only appears once a password is set (`acctForm` in `src/game/game.ts:2971-2974`) and the server refuses `forget` without one (`server/index.ts:252`), so the only way to switch is clearing site data
-  - Add a "Log in as a different account" option in ⚙️ Settings > Account for every account, leading to the join screen (name + password). For a password-free account, warn clearly that it can't be got back after logging out (or offer to set a password first)
-  - Also asked for in-game via `/idea` (Oscar C, 2026-10-29), together with changing your name (Ideas > Accounts and server)
 
 ## Ideas
 
@@ -54,7 +50,8 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Accounts and server
 
-- 📋💬 Change your player name (from `/idea`, Oscar C, 2026-10-29, asked for together with the log out/in item in Up next). Needs decisions first: uniqueness and the profanity filter, how often it can be changed, and what happens to leaderboard entries, the 💗 supporter mark and passwords, which are all keyed by name today
+- 📋💬 Change your player name (from `/idea`, Oscar C, 2026-10-29, asked for together with the log out/in item, now done). Needs decisions first: uniqueness and the profanity filter, how often it can be changed, and what happens to leaderboard entries, the 💗 supporter mark and passwords, which are all keyed by name today
+- 🎨 Profanity filter: nothing filters names (on join or, once it exists, on rename) or chat today. Decide on a word list and where it applies (names only, or chat too), then check it in `parse` (`server/accounts.ts`) and the chat gate (`server/chat.ts`)
 - 📋 The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
 
 ### Mobile

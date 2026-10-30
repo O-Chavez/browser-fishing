@@ -117,12 +117,18 @@ export class AccountStore {
     return null;
   }
 
-  /** This browser stops logging in by itself. Only allowed with a password, or the account would be lost. */
-  forget(acct: Account, token: string): boolean {
-    if (!acct.pw) return false;
-    acct.tokens = acct.tokens.filter((t) => t !== hash(token));
+  /**
+   * Log out: this browser stops logging in by itself. Without a password nothing could ever log in
+   * again, so the account is deleted instead and its name freed.
+   */
+  forget(acct: Account, token: string): void {
+    if (acct.pw) acct.tokens = acct.tokens.filter((t) => t !== hash(token));
+    else {
+      this.accounts.delete(nameKey(acct.name));
+      this.hallRows = null;
+      this.supporterNames = null;
+    }
     this.touch();
-    return true;
   }
 
   /** Dev console: give a locked-out player a new password. Every remembered browser is signed out. */

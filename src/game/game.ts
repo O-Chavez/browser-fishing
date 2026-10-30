@@ -3011,10 +3011,18 @@ export class Game {
         <p>${this.net.hasPass ? 'Every other device is logged out and needs the new password.' : 'Log in on any device with your name and this password.'}</p>
         ${this.btn('Save password', 'data-act="passsave"', 'ok')}${this.btn('Cancel', 'data-act="acctno"', 'plain')}`;
     }
+    const name = escapeHtml(this.net.name);
+    const cancel = this.btn('Cancel', 'data-act="acctno"', 'plain');
+    if (this.acctForm === 'logout' && this.net.hasPass)
+      return `<p>Log out on this browser? You'll need your name and password to come back here.</p>${this.btn('Yes, log out', 'data-act="logoutyes"', 'bad')}${cancel}`;
+    // Nothing could log back in to an account without a password, so the server deletes it.
     if (this.acctForm === 'logout')
-      return `<p>Log out on this browser? You'll need your password to come back here.</p>${this.btn('Yes, log out', 'data-act="logoutyes"', 'bad')}${this.btn('Cancel', 'data-act="acctno"', 'plain')}`;
-    if (!this.net.hasPass) return `<p>Set a password to play as ${escapeHtml(this.net.name)} on other devices and browsers.</p>${msg}${this.btn('Set a password…', 'data-act="pass"', 'plain')}`;
-    return `<p>🔒 Password set. Log in on another device with your name and password.</p>${msg}${this.btn('Change password…', 'data-act="pass"', 'plain')}${this.btn('Log out of this device…', 'data-act="logout"', 'plain')}`;
+      return `<p class="acct-msg">⚠️ ${name} has no password. Logging out deletes ${name} for good: its coins, level, gear, fish${this.net.isSupporter(this.net.name) ? ', 💗' : ''} and everything else are lost, and anyone can take the name.</p>
+        <p>To keep it, set a password first. Then you can log back in any time.</p>
+        ${this.btn('Set a password first…', 'data-act="pass"', 'ok')}${this.btn(`Delete ${name} and log out`, 'data-act="logoutyes"', 'bad')}${cancel}`;
+    const logout = this.btn('Log in as a different account…', 'data-act="logout"', 'plain');
+    if (!this.net.hasPass) return `<p>Set a password to play as ${name} on other devices and browsers.</p>${msg}${this.btn('Set a password…', 'data-act="pass"', 'plain')}${logout}`;
+    return `<p>🔒 Password set. Log in on another device with your name and password.</p>${msg}${this.btn('Change password…', 'data-act="pass"', 'plain')}${logout}`;
   }
 
   // ---------- Shop ----------

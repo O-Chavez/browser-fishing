@@ -82,13 +82,26 @@ describe('accounts', () => {
     expect(store.auth('Ann', A)).toMatchObject({ ok: false, need: 'password' });
   });
 
-  it('logging out forgets this browser, but only with a password', async () => {
+  it('logging out forgets this browser, and the password still logs in', async () => {
     const { store, acct } = claimed();
-    expect(store.forget(acct, A)).toBe(false);
-    expect(store.auth('Ann', A).ok).toBe(true);
     await store.setPass(acct, A, 'trout-lake');
-    expect(store.forget(acct, A)).toBe(true);
+    store.forget(acct, A);
     expect(store.auth('Ann', A)).toMatchObject({ ok: false, need: 'password' });
+    expect((await store.login('Ann', A, 'trout-lake')).ok).toBe(true);
+  });
+
+  it('logging out of an account without a password deletes it and frees the name', () => {
+    const { store, acct } = claimed();
+    acct.save.best = { fishId: 'trout', size: 40, value: 99 };
+    store.setSupporter('Ann', true);
+    expect(store.hall()).toHaveLength(1);
+    expect(store.supporters()).toEqual(['Ann']);
+    store.forget(acct, A);
+    expect(store.names()).toEqual([]);
+    expect(store.hall()).toEqual([]);
+    expect(store.supporters()).toEqual([]);
+    expect(store.snapshot()).toEqual({});
+    expect(store.auth('Ann', B)).toMatchObject({ ok: true, created: true });
   });
 
   it('loads saves from before passwords, and keeps passwords and devices across a reload', async () => {
