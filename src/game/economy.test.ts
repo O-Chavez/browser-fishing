@@ -5,7 +5,11 @@ import { FISH } from '../data/content';
 import { Drops } from './drops';
 import { COSMETICS, COS_SLOTS, cosById, isFace } from '../data/cosmetics';
 
-const fishSlot = () => ({ k: 'fish' as const, fishId: FISH[0].id, size: 20 });
+const fishSlot = (size = 20) => ({ k: 'fish' as const, fishId: FISH[0].id, size });
+/** Distinct fish that survive the size clamp in `migrate`. */
+const fish = (i: number) => ({ k: 'fish' as const, fishId: FISH[0].id, size: 5 + i / 4 });
+const rod = (id: string) => ({ k: 'rod' as const, id });
+const bait = (id: 'worm' | 'fly' | 'minnow' | 'pearl', n: number) => ({ k: 'bait' as const, id, n });
 
 describe('best catch', () => {
   it('keeps only the most valuable fish caught', () => {
@@ -66,28 +70,55 @@ describe('carry slots', () => {
     expect(eco.equipRod(s, 'carbon')).toBe(false);
   });
 
-  it('stows gear and refills from the locker when a stack runs out', () => {
+  it('refills the bait slot from the locker when a stack runs out, and leaves it empty when none is left', () => {
     const s = newSave();
     s.locker.bait.worm = 3;
-    s.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 1 }, null, null, null];
+    s.slots = [rod('twig'), bait('worm', 1), null, null, null];
     expect(eco.spendBait(s)).toBe(true);
     expect(s.slots[1]).toMatchObject({ k: 'bait', n: 3 });
-    expect(eco.stowSlot(s, 1)).toBe(true);
-    expect(s.slots[1]).toBeNull();
-    expect(eco.baitCount(s, 'worm')).toBe(3);
-  });
-
-  it('only stores catches in free slots and blocks casting when full', () => {
-    const s = newSave();
-    s.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 1 }, null, null, null];
+    s.slots[1] = bait('worm', 1);
     expect(eco.spendBait(s)).toBe(true);
     expect(s.slots[1]).toBeNull();
+    expect(s.bait).toBe('worm');
     expect(eco.canCast(s)).toBe('nobait');
-    s.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 3 }, fishSlot(), fishSlot(), fishSlot()];
-    expect(eco.canCast(s)).toBe('full');
+  });
+
+  it('only stores catches in free fish slots and blocks casting when the fish row is full', () => {
+    const s = newSave();
+    s.slots = [rod('twig'), null, fishSlot(), fishSlot(), null];
+    // The empty bait slot never takes a fish.
+    expect(eco.freeSlots(s)).toBe(1);
+    expect(eco.applyCatch(s, FISH[0], 20).stored).toBe(true);
+    expect(s.slots[4]).toMatchObject({ k: 'fish' });
+    expect(s.slots[1]).toBeNull();
     expect(eco.applyCatch(s, FISH[0], 20).stored).toBe(false);
-    s.slots[1] = { k: 'bait', id: 'worm', n: 1 };
+    s.slots = [rod('twig'), bait('worm', 3), fishSlot(), fishSlot(), fishSlot()];
+    expect(eco.canCast(s)).toBe('full');
+    // The last bait no longer frees a slot for the catch.
+    s.slots[1] = bait('worm', 1);
+    expect(eco.canCast(s)).toBe('full');
+    s.slots[4] = null;
     expect(eco.canCast(s)).toBe('ok');
+  });
+
+  it('swaps rods and bait in their own slots, even with every fish slot full', () => {
+    const s = newSave();
+    s.level = 10;
+    s.coins = 9999;
+    s.slots = [rod('twig'), bait('worm', 15), fishSlot(), fishSlot(), fishSlot()];
+    expect(eco.buyRod(s, 'graphite')).toBe(true);
+    expect(s.slots[0]).toEqual(rod('graphite'));
+    expect(s.locker.rods).toEqual(['twig']);
+    expect(eco.buyBait(s, 'minnow')).toBe(true);
+    expect(s.slots[1]).toEqual(bait('minnow', 5));
+    expect(s.locker.bait.worm).toBe(15);
+    expect(eco.equipRod(s, 'twig')).toBe(true);
+    expect(eco.equipBait(s, 'worm')).toBe(true);
+    expect(s.slots.slice(0, 2)).toEqual([rod('twig'), bait('worm', 15)]);
+    expect(s).toMatchObject({ rod: 'twig', bait: 'worm', locker: { rods: ['graphite'], bait: { minnow: 5 } } });
+    expect(s.slots.filter((x) => x?.k === 'fish')).toHaveLength(3);
+    expect(eco.selectSlot(s, 1)).toBe(true);
+    expect(s.held).toBe(1);
   });
 
   it('sells only the fish in hand', () => {
@@ -117,27 +148,147 @@ describe('carry slots', () => {
     expect(eco.dropHeld(s)).toBeNull();
   });
 
+  it('dropping the rod brings out the best other rod from the locker', () => {
+    const s = newSave();
+    s.locker.rods = ['fiberglass', 'graphite'];
+    expect(eco.dropHeld(s)).toEqual(rod('twig'));
+    expect(s.slots[0]).toEqual(rod('graphite'));
+    expect(s.rod).toBe('graphite');
+    expect(s.locker.rods).toEqual(['fiberglass']);
+    expect(eco.ownsRod(s, 'twig')).toBe(false);
+  });
+
   it('drops and picks items back up', () => {
     const s = newSave();
     eco.selectSlot(s, 1);
     const item = eco.dropHeld(s)!;
     expect(item).toMatchObject({ k: 'bait', n: 15 });
     expect(eco.baitCount(s, 'worm')).toBe(0);
+    expect(s.slots[1]).toBeNull();
     expect(eco.takeItem(s, item)).toBe(true);
-    expect(eco.baitCount(s, 'worm')).toBe(15);
-    s.slots = [fishSlot(), fishSlot(), fishSlot(), fishSlot(), fishSlot()];
+    expect(s.slots[1]).toEqual(bait('worm', 15));
+    s.slots = [rod('twig'), bait('worm', 15), fishSlot(), fishSlot(), fishSlot()];
     expect(eco.canTake(s, fishSlot())).toBe(false);
+    s.slots[3] = null;
+    expect(eco.takeItem(s, fishSlot(30))).toBe(true);
+    expect(s.slots[3]).toEqual(fishSlot(30));
+  });
+
+  it('puts picked-up rods and bait in their slot or the tackle locker, never in a fish slot', () => {
+    const s = newSave();
+    s.level = 10;
+    // A dropped bait stack refills from the locker, like a used-up one.
+    s.locker.bait.worm = 4;
+    eco.selectSlot(s, 1);
+    eco.dropHeld(s);
+    expect(s.slots[1]).toEqual(bait('worm', 4));
+    // Other bait waits in the locker; the same bait tops the slot up, spilling past 99 into the locker.
+    expect(eco.takeItem(s, bait('fly', 7))).toBe(true);
+    expect(eco.takeItem(s, bait('worm', 98))).toBe(true);
+    expect(s.slots[1]).toEqual(bait('worm', 99));
+    expect(s.locker.bait).toEqual({ fly: 7, worm: 3 });
+    s.locker.bait.fly = eco.LOCKER_CAP;
+    expect(eco.canTake(s, bait('fly', 1))).toBe(false);
+    // A new rod goes to the locker; one you already own stays on the ground.
+    expect(eco.canTake(s, rod('twig'))).toBe(false);
+    expect(eco.takeItem(s, rod('graphite'))).toBe(true);
+    expect(s.slots[0]).toEqual(rod('twig'));
+    expect(s.locker.rods).toEqual(['graphite']);
+    expect(s.slots.slice(2)).toEqual([null, null, null]);
   });
 
   it('migrates old saves', () => {
-    const old = { ...newSave(), ownedRods: ['twig', 'graphite'], baitStock: { worm: 25, fly: 3, minnow: 0 }, inventory: [{ fishId: FISH[0].id, size: 20 }] } as Partial<SaveData>;
+    const old = { ...newSave(), ownedRods: ['twig', 'graphite'], baitStock: { worm: 25, fly: 3, minnow: 0 }, inventory: [{ fishId: FISH[0].id, size: 5 }] } as Partial<SaveData>;
     delete old.slots;
     const s = migrate(old);
-    expect(s.slots).toHaveLength(SLOT_COUNT);
-    expect(eco.hasRod(s, 'graphite')).toBe(true);
-    expect(s.slots.filter((x) => x?.k === 'rod')).toHaveLength(2);
+    expect(s.slots).toEqual([rod('twig'), bait('worm', 25), fish(0), null, null]);
+    expect(s.locker).toEqual({ rods: ['graphite'], bait: { fly: 3 } });
     expect('inventory' in s).toBe(false);
     expect('ownedRods' in s).toBe(false);
+  });
+
+  it('leaves saves that already have the rod and bait slots alone', () => {
+    const s = newSave();
+    expect(migrate(structuredClone(s))).toEqual(s);
+    const t = { ...newSave(), rod: 'graphite', bait: 'fly' as const, held: 4, locker: { rods: ['twig'], bait: { worm: 3 } } };
+    t.slots = [rod('graphite'), bait('fly', 9), null, null, fish(0)];
+    expect(migrate(structuredClone(t))).toEqual(t);
+    // An empty bait slot stays empty when the locker has none of the active bait either.
+    t.slots[1] = null;
+    expect(migrate(structuredClone(t)).slots[1]).toBeNull();
+  });
+
+  it('moves extra rods and bait from an old hotbar to the tackle locker, keeping the equipped ones', () => {
+    const old = { ...newSave(), level: 10, rod: 'graphite', bait: 'fly' as const, held: 3, locker: { rods: ['carbon'], bait: { fly: 5 } } };
+    old.slots = [rod('twig'), bait('worm', 15), fish(11), rod('graphite'), bait('fly', 60)];
+    const s = migrate(old);
+    expect(s.slots).toEqual([rod('graphite'), bait('fly', 65), fish(11), null, null]);
+    expect(s).toMatchObject({ rod: 'graphite', bait: 'fly', held: 0 });
+    expect(s.locker.rods.sort()).toEqual(['carbon', 'twig']);
+    expect(s.locker.bait).toEqual({ worm: 15 });
+    // Nothing is lost: every rod and every bait is still owned.
+    expect(eco.baitCount(s, 'worm') + eco.baitCount(s, 'fly')).toBe(15 + 60 + 5);
+  });
+
+  it('merges stacks of the active bait into the bait slot, up to 99, and keeps the fish in hand', () => {
+    const old = { ...newSave(), bait: 'worm' as const, held: 0, perks: ['vest'] };
+    old.slots = [fish(11), bait('worm', 99), rod('twig'), bait('worm', 30), fish(12), bait('fly', 4), null];
+    const s = migrate(old);
+    // Fish already in fish slots stay put; the one from slot 1 fills the first free fish slot.
+    expect(s.slots).toEqual([rod('twig'), bait('worm', 99), fish(11), null, fish(12), null, null]);
+    expect(s.held).toBe(2);
+    expect(s.locker.bait).toEqual({ worm: 30, fly: 4 });
+  });
+
+  it('takes the rod and bait slots from the locker when the old hotbar has none', () => {
+    const old = { ...newSave(), rod: 'graphite', bait: 'fly' as const, locker: { rods: ['graphite', 'twig'], bait: { fly: 150 } } };
+    old.slots = [fish(1), fish(2), fish(3), null, null];
+    const s = migrate(old);
+    // Fish already in fish slots stay put; the ones from slots 1 and 2 fill the free ones.
+    expect(s.slots).toEqual([rod('graphite'), bait('fly', 99), fish(3), fish(1), fish(2)]);
+    expect(s.locker).toEqual({ rods: ['twig'], bait: { fly: 51 } });
+    // Saves that don't own the active bait any more pick up the first stack they carry instead.
+    const t = migrate({ ...newSave(), bait: 'minnow', slots: [rod('twig'), null, bait('fly', 3), null, null] });
+    expect(t.slots[1]).toEqual(bait('fly', 3));
+    expect(t.bait).toBe('fly');
+  });
+
+  it('never loses fish that no longer fit: they wait in extra slots until sold', () => {
+    const old = { ...newSave(), held: 4, coins: 0 };
+    old.slots = [rod('twig'), fish(1), fish(2), fish(3), fish(4)];
+    const s = migrate(old);
+    expect(s.slots).toEqual([rod('twig'), null, fish(2), fish(3), fish(4), fish(1)]);
+    expect(s.held).toBe(4);
+    expect(eco.freeSlots(s)).toBe(0);
+    expect(eco.canTake(s, fish(0))).toBe(false);
+    // A second load keeps the extra slot.
+    expect(migrate(structuredClone(s))).toEqual(s);
+    // Selling an ordinary fish frees its slot; selling the extra one removes the extra slot.
+    expect(eco.sellSlot(s, 2)).toBe(true);
+    expect(s.slots).toHaveLength(6);
+    expect(eco.selectSlot(s, 5)).toBe(true);
+    expect(eco.sellHeld(s)).toBe(true);
+    expect(s.slots).toEqual([rod('twig'), null, null, fish(3), fish(4)]);
+    expect(s.held).toBe(4);
+    expect(s.coins).toBeGreaterThan(0);
+  });
+
+  it('keeps every fish from a vest-sized hotbar full of fish, and the vest turns extra slots into ordinary ones', () => {
+    const old = { ...newSave(), perks: ['vest'], chips: 0, locker: { rods: ['twig'], bait: {} } };
+    old.slots = Array.from({ length: 7 }, (_, i) => fish(i + 1));
+    const s = migrate(old);
+    expect(s.slots).toHaveLength(9);
+    expect(s.slots[0]).toEqual(rod('twig'));
+    expect(s.slots.filter((x) => x?.k === 'fish')).toHaveLength(7);
+    // Dropping an extra fish removes its slot too; the fish after it moves up.
+    eco.selectSlot(s, 7);
+    expect(eco.dropHeld(s)).toEqual(fish(1));
+    expect(s.slots).toEqual([rod('twig'), null, fish(3), fish(4), fish(5), fish(6), fish(7), fish(2)]);
+    const v = migrate({ ...old, perks: [], slots: [rod('twig'), bait('worm', 5), fish(1), fish(2), fish(3), fish(4)] });
+    expect(v.slots).toHaveLength(6);
+    v.chips = 100;
+    expect(eco.buyPerk(v, 'vest')).toBe(true);
+    expect(v.slots).toEqual([rod('twig'), bait('worm', 5), fish(1), fish(2), fish(3), fish(4), null]);
   });
 
   it('gives saves from before faces a random face, and keeps a valid one', () => {
@@ -155,13 +306,13 @@ describe('carry slots', () => {
     const minnow = FISH.find((f) => f.id === 'minnow')!;
     const sturgeon = FISH.find((f) => f.id === 'sturgeon')!;
     const old = { ...newSave(), dex: { minnow: { count: 3, best: 30 }, sturgeon: { count: 1, best: 100 } }, best: { fishId: 'sturgeon', size: 100, value: 500 } };
-    old.slots = [{ k: 'rod', id: 'twig' }, { k: 'fish', fishId: 'minnow', size: 12 }, null, null, null];
+    old.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, { k: 'fish', fishId: 'minnow', size: 12 }, null, null];
     const s = migrate(old);
     expect(s.dex.minnow.best).toBe(minnow.maxSize);
     expect(s.dex.sturgeon.best).toBe(sturgeon.minSize);
     expect(s.best!.size).toBe(sturgeon.minSize);
     expect(s.best!.value).toBe(500);
-    expect(s.slots[1]).toMatchObject({ k: 'fish', size: minnow.maxSize });
+    expect(s.slots[2]).toMatchObject({ k: 'fish', size: minnow.maxSize });
   });
 
   it('only accepts known faces', () => {
@@ -240,14 +391,14 @@ describe('worm digging', () => {
     expect(eco.digWorms(s)).toBe(0);
   });
 
-  it('keeps dug worms in the locker when the hotbar is full', () => {
+  it('puts dug worms in the bait slot even when every fish slot is full', () => {
     const s = broke();
-    s.slots[1] = { k: 'fish', fishId: FISH[0].id, size: 10 };
     s.slots[2] = { k: 'fish', fishId: FISH[0].id, size: 10 };
     s.slots[3] = { k: 'fish', fishId: FISH[0].id, size: 10 };
     s.slots[4] = { k: 'fish', fishId: FISH[0].id, size: 10 };
     expect(eco.digWorms(s)).toBe(eco.DIG_WORMS);
-    expect(s.locker.bait.worm).toBe(eco.DIG_WORMS);
+    expect(s.slots[1]).toEqual({ k: 'bait', id: 'worm', n: eco.DIG_WORMS });
+    expect(s.locker.bait.worm).toBeUndefined();
   });
 });
 

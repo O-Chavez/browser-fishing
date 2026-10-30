@@ -33,10 +33,9 @@ export type ClientMsg =
   | { t: 'jump' }
   | { t: 'buyrod'; id: string }
   | { t: 'buybait'; id: string }
-  /** Gear from the tackle locker into the hotbar, or a hotbar rod/bait stack back to the locker. */
+  /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
   | { t: 'equiprod'; id: string }
   | { t: 'equipbait'; id: string }
-  | { t: 'stow'; i: number }
   /** Sell the fish in hand, or in hotbar slot i. */
   | { t: 'sell'; i?: number }
   | { t: 'bottle'; id: string }

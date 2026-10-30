@@ -39,6 +39,22 @@ describe('betting a fish', () => {
     expect(cas.betError(s, 4)).toBeTruthy();
     expect(cas.betError(s, 9)).toBeTruthy();
   });
+
+  it('gives a fish in an extra slot back in place on a win, and removes the slot when it is lost or turned in', () => {
+    // Extra slots past the hotbar size hold fish left over from before the rod and bait slots.
+    const s = saveWith(fish());
+    s.slots.push(fish(), fish(3));
+    s.held = 6;
+    cas.settleBet(s, 6, 2);
+    expect(s.slots).toHaveLength(7);
+    expect((s.slots[6] as ReturnType<typeof fish>).mult).toBe(6);
+    cas.settleBet(s, 5, 0);
+    expect(s.slots).toHaveLength(6);
+    expect(s.held).toBe(5);
+    expect(cas.cashOut(s, 5)).toBeGreaterThan(0);
+    expect(s.slots).toHaveLength(5);
+    expect(s.held).toBe(4);
+  });
 });
 
 describe('prize shop', () => {

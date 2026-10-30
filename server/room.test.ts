@@ -159,18 +159,47 @@ describe('Room economy', () => {
     expect(a.acct.save.rod).toBe('twig');
   });
 
-  it('refuses to cast when every slot is full', () => {
+  it('refuses to cast when every fish slot is full, even on the last bait', () => {
     const { room, join } = setup();
     const a = join('Ann');
-    a.acct.save.slots = [
-      { k: 'rod', id: 'twig' },
-      { k: 'bait', id: 'worm', n: 5 },
-      { k: 'fish', fishId: 'perch', size: 20 },
-      { k: 'fish', fishId: 'perch', size: 20 },
-    ];
+    const perch = { k: 'fish', fishId: 'perch', size: 20 } as const;
+    a.acct.save.slots = [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 1 }, perch, perch, perch];
     room.handle(a.id, { t: 'cast', x: 0, z: -10 });
-    expect(last(a.c, 'castfail').msg).toMatch(/full/);
-    expect(eco.baitCount(a.acct.save, 'worm')).toBe(5);
+    expect(last(a.c, 'castfail').msg).toMatch(/fish slots are full/);
+    expect(eco.baitCount(a.acct.save, 'worm')).toBe(1);
+  });
+
+  it('lets a catch get away when the fish row fills up mid-fight', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    const ok = last(a.c, 'castok');
+    const perch = { k: 'fish', fishId: 'perch', size: 20 } as const;
+    a.acct.save.slots.splice(2, 3, perch, perch, perch);
+    advance(ok.wait * 1000 + 2000);
+    room.handle(a.id, { t: 'catch' });
+    expect(a.acct.save.slots).toHaveLength(5);
+    expect(a.acct.save.slots[1]).toMatchObject({ k: 'bait', id: 'worm', n: 14 });
+  });
+
+  it('keeps picked-up rods and bait out of the fish slots', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'pos', x: 0, z: 0, yaw: 0 });
+    room.handle(b.id, { t: 'pos', x: 0, z: 0, yaw: 0 });
+    a.acct.save.locker.rods.push('graphite');
+    room.handle(a.id, { t: 'slot', i: 0 });
+    room.handle(a.id, { t: 'drop' });
+    expect(a.acct.save.slots[0]).toEqual({ k: 'rod', id: 'graphite' });
+    const [d] = last(b.c, 'drops').list;
+    // Bob already has a Twig Rod, so it stays on the ground for someone else.
+    room.handle(b.id, { t: 'pickup', id: d.id });
+    expect(room.drops.all()).toHaveLength(1);
+    expect(b.acct.save.slots.slice(2)).toEqual([null, null, null]);
+    // Old clients may still ask to stow gear; there's nothing to stow it from any more.
+    room.handle(a.id, { t: 'stow', i: 0 } as never);
+    expect(a.acct.save.slots[0]).toEqual({ k: 'rod', id: 'graphite' });
   });
 
   it('drops items, lets others pick them up, and expires them after 30 s', () => {
@@ -250,21 +279,21 @@ describe('lucky wheel', () => {
     const a = t.join('Ann');
     const w = MAPS[0].wheel;
     t.room.handle(a.id, { t: 'pos', x: w.x + 1, z: w.z, yaw: 0 });
-    a.acct.save.slots[1] = { k: 'fish', fishId: 'perch', size: 20 };
-    a.acct.save.held = 1;
+    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
+    a.acct.save.held = 2;
     return { ...t, a };
   };
   it('doubles a fish after the spin finishes, not before', () => {
     const { room, a, advance, setRoll } = stage();
-    const base = eco.fishValue(a.acct.save.slots[1] as never);
+    const base = eco.fishValue(a.acct.save.slots[2] as never);
     setRoll(0.1);
     room.handle(a.id, { t: 'gamble' });
     expect(last(a.c, 'wheel').win).toBe(true);
     room.snapshot();
-    expect((a.acct.save.slots[1] as { mult?: number }).mult).toBeUndefined();
+    expect((a.acct.save.slots[2] as { mult?: number }).mult).toBeUndefined();
     advance(5000);
     room.snapshot();
-    expect((a.acct.save.slots[1] as { mult?: number }).mult).toBe(2);
+    expect((a.acct.save.slots[2] as { mult?: number }).mult).toBe(2);
     room.handle(a.id, { t: 'pos', x: MAPS[0].vendor.shop.x - 2, z: MAPS[0].vendor.shop.z, yaw: 0 });
     const coins = a.acct.save.coins;
     room.handle(a.id, { t: 'sell' });
@@ -276,12 +305,12 @@ describe('lucky wheel', () => {
     room.handle(a.id, { t: 'gamble' });
     room.handle(a.id, { t: 'drop' });
     room.handle(a.id, { t: 'slot', i: 0 });
-    expect(a.acct.save.held).toBe(1);
+    expect(a.acct.save.held).toBe(2);
     advance(5000);
     room.snapshot();
-    expect(a.acct.save.slots[1]).toBeNull();
+    expect(a.acct.save.slots[2]).toBeNull();
     room.handle(a.id, { t: 'pos', x: 0, z: 0, yaw: 0 });
-    a.acct.save.slots[1] = { k: 'fish', fishId: 'perch', size: 20 };
+    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
     a.c.log.length = 0;
     room.handle(a.id, { t: 'gamble' });
     expect(a.c.log.some((m) => m.t === 'wheel')).toBe(false);
@@ -338,10 +367,10 @@ describe('dropping a carried fish', () => {
   it('works while the fish is held in hand', () => {
     const { room, join } = setup();
     const a = join('Ann');
-    a.acct.save.slots[1] = { k: 'fish', fishId: 'perch', size: 20 };
-    room.handle(a.id, { t: 'slot', i: 1 });
+    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
+    room.handle(a.id, { t: 'slot', i: 2 });
     room.handle(a.id, { t: 'drop' });
-    expect(a.acct.save.slots[1]).toBeNull();
+    expect(a.acct.save.slots[2]).toBeNull();
     expect(room.drops.all()).toHaveLength(1);
   });
 });

@@ -27,6 +27,10 @@
   --ok-dark: #2e9a46;
   --bad: #e5533d;
   --hud-bg: rgba(58, 39, 23, .88);
+  /* the hotbar's rod and bait slots */
+  --gear: #5fb8ae;
+  --gear-bg: rgba(26, 62, 62, .9);
+  --gear-ink: #10302e;
   --hud-edge: 0 0 0 3px var(--wood-900);
   --t1: #b9b9b9;
   --t2: #4cd964;
@@ -155,8 +159,16 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 .rodico { display: block; width: 1.15em; height: 1.15em; }
 #hotbar .slot .q { position: absolute; top: 3px; right: 6px; font-size: 12px; font-weight: 900; }
 #hotbar .slot i { position: absolute; top: -8px; left: -8px; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 900; font-style: normal; background: var(--wood-800); box-shadow: 0 0 0 2px var(--wood-600); color: var(--cream-muted); }
-/* the rod and bait your next cast uses */
-#hotbar .slot.use::after { content: ''; position: absolute; bottom: -8px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+/* slots 1 and 2 always hold the rod and bait you fish with: a teal frame, a tag under them, and a gap before the fish */
+#hotbar .slot.gear { --ring: var(--gear); background: var(--gear-bg); }
+#hotbar .slot.baitslot { margin-right: 10px; }
+#hotbar .slot.gear .nm { bottom: 9px; }
+#hotbar .slot .tag { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); padding: 1px 7px; border-radius: 6px; font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; line-height: 14px; background: var(--gear); color: var(--gear-ink); }
+#hotbar .slot.gear.empty { opacity: .75; }
+#hotbar .slot .ic.ghost { opacity: .35; filter: grayscale(1); }
+#hotbar .slot.held .tag { background: var(--gold); color: var(--gold-ink); }
+/* fish left over from an older save, in extra slots that go once they're sold */
+#hotbar .slot.extra { outline: 2px dashed var(--cream-muted); outline-offset: 5px; }
 #hotbar .slot.held { --ring: var(--gold); transform: translateY(-10px); box-shadow: 0 0 0 3px var(--ring), 0 0 18px rgba(255,201,51,.55), 0 10px 18px rgba(0,0,0,.35); }
 #hotbar .slot.held i { background: var(--gold); color: var(--gold-ink); box-shadow: none; }
 /* the slot just picked bounces up, overshoots and settles */

@@ -363,6 +363,10 @@ async function pondChecks(): Promise<void> {
     return { same: document.querySelector('#hotbar .slot') === first, held: document.querySelectorAll('#hotbar .slot.held').length, picks: document.querySelectorAll('#hotbar .pick').length };
   });
   check('hotbar: switching slots keeps the slot elements (old slot glides down)', kept.same && kept.held === 1 && kept.picks === 1, JSON.stringify(kept));
+  const gear = await page.evaluate(() =>
+    [...document.querySelectorAll('#hotbar .slot')].slice(0, 3).map((el) => `${el.classList.contains('gear')}:${el.querySelector('.tag')?.textContent ?? ''}`).join(),
+  );
+  check('hotbar: slots 1 and 2 are the tagged rod and bait slots', gear === 'true:Rod,true:Bait,false:', gear);
 
   // Drop a fish and pick it back up.
   await page.evaluate((f) => { (window.__game.s as any).slots[3] = f; }, fish(4));

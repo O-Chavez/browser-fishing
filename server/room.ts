@@ -190,9 +190,6 @@ export class Room {
       case 'equipbait':
         changed = eco.equipBait(s, str(msg.id));
         break;
-      case 'stow':
-        changed = eco.stowSlot(s, Math.floor(Number(msg.i)));
-        break;
       case 'bottle': {
         const town = this.maps[m.info.map]?.town;
         const b = town?.bottles.find((x) => x.id === msg.id);
