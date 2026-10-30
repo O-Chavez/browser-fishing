@@ -7,6 +7,9 @@ Finished items move to [DONE.md](DONE.md).
 ## Up next
 
 - [ ] Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
+- [ ] 💬 Make the day/night cycle follow the server's clock, not each device's clock: players reported some saw night while others saw day at the same moment
+  - Likely cause: each client draws the sky from its own device clock (`dayFraction(Date.now() / 1000)` in `World.updateDaylight`, `src/game/world.ts:390`), and a day lasts only 10 minutes (`DAY_SECONDS`, `src/game/daynight.ts`), so a phone clock off by a minute or two shifts its whole cycle. The server already decides night bites from its own clock (`server/room.ts:493`), so a skewed client can also show night while the server rolls day fish. Fix: the server sends its time (or the day fraction) on join and now and then, and the client uses that offset instead of its own clock
+  - Also check the dev `/time` override (`m.dayFrac` in `server/room.ts`, `dayOverride` set in `src/game/game.ts:285`) only affects the player who typed it, and that it stays obvious when it's on
 
 ## Ideas
 
