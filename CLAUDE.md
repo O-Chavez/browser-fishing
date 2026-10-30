@@ -2,11 +2,11 @@
 
 ## Planned work
 
-Planned work lives in `TODO.md`.
+Planned work lives in `TODO.md`: **Up next** is what's been decided on, **Ideas** is everything else, grouped by area. Finished items live in `DONE.md`.
 
 - Work on one TODO item per session unless asked otherwise.
-- When an item is finished and verified, tick it off (`- [x]`) in `TODO.md`.
-- If you come up with an idea that's out of scope for the current task, add it under **Ideas** in `TODO.md` instead of doing it.
+- When an item is finished and verified, tick it off (`- [x]`) and move it to the top of `DONE.md`.
+- If you come up with an idea that's out of scope for the current task, add it under the matching area in **Ideas** in `TODO.md` instead of doing it. Tag it 🎨 (taste-driven), 📋 (needs a plan) or 💬 (asked for by players) where that fits.
 - For taste-driven items (visual cleanup, menu polish, player faces), ask questions or propose options before writing code. "Polish the menu systems" has no details yet, so always ask first.
 - For larger items (performance, global chat), propose a plan before making edits.
 
