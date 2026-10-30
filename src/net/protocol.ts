@@ -72,7 +72,7 @@ export type ClientMsg =
   | { t: 'cmd'; text: string }
   /** Set or change the account password; every other browser is signed out. */
   | { t: 'setpass'; pass: string }
-  /** Log out: this browser stops logging in by itself. Only for accounts with a password. */
+  /** Log out: this browser stops logging in by itself. An account without a password is deleted. */
   | { t: 'forget' };
 
 export type ServerMsg =

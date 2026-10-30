@@ -248,9 +248,14 @@ wss.on('connection', (ws, req) => {
     if (!msg || typeof msg !== 'object') return;
     if (id && acct) {
       if (msg.t === 'setpass') return busy || run(setPass(acct, msg.pass));
+      // Not while a password is being saved: it could land on an account that was just deleted.
       if (msg.t === 'forget') {
-        if (!accounts.forget(acct, token)) return send({ t: 'account', hasPass: false, msg: 'Set a password first.' });
+        if (busy) return;
+        const gone = acct;
+        accounts.forget(gone, token);
         endSession();
+        // A deleted supporter's 💗 goes from everyone's list.
+        if (!gone.pw && gone.supporter) rooms.forEach((r) => r.supportersChanged(gone, false, accounts.supporters()));
         return ws.close();
       }
       return r.handle(id, msg);
