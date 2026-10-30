@@ -1,229 +1,61 @@
 # TODO
 
-## Checklist
+Finished items move to [DONE.md](DONE.md).
 
-- [x] Improve performance
-  - Merged to `main` (2026-10-19): 23-29% faster rendering in every benchmark scene, original lighting kept. Results in `bench-results/ab-2a42083-vs-13dbd1f.json`
-  - Done = a tangible difference is noticed when playing (confirmed by Oscar, 2026-10-19)
-- [x] Global chat in the top right
-  - Non-intrusive, with a clear hint on how to use it ("Press Enter to chat")
-  - Everyone on the server; filterable by world (pond vs casino) with Tab while in chat mode, if needed
-  - No history on join: players only see messages sent after they log in (like OSRS)
-  - Messages disappear from the chat window after 5 minutes
-  - Standard max message length, spam/rate limiting, basic profanity filter
-  - Chat bubble above the speaker's head, as long as it isn't obnoxious
-- [x] Stop the player getting stuck on dock objects
-  - Keep the decorative items sitting on the dock (bucket etc.) for the look, but don't let them block movement
-  - Shore objects are fine as they are
-  - Also let players walk through the NPCs on that map (they block the path to/from the casino)
-- [x] Remove the duplicated set of benches in the town square
-  - Bench code lives in several places: `Town.benches()` around the well (`src/game/town.ts`), `Town.buildCozy()` (also `town.ts`), and the fire-pit benches in `src/game/hub.ts`. Confirm in-game which set is the extra one before removing it
-- [x] Allow changing inventory slots while sprinting
-- [x] Make scroll-wheel slot switching smooth
-  - Right now it doesn't respond evenly to scroll movement and feels sticky; each notch/gesture should move one slot consistently
-  - Add a slight animation when the highlight moves to a new hotbar slot
-- [x] Luck items in the casino shop should read as "caught fish are worth x more"
-  - The in-game text currently says "Every fish sells for +X%"
-  - Source already says "worth" (commit fa24e73, 2026-10-17), but the built `dist/` bundle still says "sells for", so the running game may be a stale build. Rebuild (and redeploy if the live server is behind) and check before changing any code
-- [x] Tab player list should show each player's level instead of their money
-- [x] Remove the Town Fund from the game entirely
-  - The level-15 casino lock (`CASINO_LEVEL`) is the only gate needed
-  - Remove all references and elements: `src/game/fund.ts` + `fund.test.ts`, the HUD/menus (`game.ts`, `index.html`, `style.css`), world props (`town.ts`, `hub.ts`), the `fund` net message (`protocol.ts`, `net.ts`, `server/room.ts`), `goal` fields in `maps.ts`, the save `fund` field (`state.ts`, `accounts.ts`, `server/index.ts`), tests, and `GAME_DESIGN.md`
-  - Watch out: the server gate (`server/room.ts:262`) currently checks only the fund, and the level check happens only on the client (`game.ts:887`). Swap in a server-side `CASINO_LEVEL` check, or the casino ends up open to everyone server-side
-  - Make sure old saves and stored fund data still load cleanly after the field is removed
-- [x] Remove the bench blocking the path in front of the well in the town square
-  - Well benches are placed by `Town.benches()` (`src/game/town.ts:163`). Remove only the one in front of the well and keep the others
-- [x] Faces on player models
-  - Simple, happy, fun faces
-  - Painted texture on the head sphere, on the side the player is looking
-  - Optionally A/B against a simple 3D face if it fits the theme better and doesn't cost much performance
-  - Random face assigned on account creation; pickable in the wardrobe
-  - Existing accounts without a face get a random one at login
-- [x] General visual cleanup
-  - The HUD shows a lot of unnecessary information; tone it down and remove unneeded elements
-  - The 3D world is fine as is
-- [x] Polish the menu systems
-  - Inventory and shop menus are clumsy and cluttered; improve the flow so it's clear what everything does
-- [x] Escape always closes the current menu
-  - If any menu is open (inventory, shop, wardrobe, etc.), pressing Escape closes it
-- [x] Show a "XXXX has joined" message in chat when a player joins
-  - Sent to everyone already on the server, using the joining player's name
-- [x] Lower the global chat's opacity when not in chat mode
-  - Fade the chat window while the player isn't typing; return to full opacity when they press Enter to open chat mode
-- [x] Rework the fish and tiers into a cohesive set
-  - Each tier gets a clear identity (Shallows, Sport fish, Lake giants, Jewel fish, Spirit fish) carried through look, name and value
-  - Distinct 3D silhouettes and species markings instead of one shared egg body; tier 5 stays recognisably fish; 2D icons match
-  - Balance pass: better gear catches fewer low-tier fish, values spread sensibly, bait cost vs earnings checked, catch mixes covered by tests
-  - Fishdex and catch card: one-line description, day/night note
-  - Keep all fish ids so saves, Fishdex progress and records carry over; show renames before applying
-- [x] Casino game menus/pop-ups block the screen since the UI changes
-  - Regression from the menu/HUD polish; casino game panels should stay out of the way of the view
-- [x] Hotbar fish icons show only total value
-  - Drop the "x.x" multiplier text on hotbar fish slots and show just the total value
-- [x] Show a prompt in the casino when the player can trade fish for chips
-  - A UI hint appears when the player is in range and able to click to trade fish in for chips
-- [x] Inventory/wardrobe shows equipped charms and their total buffs
-  - List the equipped charms and the summed buffs they give
-- [x] Smaller bait purchase popup, and reconsider the 20-bait cap
-  - The shop's purchase popup is too large and blocks the view; it should just say the amount purchased
-  - Oscar is fine with holding more than 20 bait unless there's a reason for the limit (`BAIT_STACK` in `src/game/state.ts:11`, covered by `economy.test.ts`)
-- [x] UI sometimes disappears until Escape/Tab is toggled
-  - Find the repro first; the UI only comes back after pressing/toggling Escape or Tab
-- [x] Cosmetic rework
-  - Change the cosmetics' appearance so they fit the game's theme better. Taste-driven: propose options before coding
-- [x] Join/welcome-back screen
-  - Currently joining just shows the inventory; replace it with a proper join/welcome-back screen. Taste-driven: propose options before coding
-- [x] Continue fish rework
-  - Higher tiers of fish should be more extreme/special (visually and in size)
-- [x] Add an in game element by the casino teleport that add a popup with a screenshot of the inside of the casino
-  - This is nice to show newer players whats waiting for them.
-- [x] Make the wardrobe/cosmetics shop player preview proportionally sized
-  - The spinning character preview is too small; size it in proportion to the menu panel instead of fixed pixels
-  - Sizes are hard-coded in `src/style.css` (`canvas.preview` 240×300 at line 308, `#pv-slot` 220px/140px at lines 288-290); the canvas comes from `CharacterPreview` in `src/game/character.ts:600`. Check its render resolution follows the new size so it doesn't blur
-- [x] Safety net for players with no bait and no money: dig for worms on the beach
-  - Only players with no bait anywhere (hotbar + locker) who can't afford a worm pack can dig; everyone else never sees a prompt, marker or hint
-  - A small, plain dirt mound on the sand left of the pier, visible from the dock. When the player can dig, their own client shows wriggling worms and a bobbing marker over it
-  - E digs up one pack of worms (5), auto-equipped. Server checks distance and eligibility, plus a 30 s per-account cooldown so drop-and-redig can't farm worms
-  - Hints point to the spot when eligible: the out-of-bait cast message, the inventory hint, the shop, and a line from Old Salty
-- [x] New-player guidance through the core loop
-  - Contextual tips that walk a new player through catch first fish → sell it at the shop → buy better bait → catch better fish, triggered by milestones (first spawn, first catch, first sale, first bait purchase) rather than a wall of text
-  - Should feel natural in the existing UI (hint lines, Old Salty, the welcome screen), show once per account, and stay out of the way. Taste-driven: propose options before coding
-- [x] In-game dev console for debugging/testing
-  - Locked behind a username/password, with the check done on the server (not just the client) so regular players can't unlock it; ideally slash commands typed into the existing chat (`src/game/chatbox.ts`), e.g. give money/bait/fish, set level, teleport, set time of day
-  - Larger item: propose a plan (auth approach, command list, where commands run) before editing
-- [x] Proper HTML/SEO metadata and a favicon
-  - `index.html` currently has only charset, viewport and title: add description, Open Graph/Twitter card tags (with a preview image), theme color, canonical URL, and `robots.txt`/sitemap if useful
-  - A browser-tab icon (favicon + apple-touch icon) that fits the game's look
-- [x] Fill out readme for the project.
-  - Highlight technologies uses, game features/progression/etc
-- [x] Add messaging that the game is meant for desktop play (prevents mobile players from getting frustrated)
-- [x] Player feedback forwarded to a Discord forum channel
-  - Start with a `/feedback <text>` chat command (reuse the slash-command handling in `src/game/chatbox.ts`); a Bug/Idea panel can come later (taste-driven: propose options first)
-  - Client sends a new `feedback` WebSocket message (`server/room.ts`); the server caps length, rate-limits per account, reuses the chat profanity filter, and attaches context (account, level, map, position, build hash, browser, time)
-  - Server posts to a Discord webhook from a Render env var (`DISCORD_FEEDBACK_WEBHOOK`, never sent to the client), one forum thread per report with a category tag and `allowed_mentions: { parse: [] }`; store in Postgres as a fallback if Discord is unreachable
-  - Oscar sets up the forum channel, its tags (bug/idea, new/planned/done) and the webhook
-  - Done (2026-10-21): `/bug`, `/idea` and `/feedback` reuse the existing `cmd` message rather than a new one (`server/feedback.ts`, `server/discord.ts`). Forum tags are optional through `DISCORD_FEEDBACK_TAGS` (Discord doesn't show tag ids in the app). A webhook on a plain text channel also works: reports are posted as normal messages. Checked live against Oscar's webhook; the current feedback webhook is on a text channel, not a forum
-- [x] Discord ping when a player joins (pairs with the feedback webhook above)
-  - To see whether anyone plays after the Reddit post: the server posts to a Discord webhook from a Render env var (separate channel from feedback, never sent to the client) when a player joins, e.g. name, new vs returning account, map, players online
-  - Hook in `Room.join` (`server/room.ts:95`, called from `server/index.ts:137`); throttle or batch (e.g. one summary per few minutes) so a burst of joins or reconnects doesn't spam the channel or hit Discord's rate limit
-  - Done (2026-10-21): `JoinFeed` in `server/discord.ts`, from `DISCORD_JOINS_WEBHOOK`. The first join waits 30 s to gather a burst, then at most one message per 5 min; players online within the last 10 min aren't posted again. Checked live against Oscar's webhook
-- [x] Tab-complete slash commands in chat, so feedback is easier to send
-  - Typing `/` lists `/bug`, `/idea` and `/feedback` under the chat input; Tab completes a half-typed one and steps through several (Shift+Tab back). Tab only switches the world filter in normal chat now (`src/game/chatbox.ts`, done 2026-10-21)
-- [x] NPCs wander around so the world feels more alive
-  - Town NPCs (`NpcDef` in `src/data/maps.ts`, built by `Town.buildNpc()` in `src/game/town.ts:294`) walk fixed routes or wander randomly inside set areas, with a walk animation, pauses and turning toward nearby players; vendors at their stalls (`src/game/hub.ts`) stay put
-  - "Talk to" range (`game.ts:1406`) must follow the NPC's live position; keep them walk-through and off water/props. Client-only is fine unless players need to see NPCs in the same spot
-  - Done (2026-10-22), Oscar chose townsfolk plus casino staff, with a bob and arm swing rather than new legs: hand-drawn loops (`walk` on `NpcDef`) run by `NpcWalker` (`src/game/npcwalk.ts`, tested). Old Salty strolls out to the pier head, Pip laps the well and runs to the fish racks, Granny Wren loops from her cottage to the main street, Captain Reed paces before the gate, and the casino staff shuffle about 1 m at their posts. Within talking range (3.5 m) they stop and turn to you; after 10 s beside someone who stays put (fishing off the pier) they walk on, and talking resets that. Client-only, so players may see them in different spots. Arms hang from shoulder pivots so they can swing
-  - Checked: unit tests (stops, pauses, facing, stopping for and leaving a player, every route off the water), smoke checks that every leg clears the live colliders by the body radius and that townsfolk move (60/60), and headless screenshots of each walker and of Granny Wren stopping to face the player with "Talk to" following her. Draw calls and triangles are unchanged in every bench scene; the walkers cost about 6.5 µs a frame. The `bench:ab` render times were too noisy to read (another headless Chrome and two browsers were busy; pairs ranged from -26% to +120%), results in `bench-results/ab-main-vs-f2b3ef3.json`
-- [x] Leaving the casino puts the player at the pond gate (the arch they entered by), not on the dock
-  - Every map arrival uses that map's `spawn` (pond: `x: 0, z: 2`, the dock, `src/data/maps.ts:91`), both on the client (`applyLocation`, `src/game/game.ts:1213`) and on the server (`Room.teleport`, `server/room.ts:403`). Arriving from the casino should place the player just inside the pond `gate` (`maps.ts:99`, `x: 0, z: 56`) facing into town
-  - Keep the dock spawn for logins and other arrivals; check the gate spot is clear of props and NPCs
-  - Done (2026-10-22): new optional `MapDef.gateArrival` (pond: `x: 0, z: 50.5`, yaw 0, facing the well) and `arrivalSpot(dest, from)` in `src/data/maps.ts`, used by both `applyLocation` and `Room.teleport`, so client and server agree. It applies whenever you arrive from the map the gate leads to (gate travel, and a dev `/tp` from the casino); logins and other arrivals keep the dock spawn. The spot is on the open street, ~3 m short of the gate's "Travel" prompt so it doesn't pop up on arrival. Unit tests, plus a smoke check (58/58) that the real exit lands there
-- [ ] Make new chat messages easier to notice, including on mobile
+🎨 taste-driven: ask or propose options before coding · 📋 larger: propose a plan before editing · 💬 asked for by players (`/idea`, `/bug`)
+
+## Up next
+
+- [ ] 🎨 Make new chat messages easier to notice, including on mobile
   - The chat sits at 50% opacity while not typing (`#chat`, `src/style.css:91`) and a new line just appears (`ChatBox.add`, `src/game/chatbox.ts:157`), so it's easy to miss. Ideas: briefly show a new line at full opacity or with a highlight/slide-in that fades back, maybe a soft sound for messages from other players. Taste-driven: propose options first
   - Touch mode: check the chat is readable on a real phone (`body.touch #chat`, `style.css:449`, under the scaled 1400px layout) and that new messages get noticed, e.g. an unread badge on the 💬 button (`src/game/touch.ts:47`)
-- [x] Game world sometimes renders smaller than the screen, with black bars below and to the side
-  - Seen on a fresh load or refresh, mostly on mobile; a friend saw it on desktop too. The HUD fills the screen but the 3D view doesn't, so the canvas is stuck at a stale size. `World.resize()` (`src/game/world.ts:234`) sets the canvas to `innerWidth`/`innerHeight` (fixed px, as inline style) only at startup and on `window` `resize`, so a viewport that settles later without a `resize` event (mobile URL bar, touch mode swapping the viewport meta to `width=1400` at `src/game/game.ts:780`, page zoom) leaves it wrong
-  - Likely fix: size from the canvas's own CSS box (CSS `width/height: 100%`, a `ResizeObserver` like the character preview at `src/game/character.ts:613`, or a check each frame) and also listen to `visualViewport` resize. Try to reproduce first (refresh in phone emulation and on a real phone)
-  - Done (2026-10-22): the canvas is sized by CSS (`#game` 100% x 100%) and `World.resize()` follows its box with a `ResizeObserver`, calling `setSize(w, h, false)` so no stale inline px sizes are left; the pixel ratio is recomputed there too (zoom, other screens). `visualViewport` wasn't needed, since the canvas fills the layout viewport. Reproduced in headless Chrome by swallowing `resize` events and changing the viewport (`main`: canvas stuck at 1100x700 in a 1600x900 window; fixed: fills it), and checked a phone in landscape with `?touch`. Not yet checked on a real phone. Build, 202 unit tests and `npm run smoke` (57/57) pass
-- [x] Real accounts with a password, so players can log in from another browser or device
-  - Today an account is a name plus a random token kept in that browser's localStorage (`game.ts:204-208`, checked by `AccountStore.auth` in `server/accounts.ts`), so a new browser or cleared site data can't get back in. Add an optional "set a password" step that claims the name; password-free play stays as it is, and existing accounts keep working
-  - Plan agreed (2026-10-21): the browser token stays the everyday login; a password only gets a new browser in, and that browser's token is then added to the account (`tokens: string[]` replaces `hash`, about 10 devices max; old saves load as `tokens: [hash]`, and the server keeps writing `hash` too, so a rollback to the current server keeps every account). Async `crypto.scrypt` for passwords, lockout per name plus server-wide, pulled out of `DevGate` (`server/dev.ts`) so both share it. The join handler in `server/index.ts` becomes async: guard against a second `join` while one is checking, and re-check "online" after the await
-  - Protocol: optional `pass` on `join`, `error` with `need: 'password'` for a taken name that has one, new `setpass { pass, old? }` (changing it signs out other devices), `hasPass` in `welcome`. UI: password field on the join screen only when the server asks for it; Account section in the ⚙️ settings tab (set/change password, log out of this device, warning if no password)
-  - Decisions: password optional, with a nudge on the welcome-back screen from about level 3; recovery = any still-logged-in device can set a new password without the old one, otherwise Oscar resets it with a dev command (`/resetpass <name>`), no email; newest login wins (the older session is disconnected with "You logged in somewhere else")
-  - Tests: new `server/accounts.test.ts` (token login, password adds a device, wrong password, lockout, device cap, old-save migration, setpass), then `npm run smoke`
-  - Done (2026-10-21) as planned, with two changes: `setpass` takes no `old` password (any logged-in browser can set a new one, per the recovery decision), and "Log out of this device" only appears once a password is set instead of warning. `/resetpass <name> <new password>` takes the new password, so Oscar can hand it to the player. Verified with 11 unit tests, a headless-Chrome run of the whole flow (set password, second browser asked for it, wrong/right password, older tab disconnected, reload remembered, logout, level-3 nudge) and `npm run smoke` (52/52)
-- [x] Remove the casino multiplier cap
-  - No limit on how much a gambled fish can be worth: drop `MULT_CAP` (×16, `src/data/casino.ts:6`) and its checks in `src/game/casino.ts:15,28` and `src/game/game.ts:1063,1166,1232` ("too rich for the table"), plus the test in `casino.test.ts` and the cap line in `GAME_DESIGN.md:374`
-  - Check that huge values still display, save and sell correctly (number formatting, nothing past `Number.MAX_SAFE_INTEGER`). This also settles the Lucky Wheel cap idea: neither is capped
-- [x] Blackjack double down costs coins
-  - Doubling used to risk nothing extra (a loss destroyed the fish either way, a win paid ×4). It now costs coins equal to the fish's value: refunded on a push, lost on a loss or bust, refused with a notice if the player can't pay
-- [x] Sketch out a possible route to making the game mobile friendly
-  - [x] How feasable?
-    - Feasible (2026-10-21): the verbs (move, look, hold to cast/reel, interact, pick a slot) map cleanly to touch, and the server needs no changes. Hard parts: iPhone Safari has no Pointer Lock (game activity is tied to it in `game.ts`), input handling is mixed into `game.ts`, menus rely on hover, and phone GPUs vs the current shadows/lights
-  - [x] What would need to change?
-  - Mobile spec with screen mockups over real phone-size renders (2026-10-21): https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv. Verdict: fits; weak spots are first-person walking and chat on a landscape keyboard. Five open decisions listed at the end
-  - Test build behind "Try touch controls (early test)" on the desktop-only notice (`src/game/touch.ts`, `Game.enableTouch()`; `?touch` forces it on desktop). Touch mode lays the page out 1400px wide so the desktop HUD/menus scale to fit, and runs without pointer lock via `forceActive`
-  - Validated by Oscar on a real phone over the LAN (2026-10-21): steady 60 fps in both full and lite graphics; fishing, the shop, the Lucky Wheel and running around all work. Slight hitching for the first few seconds after load
-- [x] Escape on the shop closes it but then opens the inventory
-- [x] Phones: white screen after joining, and the styling changes slowed them down
-  - A friend on Android (Brave, touch controls on) saw a white screen with the HUD and a small icon top left after creating a character: Chromium's "sad canvas", drawn when the GPU process crashes. Couldn't reproduce on desktop GPUs; every shader is far inside phone uniform/texture limits, so the likely cause is load or GPU memory right after joining
-  - The outdoor painted textures, casino style pass and night glow cost about +3% on an M1 but +20-27% outdoors on SwiftShader at the touch resolution (a rough stand-in for a fill-rate-bound phone); the grass tufts and flowers alone were about 15-20%
-  - Done (2026-10-22): touch devices start in Lite graphics, and ⚙️ Settings has a Full/Lite switch (remembered per browser; the dev FPS meter uses the same setting). Lite now frees the 2048² shadow map, the hidden character preview shrinks its drawing buffer to 1x1, and touch mode drops the join screen's backdrop blur. A lost WebGL context shows a "Graphics stopped working" banner with Reload, and the reload starts in Lite. Lite renders in about half the time of Full on SwiftShader (pond 205 → 96 ms, town square ~235 → ~125 ms), below what phones paid before the styling changes. Build, 208 unit tests and a headless phone run (lite on after join, toggle, preview buffer, simulated context loss) pass. `npm run smoke` 62/63: the one failure, "pond night: town lamps lit", fails on `main` too. Not yet checked on a real phone
-  - Follow-up (2026-10-22): after the deploy the friend's notice couldn't be dismissed (yet he showed as online). Chromium had most likely blocked WebGL for the site since his crash (on Android until the browser restarts), so `new Game()` threw and `main.ts` never wired up "Try touch controls". Reproduced with `--disable-3d-apis`. Now a failed start shows why on the notice panel (close the browser fully and come back) with Reload, phones start in Lite from page load, and nothing is drawn behind the notice until the player taps through. New smoke check for the no-WebGL page (66/66)
-  - Regression of "Escape always closes the current menu": Escape should close the open menu and nothing else, for every menu (shop, inventory, wardrobe, etc.)
-  - Likely the browser releasing pointer lock on Escape: the `pointerlockchange` handler (`src/game/game.ts:639`) calls `setMenu(true)` and resets `this.tab` to `'inventory'`, alongside the Escape keydown handler (`game.ts:697-702`)
-  - Done (2026-10-21): `openMenu` frees the mouse with `exitPointerLock()`, so Chrome hands it straight back to `closeMenu` without a click, and the same Esc then releases it again. A lock loss within 1 s of an Esc close now just shows "Click to keep playing" instead of the pause menu. Smoke check added; not yet tried by hand in a real browser
-- [x] Hotbar slot bounce, and scroll-wheel slot switching that feels extremely clean
-  - A slight bounce when a slot is selected (number key, click or scroll), so it's easy to tell which slot was just picked. Today there's only a 0.16 s `slot-pick` animation on `.slot.held.pick` (`src/style.css:141-144`)
-  - Scroll switching is still janky after the earlier "Make scroll-wheel slot switching smooth" fix: `WheelStepper` (`src/game/wheelstep.ts`, used at `src/game/game.ts:676`). Check both a mouse wheel and a trackpad; each notch/gesture should move exactly one slot, with no skipped, doubled or laggy steps
-  - Done (2026-10-21), confirmed by Oscar with a real mouse and trackpad: the picked slot bounces (0.36 s overshoot-and-settle) while the old one glides back down, since `renderHotbar` now updates slots in place instead of rebuilding them. `WheelStepper` tells a small Chrome-on-macOS mouse notch (~4 px) from a trackpad by the legacy `wheelDeltaY`, and a swipe the other way during a momentum tail now steps straight back. Unit tests and smoke checks for both
-- [x] Other players can see each other jump
-  - Jumps are local only today: `Player.jump()` (`src/game/player.ts:31`) lifts the player, but the `pos` message (`src/net/protocol.ts:30`, sent from `src/game/net.ts:99`, relayed in `server/room.ts:155`) carries only `x`, `z`, `yaw`, so remote players stay on the ground
-  - Send the jump (a height in `pos`, or a one-off jump event that remotes play back with the same arc) and show it on other players' models, smoothly and without extra network spam
-  - Done (2026-10-21): a one-off `jump` message (client to server, then `{ t: 'jump', id }` to the others on the same map; the server drops jumps closer than 450 ms). Avatars replay the arc with `jumpLift` (`src/game/player.ts`, the same physics as the local jump) on top of their smoothed ground height. Unit tests for the arc and the relay, and a two-browser smoke check (Bob sees Ann rise ~0.96 m and land)
-- [x] Make player and dealer blackjacks clear: the win/loss banner never shows when a hand ends on the deal
-  - A natural on the deal (player or dealer) skips the big result banner: `onBlackjack` (`src/game/game.ts:229`) only shows it when the previous view was live, and `blackjackAct` (`game.ts:1281`) clears `this.bj` before dealing. Instant dealer blackjacks with no banner may add to the "rigged" feeling
-  - Show the banner for these hands and make it obvious who had blackjack (e.g. "Dealer blackjack" / "Blackjack!"), with the dealer's cards revealed
-  - Done (2026-10-21): every finished hand the server sends now shows the banner (it sends one view per deal or action, so a finished one is always new). `blackjackVerdict` (`src/game/casino.ts`, tested) names naturals: "BLACKJACK!", "DEALER BLACKJACK" or "BOTH BLACKJACK", and the table readout says the same; wins also show the multiplier (×2, ×3, ×4). The dealer's cards were already revealed once a hand ends. Not yet seen in a real hand: smoke can't force a natural
-- [x] Check that a doubled blackjack win raises the fish's value instead of paying out coins plus the fish
-  - Intended: a doubled win only multiplies the fish (×4 in `blackjackFactor`, `src/game/casino.ts:181`). The double-down coins (`doubleCost`/`doubleDown`, `casino.ts:158-170`) are spent, and only a push gives them back (`settleBlackjack`, `casino.ts:175`)
-  - Check it in-game and on the server (`Room.bjAct`, `server/room.ts:425`): coins before/after and the fish's value after a doubled win, loss and push. Add a test in `casino.test.ts` if one is missing
-  - Done (2026-10-21): it already works as intended, so no game code changed. `casino.test.ts` already covered it; added `Room` tests (doubled win, push and loss through `bj` messages: coins, fish value and the `state` sent back) and a smoke check that doubles a real hand. Smoke runs saw a loss (12 coins and the fish gone) and a win (fish ×4, the 12 coins stay spent)
-- [x] Suggest a rod upgrade after a tough fight or a lost fish
-  - When a reel fight runs long or ends in a snapped line / escaped fish, show a hint like "A better rod makes fish easier to reel in". Outcomes are handled at the end of the reel tick in `src/game/game.ts:2268-2274` (`Reel` in `src/game/reel.ts`, built with the rod's control at `game.ts:1720`)
-  - Keep it from nagging: only when a better rod exists that the player hasn't bought, and with a cooldown or once-per-session limit
-  - Done (2026-10-21): after a snapped line, an escaped fish, or a catch that took over 30 s to reel in (medium fights take ~18 s, hard ones 30-40 s in a simulation), the 💡 tip box names the next rod up with its vendor and price. Only when that rod is unlocked and the player owns nothing as good, once per session. `rodUpgrade`/`rodHintText` in `src/game/tips.ts` (tested); checked in headless Chrome: the first escaped fish showed the hint, the second didn't. The tough-catch path wasn't seen live (a bot can't reliably drag a fight past 30 s)
-- [x] Casino style pass, matching the outdoor visual polish
-  - The carpet is already textured; walls, ceiling, tables, pillars and trim are flat colours. Candidates: damask wallpaper or wood wainscoting with a gold rail, a coffered or patterned ceiling, felt with printed markings on the blackjack and roulette tables (blackjack arc, roulette number grid) with wood-grain rims, wood grain and brass on pillars and trim. Reuse `src/game/textures.ts` and `boxUV` from the outdoor pass (branch `visual-polish`); casino geometry is in `src/game/casinoroom.ts` and `src/game/casinohall.ts`
-  - Taste-driven: render 2-3 levels from the same camera angles first, like the outdoor options page (https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc), and let Oscar pick. Then re-shoot the popup preview (`src/assets/images/casino-preview.jpg`) and benchmark the casino scene before/after
-  - Done (2026-10-22): options at four levels (https://claude.ai/artifact/XNpFQ5d844eQDzkWDJ9Pvj); Oscar picked level 3. Damask walls over raised wood panels, coffered wood ceiling with gold medallions, fluted pillars, felt printed in gold with the real rules ("BLACKJACK ×3 · DEALER STANDS ON 17"; border and wheel ring on roulette), brass sconces, framed fish paintings, velvet ropes with solid posts at the cashier. No new real lights. Casino render 1.66 to 1.85 ms (+12%, still the cheapest scene; pond and town unchanged as controls), draw calls 100 to 132, triangles 20k to 27k; the first casino visit builds and renders about 60-90 ms slower (new textures and shader variants). No leaks. `npm run screenshots -- casino` now re-shoots the poster image; smoke 57/57
-- [x] Tip jar so players who enjoy the game can tip Oscar
-  - A plain external link (Ko-fi recommended: no cut on one-off tips, can pay out to PayPal, and doesn't show a legal name the way PayPal.me can; GitHub Sponsors in the README too if the repo is public). Suggest $3-5 rather than $1, since fixed fees take about half of a $1 tip. Hard rule: a tip gives nothing in game (no coins, chips, perks or head start), because selling anything that feeds the casino is real money for gambling currency
-  - Non-intrusive placement: a small line on the welcome-back screen (`welcomeText`, `src/game/progression.ts:163`), the ⚙️ settings tab (`settingsHtml`, `src/game/game.ts:2858`) and the README; maybe one prompt at a milestone like the first Spirit Fish, never mid-fight or repeated. Taste-driven: propose options first. Optional: a Ko-fi webhook posting tips to Discord, like the join pings (`server/discord.ts`)
-  - Done (2026-10-22), Oscar chose the placement: a "Support Lakeside" section with a ☕ Tip on Ko-fi link (https://ko-fi.com/ochavez) in the ⚙️ settings sidebar under Sound, and a Support section in the README; no welcome-screen line or milestone prompt (the welcome banner can't hold a clickable link). Supporters get a cosmetic 💗 on their name tag, in the Anglers list and in chat, plus a "Thank you" board beside Top Anglers. `POST /kofi` (`server/kofi.ts`) checks `KOFI_VERIFY_TOKEN`, matches a Lakeside name in the tip message (or the Ko-fi name) and posts each tip to `DISCORD_TIPS_WEBHOOK`; `/supporter <name> [off]` in the dev console covers missed matches. Checked in headless Chrome with a fake webhook (wrong token refused, heart shown everywhere at once). Live webhook confirmed by Oscar with Ko-fi's "Send test" (2026-10-22): the tip reached Discord
-- [x] Blackjack wins and losses play the same sounds as roulette
-  - Roulette plays `audio.jingle('epic')` on a win and `audio.snap()` on a loss (`src/game/game.ts:1265-1266`, same as the Lucky Wheel at `game.ts:982`), but the blackjack result in `onBlackjack` (`game.ts:229`) plays nothing. Decide what a push sounds like (maybe a softer jingle, or nothing)
-  - Should also cover hands that end on the deal, which skip the result banner today; overlaps the "Make player and dealer blackjacks clear" item (branch `blackjack-natural-banner`), so do it after that merges or together with it
-  - Done (2026-10-22): `onBlackjack` plays the sound with the result banner, so naturals on the deal get one too. A push plays the short two-note sale jingle (the fish is kept). Smoke now records the sounds and checks a finished hand plays exactly the one for its outcome (saw a doubled win: `jingle:epic`)
-- [x] Visual polish for the outdoor world, keeping the cute low-poly look
-  - Options rendered at four levels (2026-10-22): https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc. Oscar picked level 2: painted textures plus scenery variety
-  - Textures drawn in code (`src/game/textures.ts`), multiplied over existing colours: ground dabs, dock plank grain, cottage siding and shingle roofs, stone well and chimneys, two-tone rocks
-  - Scenery: two rings of snow-capped mountains tinted by the sky, about a quarter of the trees round and leafy, grass tufts and flower clusters on grassy ground only (off sand, paths, hidden bottles and the worm patch), lily pads in the shallows. Lite graphics hides the tufts and flowers
-  - Done (2026-10-22): render time +2.3-2.6% in the pond and town scenes (about 0.05 ms a frame at 2.2 ms), casino unchanged (+0.2%, the control). Three alternating runs each against main on a quiet machine. Triangles 88k to 131k (pond) and draw calls +3 (pond) / +18 (town, the textured cottages only merge with same-coloured parts). Mountains went from 18 meshes to 4. No leaked geometries or textures across map changes. Grass blades are open-ended cones and flowers octahedra to halve their triangles. `npm run bench` works again (`openMenu('wardrobe')`, and `BENCH_PORT` overrides 5299). Smoke 57/57; README screenshots regenerated (fish lineup unchanged)
-- [x] Light the distant town and dock at night without adding real lights
-  - Only the 8 point lights nearest the camera are on (each one costs every lit pixel), so far lamps looked switched off and the pier vanished at night. Options at four levels (2026-10-22): https://claude.ai/artifact/CSfsXXhLZuo8NxUcF6yqCS. Oscar picked level 3 after trying it locally
-  - Done (2026-10-22): `src/game/nightglow.ts` adds soft halos round bulbs, lanterns, fires, torches and windows; light pools on the ground and dock under lamps whose real light is off; and shimmering lamp reflections on the lake. One draw call each, hidden by day. Glow sources are tagged where they're built (`glowTag`)
-  - Pools use three.js's own point-light falloff and are calibrated per surface to about 0.7-0.8x the real light (measured on the same patch of ground). Pools add light while real lights scale with the surface colour, so the dark dock planks need a much lower gain (`POOL_GAIN`)
-  - `LightPool` fades lights over 0.4 s (`LIGHT_FADE`) instead of popping them on: a light leaving the nearest 8 dims to zero, then hands its slot to the incoming one, so the light count (and shaders) never change. Each pool crossfades with its lamp's real light. Tests in `lightpool.test.ts`
-  - Cost (`bench:ab`, 6 alternating pairs on an M1 against main): plazaNight +2% (about 0.04 ms at 2.3 ms, 5 of 6 pairs slower), pondNight and every day scene unchanged (within noise), draw calls +3 at night. Map build and first-render timings were noisy in both directions. Results in `bench-results/ab-main-vs-943a328.json`. Smoke 58/58; README night screenshot re-shot
-
-- [ ] Log out of a password-free account and log in as another one
+- [ ] 💬 Log out of a password-free account and log in as another one
   - E.g. a player who started a throwaway account on one device wants to switch to their main account there. Today "Log out of this device" only appears once a password is set (`acctForm` in `src/game/game.ts:2971-2974`) and the server refuses `forget` without one (`server/index.ts:252`), so the only way to switch is clearing site data
   - Add a "Log in as a different account" option in ⚙️ Settings > Account for every account, leading to the join screen (name + password). For a password-free account, warn clearly that it can't be got back after logging out (or offer to set a password first)
-
-- [x] Make it obvious when you're playing offline, with a way to reconnect
-  - Today a dropped connection or "play offline" only shows a one-off toast ("Disconnected - playing offline.", `src/game/game.ts:324`; also `game.ts:305`), plus a line in the players panel (`game.ts:2917`), so it's easy to miss that progress isn't reaching the server
-  - Show a small persistent badge/banner while offline, e.g. "Offline - refresh to connect" (or a "Reconnect" button that reloads/rejoins). Taste-driven: propose options first
-  - Done (2026-10-22): Oscar picked a top-center banner whose button reloads the page, shown only when the player didn't choose to go offline. `#offline` ("📡 Disconnected / Playing offline: progress here isn't saved to your account." + **Refresh to reconnect**) replaces the old toast after a dropped connection, a refused join, or an unreachable server on a direct `?name=` login, and stays until the reload. "Play offline" on the join screen shows nothing. It sits outside `#hud` above the resume overlay, so the button can be clicked whenever the mouse is free. A reload rejoins by itself for returning players (`fishing-auto`). Smoke has new checks (no banner for "Play offline", the banner after the server is killed, clickable over the overlay, reload with the server still down): 63/63
+  - Also asked for in-game via `/idea` (Oscar C, 2026-10-29), together with changing your name (Ideas > Accounts and server)
 
 ## Ideas
 
-<!-- Add new ideas here. Move them into the checklist when you decide to do them. -->
+<!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
+
+### Bugs and tooling
 
 - `npm run smoke` fails "pond night: town lamps lit, lanterns and windows drawn" on `main` (seen 2026-10-22). Probably since the night glow made real lights fade in: the check reads `intensity > 1` only 600 ms after switching to night. Fix the check (or the fade) so smoke is green again
-
-- Fewer real point lights: cutting them from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling. Outdoors, the night glow pools (`src/game/nightglow.ts`) now stand in for far lamps, so a lower cap might look fine there; the casino chandeliers would need pools of their own
-- Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
 - The bench scenes have no high-tier fish, so they can't measure the fish tier effects
-- Level 3 of the visual polish options (https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc): a soft foam line just offshore and lighter shallows (a baked shore-distance texture read by the water shader), small round bushes along the shore and hillsides, slightly richer greens. Each piece could ship on its own
 - `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
-- The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
-- Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)
-- Shoreline rocks, flower pots and log piles have no colliders, so players walk through them. Decide whether that's intended
 - Dev console `/tips` command to clear the new-player tips list for testing: a new case in `server/dev.ts` that empties the player's saved `tips` (marked by `markTip`, `src/game/tips.ts`), so the tips show again
+
+### Performance
+
+- 🎨 Fewer real point lights: cutting them from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling. Outdoors, the night glow pools (`src/game/nightglow.ts`) now stand in for far lamps, so a lower cap might look fine there; the casino chandeliers would need pools of their own
+- Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
+- Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs
-- Full mobile support, building on the touch test build and the mobile spec (https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv): answer the spec's five open decisions first, then full-screen menus with tap-to-select and a detail bar instead of hover tooltips, quick-chat chips, long-press to drop, and touch wording in the remaining key/click text (casino table hints, toasts like "Hold a fish (1-5)"). Remove the FPS readout (dev-only today) and decide whether touch mode should skip the desktop-only notice
 - Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
-- Feedback discoverability: today the only pointer to `/bug` and `/idea` is the chat input placeholder. A Bug/Idea button (settings tab or pause menu) would reach players who never open chat. Taste-driven: propose options first
-- Townsfolk follow the day: head indoors at night (Granny Wren to her cottage) or gather at the campfire; their walks could take a different loop after dark (`nightLines` already exists for talk)
-- Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%)
+
+### Gameplay and UI
+
+- 💬 Show rod prices in the shop even when the rod is owned or still level-locked (from `/idea`, Oscar C, 2026-10-29). The tile label in `gearShopHtml` (`src/game/game.ts:3034`) replaces the price with "Owned" or "🔒 Lv N"; show the price alongside those instead, and check the bait tiles and the Bag tiles (`game.ts:2802`) the same way
+- 🎨 Feedback discoverability: today the only pointer to `/bug` and `/idea` is the chat input placeholder. A Bug/Idea button (settings tab or pause menu) would reach players who never open chat. Taste-driven: propose options first
+
+### Casino
+
+- 🎨💬 Make gambling feel more suspenseful; today it "feels a bit disconnected" (from `/idea`, Oscar C, 2026-10-29). Taste-driven: first ask which games and moments feel flat, then propose options (e.g. a slower reveal, a short drumroll before the result, camera or sound cues on the big moment)
+- 🎨 Blackjack hand history or per-player stats (hands, wins, dealer blackjacks) so players can check their luck against the real odds. Players have complained of "rigged" bad luck, but a 2M-hand simulation (2026-10-21) showed the deal is fair (dealer natural 4.84%, theory 4.83%)
+
+### World, NPCs and visuals
+
+- 🎨💬 NPCs wander too far and end up on top of players, "kind of jump scares" (from `/idea`, Oscar C, 2026-10-29). Probably the walk-on rule in `NpcWalker` (`src/game/npcwalk.ts`): after 10 s beside a player who stays put they walk on, and since NPCs are walk-through their route can pass straight through the player (e.g. Old Salty on the pier). Options: shorter routes, re-route or wait instead of passing within ~1.5 m of a player, or keep them stopped while someone is fishing nearby
+- 🎨💬 Make night slightly brighter overall so it's easier to see, while keeping the cozy feel (from `/idea`, Oscar C, 2026-10-29). Night ambient/sky levels live in `World.updateDaylight`; taste-driven, so propose a few brightness levels side by side first
+- 🎨 Townsfolk follow the day: head indoors at night (Granny Wren to her cottage) or gather at the campfire; their walks could take a different loop after dark (`nightLines` already exists for talk)
+- 🎨 Level 3 of the visual polish options (https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc): a soft foam line just offshore and lighter shallows (a baked shore-distance texture read by the water shader), small round bushes along the shore and hillsides, slightly richer greens. Each piece could ship on its own
+- 🎨 Shoreline rocks, flower pots and log piles have no colliders, so players walk through them. Decide whether that's intended
+
+### Accounts and server
+
+- 📋💬 Change your player name (from `/idea`, Oscar C, 2026-10-29, asked for together with the log out/in item in Up next). Needs decisions first: uniqueness and the profanity filter, how often it can be changed, and what happens to leaderboard entries, the 💗 supporter mark and passwords, which are all keyed by name today
+- 📋 The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
+
+### Mobile
+
+- 📋 Full mobile support, building on the touch test build and the mobile spec (https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv): answer the spec's five open decisions first, then full-screen menus with tap-to-select and a detail bar instead of hover tooltips, quick-chat chips, long-press to drop, and touch wording in the remaining key/click text (casino table hints, toasts like "Hold a fish (1-5)"). Remove the FPS readout (dev-only today) and decide whether touch mode should skip the desktop-only notice
