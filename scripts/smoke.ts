@@ -593,12 +593,8 @@ async function chatChecks(): Promise<void> {
   await a.page.evaluate(() => window.__game.teleport(0, -2.5));
   await b.page.evaluate(() => { window.__game.teleport(0, 2); window.__game.look(0, -0.05); });
   await sleep(800);
-  const chatOpacity = () => a.page.evaluate(() => Number(getComputedStyle(document.getElementById('chat')!).opacity));
-  const faded = await chatOpacity();
   await a.page.keyboard.press('Enter');
   const typing = await a.page.evaluate(() => document.activeElement?.classList.contains('chat-input') ?? false);
-  await sleep(300);
-  const full = await chatOpacity();
   await a.page.keyboard.type('hello from the pier');
   await a.page.keyboard.press('Enter');
   await sleep(600);
@@ -612,7 +608,6 @@ async function chatChecks(): Promise<void> {
   });
   await b.page.screenshot({ path: `${SHOTS}/chat.png` });
   check('chat: Enter opens the chat input', typing);
-  check('chat: window is faded while playing and full while typing', faded < 0.7 && full === 1, JSON.stringify({ faded, full }));
   check('chat: line shows for the sender and others in the room', la.includes('hello from the pier') && lb.includes('Ann: hello from the pier'), `"${lb}"`);
   check('chat: line reaches players in other rooms', lc.includes('hello from the pier'), `"${lc}"`);
   check('chat: speaker gets a bubble for players nearby', bubble);
@@ -667,6 +662,34 @@ async function chatChecks(): Promise<void> {
     resume: !document.getElementById('resume')!.classList.contains('hidden'),
   }));
   check('chat: losing the mouse while typing cancels chat without the pause menu', !esc.chat && !esc.menu && esc.resume, JSON.stringify(esc));
+
+  // New lines (two at once here) flash at full strength, then fade back to the faded look; typing shows them at full.
+  const said = ['anyone biting?', 'try the lilies'];
+  for (const text of said) {
+    await b.page.keyboard.press('Enter');
+    await b.page.keyboard.type(text);
+    await b.page.keyboard.press('Enter');
+  }
+  const opacities = (p: Page) => p.evaluate((said) => said.map((t) => {
+    const el = [...document.querySelectorAll('#chat .chat-line')].find((e) => e.textContent!.includes(t));
+    return el ? Number(getComputedStyle(el).opacity) : -1;
+  }), said);
+  await c.page.waitForFunction((t) => document.querySelector('#chat .chat-log')!.textContent!.includes(t), { timeout: 5000 }, said[1]);
+  const t0 = Date.now();
+  const fresh = await opacities(c.page);
+  await c.page.screenshot({ path: `${SHOTS}/chat-flash.png` });
+  await c.page.waitForFunction((said) => said.every((t) => {
+    const el = [...document.querySelectorAll('#chat .chat-line')].find((e) => e.textContent!.includes(t));
+    return el && Number(getComputedStyle(el).opacity) <= 0.5;
+  }), { timeout: 8000, polling: 50 }, said).catch(() => null);
+  const backMs = Date.now() - t0;
+  const faded = Math.max(...(await opacities(c.page)));
+  await c.page.keyboard.press('Enter');
+  await sleep(300);
+  const full = Math.min(...(await opacities(c.page)));
+  await c.page.keyboard.press('Enter');
+  check('chat: new lines flash at full strength and fade back after a few seconds', fresh.every((o) => o === 1) && faded <= 0.5 && backMs > 3000 && backMs < 5500, JSON.stringify({ fresh, backMs }));
+  check('chat: window is faded while playing and full while typing', faded < 0.7 && full === 1, JSON.stringify({ faded, full }));
   for (const p of [a, b, c]) await p.ctx.close();
 }
 
