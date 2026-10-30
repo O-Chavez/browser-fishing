@@ -17,15 +17,53 @@ const plain = (word: string): string =>
     .replace(/[01!34@5$7]/g, (c) => LEET[c])
     .replace(/(.)\1+/g, '$1$1');
 
-const rude = (word: string): boolean => {
+/** `safe` is cut out before looking for ROOTS, so innocent words that contain one can pass. */
+const rude = (word: string, safe?: RegExp): boolean => {
   const p = plain(word);
   const squeezed = p.replace(/(.)\1+/g, '$1');
-  return ROOTS.some((r) => p.includes(r) || squeezed.includes(r)) || WORDS.has(p) || WORDS.has(squeezed);
+  const r = safe ? p.replace(safe, '') : p;
+  const rSqueezed = r.replace(/(.)\1+/g, '$1');
+  return ROOTS.some((root) => r.includes(root) || rSqueezed.includes(root)) || WORDS.has(p) || WORDS.has(squeezed);
 };
 
 /** Replaces rude words with asterisks of the same length. */
 export function censor(text: string): string {
   return text.replace(/[\p{L}\p{N}@$!]+/gu, (w) => (rude(w) ? '*'.repeat(w.length) : w));
+}
+
+/**
+ * Innocent names that contain a root ("Scunthorpe", "Yoshitaka", "Shiitake", "FishIt"). Only names
+ * skip these, and a capital still splits them ("FiShit"); chat masks them as before.
+ */
+const NAME_SAFE = /scunthorpe|shi+take|[yt]oshit(?=[aeiou])|fishit/g;
+const NAME_SEP = /[^\p{L}\p{N}@$!]+/u;
+/** Between "Big" and "Dick" in "BigDick", or "XX" and "Ass" in "XXAss". */
+const CAMEL = /(?<=[\p{Ll}\p{N}])(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/u;
+
+/**
+ * Whether a name has a rude word in it. Names have no spaces, so on top of the chat rules each
+ * piece is also split at capitals, digits and symbols ("BigDickFisher", "xx_ass_xx", "Ass99"),
+ * and spaced-out letters are joined ("f u c k"). Whole-word ones still only match a whole piece,
+ * so "Hancock", "Dickens" and "Classic" pass. `AccountStore.auth` only asks for new claims, so old accounts keep theirs.
+ */
+export function rudeName(name: string): boolean {
+  // Also as the name will be saved, with symbols dropped ("Fu.ck" becomes "Fuck").
+  return [name, name.replace(/[^\p{L}\p{N}\s_-]/gu, '')].some((text) => {
+    const chunks: string[] = [];
+    let letters = '';
+    for (const c of text.split(NAME_SEP)) {
+      if ([...c].length === 1) letters += c;
+      else {
+        if (letters) chunks.push(letters);
+        if (c) chunks.push(c);
+        letters = '';
+      }
+    }
+    if (letters) chunks.push(letters);
+    return chunks.some((chunk) =>
+      [chunk, ...chunk.split(CAMEL)].some((part) => rude(part, NAME_SAFE) || part.split(/[\p{N}@$!]+/u).some((w) => w && rude(w, NAME_SAFE))),
+    );
+  });
 }
 
 /** Trims, drops control characters, collapses whitespace and caps the length. Empty means "nothing to send". */
