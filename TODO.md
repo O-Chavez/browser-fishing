@@ -24,6 +24,7 @@ Finished items move to [DONE.md](DONE.md).
 - The bench scenes have no high-tier fish, so they can't measure the fish tier effects
 - `npm run build` only type-checks `src/` (tsconfig `include`), so type errors in `server/` go unnoticed. The two that had piled up were fixed in the bug sweep (2026-10-21), but nothing stops new ones
 - Dev console `/tips` command to clear the new-player tips list for testing: a new case in `server/dev.ts` that empties the player's saved `tips` (marked by `markTip`, `src/game/tips.ts`), so the tips show again
+- `npm run ideas`: read `/idea` and `/bug` reports from the Discord feedback channel and add new ones to Ideas (skipping ones already there), instead of pasting them in by hand. The feedback webhook can only post, so this needs a separate read-only bot: a private app in the Developer Portal with Message Content Intent on, added with only View Channels + Read Message History (optionally only on the feedback channel), read with `GET /channels/<id>/messages` and `Authorization: Bot <token>`. Token and channel id go in the local `.env` (gitignored), not Render. Setup stalled on "Private application cannot have a default authorization link" (2026-10-29): set Installation > Install Link to None and save first, then turn Public Bot off
 
 ### Performance
 
