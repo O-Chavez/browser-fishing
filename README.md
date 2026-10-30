@@ -30,6 +30,8 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![Inside the casino](src/assets/images/casino-preview.jpg)
 
+**🔥 Smoke your catch.** Mags Cinder's Smokehouse, across from the bait shop, turns spare fish into smoked goods. Load her racks with a recipe's fish, come back when they're done (they keep smoking while you're offline), and eat them at the pond for 10-minute buffs: quicker bites, better luck, an easier fight, an early night bite or more shinies. Coming soon: combine smoked goods into advanced recipes for deep-sea charters.
+
 **👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, and race for a spot on the **Top Anglers** leaderboard.
 
 ![Two players in hats chatting on the end of the pier at sunset, one with a speech bubble above their head](docs/images/dock.jpg)
@@ -49,6 +51,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 - 5 rods, 5 baits and 50 levels of progression
 - Day/night cycle with night-only fish
 - Casino Cove with roulette, blackjack and a perk shop
+- A Smokehouse that turns spare fish into buffs, smoking in real time
 - Fishdex, records and a live leaderboard
 - Character customisation: faces, colours, hats, shirts and jewellery
 - Your progress is saved on the server, so just log back in with your name
@@ -107,7 +110,7 @@ Lakeside is free with no ads, made by one person. If you enjoy it, you can leave
 
 - **Client** (`src/`): the Three.js scene, player controller, reel minigame, HUD and menus. Game content (fish, rods, baits, maps, cosmetics, casino tuning) is plain TypeScript data in `src/data/`.
 - **Server** (`server/`): owns every save. When you cast, the server rolls what bites, and catches, sales, purchases and casino bets are all checked server-side, so the client can't award itself coins or fish.
-- **Shared code**: the server imports the same rule modules as the client (`src/game/economy.ts`, `progression.ts`, `casino.ts`), so both sides always agree on prices, odds and level gates. Message types live in `src/net/protocol.ts`.
+- **Shared code**: the server imports the same rule modules as the client (`src/game/economy.ts`, `progression.ts`, `casino.ts`, `smoke.ts`), so both sides always agree on prices, odds and level gates. Message types live in `src/net/protocol.ts`.
 - **Saves**: accounts are stored through a small storage interface that uses PostgreSQL when `DATABASE_URL` is set and JSON files otherwise. Older saves are migrated on load.
 
 ## Running locally

@@ -55,7 +55,7 @@ export function applyXp(level: number, xp: number, gained: number): { level: num
   return { level: lvl, xp: total, leveledUp };
 }
 
-/** Free rewards for levels past `FLAT_LEVEL`, kept until the Smokehouse and the charters can use them. */
+/** Free rewards for levels past `FLAT_LEVEL`. Provisions go straight to the Pantry (`stockGifts`); fares wait for the charters. */
 export interface Gifts {
   /** Smoked provisions: one per level past 50. */
   provisions: number;
@@ -159,7 +159,13 @@ export const NIGHT_LUCK = 1.8;
 export const NIGHT_FISH_BOOST = 2;
 
 /** Non-common weights are boosted by rod and bait luck. */
-export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false, nightBoost = 1): Fish | null {
+/** Eaten Smokehouse buffs: more luck, and more 🌙 fish at night. */
+export interface FishBuff {
+  luck?: number;
+  nightFish?: number;
+}
+
+export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false, nightBoost = 1, buff: FishBuff = {}): Fish | null {
   const rule = SPOTS[spot];
   const g = Math.max(1, gearTier(rod, bait) - rule.cut);
   const capped = pool.filter((f) => f.tier <= g);
@@ -170,11 +176,11 @@ export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number =
     if (high.length > 0) pool = high;
   }
   if (pool.length === 0) return null;
-  const luck = rod.luck * bait.luck * rule.luck * (perfect ? PERFECT_LUCK : 1) * (night ? NIGHT_LUCK * nightBoost : 1);
+  const luck = rod.luck * bait.luck * rule.luck * (perfect ? PERFECT_LUCK : 1) * (night ? NIGHT_LUCK * nightBoost : 1) * (buff.luck ?? 1);
   const weights = pool.map(
     (f) =>
       (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) *
-      (night && f.night ? NIGHT_FISH_BOOST : 1) *
+      (night && f.night ? NIGHT_FISH_BOOST * (buff.nightFish ?? 1) : 1) *
       Math.pow(OUTGROWN, Math.max(0, g - f.tier)),
   );
   let r = rng() * weights.reduce((a, b) => a + b, 0);

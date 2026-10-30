@@ -3,7 +3,8 @@ import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
-import { BAIT_SLOT, BAIT_STACK, FISH_SLOT, ROD_SLOT, slotCount, type SaveData, type Slot } from './state';
+import { biteWait, buffControl, buffLuck, buffNightFish, buffShiny, stockGifts } from './smoke';
+import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
 
@@ -12,27 +13,7 @@ const ROD_LEVEL_OK = (s: SaveData, id: string) => {
   return !!r && s.level >= r.unlockLevel;
 };
 
-/** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
-export const freeSlots = (s: SaveData): number => {
-  let n = 0;
-  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) n++;
-  return n;
-};
-const freeFishSlot = (s: SaveData): number => {
-  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) return i;
-  return -1;
-};
-
-/** Empties a fish slot. An extra slot past the hotbar size (fish left over from an older save) goes away instead. */
-export function clearSlot(s: SaveData, i: number): void {
-  if (i < slotCount(s)) {
-    s.slots[i] = null;
-    return;
-  }
-  s.slots.splice(i, 1);
-  if (s.held > i) s.held--;
-  s.held = Math.min(s.held, s.slots.length - 1);
-}
+export { clearSlot, freeSlots } from './state';
 
 export const hasRod = (s: SaveData, id: string): boolean => s.slots.some((sl) => sl?.k === 'rod' && sl.id === id);
 /** Carried in the hotbar or kept in the locker. */
@@ -194,8 +175,8 @@ export function setLure(s: SaveData, on: unknown): boolean {
   return true;
 }
 
-/** Rod control with the Quick-Reel Gloves on. */
-export const reelControl = (s: Pick<SaveData, 'perks'>, base: number): number => (s.perks.includes('gloves') ? base * GLOVES_CONTROL : base);
+/** Rod control with the Quick-Reel Gloves and Pike Jerky. */
+export const reelControl = (s: Pick<SaveData, 'perks' | 'smoke'>, base: number): number => base * (s.perks.includes('gloves') ? GLOVES_CONTROL : 1) * buffControl(s);
 
 /** Resolves a spin for the fish in hand: a win doubles its value, a loss destroys it. */
 export function applyWheel(s: SaveData, win: boolean): number {
@@ -386,7 +367,8 @@ export interface Roll {
 export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Roll {
   const rod = byId(RODS, s.rod);
   const bait = byId(BAITS, s.bait);
-  const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1);
+  const buff = { luck: buffLuck(s), nightFish: buffNightFish(s) };
+  const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1, buff);
   const lure = !!fish && lureOn(s);
   if (lure) s.lure--;
   return {
@@ -394,8 +376,8 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
     spot,
     fishId: fish?.id ?? null,
     size: fish ? rollSize(fish, rng) : 0,
-    wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait,
-    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE)),
+    wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait * biteWait(s),
+    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE) * buffShiny(s)),
   };
 }
 
@@ -438,6 +420,7 @@ export function gainXp(s: SaveData, xp: number): Rank[] {
   const g = levelGifts(before, s.level);
   s.gifts.provisions += g.provisions;
   s.gifts.fares += g.fares;
+  stockGifts(s);
   return grantRanks(s);
 }
 
@@ -454,6 +437,7 @@ export function payBack(s: SaveData): { levels: number; ranks: Rank[] } {
   const g = levelGifts(before, s.level);
   s.gifts.provisions += Math.min(g.provisions, BACKPAY_GIFTS.provisions);
   s.gifts.fares += Math.min(g.fares, BACKPAY_GIFTS.fares);
+  stockGifts(s);
   s.backPay.paid = true;
   return { levels: s.level - before, ranks: grantRanks(s) };
 }

@@ -70,6 +70,12 @@ export type ClientMsg =
   | { t: 'buyperk'; id: string }
   /** Switch the Shiny Lure on or off (off saves its charges). */
   | { t: 'lure'; on: boolean }
+  /** Smokehouse: put the fish in hotbar slot i on a rack for recipe r. */
+  | { t: 'smoke'; r: string; i: number }
+  /** Smokehouse: take fish j back off a rack that hasn't started smoking. */
+  | { t: 'unsmoke'; rack: number; j: number }
+  /** Eat a smoked item from the Pantry for its buff. */
+  | { t: 'eat'; id: string }
   /** A new-player tip was shown, so it isn't shown again. */
   | { t: 'tip'; id: string }
   /** A global chat line. */

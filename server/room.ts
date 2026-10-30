@@ -2,11 +2,13 @@ import { FISH, byId } from '../src/data/content';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
-import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
+import { dayFraction, nightness } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
 import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
+import { SMOKE_RANGE, recipeById } from '../src/data/smokehouse';
+import * as smoke from '../src/game/smoke';
 import { newSave, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
@@ -46,6 +48,8 @@ interface Member {
   moved?: boolean;
   /** When this player last jumped, to rate-limit jump relays. */
   jumpAt?: number;
+  /** When their buffs last ticked down: buffs only run while the player is online. */
+  smokeAt: number;
 }
 
 const VENDOR_RANGE = 5;
@@ -126,8 +130,12 @@ export class Room {
     const map = this.maps[acct.save.location] ?? Object.values(this.maps)[0];
     acct.save.location = map.id;
     const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
-    const m: Member = { info, conn, acct, pending: null, spin: null, bj: null };
+    const m: Member = { info, conn, acct, pending: null, spin: null, bj: null, smokeAt: this.now() };
     acct.online = true;
+    // Racks kept smoking while they were away; level gifts banked before the Smokehouse go to the Pantry.
+    const smoked = smoke.collectRacks(acct.save, this.now());
+    const gifts = smoke.stockGifts(acct.save);
+    if (smoked.length || gifts) this.onChange();
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
     conn.send({
@@ -147,6 +155,8 @@ export class Room {
     // Before adding the member, so everyone else on the server hears it but not the joiner.
     this.say({ t: 'sys', text: `${acct.name} has joined` });
     this.members.set(id, m);
+    if (smoked.length) conn.send({ t: 'notice', msg: `🔥 While you were away, Mags smoked your ${smokedText(smoked)}. It's in your Pantry.` });
+    if (gifts) conn.send({ t: 'notice', msg: `🎁 Your levels past 50 put ${smokedText([{ id: smoke.bestRecipe(acct.save).id, n: gifts }])} in your Pantry.` });
     return id;
   }
 
@@ -156,6 +166,8 @@ export class Room {
     if (m.spin) m.spin.at = 0;
     if (m.bj) this.bjAct(m, 'stand');
     this.settle(m);
+    this.tickSmoke(m);
+    this.onChange();
     m.acct.online = false;
     this.members.delete(id);
     this.broadcast({ t: 'left', id });
@@ -232,6 +244,15 @@ export class Room {
       case 'tip':
         changed = markTip(s, msg.id);
         break;
+      case 'smoke':
+        changed = this.atSmoker(m) && this.ok(m, smoke.loadFish(s, msg.r, int(msg.i), this.now()));
+        break;
+      case 'unsmoke':
+        changed = this.atSmoker(m) && this.ok(m, smoke.takeFish(s, int(msg.rack), int(msg.j)));
+        break;
+      case 'eat':
+        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eat(s, str(msg.id)));
+        break;
       case 'lure':
         changed = eco.setLure(s, msg.on);
         break;
@@ -282,7 +303,7 @@ export class Room {
         this.syncCarry(m);
         return;
     }
-    if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell')) this.syncCarry(m);
+    if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell' || msg.t === 'smoke' || msg.t === 'unsmoke')) this.syncCarry(m);
     if (changed && (msg.t === 'equip' || msg.t === 'color' || msg.t === 'face')) this.broadcast({ t: 'look', id, look: s.look });
     if (changed) {
       this.onChange();
@@ -539,6 +560,31 @@ export class Room {
     return true;
   }
 
+  private atSmoker(m: Member): boolean {
+    const c = this.maps[m.info.map]?.smokehouse;
+    return (!!c && Math.hypot(m.info.x - c.x, m.info.z - c.z) <= SMOKE_RANGE) || this.deny(m, "Get closer to Mags's counter.");
+  }
+
+  /** True when a rule check passed; otherwise tells the player why not. */
+  private ok(m: Member, why: string | null): boolean {
+    if (why) m.conn.send({ t: 'notice', msg: why });
+    return !why;
+  }
+
+  /** Runs buffs down by the online time since the last tick and moves finished racks to the Pantry. */
+  private tickSmoke(m: Member): void {
+    const now = this.now();
+    const s = m.acct.save;
+    const worn = smoke.tickBuffs(s, now - m.smokeAt);
+    m.smokeAt = now;
+    const done = smoke.collectRacks(s, now);
+    if (done.length) m.conn.send({ t: 'notice', msg: `🔥 Mags smoked your ${smokedText(done)}. It's in your Pantry.` });
+    // Buffs running down only reach the save file when they run out, or with the next real change.
+    if (!worn && !done.length) return;
+    this.onChange();
+    m.conn.send({ t: 'state', save: s });
+  }
+
   private atVendor(m: Member): boolean {
     const v = this.maps[m.info.map]?.vendor.shop;
     return !!v && Math.hypot(m.info.x - v.x, m.info.z - v.z) <= VENDOR_RANGE;
@@ -555,7 +601,8 @@ export class Room {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });
       return false;
     }
-    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
+    const dark = nightness(m.dayFrac ?? dayFraction(this.now() / 1000));
+    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), smoke.nightBite(m.acct.save, dark));
     m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, readyAt: this.now() + roll.wait * 1000 + MIN_FIGHT_MS } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
@@ -617,7 +664,10 @@ export class Room {
 
   snapshot(): void {
     if (this.drops.expire()) this.broadcast({ t: 'drops', list: this.drops.all() });
-    for (const m of this.members.values()) this.settle(m);
+    for (const m of this.members.values()) {
+      this.settle(m);
+      this.tickSmoke(m);
+    }
     if (this.now() - this.boardAt >= BOARD_MS) this.board();
     if (this.now() - this.clockAt >= CLOCK_MS) {
       this.clockAt = this.now();
@@ -697,8 +747,16 @@ export class Room {
   }
 }
 
+/** "Kippers ×2 and Pike Jerky". */
+const smokedText = (list: { id: string; n: number }[]): string => {
+  const parts = list.map((d) => `${recipeById(d.id)?.name ?? d.id}${d.n > 1 ? ` ×${d.n}` : ''}`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
+};
+
 const finite = (...n: number[]) => n.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e4);
 const round = (v: number) => Math.round(v * 100) / 100;
 const snapEntry = (m: Member): [number, number, number, number] => [m.info.id, round(m.info.x), round(m.info.z), round(m.info.yaw)];
 /** Untrusted ids: only strings and numbers count, since `String()` throws on objects like `{ toString: null }`. */
+/** A client-sent index; anything but a number (an object with no `toString` would make `Number()` throw) is NaN. */
+const int = (v: unknown) => (typeof v === 'number' ? Math.floor(v) : NaN);
 const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 32) : typeof v === 'number' ? String(v) : '');

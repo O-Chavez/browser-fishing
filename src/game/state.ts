@@ -2,6 +2,7 @@ import { BAITS, FISH, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { TITLES } from '../data/ranks';
+import { RACKS, recipeById, type RecipeId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
 
@@ -31,6 +32,31 @@ export type Slot =
   | { k: 'bait'; id: BaitType; n: number }
   | { k: 'fish'; fishId: string; size: number; shiny?: boolean; /** Value multiplier won at the wheel and casino tables. */ mult?: number }
   | { k: 'rod'; id: string };
+
+export type FishItem = Extract<Slot, { k: 'fish' }>;
+
+/** A rack at the Smokehouse, loaded with one recipe's fish over as many trips as it takes. */
+export interface Rack {
+  r: RecipeId;
+  /** One per spot in the recipe's `needs`, null until filled. */
+  fish: (FishItem | null)[];
+  /** Server time it is smoked; set once every spot is filled. */
+  doneAt?: number;
+}
+
+/** The Smokehouse (see `src/game/smoke.ts`). */
+export interface Smoke {
+  /** Always `RACKS` long; the last one opens at `RACK3_LEVEL`. */
+  racks: (Rack | null)[];
+  /** Smoked goods by recipe: each item's buff length in seconds, longest first. */
+  pantry: Partial<Record<RecipeId, number[]>>;
+  /** Batches smoked per recipe, toward Well-smoked. */
+  made: Partial<Record<RecipeId, number>>;
+  /** Buffs being eaten, with the online milliseconds each has left. */
+  buffs: { id: RecipeId; ms: number }[];
+}
+
+export const newSmoke = (): Smoke => ({ racks: Array.from({ length: RACKS }, () => null), pantry: {}, made: {}, buffs: [] });
 
 export interface SaveData {
   version: 1;
@@ -68,8 +94,9 @@ export interface SaveData {
   /** Titles earned (ids from `TITLES`), and the one worn under the name tag. */
   titles: string[];
   title: string | null;
-  /** Rewards for levels past 50, kept until the Smokehouse and the charters can use them. */
+  /** Rewards for levels past 50; provisions go straight to the Pantry, fares wait for the charters. */
   gifts: Gifts;
+  smoke: Smoke;
   /**
    * XP thrown away at the old level-50 cap, estimated once from the Fishdex when the cap was lifted.
    * The dev console's `/backpay` pays it out; `paid` keeps it from being paid twice.
@@ -110,8 +137,57 @@ export const newSave = (): SaveData => ({
   titles: [],
   title: null,
   gifts: { provisions: 0, fares: 0 },
+  smoke: newSmoke(),
   backPay: { xp: 0, paid: true },
 });
+
+/** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
+export const freeSlots = (s: SaveData): number => {
+  let n = 0;
+  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) n++;
+  return n;
+};
+
+export const freeFishSlot = (s: SaveData): number => {
+  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) return i;
+  return -1;
+};
+
+/** Empties a fish slot. An extra slot past the hotbar size (fish left over from an older save) goes away instead. */
+export function clearSlot(s: SaveData, i: number): void {
+  if (i < slotCount(s)) {
+    s.slots[i] = null;
+    return;
+  }
+  s.slots.splice(i, 1);
+  if (s.held > i) s.held--;
+  s.held = Math.min(s.held, s.slots.length - 1);
+}
+
+const isFishItem = (x: unknown): x is FishItem => {
+  const f = x as FishItem | null;
+  return !!f && f.k === 'fish' && FISH.some((d) => d.id === f.fishId) && Number.isFinite(f.size);
+};
+
+/** Keeps only well-formed racks, pantry items and buffs from a saved Smokehouse. */
+function cleanSmoke(raw: unknown): Smoke {
+  const d = (raw ?? {}) as Partial<Smoke>;
+  const out = newSmoke();
+  const num = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n > 0;
+  if (Array.isArray(d.racks))
+    d.racks.slice(0, RACKS).forEach((r, i) => {
+      const rec = recipeById(r?.r);
+      if (!r || !rec || !Array.isArray(r.fish) || r.fish.length !== rec.needs.length) return;
+      out.racks[i] = { r: rec.id, fish: r.fish.map((f) => (isFishItem(f) ? f : null)), ...(num(r.doneAt) ? { doneAt: r.doneAt } : {}) };
+    });
+  for (const [id, list] of Object.entries(d.pantry ?? {})) {
+    const items = Array.isArray(list) ? list.filter(num).map(Math.round) : [];
+    if (recipeById(id) && items.length) out.pantry[id as RecipeId] = items.sort((a, b) => b - a);
+  }
+  for (const [id, n] of Object.entries(d.made ?? {})) if (recipeById(id) && num(n)) out.made[id as RecipeId] = Math.floor(n);
+  if (Array.isArray(d.buffs)) out.buffs = d.buffs.filter((b) => recipeById(b?.id) && num(b.ms)).map((b) => ({ id: b.id, ms: Math.round(b.ms) }));
+  return out;
+}
 
 /**
  * Puts the rod in use in the rod slot and the active bait in the bait slot; every other rod and bait
@@ -212,6 +288,7 @@ export function migrate(raw: object): SaveData {
   const g = (data.gifts ?? {}) as Partial<Gifts>;
   const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
   out.gifts = { provisions: count(g.provisions), fares: count(g.fares) };
+  out.smoke = cleanSmoke(data.smoke);
   // Saves from before the cap was lifted: a level-50 player's thrown-away XP is estimated now,
   // before any new catches land in the Fishdex, and waits for the dev console to pay it.
   // An unpaid estimate from an older version is redone; catches since the cap was lifted are in the

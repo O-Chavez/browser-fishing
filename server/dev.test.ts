@@ -85,4 +85,19 @@ describe('dev commands in a room', () => {
     room.handle(a.id, { t: 'cmd', text: '/fish nope' });
     expect(devLines(a.log).at(-1)).toMatch(/Fish ids:/);
   });
+
+  it('stocks the Pantry and finishes smoking racks', () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(a.id, { t: 'cmd', text: '/smoke kippers 2' });
+    expect(a.save.smoke.pantry.kippers).toEqual([600, 600]);
+    room.handle(a.id, { t: 'cmd', text: '/smoke' });
+    expect(devLines(a.log).at(-1)).toBe('No racks are smoking.');
+    a.save.smoke.racks[1] = { r: 'minnowbites', fish: [], doneAt: Date.now() + 3_600_000 };
+    room.handle(a.id, { t: 'cmd', text: '/smoke' });
+    room.snapshot();
+    expect(a.save.smoke.racks[1]).toBeNull();
+    expect(a.save.smoke.pantry.minnowbites).toHaveLength(1);
+  });
 });

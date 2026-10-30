@@ -7,6 +7,7 @@ import { AccountStore } from './accounts';
 import { FISH } from '../src/data/content';
 import { sellValue, xpForNextLevel } from '../src/game/progression';
 import { BOARD_MS, CLOCK_MS, Room } from './room';
+import * as smoke from '../src/game/smoke';
 
 const conn = () => {
   const log: ServerMsg[] = [];
@@ -718,5 +719,109 @@ describe('ranks and titles', () => {
     expect(last(b.c, 'title')).toEqual({ t: 'title', id: a.id, title: 'bosun' });
     const c = join('Cy');
     expect(last(c.c, 'welcome').players.find((p) => p.id === a.id)?.title).toBe('bosun');
+  });
+});
+
+describe('Smokehouse', () => {
+  const atCounter = (room: Room, p: { id: number }) => {
+    const c = MAPS[0].smokehouse!;
+    room.handle(p.id, { t: 'pos', x: c.x, z: c.z - 1.5, yaw: 0 });
+  };
+  const give = (save: ReturnType<typeof newSave>, ...ids: string[]) =>
+    ids.forEach((id, i) => (save.slots[2 + i] = { k: 'fish', fishId: id, size: FISH.find((f) => f.id === id)!.minSize }));
+
+  it('loads a rack only at the counter, and says why not', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    give(a.acct.save, 'pike', 'gar', 'koi');
+    room.handle(a.id, { t: 'smoke', r: 'pikejerky', i: 2 });
+    expect(a.acct.save.smoke.racks[0]).toBeNull();
+    expect(last(a.c, 'notice').msg).toBe("Get closer to Mags's counter.");
+    atCounter(room, a);
+    room.handle(a.id, { t: 'smoke', r: 'kippers', i: 2 });
+    expect(last(a.c, 'notice').msg).toMatch(/doesn't take a Northern Pike/);
+    for (const i of [2, 3, 4]) room.handle(a.id, { t: 'smoke', r: 'pikejerky', i });
+    expect(a.acct.save.smoke.racks[0]!.doneAt).toBeDefined();
+    room.handle(a.id, { t: 'unsmoke', rack: 0, j: 0 });
+    expect(last(a.c, 'notice').msg).toBe("It's already smoking.");
+    room.handle(a.id, { t: 'unsmoke', rack: { toString: null } as unknown as number, j: 0 });
+    expect(last(a.c, 'notice').msg).toBe('Nothing there to take.');
+  });
+
+  it('puts down the fish in hand when it goes on a rack', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    give(a.acct.save, 'pike');
+    room.handle(a.id, { t: 'slot', i: 2 });
+    expect(last(b.c, 'act')).toMatchObject({ id: a.id, act: { a: 'carry', fish: 'pike' } });
+    atCounter(room, a);
+    room.handle(a.id, { t: 'smoke', r: 'pikejerky', i: 2 });
+    expect(last(b.c, 'act')).toMatchObject({ id: a.id, act: null });
+  });
+
+  it('smokes while the player is away and hands the batch over when they come back', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    give(a.acct.save, 'pike', 'gar', 'koi');
+    atCounter(room, a);
+    for (const i of [2, 3, 4]) room.handle(a.id, { t: 'smoke', r: 'pikejerky', i });
+    room.leave(a.id);
+    advance(60 * 60_000);
+    const back = join('Ann');
+    expect(back.acct.save.smoke.pantry.pikejerky).toEqual([600]);
+    expect(last(back.c, 'notice').msg).toBe("🔥 While you were away, Mags smoked your Pike Jerky. It's in your Pantry.");
+  });
+
+  it('hands over a batch that finishes while online', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    give(a.acct.save, 'pike', 'gar', 'koi');
+    atCounter(room, a);
+    for (const i of [2, 3, 4]) room.handle(a.id, { t: 'smoke', r: 'pikejerky', i });
+    advance(15 * 60_000);
+    room.snapshot();
+    expect(last(a.c, 'notice').msg).toBe("🔥 Mags smoked your Pike Jerky. It's in your Pantry.");
+    expect(last(a.c, 'state').save.smoke.pantry.pikejerky).toHaveLength(1);
+  });
+
+  it('runs buffs down in online time only', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    smoke.stock(a.acct.save, 'kippers', 600);
+    room.handle(a.id, { t: 'eat', id: 'kippers' });
+    expect(a.acct.save.smoke.buffs).toEqual([{ id: 'kippers', ms: 600_000 }]);
+    advance(4 * 60_000);
+    room.snapshot();
+    room.leave(a.id);
+    advance(3 * 60 * 60_000);
+    const back = join('Ann');
+    expect(back.acct.save.smoke.buffs).toEqual([{ id: 'kippers', ms: 360_000 }]);
+    advance(6 * 60_000);
+    room.snapshot();
+    expect(back.acct.save.smoke.buffs).toEqual([]);
+    expect(last(back.c, 'state').save.smoke.buffs).toEqual([]);
+  });
+
+  it("doesn't eat in the casino", () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    smoke.stock(a.acct.save, 'kippers', 600);
+    a.acct.save.location = 'casino';
+    room.leave(a.id);
+    const b = join('Ann');
+    room.handle(b.id, { t: 'eat', id: 'kippers' });
+    expect(b.acct.save.smoke.buffs).toEqual([]);
+  });
+
+  it('puts banked level gifts in the Pantry on joining', () => {
+    const { join, store } = setup();
+    const res = store.auth('Ann', 'token-token-token-Ann');
+    if (!res.ok) throw new Error(res.msg);
+    Object.assign(res.account.save, { level: 56 });
+    res.account.save.gifts.provisions = 2;
+    const a = join('Ann');
+    expect(a.acct.save.smoke.pantry.jewelplatter).toEqual([600, 600]);
+    expect(last(a.c, 'notice').msg).toBe('🎁 Your levels past 50 put Jewel Platter ×2 in your Pantry.');
   });
 });

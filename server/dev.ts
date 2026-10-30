@@ -1,7 +1,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { BAITS, FISH, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
+import { BUFF_MINUTES, RECIPES, recipeById } from '../src/data/smokehouse';
 import * as eco from '../src/game/economy';
+import * as smoke from '../src/game/smoke';
 import { grantRanks } from '../src/game/progression';
 import type { SaveData } from '../src/game/state';
 import { Lockout } from './lockout';
@@ -60,7 +62,8 @@ export const HELP = [
   '/coins N · /chips N · /level N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /time day|dusk|night|dawn|auto',
-  '/dig (reset worm cooldown) · /resetpass <name> <new password>',
+  '/dig (reset worm cooldown) · /smoke (finish your racks) · /smoke <recipe> [N]',
+  '/resetpass <name> <new password>',
   '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
 ];
 
@@ -120,6 +123,18 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       const shiny = args.includes('shiny');
       if (!eco.takeItem(s, { k: 'fish', fishId: f.id, size, ...(shiny ? { shiny } : {}) })) return say('Your fish slots are full.');
       return ok(`Added a ${shiny ? 'shiny ' : ''}${size} cm ${f.name}.`);
+    }
+    case 'smoke': {
+      if (!args[0]) {
+        const racks = s.smoke.racks.filter((r) => r?.doneAt);
+        for (const r of racks) r!.doneAt = 1;
+        return racks.length ? ok(`Finished ${racks.length} rack${racks.length === 1 ? '' : 's'}.`) : say('No racks are smoking.');
+      }
+      const r = recipeById(args[0]);
+      if (!r) return say(`Recipe ids: ${ids(RECIPES)}`);
+      const n = int(args[1] ?? '1', 1, 50)!;
+      smoke.stock(s, r.id, BUFF_MINUTES * 60, n);
+      return ok(`Added ${n} ${r.name} to your Pantry.`);
     }
     case 'tp': {
       const m = t.maps[args[0]];
