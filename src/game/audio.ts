@@ -313,6 +313,21 @@ class AudioFX {
     this.noise(0.03, 'highpass', 3500, 5000, gain);
   }
 
+  /**
+   * A wheel's peg (or a roulette pocket) clacking past the pointer: a short knock with a little ring.
+   * `pitch` scales it (lower is woodier), and `at` delays it in seconds so a frame's ticks spread out.
+   */
+  peg(gain = 0.14, pitch = 1, at = 0): void {
+    if (!this.ctx) return;
+    this.noise(0.025, 'bandpass', 2600 * pitch, 1600 * pitch, gain, 3, at);
+    this.tone(1300 * pitch, 800 * pitch, 0.035, gain * 0.5, this.ctx.currentTime + at, 'triangle');
+  }
+
+  /** A card slid off the shoe, or turned over (`flip`, a little lower and shorter). */
+  card(flip = false): void {
+    this.noise(flip ? 0.06 : 0.09, 'bandpass', flip ? 2200 : 3200, flip ? 1200 : 1500, 0.1, 0.9);
+  }
+
   snap(): void {
     this.noise(0.15, 'highpass', 2000, 6000, 0.5);
     this.tone(500, 120, 0.2, 0.2, undefined, 'sawtooth');

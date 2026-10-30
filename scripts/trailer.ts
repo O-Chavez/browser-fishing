@@ -16,6 +16,7 @@ import puppeteer, { type KeyInput, type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { COSMETICS } from '../src/data/cosmetics';
 import { ROULETTE_MS } from '../src/data/casino';
+import { RESULT_BEAT_MS } from '../src/game/tablepace';
 import { TIP_IDS } from '../src/game/tips';
 import { newSave } from '../src/game/state';
 
@@ -344,7 +345,8 @@ try {
       await sleep(1600);
       await say(jun, lines[attempt % 4][1]);
     });
-    spin.marks.result += ROULETTE_MS / 1000;
+    // The banner lands a beat after the wheel stops
+    spin.marks.result += (ROULETTE_MS + RESULT_BEAT_MS) / 1000;
     const won = await table.evaluate(() => document.getElementById('tableresult')!.className.includes('win'));
     console.log(`roulette spin ${attempt + 1}: ${won ? 'win' : 'lose'}`);
     if (won) break;

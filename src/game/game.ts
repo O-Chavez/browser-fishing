@@ -63,6 +63,7 @@ import { NIGHT_BITE } from './daynight';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
+import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
 import { load, newSave, save, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
@@ -205,12 +206,19 @@ export class Game {
   /** Why the server dropped us, shown with the "playing offline" toast. */
   private offlineWhy: string | undefined;
   private bannerTimer = 0;
+  /** A wheel is spinning or cards are being dealt: other actions wait until the result has landed. */
   private spin = false;
+  /** Timers of the reveal in progress; the exit gate waits for them. */
+  private revealTimers: number[] = [];
+  /** The server's newest save, held back while a reveal is running so the hotbar and menus can't spoil it. */
+  private heldSave: SaveData | null = null;
   private betSlot = -1;
   private chat!: ChatBox;
   private hotbarHeld = -1;
   private ctxShown: boolean | null = null;
   private bj: BlackjackView | null = null;
+  /** The hand as far as it has been dealt onto the felt, for the table readout. */
+  private bjShown: BlackjackView | null = null;
   private casinoMsg = '';
   private table: 'roulette' | 'blackjack' | 'prizes' | null = null;
   private aim: { k: string; id: string } | null = null;
@@ -241,33 +249,13 @@ export class Game {
     if (!token) localStorage.setItem('fishing-token', (token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('')));
     this.net = new NetClient(name, token, q.get('room') || 'lobby', {
       onState: (save) => {
-        const from = this.s.location;
-        const moved = !!save.location && save.location !== from;
-        Object.assign(this.s, save);
-        if (this.joining) this.finishJoin();
-        else if (this.pendingWelcome) this.welcome();
-        if (moved) this.applyLocation(from);
-        this.setGateSign();
-        this.refreshHud();
-        if (this.menuOpen) this.renderMenu();
+        // The server settles a bet as the wheel stops or the hand ends; its save waits for the reveal.
+        if (this.revealTimers.length && !this.joining) this.heldSave = save;
+        else this.applyState(save);
       },
       onWheel: (win, ms) => this.startSpin(win, ms),
       onRoulette: (r) => this.startRoulette(r),
-      onBlackjack: (v) => {
-        this.bj = v;
-        // The server sends one view per deal or action, so a finished one is always a new result,
-        // including a hand that ends on the deal with a natural 21.
-        if (v?.done) {
-          const { kind, title, sub } = blackjackVerdict(v);
-          this.showResult(kind, title, sub);
-          // Same sounds as the roulette table; a push keeps the fish, so it gets the short sale jingle.
-          if (kind === 'win') audio.jingle('epic');
-          else if (kind === 'lose') audio.snap();
-          else audio.jingle('common');
-        }
-        this.world.hall?.setBlackjack(v);
-        if (this.menuOpen && this.tab === 'casino') this.renderMenu();
-      },
+      onBlackjack: (v) => this.dealt(v),
       onNotice: (msg) => this.toast(msg),
       onChat: (m) => {
         const self = m.room === this.net.room && m.id === this.net.id;
@@ -1028,6 +1016,33 @@ export class Game {
     this.toast('Stored in your tackle locker');
   }
 
+  private applyState(save: SaveData): void {
+    const from = this.s.location;
+    const moved = !!save.location && save.location !== from;
+    Object.assign(this.s, save);
+    if (this.joining) this.finishJoin();
+    else if (this.pendingWelcome) this.welcome();
+    if (moved) this.applyLocation(from);
+    this.setGateSign();
+    this.refreshHud();
+    if (this.menuOpen) this.renderMenu();
+  }
+
+  /** Runs part of a casino reveal after `ms`, unless a newer one cuts it short. */
+  private later(ms: number, fn: () => void): void {
+    this.revealTimers.push(window.setTimeout(fn, ms));
+  }
+
+  /** Ends the reveal: actions are free again, and the save the server sent meanwhile lands with the result. */
+  private endReveal(): void {
+    for (const t of this.revealTimers) clearTimeout(t);
+    this.revealTimers = [];
+    this.spin = false;
+    const save = this.heldSave;
+    this.heldSave = null;
+    if (save) this.applyState(save);
+  }
+
   /** Wheel: online the server rolls; offline we roll locally. */
   private gamble(): void {
     if (this.spin || this.s.slots[this.s.held]?.k !== 'fish') return;
@@ -1042,15 +1057,16 @@ export class Game {
     const name = byId(FISH, it.fishId).name;
     this.spin = true;
     this.world.hub?.spinWheel(win, ms);
-    setTimeout(() => {
-      this.spin = false;
+    // A beat of quiet after the wheel stops, then the result
+    this.later(ms + RESULT_BEAT_MS, () => {
+      this.endReveal();
       if (!this.net.connected) {
         eco.applyWheel(this.s, win);
         this.persist();
         this.refreshHud();
       }
       this.showWheelResult(win, name, value);
-    }, ms);
+    });
   }
 
   private showWheelResult(win: boolean, name: string, value: number): void {
@@ -1284,6 +1300,7 @@ export class Game {
     this.world.setLocation(byId(LOCATIONS, this.map.locationId), this.map);
     this.setGateSign();
     this.bj = null;
+    this.bjShown = null;
     this.player = new Player(this.map.radius);
     const at = arrivalSpot(this.map, from);
     this.player.teleport(at.x, at.z);
@@ -1322,6 +1339,7 @@ export class Game {
   // ---------- casino ----------
 
   private useGate(): void {
+    if (this.spin) return this.toast('Wait for the result first.');
     const dest = this.map.next;
     if (!dest) return this.toast('The road ends here.');
     if (!this.gateOpen) return this.toast(`${dest.name} needs level ${CASINO_LEVEL}.`);
@@ -1362,8 +1380,8 @@ export class Game {
     this.casinoMsg = '<span class="muted">The wheel is spinning…</span>';
     this.world.hall?.spin(r.pocket, r.ms);
     if (this.menuOpen) this.renderMenu();
-    setTimeout(() => {
-      this.spin = false;
+    this.later(r.ms + RESULT_BEAT_MS, () => {
+      this.endReveal();
       const win = r.factor > 0;
       this.casinoMsg = win
         ? `<b class="win">${r.color.toUpperCase()}! You win</b> ${name} is now worth ${Math.round(after)} 🪙`
@@ -1372,7 +1390,43 @@ export class Game {
       if (win) audio.jingle('epic');
       else audio.snap();
       if (this.menuOpen) this.renderMenu();
-    }, r.ms);
+    });
+  }
+
+  /**
+   * A blackjack view from the server, one per deal or action. Its new cards are dealt onto the felt one
+   * at a time; the readout, the buttons, the result and the server's new save wait for the last one.
+   */
+  private dealt(v: BlackjackView | null): void {
+    const shown = this.bj;
+    this.endReveal();
+    this.bj = v;
+    const hall = this.world.hall;
+    if (!v) {
+      this.bjShown = null;
+      hall?.setBlackjack(null);
+      return;
+    }
+    const { steps, end } = dealSteps(shown, v);
+    this.spin = true;
+    this.bjShown = landedView(shown, v, steps, 0);
+    hall?.setBlackjack(v, steps);
+    steps.forEach((st, i) => this.later(st.at + st.ms, () => (this.bjShown = landedView(shown, v, steps, i + 1))));
+    // A finished hand (even one that ends on the deal with a natural 21) gets a beat after its last card
+    this.later(v.done ? end + RESULT_BEAT_MS : end, () => {
+      this.endReveal();
+      this.bjShown = v;
+      this.world.hall?.setButtons(v);
+      if (v.done) {
+        const { kind, title, sub } = blackjackVerdict(v);
+        this.showResult(kind, title, sub);
+        // Same sounds as the roulette table; a push keeps the fish, so it gets the short sale jingle.
+        if (kind === 'win') audio.jingle('epic');
+        else if (kind === 'lose') audio.snap();
+        else audio.jingle('common');
+      }
+      if (this.menuOpen && this.tab === 'casino') this.renderMenu();
+    });
   }
 
   private resultTimer = 0;
@@ -1392,6 +1446,7 @@ export class Game {
     if (a === 'deal') {
       if (this.bj && !this.bj.done) return;
       this.bj = null;
+      this.bjShown = null;
       this.casinoMsg = '';
       this.casinoSend({ t: 'bj', a, i: this.betSlot });
     } else this.casinoSend({ t: 'bj', a });
@@ -1485,7 +1540,7 @@ export class Game {
         ? `Betting <b>${byId(FISH, fish.fishId).name}</b> · ${Math.round(eco.fishValue(fish))} 🪙`
         : 'Hold a fish (1-5) to bet it.',
     );
-    const g = this.bj;
+    const g = this.bjShown;
     if (t === 'blackjack' && g) {
       lines.push(`Dealer <b>${g.dealerTotal ?? '?'}</b> · You <b>${g.playerTotal}</b>`);
       if (g.done) {

@@ -433,8 +433,8 @@ export class Room {
       const g = cas.dealBlackjack(slot, this.rng);
       m.bj = g;
       m.acct.save.held = slot;
-      this.bjDone(m);
       m.conn.send({ t: 'bj', view: cas.blackjackView(g) });
+      this.bjDone(m);
       return;
     }
     if (!m.bj || !this.atCasino(m, 'blackjack')) return;
@@ -449,11 +449,14 @@ export class Room {
       const bad = cas.doubleDown(m.acct.save, g);
       if (bad) return m.conn.send({ t: 'notice', msg: bad });
     } else if (!cas.actBlackjack(g, a)) return;
-    this.bjDone(m);
     m.conn.send({ t: 'bj', view: cas.blackjackView(g) });
+    this.bjDone(m);
   }
 
-  /** Pays out a finished hand and frees the table. */
+  /**
+   * Pays out a finished hand and frees the table. Callers send the hand first, so the client knows to
+   * hold this new save back until it has dealt the last card.
+   */
   private bjDone(m: Member): void {
     const g = m.bj;
     if (!g?.done) return;
