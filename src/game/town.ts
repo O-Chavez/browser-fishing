@@ -3,7 +3,7 @@ import type { MapDef, NpcDef, Spot } from '../data/maps';
 import { groundHeight, standHeight } from './env';
 import { DARK, WOOD, ball, cyl, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
-import { NpcWalker } from './npcwalk';
+import { NpcWalker, type Bystander } from './npcwalk';
 import { glowTag } from './nightglow';
 import { boxUV, shingleTexture, sidingTexture, stoneTexture } from './textures';
 import { faceHead } from './faces';
@@ -713,7 +713,8 @@ export class Town {
     return `${npc.def.name}: "${line}"`;
   }
 
-  update(t: number, dt: number, px: number, pz: number): void {
+  /** `you` is the local player; `others` are the other players on this map, whom walking townsfolk keep clear of too. */
+  update(t: number, dt: number, you: Bystander, others: readonly Bystander[]): void {
     for (const f of this.fires) {
       f.light.intensity = (4 + 8 * this.night) * (0.85 + 0.15 * Math.sin(t * 9 + f.ph) + 0.08 * Math.sin(t * 23 + f.ph));
       f.flames.forEach((c, i) => c.scale.set(1, 0.85 + 0.25 * Math.sin(t * 8 + i * 2 + f.ph), 1));
@@ -727,13 +728,13 @@ export class Town {
     for (const h of this.heads) {
       const w = h.walker;
       if (w) {
-        w.update(dt, px, pz);
+        w.update(dt, you, others);
         h.pos.set(w.x, standHeight(w.x, w.z), w.z);
         h.model.position.copy(h.pos);
         h.model.rotation.y = h.yaw = w.yaw;
       }
-      const dx = px - h.pos.x;
-      const dz = pz - h.pos.z;
+      const dx = you.x - h.pos.x;
+      const dz = you.z - h.pos.z;
       if (Math.hypot(dx, dz) < 7) {
         let a = Math.atan2(dx, dz) - h.yaw;
         a = Math.atan2(Math.sin(a), Math.cos(a));

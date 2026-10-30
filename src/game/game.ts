@@ -2127,6 +2127,17 @@ export class Game {
     $('ctx').classList.toggle('hidden', !fishing);
   }
 
+  /** Tells the townsfolk who's around and who's fishing, so they don't walk into anyone or wander off mid-cast. */
+  private syncBystanders(): void {
+    this.world.fishing = this.phase !== 'idle';
+    const others = this.world.others;
+    others.length = 0;
+    for (const p of this.net.players.values()) {
+      if (p.id === this.net.id || p.map !== this.map.id) continue;
+      others.push({ x: p.x, z: p.z, fishing: p.act?.a === 'cast' || p.act?.a === 'hold' });
+    }
+  }
+
   private tick(dt: number): void {
     this.updateWalking(dt);
     this.updateContext();
@@ -2134,6 +2145,7 @@ export class Game {
     this.updateNight();
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
     this.avatars.update(dt, this.world.time, this.net.players, this.player.x, this.player.z);
+    this.syncBystanders();
     if (!this.net.connected && this.localDrops.expire()) this.dropsView.sync(this.localDrops.all(), this.map.id);
     this.dropsView.update(this.world.time);
     this.updateCarry();

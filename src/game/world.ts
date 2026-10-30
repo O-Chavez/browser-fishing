@@ -20,6 +20,7 @@ import {
 } from './env';
 import { Hub } from './hub';
 import { Town } from './town';
+import type { Bystander } from './npcwalk';
 import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { FX } from './fx';
@@ -119,6 +120,10 @@ export class World {
   pitch = -0.12;
   time = 0;
   bobberVisible = false;
+  /** Set by `Game` each frame for the townsfolk: whether you're fishing, and the other players on this map. */
+  fishing = false;
+  readonly others: Bystander[] = [];
+  private you: Bystander = { x: 0, z: 0, fishing: false };
   fovKick = 0;
   pitchKick = 0;
   private shake = 0;
@@ -1107,7 +1112,10 @@ export class World {
       .multiplyScalar(80)
       .add(this.sun.target.position);
     this.hub?.update(t, this.eye.x, this.eye.z);
-    this.town?.update(t, dt, this.eye.x, this.eye.z);
+    this.you.x = this.eye.x;
+    this.you.z = this.eye.z;
+    this.you.fishing = this.fishing;
+    this.town?.update(t, dt, this.you, this.others);
     this.hall?.update(t, dt);
     // After every owner has set its lights' intensity this frame: the pool fades them on top of it.
     this.lightPool.update(dt, this.eye);
