@@ -39,6 +39,7 @@ class Avatar {
   private rod: THREE.Mesh;
   private char: Character;
   private plate: THREE.Sprite;
+  private name: string;
   private sup = false;
   private bubble: { sprite: THREE.Sprite; until: number } | null = null;
 
@@ -54,6 +55,7 @@ class Avatar {
     this.rod.position.set(-0.3, 1.2, 0.55);
     this.rod.rotation.x = 0.9;
     this.tip.position.set(-0.3, 1.2 + 0.8 * Math.cos(0.9), 0.55 + 0.8 * Math.sin(0.9));
+    this.name = info.name;
     this.plate = this.nameplate(info.name);
     this.group.add(this.char.group, this.rod, this.tip, this.plate);
     this.group.visible = false;
@@ -102,8 +104,10 @@ class Avatar {
     return tex;
   }
 
-  setSupporter(name: string, sup: boolean): void {
-    if (sup === this.sup) return;
+  /** Redraws the nameplate after a rename or a 💗 change. */
+  setName(name: string, sup: boolean): void {
+    if (name === this.name && sup === this.sup) return;
+    this.name = name;
     this.sup = sup;
     this.plate.material.map?.dispose();
     this.plate.material.map = this.plateTexture(name, sup);
@@ -282,7 +286,7 @@ export class Avatars {
         this.list.set(p.id, a);
       }
       a.setLook(p.look);
-      a.setSupporter(p.name, this.supporter(p.name));
+      a.setName(p.name, this.supporter(p.name));
       a.setVisible(p.map === map);
     }
   }

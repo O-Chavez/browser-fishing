@@ -1,5 +1,5 @@
 import type { Activity, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
-import { SERVER_PORT } from '../net/protocol';
+import { RENAME_COOLDOWN_MS, SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Drop } from './drops';
 import type { SaveData } from './state';
@@ -22,6 +22,8 @@ export interface NetEvents {
   onError(msg: string, need?: 'password'): void;
   /** The server answered a password change; `msg` is set if it was refused. */
   onAccount(msg?: string): void;
+  /** This account's name changed: renamed here (`now`), or elsewhere before this join. */
+  onName(now: boolean): void;
   onNotice(msg: string): void;
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
@@ -52,6 +54,8 @@ export class NetClient {
   pass: string | undefined;
   /** The account has a password (so it can log in on other devices). */
   hasPass = false;
+  /** `Date.now()` when the name may change again. */
+  renameAt = 0;
 
   constructor(
     public name: string,
@@ -112,7 +116,12 @@ export class NetClient {
         this.id = m.id;
         this.room = m.room;
         this.hasPass = m.hasPass;
+        this.renameAt = Date.now() + m.renameIn;
         m.players.forEach((p) => this.players.set(p.id, p));
+        if (m.name !== this.name) {
+          this.name = m.name;
+          this.events.onName(false);
+        }
         this.setSave(m.save);
         this.events.onPlayers();
         break;
@@ -190,6 +199,17 @@ export class NetClient {
       case 'look': {
         const p = this.players.get(m.id);
         if (p) p.look = m.look;
+        this.events.onPlayers();
+        break;
+      }
+      case 'named': {
+        const p = this.players.get(m.id);
+        if (p) p.name = m.name;
+        if (m.id === this.id) {
+          this.name = m.name;
+          this.renameAt = Date.now() + RENAME_COOLDOWN_MS;
+          this.events.onName(true);
+        }
         this.events.onPlayers();
         break;
       }

@@ -124,6 +124,7 @@ function room(name: string): Room {
     r.resetPass = (name, pass) => accounts.resetPass(name, pass);
     r.supporters = () => accounts.supporters();
     r.setSupporter = setSupporter;
+    r.renameWait = (a) => accounts.renameWait(a);
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }
@@ -257,6 +258,15 @@ wss.on('connection', (ws, req) => {
         // A deleted supporter's 💗 goes from everyone's list.
         if (!gone.pw && gone.supporter) rooms.forEach((r) => r.supportersChanged(gone, false, accounts.supporters()));
         return ws.close();
+      }
+      if (msg.t === 'rename') {
+        const old = acct.name;
+        const bad = accounts.rename(acct, msg.name);
+        if (bad) return send({ t: 'account', hasPass: !!acct.pw, msg: bad });
+        r.renamed(id, old);
+        // The 💗 lists hold names, so a supporter's new name has to reach everyone.
+        if (acct.supporter) rooms.forEach((o) => o.broadcast({ t: 'supporters', names: accounts.supporters() }));
+        return;
       }
       return r.handle(id, msg);
     }

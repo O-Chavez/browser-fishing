@@ -88,6 +88,8 @@ export class Room {
   setSupporter: (name: string, on: boolean) => string = () => 'No account store.';
   /** Dev console `/resetpass`; the server points this at the account store. */
   resetPass: (name: string, pass: string) => Promise<string> = async () => 'No account store.';
+  /** Milliseconds until an account may change its name again; the server points this at the account store. */
+  renameWait: (acct: Account) => number = () => 0;
   /** Delivers chat lines and notices; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -125,8 +127,10 @@ export class Room {
       id,
       room: this.name,
       save: acct.save,
+      name: acct.name,
       players: [...this.members.values()].map((o) => o.info),
       hasPass: !!acct.pw,
+      renameIn: this.renameWait(acct),
     });
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
@@ -581,6 +585,15 @@ export class Room {
       this.lastHall = hk;
       this.broadcast({ t: 'hall', rows });
     }
+  }
+
+  /** Player `id` changed their name (already set on the account): everyone in the room sees the new one, and the whole server hears it. */
+  renamed(id: number, old: string): void {
+    const m = this.members.get(id);
+    if (!m) return;
+    m.info.name = m.acct.name;
+    this.broadcast({ t: 'named', id, name: m.acct.name });
+    this.say({ t: 'sys', text: `${old} is now ${m.acct.name}` });
   }
 
   /** A player gained or lost the supporter 💗: everyone gets the new list, and the player a thank-you. */

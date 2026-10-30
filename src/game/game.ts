@@ -28,6 +28,7 @@ import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
 import { shortCoins } from './format';
+import { waitText } from '../net/protocol';
 import { Player } from './player';
 import {
   animateFish,
@@ -190,10 +191,11 @@ export class Game {
   private rodHinted = false;
   private toughCatch = false;
   private confirmReset = false;
-  /** Settings > Account: the open password form or logout confirmation, and its last message. */
-  private acctForm: 'pass' | 'logout' | null = null;
+  /** Settings > Account: the open password or name form or logout confirmation, and its last message. */
+  private acctForm: 'pass' | 'name' | 'logout' | null = null;
   private acctMsg = '';
-  private focusPass = false;
+  /** Focus the form's text box on the next render. */
+  private focusAcct = false;
   private loggingOut = false;
   /** Why the server dropped us, shown with the "playing offline" toast. */
   private offlineWhy: string | undefined;
@@ -326,6 +328,17 @@ export class Game {
           this.toast('🔒 Password saved. Log in anywhere with your name and password.');
         }
         if (this.menuOpen && this.tab === 'settings') this.renderMenu();
+      },
+      onName: (now) => {
+        // Saved, so this browser's next automatic login uses the new name.
+        localStorage.setItem('fishing-name', this.net.name);
+        if (now) {
+          this.acctForm = null;
+          this.acctMsg = '';
+          this.toast(`✏️ Your name is now ${this.net.name}.`, 3);
+        }
+        this.refreshHud();
+        if (this.menuOpen) this.renderMenu();
       },
       onClose: () => {
         if (this.loggingOut) {
@@ -647,7 +660,10 @@ export class Game {
       this.onMenuClick(e.target as HTMLElement),
     );
     $('menu').addEventListener('keydown', (e) => {
-      if ((e.target as HTMLElement).id === 'acct-pass' && e.key === 'Enter') this.savePass();
+      if (e.key !== 'Enter') return;
+      const id = (e.target as HTMLElement).id;
+      if (id === 'acct-pass') this.savePass();
+      else if (id === 'acct-name') this.saveName();
     });
     $('hotbar').addEventListener('click', (e) => {
       const slot = (e.target as HTMLElement).closest<HTMLElement>('.slot');
@@ -899,12 +915,13 @@ export class Game {
     else if (act === 'reset') this.confirmReset = true;
     else if (act === 'resetno') this.confirmReset = false;
     else if (act === 'resetyes') this.resetAccount();
-    else if (act === 'pass' || act === 'logout') {
+    else if (act === 'pass' || act === 'name' || act === 'logout') {
       this.acctForm = act;
       this.acctMsg = '';
-      this.focusPass = act === 'pass';
+      this.focusAcct = act !== 'logout';
     } else if (act === 'acctno') this.acctForm = null;
     else if (act === 'passsave') return this.savePass();
+    else if (act === 'namesave') return this.saveName();
     else if (act === 'logoutyes') {
       this.loggingOut = true;
       this.net.send({ t: 'forget' });
@@ -1100,6 +1117,17 @@ export class Game {
     else {
       this.acctMsg = '';
       this.net.send({ t: 'setpass', pass });
+    }
+    this.renderMenu();
+  }
+
+  private saveName(): void {
+    const name = (($('acct-name') as HTMLInputElement | null)?.value ?? '').replace(/[^\w \-]/g, '').trim();
+    if (name.length < 2) this.acctMsg = 'Pick a name of 2-16 letters, numbers, spaces or dashes.';
+    else if (name === this.net.name) this.acctForm = null;
+    else {
+      this.acctMsg = '';
+      this.net.send({ t: 'rename', name });
     }
     this.renderMenu();
   }
@@ -2584,17 +2612,16 @@ export class Game {
         el.innerHTML = this.wardrobeHtml();
         break;
       case 'settings': {
-        // Menu re-renders (a state update arriving) must not wipe a half-typed password.
-        const old = document.getElementById('acct-pass') as HTMLInputElement | null;
-        const typed = old?.value ?? '';
+        // Menu re-renders (a state update arriving) must not wipe a half-typed password or name.
+        const old = document.querySelector<HTMLInputElement>('#acct-pass, #acct-name');
         const focused = !!old && document.activeElement === old;
         el.innerHTML = this.settingsHtml();
-        const pass = document.getElementById('acct-pass') as HTMLInputElement | null;
-        if (pass) {
-          pass.value = typed;
-          if (focused || this.focusPass) pass.focus();
+        const box = document.querySelector<HTMLInputElement>('#acct-pass, #acct-name');
+        if (box) {
+          if (old?.id === box.id) box.value = old.value;
+          if (focused || this.focusAcct) box.focus();
         }
-        this.focusPass = false;
+        this.focusAcct = false;
         break;
       }
       case 'shop':
@@ -3013,6 +3040,10 @@ export class Game {
     }
     const name = escapeHtml(this.net.name);
     const cancel = this.btn('Cancel', 'data-act="acctno"', 'plain');
+    if (this.acctForm === 'name')
+      return `<input id="acct-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" value="${name}" placeholder="New name">${msg}
+        <p>Your coins, catches${this.net.hasPass ? ', password' : ''} and everything else stay with you. You can change your name once every 7 days.${this.net.isSupporter(this.net.name) ? '' : ' Ko-fi tips need the new name.'}</p>
+        ${this.btn('Save name', 'data-act="namesave"', 'ok')}${cancel}`;
     if (this.acctForm === 'logout' && this.net.hasPass)
       return `<p>Log out on this browser? You'll need your name and password to come back here.</p>${this.btn('Yes, log out', 'data-act="logoutyes"', 'bad')}${cancel}`;
     // Nothing could log back in to an account without a password, so the server deletes it.
@@ -3020,9 +3051,11 @@ export class Game {
       return `<p class="acct-msg">⚠️ ${name} has no password. Logging out deletes ${name} for good: its coins, level, gear, fish${this.net.isSupporter(this.net.name) ? ', 💗' : ''} and everything else are lost, and anyone can take the name.</p>
         <p>To keep it, set a password first. Then you can log back in any time.</p>
         ${this.btn('Set a password first…', 'data-act="pass"', 'ok')}${this.btn(`Delete ${name} and log out`, 'data-act="logoutyes"', 'bad')}${cancel}`;
+    const wait = this.net.renameAt - Date.now();
+    const rename = wait > 0 ? `<p class="foot">You can change your name again in ${waitText(wait)}.</p>` : this.btn('Change name…', 'data-act="name"', 'plain');
     const logout = this.btn('Log in as a different account…', 'data-act="logout"', 'plain');
-    if (!this.net.hasPass) return `<p>Set a password to play as ${name} on other devices and browsers.</p>${msg}${this.btn('Set a password…', 'data-act="pass"', 'plain')}${logout}`;
-    return `<p>🔒 Password set. Log in on another device with your name and password.</p>${msg}${this.btn('Change password…', 'data-act="pass"', 'plain')}${logout}`;
+    if (!this.net.hasPass) return `<p>Set a password to play as ${name} on other devices and browsers.</p>${msg}${this.btn('Set a password…', 'data-act="pass"', 'plain')}${rename}${logout}`;
+    return `<p>🔒 Password set. Log in on another device with your name and password.</p>${msg}${this.btn('Change password…', 'data-act="pass"', 'plain')}${rename}${logout}`;
   }
 
   // ---------- Shop ----------

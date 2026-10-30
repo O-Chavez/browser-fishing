@@ -52,8 +52,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Accounts and server
 
-- 📋💬 Change your player name (from `/idea`, Oscar C, 2026-10-29, asked for together with the log out/in item, now done). Needs decisions first: uniqueness and the profanity filter, how often it can be changed, and what happens to leaderboard entries, the 💗 supporter mark and passwords, which are all keyed by name today
-- 🎨 Profanity filter: nothing filters names (on join or, once it exists, on rename) or chat today. Decide on a word list and where it applies (names only, or chat too), then check it in `parse` (`server/accounts.ts`) and the chat gate (`server/chat.ts`)
+- 🎨 Profanity filter: nothing filters names (on join or rename) or chat today. Decide on a word list and where it applies (names only, or chat too), then check it in `parse` and `rename` (`server/accounts.ts`) and the chat gate (`server/chat.ts`)
 - 📋 The server takes `pos` updates on trust (no speed or distance check), so a modified client can stand at any counter or table. Every vendor/table range check depends on it
 
 ### Mobile
