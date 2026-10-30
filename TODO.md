@@ -13,6 +13,9 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] Use the HUD's gold coin everywhere a price or coin amount is shown, in the shops and the rest of the UI
   - The top-left coin count draws a CSS coin (`.coin`, `src/style.css:59`, with `.sm`/`.xs` sizes), but most prices use the 🪙 emoji instead (about 34 places: `src/game/game.ts` shop, bag and casino tiles and detail panels, `casino.ts`, `tips.ts`), which looks different on every platform. Swap the HTML ones for the `.coin` span at a size that sits on the text line
   - Plain-text spots can't hold a span: toasts (e.g. the catch toast, `game.ts:316`), chat lines, and the canvas-drawn Top Anglers board (`hub.ts:438`). Decide per spot: draw a matching coin on the canvas, allow HTML in toasts, or keep the emoji there
+- [ ] 🎨 Show when a Shiny Lure is on, and let players turn it off in the Bag
+  - Today a bought lure is always on: the server spends a charge on the next cast that hooks a fish (`rollCast`, `src/game/economy.ts:362`), and the only sign is a line under "Charms & perks" in the Bag (`activePerks`, `economy.ts:202`; `perksHtml`, `src/game/game.ts:2879`). Add something visible while fishing, e.g. "✨ Shiny Lure on · 2 casts left" near the hotbar or HUD; propose the look first
+  - An on/off toggle on the lure in the Bag, so players can save charges for a better fish. Store it in the save (`SaveData`, `src/game/state.ts:48`) and have the server check it in `rollCast`, not just the client
 
 ## Ideas
 
