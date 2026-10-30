@@ -110,8 +110,11 @@ export type ServerMsg =
   | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
   /** A server-wide notice for the chat window ("Ann has joined"). */
   | { t: 'sys'; text: string }
-  /** Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night. */
-  | { t: 'dev'; lines: string[]; time?: number | null };
+  /**
+   * Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night.
+   * `sent` answers a /bug, /idea or /feedback: whether the report went through (the feedback form reads it).
+   */
+  | { t: 'dev'; lines: string[]; time?: number | null; sent?: boolean };
 
 export interface HallRow { name: string; level: number; best: BestCatch }
 

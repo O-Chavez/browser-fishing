@@ -7,7 +7,6 @@ Finished items move to [DONE.md](DONE.md).
 ## Up next
 
 - [ ] 🎨💬 Make night slightly brighter overall so it's easier to see, while keeping the cozy feel (from `/idea`, Oscar C, 2026-10-29). Night ambient/sky levels live in `World.updateDaylight`; taste-driven, so propose a few brightness levels side by side first
-- [ ] 🎨 Feedback discoverability: today the only pointer to `/bug` and `/idea` is the chat input placeholder. A Bug/Idea button (settings tab or pause menu) would reach players who never open chat. Taste-driven: propose options first
 - [ ] Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
 
 ## Ideas

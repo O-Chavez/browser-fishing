@@ -23,6 +23,7 @@ import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
 import { FpsMeter, TouchControls, touchOnly } from './touch';
 import { ChatBox } from './chatbox';
+import { FEEDBACK_MAX, FEEDBACK_WAIT_MS, FeedbackForm, OFFLINE_MSG, type FeedbackKind } from './feedback';
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
 import { cosIcon } from './cosicon';
@@ -197,6 +198,10 @@ export class Game {
   private acctMsg = '';
   private focusPass = false;
   private loggingOut = false;
+  /** Settings > Send feedback, also opened from the pause screen. */
+  private fb = new FeedbackForm();
+  private fbTimer = 0;
+  private focusFb = false;
   /** Why the server dropped us, shown with the "playing offline" toast. */
   private offlineWhy: string | undefined;
   private bannerTimer = 0;
@@ -270,7 +275,12 @@ export class Game {
         if (!self && m.room === this.net.room && m.map === this.map.id) this.avatars.say(m.id, m.text);
       },
       onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
-      onDev: (lines, time) => {
+      onDev: (lines, time, sent) => {
+        // The answer to a report from the feedback form goes to the form; /bug typed in chat answers in chat.
+        if (sent !== undefined && this.fb.answer(sent, lines[0] ?? '')) {
+          clearTimeout(this.fbTimer);
+          return this.renderFeedback();
+        }
         for (const text of lines) this.chat.add({ name: '', map: '', text, self: false, system: true });
         if (time !== undefined) this.world.dayOverride = time;
       },
@@ -337,6 +347,8 @@ export class Game {
         }
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
+        this.fb.giveUp(OFFLINE_MSG);
+        this.renderFeedback();
         this.showOffline(this.offlineWhy ?? 'Disconnected');
         this.offlineWhy = undefined;
       },
@@ -353,7 +365,8 @@ export class Game {
       map: () => this.map.id,
       mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
     });
-    $('resume').addEventListener('click', () => {
+    $('resume').addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('#resume-fb')) return this.openFeedback();
       // Audio has to start inside a click (Safari); this overlay is the desktop way into the game.
       audio.start();
       // Chrome refuses a re-lock for a moment after Esc; the overlay stays up until a later click works.
@@ -650,6 +663,15 @@ export class Game {
     );
     $('menu').addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement).id === 'acct-pass' && e.key === 'Enter') this.savePass();
+      // Enter sends, Shift+Enter is a new line (the server turns line breaks into spaces anyway).
+      if ((e.target as HTMLElement).id === 'fb-text' && e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this.sendFeedback();
+      }
+    });
+    $('menu').addEventListener('input', (e) => {
+      const el = e.target as HTMLTextAreaElement;
+      if (el.id === 'fb-text') this.fb.text = el.value;
     });
     $('hotbar').addEventListener('click', (e) => {
       const slot = (e.target as HTMLElement).closest<HTMLElement>('.slot');
@@ -731,7 +753,9 @@ export class Game {
       } else if (e.code.startsWith('Shift') && this.active) this.keys.add(e.code);
       if (e.code === 'Tab') {
         e.preventDefault();
-        if (e.repeat || !$('join').classList.contains('hidden')) return;
+        // Not while typing in a menu text box: that would close the menu mid-sentence.
+        const typing = (e.target as HTMLElement).matches?.('#menu input, #menu textarea');
+        if (e.repeat || typing || !$('join').classList.contains('hidden')) return;
         if (this.menuOpen) this.closeMenu();
         else if (this.active || !$('resume').classList.contains('hidden')) this.openMenu('inventory');
         return;
@@ -906,6 +930,11 @@ export class Game {
       this.acctMsg = '';
       this.focusPass = act === 'pass';
     } else if (act === 'acctno') this.acctForm = null;
+    else if (act === 'fbopen' || act === 'fbkind') {
+      this.fb.show(id as FeedbackKind | undefined);
+      this.focusFb = true;
+    } else if (act === 'fbno') this.fb.hide();
+    else if (act === 'fbsend') return this.sendFeedback();
     else if (act === 'passsave') return this.savePass();
     else if (act === 'logoutyes') {
       this.loggingOut = true;
@@ -1206,7 +1235,7 @@ export class Game {
   /** The overlay shown while the game is running but the mouse isn't captured; hidden on capture. */
   private showResume(prefix = '', action = 'to keep playing'): void {
     const el = $('resume');
-    el.innerHTML = `${prefix}<b>Click</b> ${action}`;
+    el.innerHTML = `${prefix}<b>Click</b> ${action}<button id="resume-fb" class="btn plain">💬 Send feedback</button>`;
     el.classList.remove('hidden');
   }
 
@@ -2598,10 +2627,13 @@ export class Game {
         el.innerHTML = this.wardrobeHtml();
         break;
       case 'settings': {
-        // Menu re-renders (a state update arriving) must not wipe a half-typed password.
+        // Menu re-renders (a state update arriving) must not wipe a half-typed password, or move the
+        // caret in the feedback box (its text is kept in `fb`).
         const old = document.getElementById('acct-pass') as HTMLInputElement | null;
         const typed = old?.value ?? '';
         const focused = !!old && document.activeElement === old;
+        const fbOld = document.getElementById('fb-text') as HTMLTextAreaElement | null;
+        const caret = fbOld && document.activeElement === fbOld ? fbOld.selectionStart : null;
         el.innerHTML = this.settingsHtml();
         const pass = document.getElementById('acct-pass') as HTMLInputElement | null;
         if (pass) {
@@ -2609,6 +2641,14 @@ export class Game {
           if (focused || this.focusPass) pass.focus();
         }
         this.focusPass = false;
+        const fb = document.getElementById('fb-text') as HTMLTextAreaElement | null;
+        if (fb && (caret !== null || this.focusFb)) {
+          fb.focus();
+          const at = caret ?? fb.value.length;
+          fb.setSelectionRange(at, at);
+          if (this.focusFb) fb.closest('.fb')?.scrollIntoView({ block: 'nearest' });
+        }
+        this.focusFb = false;
         break;
       }
       case 'shop':
@@ -3002,7 +3042,45 @@ export class Game {
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
       <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}
-      <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+      <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.feedbackHtml()}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+  }
+
+  /** Bug / Idea reports, sent like `/bug` and `/idea` in chat. Collapsed to a button until opened. */
+  private feedbackHtml(): string {
+    const f = this.fb;
+    const head = '<h4>Send feedback</h4>';
+    if (!this.net.connected) return `${head}<p>${OFFLINE_MSG}</p>`;
+    if (!f.open) return `${head}<p>Found a bug or have an idea? It goes straight to the developer.</p>${this.btn('✉️ Send feedback…', 'data-act="fbopen"', 'plain')}`;
+    const kind = (k: FeedbackKind, label: string) => this.btn(label, `data-act="fbkind" data-id="${k}"`, f.kind === k ? 'gold' : 'plain', f.sending);
+    const hint = f.kind === 'bug' ? 'What went wrong, and what were you doing?' : 'What would make Lakeside better?';
+    const msg = f.msg ? `<p class="fb-msg ${f.state}">${escapeHtml(f.msg)}</p>` : '';
+    return `${head}<div class="fb"><div class="fb-kind">${kind('bug', '🐞 Bug')}${kind('idea', '💡 Idea')}</div>
+      <textarea id="fb-text" rows="4" maxlength="${FEEDBACK_MAX}" placeholder="${hint}"${f.sending ? ' readonly' : ''}>${escapeHtml(f.text)}</textarea>${msg}
+      ${this.btn(f.sending ? 'Sending…' : 'Send', 'data-act="fbsend"', 'ok', f.sending)}${this.btn(f.state === 'sent' ? 'Close' : 'Cancel', 'data-act="fbno"', 'plain')}</div>`;
+  }
+
+  /** The pause screen's button: Settings with the feedback form open. */
+  private openFeedback(): void {
+    this.fb.show();
+    this.focusFb = true;
+    this.openMenu('settings');
+  }
+
+  private sendFeedback(): void {
+    const cmd = this.fb.submit(this.net.connected);
+    if (cmd) {
+      this.net.send({ t: 'cmd', text: cmd });
+      clearTimeout(this.fbTimer);
+      this.fbTimer = window.setTimeout(() => {
+        this.fb.giveUp();
+        this.renderFeedback();
+      }, FEEDBACK_WAIT_MS);
+    } else this.focusFb = true;
+    this.renderFeedback();
+  }
+
+  private renderFeedback(): void {
+    if (this.menuOpen && this.tab === 'settings') this.renderMenu();
   }
 
   /** The tip jar. A tip gives nothing in game, only the 💗 by the player's name. */

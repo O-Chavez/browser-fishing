@@ -52,7 +52,8 @@ fs.writeFileSync(
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
-  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '' },
+  // No Discord webhooks: the feedback check below must not post a real report.
+  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 await waitForLine(server, /fishing server on port/);
@@ -690,6 +691,24 @@ async function chatChecks(): Promise<void> {
   await c.page.keyboard.press('Enter');
   check('chat: new lines flash at full strength and fade back after a few seconds', fresh.every((o) => o === 1) && faded <= 0.5 && backMs > 3000 && backMs < 5500, JSON.stringify({ fresh, backMs }));
   check('chat: window is faded while playing and full while typing', faded < 0.7 && full === 1, JSON.stringify({ faded, full }));
+
+  // The pause screen's feedback button opens the form in Settings; it sends like /idea and shows the server's thanks.
+  await a.page.click('#resume-fb');
+  await a.page.waitForSelector('#fb-text', { visible: true, timeout: 3000 });
+  const fbFocused = await a.page.evaluate(() => document.activeElement?.id === 'fb-text');
+  await a.page.click('[data-act="fbkind"][data-id="idea"]');
+  // Tab and other keybinds stay in the text box instead of closing the menu.
+  await a.page.keyboard.press('Tab');
+  await a.page.keyboard.type('a smoke test idea');
+  await a.page.keyboard.press('Enter');
+  await a.page.waitForSelector('.fb-msg.sent', { timeout: 5000 }).catch(() => null);
+  const fb = await a.page.evaluate(() => ({
+    msg: document.querySelector('.fb-msg')?.textContent ?? '',
+    menu: !document.getElementById('menu')!.classList.contains('hidden'),
+    inChat: (document.querySelector('#chat .chat-log')?.textContent ?? '').includes('was sent'),
+  }));
+  await a.page.screenshot({ path: `${SHOTS}/feedback.png` });
+  check('feedback: the pause screen button opens the form and an idea sent from it is thanked', fbFocused && fb.menu && /idea was sent/.test(fb.msg) && !fb.inChat, JSON.stringify({ fbFocused, ...fb }));
   for (const p of [a, b, c]) await p.ctx.close();
 }
 

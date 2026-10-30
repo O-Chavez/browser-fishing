@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAPS } from '../src/data/maps';
+import { FEEDBACK_MAX as FORM_MAX, FEEDBACK_MIN as FORM_MIN } from '../src/game/feedback';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { FEEDBACK_BURST, FEEDBACK_MAX, FEEDBACK_SERVER_MAX, FEEDBACK_WINDOW_MS, FeedbackGate, browserName, feedbackPost, parseTags, type FeedbackReport } from './feedback';
@@ -55,6 +56,21 @@ describe('feedback commands', () => {
     expect(a.replies().at(-1)).toMatch(/Add a few words/);
     room.handle(a.id, { t: 'cmd', text: '/bug this shit is broken' });
     expect(reports[0].text).toBe('this **** is broken');
+  });
+
+  it('marks the answer as sent or refused, for the feedback form', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cmd', text: '/bug' });
+    room.handle(a.id, { t: 'cmd', text: '/idea a glowing rod' });
+    expect(a.log.flatMap((m) => (m.t === 'dev' ? [m.sent] : []))).toEqual([false, true]);
+  });
+
+  it('has the same limits as the feedback form in Settings', () => {
+    expect(FORM_MAX).toBe(FEEDBACK_MAX);
+    const gate = new FeedbackGate();
+    expect(gate.check('a', 'bug', 'x'.repeat(FORM_MIN)).ok).toBe(true);
+    expect(gate.check('b', 'bug', 'x'.repeat(FORM_MIN - 1)).ok).toBe(false);
   });
 
   it('caps the length well above chat', () => {
