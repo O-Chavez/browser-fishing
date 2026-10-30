@@ -49,6 +49,7 @@ import {
   formatWeight,
   nextGoal,
   welcomeText,
+  isFreshSave,
   sellValue,
   difficultyLabel,
   reelDifficulty,
@@ -364,7 +365,12 @@ export class Game {
       mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
     });
     $('resume').addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('#resume-fb')) return this.openFeedback();
+      const acct = (e.target as HTMLElement).closest<HTMLElement>('#resume-fb, [data-acct]');
+      if (acct) {
+        // The welcome banner would otherwise stay over the menu until it fades.
+        this.dismissWelcome();
+        return acct.dataset.acct ? this.openAccount(acct.dataset.acct as 'pass' | 'logout') : this.openFeedback();
+      }
       // Audio has to start inside a click (Safari); this overlay is the desktop way into the game.
       audio.start();
       // Chrome refuses a re-lock for a moment after Esc; the overlay stays up until a later click works.
@@ -521,16 +527,22 @@ export class Game {
     const el = $('banner');
     el.classList.add('welcome');
     el.style.color = '';
-    // Returning players who could lose their account with this browser get a nudge to protect it.
-    const nudge = this.net.connected && !this.net.hasPass && this.s.level >= 3 ? '<small>🔒 Set a password in ⚙️ Settings to play on other devices</small>' : '';
-    el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>${nudge}`;
+    // Returning players learn where to switch accounts, and those who could lose theirs with this
+    // browser get a nudge to protect it: buttons under the Click prompt, or a line here on phones,
+    // which have no Click prompt.
+    const returning = this.net.connected && !isFreshSave(this.s);
+    const needPass = this.net.connected && !this.net.hasPass && this.s.level >= 3;
+    const hint = this.touch && (returning || needPass) ? `<small>⚙️ Settings: ${needPass ? 'set a password or switch account' : 'switch account'}</small>` : '';
+    el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>${hint}`;
     el.classList.remove('hidden');
     el.style.animation = 'none';
     void el.offsetWidth;
     el.style.animation = '';
     clearTimeout(this.bannerTimer);
     this.bannerTimer = window.setTimeout(() => this.dismissWelcome(), 4200);
-    if (!this.locked && !this.forceActive) this.showResume('', 'to start fishing');
+    const pass = needPass ? '<button class="btn plain" data-acct="pass" title="Play on other devices with your name and password">🔒 Set a password</button>' : '';
+    const other = returning ? `<button class="switch" data-acct="logout">Not ${escapeHtml(this.net.name)}? Switch account</button>` : '';
+    if (!this.locked && !this.forceActive) this.showResume('', 'to start fishing', pass, other);
   }
 
   private dismissWelcome(): void {
@@ -1269,9 +1281,10 @@ export class Game {
   }
 
   /** The overlay shown while the game is running but the mouse isn't captured; hidden on capture. */
-  private showResume(prefix = '', action = 'to keep playing'): void {
+  /** `buttons` sit beside Send feedback, `below` on a line under them (the welcome's account links). */
+  private showResume(prefix = '', action = 'to keep playing', buttons = '', below = ''): void {
     const el = $('resume');
-    el.innerHTML = `${prefix}<b>Click</b> ${action}<button id="resume-fb" class="btn plain">💬 Send feedback</button>`;
+    el.innerHTML = `${prefix}<b>Click</b> ${action}<div class="acts"><div><button id="resume-fb" class="btn plain">💬 Send feedback</button>${buttons}</div>${below}</div>`;
     el.classList.remove('hidden');
   }
 
@@ -3162,6 +3175,14 @@ export class Game {
   }
 
   /** The pause screen's button: Settings with the feedback form open. */
+  /** The welcome's account buttons: Settings with the password or log-out form open. */
+  private openAccount(form: 'pass' | 'logout'): void {
+    this.acctForm = form;
+    this.acctMsg = '';
+    this.focusPass = form === 'pass';
+    this.openMenu('settings');
+  }
+
   private openFeedback(): void {
     this.fb.show();
     this.focusFb = true;
