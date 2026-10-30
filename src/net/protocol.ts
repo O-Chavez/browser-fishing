@@ -21,7 +21,8 @@ export interface PlayerInfo {
 
 export type Activity =
   | { a: 'cast'; x: number; z: number }
-  | { a: 'hold'; fish: string; size: number; shiny?: boolean }
+  /** `mult` is the Lucky Charm bonus baked into the catch (missing from older servers: treat as 1). */
+  | { a: 'hold'; fish: string; size: number; shiny?: boolean; mult?: number }
   | { a: 'carry'; fish: string; size: number; shiny?: boolean };
 
 export type ClientMsg =

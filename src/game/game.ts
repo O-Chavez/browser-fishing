@@ -301,7 +301,7 @@ export class Game {
       onAct: (p, act) => {
         const f = act?.a === 'hold' ? FISH.find((x) => x.id === act.fish) : null;
         if (f && act?.a === 'hold' && (act.shiny || (f.rarity !== 'common' && f.rarity !== 'uncommon')) && p.map === this.map.id)
-          this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${sellValue(f, act.size, act.shiny)} 🪙)!`);
+          this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${Math.round(sellValue(f, act.size, act.shiny) * (act.mult ?? 1))} 🪙)!`);
       },
       onJump: (id) => this.avatars.jump(id),
       onCast: (roll) => {
