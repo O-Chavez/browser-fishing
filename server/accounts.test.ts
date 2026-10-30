@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { MAPS } from '../src/data/maps';
+import { newSave } from '../src/game/state';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore, MAX_DEVICES } from './accounts';
 import { DevGate } from './dev';
@@ -7,6 +9,7 @@ import { Room } from './room';
 
 const A = 'a'.repeat(20);
 const B = 'b'.repeat(20);
+const hashOf = (token: string) => createHash('sha256').update(token).digest('hex');
 
 const claimed = (name = 'Ann', token = A) => {
   const store = new AccountStore();
@@ -24,6 +27,20 @@ describe('accounts', () => {
     expect(store.auth('Ann', B)).not.toHaveProperty('need');
     expect(store.auth('x', A)).toMatchObject({ ok: false });
     expect(store.auth('Ann', 'short')).toMatchObject({ ok: false, msg: 'Bad token.' });
+  });
+
+  it('refuses to claim a rude name, but an account that already has one keeps logging in', async () => {
+    const store = new AccountStore();
+    expect(store.auth('BigDickFisher', A)).toEqual({ ok: false, msg: 'The name "BigDickFisher" isn\'t allowed. Please pick another.' });
+    expect(await store.login('xx_ass_xx', A, 'anything')).toMatchObject({ ok: false, msg: expect.stringContaining("isn't allowed") });
+    // The 16-character cut would leave "Ass" at the end.
+    expect(store.auth('xxxxxxxxxxxxxAssociate', A)).toMatchObject({ ok: false, msg: expect.stringContaining('"xxxxxxxxxxxxxAss"') });
+    expect(store.names()).toEqual([]);
+    expect(store.auth('Cassandra', A)).toMatchObject({ ok: true, created: true });
+
+    const old = new AccountStore({ ass99: { name: 'Ass99', tokens: [hashOf(B)], save: newSave() } });
+    expect(old.auth('Ass99', B)).toMatchObject({ ok: true, created: false });
+    expect(old.auth('ass99', A)).toMatchObject({ ok: false, msg: expect.stringContaining('taken') });
   });
 
   it('asks a new browser for the password once one is set, then remembers that browser', async () => {

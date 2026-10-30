@@ -2,6 +2,7 @@ import type { HallRow } from '../src/net/protocol';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { migrate, newSave, type SaveData } from '../src/game/state';
+import { rudeName } from './chat';
 import { Lockout } from './lockout';
 
 export interface Account {
@@ -81,6 +82,9 @@ export class AccountStore {
     let acct = this.accounts.get(p.key);
     const created = !acct;
     if (!acct) {
+      // Only new claims: an account that already has such a name keeps logging in. The cut to 16
+      // characters can end on a rude word ("…Associate"), so the saved name is checked too.
+      if (rudeName(String(name)) || rudeName(p.clean)) return { ok: false, msg: `The name "${p.clean}" isn't allowed. Please pick another.` };
       acct = { name: p.clean, tokens: [p.h], save: newSave(), online: false };
       this.accounts.set(p.key, acct);
       this.touch();
