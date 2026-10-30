@@ -14,6 +14,7 @@
     "bench": "node scripts/bench.mjs",
     "bench:compare": "node scripts/bench-compare.mjs",
     "bench:ab": "node scripts/bench-ab.mjs",
+    "bench:load": "node scripts/hitch.mjs",
     "smoke": "tsx scripts/smoke.ts",
     "screenshots": "tsx scripts/screenshots.ts",
     "trailer": "tsx scripts/trailer.ts"

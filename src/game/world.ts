@@ -2,6 +2,7 @@ import { audio } from './audio';
 import * as THREE from 'three';
 import { LightPool } from './lightpool';
 import { NightGlow, glowTag } from './nightglow';
+import { revealAll } from './prewarm';
 import type { Location } from '../data/content';
 import type { MapDef } from '../data/maps';
 import {
@@ -113,6 +114,14 @@ export class World {
   private lite = false;
   /** Skip drawing (a full-screen notice covers the view); the scene still updates. */
   paused = false;
+  /**
+   * Skip drawing while `prewarm` is still compiling, so the page stays responsive instead of stalling
+   * on the compile. `Game` sets it while the join screen covers the view.
+   */
+  holdForShaders = false;
+  /** The running `prewarm`, until its shaders are ready and drawn once. */
+  private warming: Promise<unknown> | null = null;
+  private compiled = false;
   /** Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5. */
   private pixelCap = 1.25;
   private trees: Circle[] = [];
@@ -228,8 +237,42 @@ export class World {
 
   /** Lighter graphics for weaker devices: no sun shadows, grass or flowers, and 25% fewer pixels in each direction. */
   setLite(on: boolean): void {
+    const changed = on !== this.lite;
     this.lite = on;
     this.applyQuality();
+    // Shadows on or off changes most shader programs (before the first map is built there's nothing to compile).
+    if (changed && this.decor.children.length) this.prewarm();
+  }
+
+  /**
+   * Compiles the shader program of every material in the scene, hidden ones included, in the
+   * background (KHR_parallel_shader_compile where the browser has it). Otherwise each program
+   * compiles on its object's first draw, so the first look around a map stalls, for seconds on
+   * phones. Programs depend on the lights, fog and shadows, so this runs after each map build and
+   * graphics change.
+   */
+  prewarm(): void {
+    this.compiled = false;
+    const p: Promise<unknown> = this.renderer.compileAsync(this.scene, this.camera).then(() => {
+      if (this.warming === p) this.compiled = true;
+    });
+    this.warming = p;
+  }
+
+  /**
+   * Draws everything once, hidden objects included, clipped to one pixel. Some GPUs (phones) only
+   * finish a program on its first draw, so without this the first look around still stalls.
+   */
+  private warmDraw(): void {
+    const restore = revealAll(this.scene);
+    const r = this.renderer;
+    r.shadowMap.needsUpdate = true;
+    r.setScissorTest(true);
+    r.setScissor(0, 0, 1, 1);
+    r.render(this.scene, this.camera);
+    r.setScissorTest(false);
+    restore();
+    r.shadowMap.needsUpdate = true;
   }
 
   get isLite(): boolean {
@@ -471,6 +514,7 @@ export class World {
       this.decor.add(this.hall.group);
       this.lightPool.collect(this.decor);
       this.glow = null;
+      this.prewarm();
       return;
     }
 
@@ -524,6 +568,7 @@ export class World {
     this.lightPool.collect(this.decor);
     this.glow = new NightGlow(this.decor);
     this.decor.add(this.glow.group);
+    this.prewarm();
   }
 
   private buildTerrain(loc: Location): void {
@@ -1142,6 +1187,11 @@ export class World {
     this.fx.update(dt, t);
     this.bobber.visible = this.bobberVisible;
     if (this.frame++ % 3 === 0) this.renderer.shadowMap.needsUpdate = true;
-    if (!this.paused) this.renderer.render(this.scene, this.camera);
+    if (this.compiled) {
+      this.compiled = false;
+      this.warming = null;
+      this.warmDraw();
+    }
+    if (!this.paused && !(this.holdForShaders && this.warming)) this.renderer.render(this.scene, this.camera);
   }
 }

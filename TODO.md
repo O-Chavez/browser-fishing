@@ -6,7 +6,6 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- [ ] Hitching for the first few seconds after load, very noticeable on phones. Likely shader programs compiling on first draw rather than textures (most textures are generated in code); `renderer.compileAsync(scene, camera)` behind the join screen could hide it. Measure before fixing
 - [ ] 💬 Make the day/night cycle follow the server's clock, not each device's clock: players reported some saw night while others saw day at the same moment
   - Likely cause: each client draws the sky from its own device clock (`dayFraction(Date.now() / 1000)` in `World.updateDaylight`, `src/game/world.ts:390`), and a day lasts only 10 minutes (`DAY_SECONDS`, `src/game/daynight.ts`), so a phone clock off by a minute or two shifts its whole cycle. The server already decides night bites from its own clock (`server/room.ts:493`), so a skewed client can also show night while the server rolls day fish. Fix: the server sends its time (or the day fraction) on join and now and then, and the client uses that offset instead of its own clock
   - Also check the dev `/time` override (`m.dayFrac` in `server/room.ts`, `dayOverride` set in `src/game/game.ts:285`) only affects the player who typed it, and that it stays obvious when it's on
@@ -36,6 +35,10 @@ Finished items move to [DONE.md](DONE.md).
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
 - Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)
 - Shadows cost 3-6 ms per frame at the old resolution; fewer shadow casters/receivers on small props could help weaker GPUs
+- The first click or touch stalls about 200 ms in headless Chrome while `audio.start()` makes the `AudioContext` (`AudioOutputDevice::GetOutputDeviceInfo`, a synchronous call). It could be made at load (it starts suspended) and only resumed in the click, if real devices show the same stall
+- Shader programs that still compile on first use, because their objects aren't in the scene until later: fish models (`buildFish`, first catch or another player holding one), held items when switching hotbar slots, drops, and the join screen's character preview (its own WebGL context, ~1 s on SwiftShader before the notice is even dismissed). Hidden stand-ins in the scene, like the one `Avatars` keeps for `World.prewarm`, would cover the in-world ones
+- 🎨 The load-hitching fix moved all shader compiling behind the join screen, so on a slow phone the join screen freezes once for longer (SwiftShader: ~3 s of compiling became ~6 s there, and none after joining). If that's noticeable on real phones, the compile could be spread over several frames, or the warm-up draw skipped where the browser compiles fully at link time
+- Returning players don't get the full load-hitching fix: their join card hides as soon as the server answers the auto-join (`fishing-auto`, `Game.finishJoin`), often before the background `compileAsync` (`World.prewarm`) is done, and `holdForShaders` only holds while `#join` is up, so the first frames in game still wait on the shaders left. No worse than before, and `warmDraw` still covers what's out of view. Measure with `npm run bench:load` on an auto-join, then e.g. keep the join card up ("Loading…") until the prewarm finishes
 
 ### Gameplay and UI
 
