@@ -38,6 +38,10 @@ function hat(c: Cosmetic): string {
       return `<path d="M4 28 Q20 34 36 28 Q32 24 20 24.5 Q8 24 4 28 Z" fill="${col}" ${line}/><path d="M10 25 L12 12 Q16 9 20 12 Q24 9 28 12 L30 25 Z" fill="${col}" ${line}/><path d="M10.6 21 H29.4 L30 25 H10 Z" fill="#183128" ${line}/><rect x="18" y="20.5" width="4.5" height="4.5" fill="${GOLD}" ${line}/><path d="M11 22 Q6 10 12 2 Q14 12 13 22 Z" fill="${acc}" ${line}/><path d="M11.8 5 Q12 4 12 2" stroke="#50606e" stroke-width="2"/>`;
     case 'crown':
       return `<path d="M6 28 L5 11 L12 18 L16 7 L20 16 L24 7 L28 18 L35 11 L34 28 Z" fill="${col}" ${line}/><rect x="6" y="27" width="28" height="5" rx="1" fill="#c99a3c" ${line}/><circle cx="5" cy="10" r="1.8" fill="#fff5ee" ${line}/><circle cx="16" cy="6" r="1.8" fill="#fff5ee" ${line}/><circle cx="24" cy="6" r="1.8" fill="#fff5ee" ${line}/><circle cx="35" cy="10" r="1.8" fill="#fff5ee" ${line}/><path d="M20 19 L23 23 L20 27 L17 23 Z" fill="${acc}" ${line}/><circle cx="11" cy="29.5" r="1.3" fill="#ff4f6a"/><circle cx="29" cy="29.5" r="1.3" fill="#ff4f6a"/>`;
+    case 'souwester':
+      return `<path d="M3 31 Q8 33 14 30 L26 30 L31 20 Q34 22 36 28 Q30 32 20 32 Z" fill="${col}" ${line}/><path d="M9 28 Q8 12 20 11 Q31 12 31 28 Q20 30 9 28 Z" fill="${col}" ${line}/><path d="M9.5 24 Q20 27 30.5 24" stroke="${INK}" stroke-width="1" opacity=".4" fill="none"/><path d="M10 28 Q8 36 20 38 Q32 36 30 28" stroke="${acc}" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="M14 16 Q17 14 21 14" stroke="#fff" stroke-width="1.4" opacity=".45" fill="none" stroke-linecap="round"/>`;
+    case 'bicorne':
+      return `<path d="M2 20 Q20 2 38 20 Q20 38 2 20 Z" fill="${col}" ${line}/><path d="M3.5 19 Q20 4.5 36.5 19" stroke="${acc}" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M10 11 Q20 3 30 11 Q20 6 10 11 Z" fill="#fff" ${line}/><circle cx="2.5" cy="20" r="1.8" fill="${acc}" ${line}/><circle cx="37.5" cy="20" r="1.8" fill="${acc}" ${line}/><circle cx="27" cy="21" r="5" fill="${acc}" ${line}/>${star(27, 21, 3.2, '#fff6c8')}`;
     case 'visor':
       return `<path d="M7 18 Q20 13 33 18 L33 23 Q20 19 7 23 Z" fill="${col}" ${line}/><path d="M7 23 Q20 19 33 23 Q30 33 20 33 Q10 33 7 23 Z" fill="#2fa66a" ${line}/><path d="M8 23.5 Q20 19.5 32 23.5" stroke="${acc}" stroke-width="2" fill="none"/><path d="M7.5 18 Q20 13 32.5 18" stroke="${acc}" stroke-width="1.6" fill="none"/>`;
     case 'tophat':
@@ -64,6 +68,8 @@ function shirt(c: Cosmetic, clip: string): string {
     }
     case 'coat':
       return `${body(col, COAT)}<path d="M15 6 L20 15 L25 6 L27 9 L20 19 L13 9 Z" fill="#141f3a" ${line}/>${[17, 23, 29].map((y) => `<circle cx="17" cy="${y}" r="1.4" fill="${acc}"/><circle cx="23" cy="${y}" r="1.4" fill="${acc}"/>`).join('')}`;
+    case 'slicker':
+      return `${body(col)}<path d="M15 5.5 Q20 11 25 5.5 L27.5 8 Q20 15 12.5 8 Z" fill="${hex(c.color)}" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/><rect x="11" y="17" width="18" height="3.4" fill="${acc}" stroke="${INK}" stroke-width="1"/>${[23.5, 27.5, 31.5].map((y) => `<rect x="17.4" y="${y - 1.3}" width="5.2" height="2.6" rx="1.3" fill="#7a4a24" stroke="${INK}" stroke-width=".8"/>`).join('')}`;
     case 'cloak':
       return `<path d="M7 10 Q20 4 33 10 L38 38 H2 Z" fill="#3d2a8f" ${line}/><path d="M3 36.5 H37" stroke="${acc}" stroke-width="2.4"/>${body(col, COAT)}<path d="M15 6 Q20 10 25 6" stroke="#ff7ad9" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M9.5 35.5 H30.5" stroke="${acc}" stroke-width="2"/>${star(20, 14, 3.5)}`;
     case 'dealer':
@@ -97,6 +103,8 @@ function jewelry(c: Cosmetic): string {
       return `${chain(col)}<circle cx="20" cy="31" r="6.5" fill="${col}" ${line}/><path d="M20 26 L24 31 L20 36 L16 31 Z" fill="${acc}" ${line}/>${glint(18.5, 29.5)}`;
     case 'diamond':
       return `${chain(col)}<path d="${NECK}" fill="none" stroke="${acc}" stroke-width=".8" transform="translate(0 2.5)"/><path d="M14 28 L17 24.5 H23 L26 28 L20 37.5 Z" fill="${acc}" ${line}/><path d="M14 28 H26 M17 24.5 L20 28 L23 24.5 M20 28 V37" stroke="${INK}" stroke-width=".8" opacity=".5"/>`;
+    case 'compass':
+      return `${chain(col)}<rect x="18.5" y="19" width="3" height="4" fill="${col}" ${line}/><circle cx="20" cy="31" r="8" fill="${col}" ${line}/><circle cx="20" cy="31" r="5.6" fill="#dff3f2" stroke="${INK}" stroke-width="1"/><path d="M20 26 L21.7 31 L20 36 L18.3 31 Z" fill="${acc}" ${line} transform="rotate(35 20 31)"/><circle cx="20" cy="31" r="1" fill="${col}"/>`;
     case 'dice': {
       const die = (x: number, y: number, rot: number, pips: [number, number][]) =>
         `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-4.5" y="-4.5" width="9" height="9" rx="1.8" fill="${acc}" ${line}/>${pips.map(([px, py]) => `<circle cx="${px}" cy="${py}" r="1" fill="#fff"/>`).join('')}</g>`;

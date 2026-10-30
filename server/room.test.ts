@@ -5,7 +5,7 @@ import { newSave } from '../src/game/state';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { FISH } from '../src/data/content';
-import { sellValue } from '../src/game/progression';
+import { sellValue, xpForNextLevel } from '../src/game/progression';
 import { BOARD_MS, CLOCK_MS, Room } from './room';
 
 const conn = () => {
@@ -683,5 +683,40 @@ describe('scaling', () => {
     t.advance(BOARD_MS);
     t.room.snapshot();
     expect(last(a.c, 'hall').rows.map((r) => r.name)).toEqual(['Ann']);
+  });
+});
+
+describe('ranks and titles', () => {
+  it('announces a new rank to everyone when a catch reaches it', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    a.acct.save.level = 24;
+    a.acct.save.xp = xpForNextLevel(24) - 1;
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    advance(60_000);
+    room.handle(a.id, { t: 'catch' });
+    expect(a.acct.save.level).toBe(25);
+    expect(b.c.log.filter((m) => m.t === 'sys').map((m) => (m as { text: string }).text)).toContain('⚓ Ann made Bosun!');
+  });
+  it('shrugs off ids that are objects instead of crashing the server', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const bad = { toString: null } as unknown as string;
+    expect(() => room.handle(a.id, { t: 'title', id: bad })).not.toThrow();
+    expect(() => room.handle(a.id, { t: 'buyrod', id: bad })).not.toThrow();
+    expect(a.acct.save.title).toBe(null);
+  });
+  it('shows a worn title to the other players, and only an earned one', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'title', id: 'admiral' });
+    expect(b.c.log.some((m) => m.t === 'title')).toBe(false);
+    a.acct.save.titles.push('bosun');
+    room.handle(a.id, { t: 'title', id: 'bosun' });
+    expect(last(b.c, 'title')).toEqual({ t: 'title', id: a.id, title: 'bosun' });
+    const c = join('Cy');
+    expect(last(c.c, 'welcome').players.find((p) => p.id === a.id)?.title).toBe('bosun');
   });
 });

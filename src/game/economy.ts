@@ -1,7 +1,8 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
-import { applyXp, catchXp, eligibleFish, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
+import { TITLES, type Rank } from '../data/ranks';
+import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import { BAIT_SLOT, BAIT_STACK, FISH_SLOT, ROD_SLOT, slotCount, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
@@ -244,7 +245,8 @@ export function buyPerk(s: SaveData, id: string): boolean {
  */
 export function buyCosmetic(s: SaveData, id: string, at: CosShop = 'stall'): boolean {
   const c = cosById(id);
-  if (!c || c.shop !== at || s.owned.includes(id)) return false;
+  // Earned outfits come only with a rank, never from a counter.
+  if (!c || c.shop === 'earned' || c.shop !== at || s.owned.includes(id)) return false;
   if (c.shop === 'casino') {
     if (s.chips < c.price) return false;
     s.chips = Math.round((s.chips - c.price) * 10) / 10;
@@ -405,24 +407,63 @@ export interface CatchResult {
   gained: number;
   leveledUp: boolean;
   level: number;
+  /** Ranks reached with this catch (their titles and outfits are already given). */
+  ranks: Rank[];
 }
 
 export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false): CatchResult {
   const slot = freeFishSlot(s);
-  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level };
+  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [] };
   const entry = s.dex[fish.id];
   const first = !entry;
   const gained = catchXp(fish, size, first, shiny);
   const record = !!entry && size > entry.best;
-  s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0) };
+  const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
+  s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
   const bonus = charmBonus(s);
   s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(bonus > 0 ? { mult: 1 + bonus } : {}) };
   const value = Math.round(sellValue(fish, size, shiny) * (1 + bonus));
   if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
-  const res = applyXp(s.level, s.xp, gained);
+  const before = s.level;
+  const ranks = gainXp(s, gained);
+  return { stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks };
+}
+
+/** Adds XP: levels up, gives the gifts for levels past 50 and any ranks reached, and returns those ranks. */
+export function gainXp(s: SaveData, xp: number): Rank[] {
+  const before = s.level;
+  const res = applyXp(s.level, s.xp, xp);
   s.level = res.level;
   s.xp = res.xp;
-  return { stored: true, first, record, gained, leveledUp: res.leveledUp, level: res.level };
+  const g = levelGifts(before, s.level);
+  s.gifts.provisions += g.provisions;
+  s.gifts.fares += g.fares;
+  return grantRanks(s);
+}
+
+/** Back-paid levels give at most this many provisions and fares, so nobody gets dozens at once. */
+export const BACKPAY_GIFTS: Gifts = { provisions: 5, fares: 1 };
+
+/** Pays out the XP the old level-50 cap threw away (see `SaveData.backPay`), once. */
+export function payBack(s: SaveData): { levels: number; ranks: Rank[] } {
+  if (s.backPay.paid) return { levels: 0, ranks: [] };
+  const before = s.level;
+  const res = applyXp(s.level, s.xp, s.backPay.xp);
+  s.level = res.level;
+  s.xp = res.xp;
+  const g = levelGifts(before, s.level);
+  s.gifts.provisions += Math.min(g.provisions, BACKPAY_GIFTS.provisions);
+  s.gifts.fares += Math.min(g.fares, BACKPAY_GIFTS.fares);
+  s.backPay.paid = true;
+  return { levels: s.level - before, ranks: grantRanks(s) };
+}
+
+/** Wears an earned title under the name tag, or none (null). */
+export function setTitle(s: SaveData, id: unknown): boolean {
+  if (id !== null && (typeof id !== 'string' || !s.titles.includes(id) || !TITLES.some((t) => t.id === id))) return false;
+  if (s.title === id) return false;
+  s.title = id;
+  return true;
 }
 
 export const BOTTLE_COINS = 40;

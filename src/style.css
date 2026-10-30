@@ -59,6 +59,21 @@ canvas { display: block; position: fixed; inset: 0; }
 #lvl .track { stroke: rgba(255,255,255,.15); }
 #xpring { stroke: var(--gold); stroke-linecap: round; stroke-dasharray: 0 157.08; transition: stroke-dasharray .4s; }
 #lvl b { font-size: 22px; font-weight: 900; line-height: 1; }
+/* level pill past 50: the badge and ring take a colour at each milestone (see `pillTier`) */
+#lvl[data-pill="bronze"] { --pill: #d9904f; --pill-ink: #3a1d08; }
+#lvl[data-pill="silver"] { --pill: #d7dde6; --pill-ink: #232a35; }
+#lvl[data-pill="gold"] { --pill: #ffd23a; --pill-ink: #3a2a00; }
+#lvl[data-pill="aurora"] { --pill: #5af0c4; --pill-ink: #062a2a; }
+#lvl[data-pill] { box-shadow: var(--hud-edge), 0 0 0 3px var(--pill), 0 0 12px color-mix(in srgb, var(--pill) 60%, transparent); }
+#lvl[data-pill] #xpring { stroke: var(--pill); }
+#lvl[data-pill] .track { stroke: color-mix(in srgb, var(--pill) 40%, transparent); }
+#lvl[data-pill] small { background: var(--pill); color: var(--pill-ink); }
+#lvl[data-pill="aurora"] small { background: linear-gradient(100deg, #5af0c4, #7aa8ff, #c58bff, #5af0c4); background-size: 300% 100%; animation: aurora 5s linear infinite; }
+#lvl[data-pill="aurora"] { animation: auroraGlow 5s ease-in-out infinite; }
+@keyframes aurora { to { background-position: -300% 0; } }
+@keyframes auroraGlow { 0%, 100% { --pill: #5af0c4; } 33% { --pill: #7aa8ff; } 66% { --pill: #c58bff; } }
+@property --pill { syntax: '<color>'; inherits: true; initial-value: #5af0c4; }
+@media (prefers-reduced-motion: reduce) { #lvl[data-pill="aurora"], #lvl[data-pill="aurora"] small { animation: none; } }
 #lvl small { position: absolute; bottom: -8px; font-size: 10px; font-weight: 900; letter-spacing: .08em; padding: 0 6px; border-radius: 6px; background: var(--gold); color: var(--gold-ink); }
 .coin { display: inline-block; width: 26px; height: 26px; border-radius: 50%; flex: none; background: radial-gradient(circle at 35% 35%, #fff3b0, var(--gold) 45%, #c58a12); box-shadow: inset 0 -2px 0 #a8730d; }
 /* in a line of text (prices, toasts): sized by the font like the 🪙 emoji it replaced */
@@ -215,6 +230,8 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 
 #banner { position: fixed; top: 16%; left: 50%; transform: translateX(-50%); font-size: 44px; font-weight: 900; letter-spacing: 1px; text-align: center; pointer-events: none; text-shadow: 0 2px 12px rgba(0,0,0,.8), 0 0 28px currentColor; animation: bannerIn 3.2s ease-out forwards; z-index: 30; white-space: nowrap; }
 #banner small { display: block; font-size: 18px; font-weight: 600; opacity: .9; letter-spacing: 0; }
+#banner.rank { color: var(--gold); font-size: 52px; animation-duration: 4.6s; }
+#banner.rank small { margin-top: 6px; color: var(--cream); font-size: 20px; text-shadow: 0 1px 3px #000, 0 2px 12px rgba(0,0,0,.9); }
 #banner.welcome { color: var(--gold); animation-duration: 4.2s; }
 #banner.welcome small { margin-top: 6px; color: var(--cream); }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
@@ -395,6 +412,11 @@ canvas.preview.dragging { cursor: grabbing; }
 #catch[data-tier="5"] { background: radial-gradient(ellipse at 50% 18%, color-mix(in srgb, var(--glow) 22%, var(--paper)) 0%, var(--paper) 60%); }
 #catch[data-tier="4"]::after, #catch[data-tier="5"]::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-120%); animation: catchShine 2.6s ease-in-out .4s infinite; }
 #catch[data-tier="5"]::after { animation-duration: 1.8s; }
+#catch .rank-acts { display: flex; gap: 8px; justify-content: center; margin: 8px 0 2px; }
+#catch .btn.mini { padding: 6px 12px; font-size: 13px; border-radius: 10px; box-shadow: 0 3px 0 var(--gold-dark); }
+#catch .btn.mini:disabled { background: var(--paper-3); color: var(--ink-muted); box-shadow: none; }
+#catch .btn.mini kbd { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(0,0,0,.15); }
+body.touch #catch .btn.mini { padding: 10px 18px; font-size: 16px; }
 #catch .catch-ico { position: relative; }
 #catch[data-tier="3"] .catch-ico, #catch[data-tier="4"] .catch-ico, #catch[data-tier="5"] .catch-ico { background: radial-gradient(ellipse at center, color-mix(in srgb, var(--glow) 35%, transparent) 0%, transparent 65%); }
 #catch[data-tier="4"] .catch-ico .fishico, #catch[data-tier="5"] .catch-ico .fishico { animation: icoFloat 2.2s ease-in-out infinite alternate; }
@@ -403,6 +425,15 @@ canvas.preview.dragging { cursor: grabbing; }
 @keyframes catchGlow { from { box-shadow: 0 0 18px var(--glow); } to { box-shadow: 0 0 60px 6px var(--glow); } }
 @keyframes catchShine { 0% { transform: translateX(-120%); } 45%, 100% { transform: translateX(120%); } }
 @keyframes icoFloat { from { transform: translateY(2px) rotate(-2deg); } to { transform: translateY(-3px) rotate(2deg); } }
+
+/* Wardrobe title picker */
+.titles { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.ttl-chip { padding: 7px 12px; border-radius: 12px; font-size: 14px; font-weight: 900; background: var(--paper-3); color: var(--ink); box-shadow: 0 0 0 2px rgba(58,39,22,.12); }
+.ttl-chip:hover { box-shadow: 0 0 0 2px rgba(58,39,22,.35); }
+.ttl-chip.on { box-shadow: 0 0 0 3px var(--gold); }
+.ttl-chip.locked { opacity: .5; cursor: default; }
+.ttl-chip.locked:hover { box-shadow: 0 0 0 2px rgba(58,39,22,.12); }
+.ttl-chip small { font-size: 12px; font-weight: 800; color: var(--ink-muted); }
 
 /* Anglers */
 .list-head { margin: 0 0 12px; font-size: 15px; font-weight: 800; color: var(--ink-muted); }
@@ -415,6 +446,8 @@ canvas.preview.dragging { cursor: grabbing; }
 .angler b { font-size: 16px; font-weight: 900; }
 .angler .sup { margin-left: 5px; font-size: 13px; }
 .angler .you { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 6px; background: var(--gold); color: var(--gold-ink); }
+.angler .ttl, .tiles .ttl { font-size: 12px; font-weight: 800; color: var(--gold-dark); }
+.angler .who2 { min-width: 0; display: flex; flex-direction: column; }
 .angler .lv { margin-left: auto; font-weight: 900; padding: 3px 10px; border-radius: 10px; background: var(--paper-2); }
 
 .cols.anglers-cols { grid-template-columns: 1fr 1fr; }

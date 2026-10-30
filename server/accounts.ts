@@ -1,9 +1,14 @@
 import type { CasinoRecord, CasinoRecords, Gamble, HallRow } from '../src/net/protocol';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { payBack } from '../src/game/economy';
+import { applyXp } from '../src/game/progression';
 import { migrate, newSave, type SaveData } from '../src/game/state';
 import { rudeName } from './chat';
 import { Lockout } from './lockout';
+
+/** Accounts listed by `/backpay` before it says "and N more". */
+const BACKPAY_ROWS = 25;
 
 export interface Account {
   name: string;
@@ -157,9 +162,33 @@ export class AccountStore {
   hall(): HallRow[] {
     return (this.hallRows ??= [...this.accounts.values()]
       .filter((a) => a.save.best)
-      .map((a) => ({ name: a.name, level: a.save.level, best: a.save.best! }))
+      .map((a) => ({ name: a.name, level: a.save.level, best: a.save.best!, ...(a.save.title ? { title: a.save.title } : {}) }))
       .sort((a, b) => b.best.value - a.best.value || a.name.localeCompare(b.name))
       .slice(0, 8));
+  }
+
+  /** Every account, online or not. */
+  all(): Account[] {
+    return [...this.accounts.values()];
+  }
+
+  /**
+   * Dev console `/backpay`: lists every account still owed the XP the old level-50 cap threw away,
+   * with the level it would reach; with `apply`, pays them all. Returns the accounts paid and their levels.
+   */
+  backPay(apply: boolean): { lines: string[]; paid: { acct: Account; levels: number }[] } {
+    const due = [...this.accounts.values()].filter((a) => !a.save.backPay.paid).sort((a, b) => b.save.backPay.xp - a.save.backPay.xp);
+    if (!due.length) return { lines: ['No back pay owed.'], paid: [] };
+    const rows = due.slice(0, BACKPAY_ROWS).map((a) => {
+      const to = applyXp(a.save.level, a.save.xp, a.save.backPay.xp).level;
+      return `${a.name}: Lv ${a.save.level} → ${to} (+${a.save.backPay.xp.toLocaleString('en-US')} XP)`;
+    });
+    if (due.length > BACKPAY_ROWS) rows.push(`…and ${due.length - BACKPAY_ROWS} more`);
+    if (!apply) return { lines: [...rows, `${due.length} account${due.length === 1 ? '' : 's'} owed. /backpay apply pays them all.`], paid: [] };
+    const paid = due.map((acct) => ({ acct, levels: payBack(acct.save).levels }));
+    this.hallRows = null;
+    this.touch();
+    return { lines: [...rows, `Paid ${due.length} account${due.length === 1 ? '' : 's'}.`], paid };
   }
 
   /** Every account name, for matching a Ko-fi tip to a player. */

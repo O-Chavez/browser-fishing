@@ -15,6 +15,8 @@ export interface PlayerInfo {
   coins: number;
   level?: number;
   best?: BestCatch | null;
+  /** Title id worn under the name tag (see `TITLES`, `src/data/ranks.ts`). */
+  title?: string | null;
   /** Current fishing activity, for other players' avatars. */
   act?: Activity;
 }
@@ -45,6 +47,8 @@ export type ClientMsg =
   | { t: 'equip'; slot: CosSlot; id: string | null }
   | { t: 'color'; color: number }
   | { t: 'face'; id: string }
+  /** Wear an earned title under the name tag, or none. */
+  | { t: 'title'; id: string | null }
   | { t: 'reset' }
   /** Take the hotbar slot (0-based) in hand. */
   | { t: 'slot'; i: number }
@@ -104,6 +108,8 @@ export type ServerMsg =
   /** Player `id` jumped (sent to the others on their map). */
   | { t: 'jump'; id: number }
   | { t: 'look'; id: number; look: Look }
+  /** Player `id` now wears this title id (or none). */
+  | { t: 'title'; id: number; title: string | null }
   /** Coins per player id, for the leaderboard. */
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
@@ -122,7 +128,7 @@ export type ServerMsg =
    */
   | { t: 'dev'; lines: string[]; time?: number | null; sent?: boolean };
 
-export interface HallRow { name: string; level: number; best: BestCatch }
+export interface HallRow { name: string; level: number; best: BestCatch; title?: string | null }
 
 export type CasinoGame = 'blackjack' | 'roulette' | 'wheel';
 /** One settled hand or spin: the coins it won or lost, and the fish that was bet. */

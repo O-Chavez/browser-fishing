@@ -213,6 +213,12 @@ export class NetClient {
         this.events.onPlayers();
         break;
       }
+      case 'title': {
+        const p = this.players.get(m.id);
+        if (p) p.title = m.title;
+        this.events.onPlayers();
+        break;
+      }
       case 'hall':
         this.hall = m.rows;
         this.events.onBoard();

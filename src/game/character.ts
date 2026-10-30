@@ -304,6 +304,44 @@ function hatModel(c: Cosmetic, g: THREE.Group): void {
       sparkles(g, 0xfff1a8, 1.95, 0.42);
       break;
     }
+    case 'souwester': {
+      // Oilskin Sou'wester: waxed yellow, a low round crown, a short front brim, a long back brim and a chin cord.
+      add(g, new THREE.SphereGeometry(0.215, 12, 6, 0, Math.PI * 2, 0, H), m(1, 'satin'), { p: [0, 1.66, 0] });
+      add(g, new THREE.CylinderGeometry(0.25, 0.25, 0.02, 14, 1, false, -H, Math.PI), m(1, 'satin'), { p: [0, 1.665, 0], s: [1, 1, 0.95], r: [0.15, 0, 0] });
+      add(g, new THREE.CylinderGeometry(0.27, 0.27, 0.02, 14, 1, false, H, Math.PI), m(1, 'satin'), { p: [0, 1.665, 0], s: [1.04, 1, 1.4], r: [-0.4, 0, 0] });
+      add(g, new THREE.TorusGeometry(0.212, 0.012, 4, 16), m(0.8, 'satin'), { p: [0, 1.672, 0], r: [H, 0, 0] });
+      const cord = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.2, 1.66, 0.02), new THREE.Vector3(-0.17, 1.5, 0.13), new THREE.Vector3(0, 1.43, 0.19), new THREE.Vector3(0.17, 1.5, 0.13), new THREE.Vector3(0.2, 1.66, 0.02)]);
+      add(g, new THREE.TubeGeometry(cord, 14, 0.007, 4), a());
+      break;
+    }
+    case 'bicorne': {
+      // Admiral's Bicorne: a navy crescent worn side to side, gold braid, a rosette with a glowing star and a white plume.
+      const hat = new THREE.Shape();
+      hat.moveTo(-0.44, 1.9);
+      hat.quadraticCurveTo(0, 2.12, 0.44, 1.9);
+      hat.quadraticCurveTo(0, 1.58, -0.44, 1.9);
+      add(g, new THREE.ExtrudeGeometry(hat, { depth: 0.34, bevelEnabled: false }), m(1, 'satin'), { p: [0, 0, -0.17] });
+      const top = (z: number) => new THREE.QuadraticBezierCurve3(new THREE.Vector3(-0.44, 1.9, z), new THREE.Vector3(0, 2.12, z), new THREE.Vector3(0.44, 1.9, z));
+      addMany(g, a('metal'), [
+        [new THREE.TubeGeometry(top(0.172), 14, 0.012, 4), {}],
+        [new THREE.TubeGeometry(top(-0.172), 14, 0.012, 4), {}],
+        [new THREE.SphereGeometry(0.03, 6, 4), { p: [-0.44, 1.9, 0] }],
+        [new THREE.SphereGeometry(0.03, 6, 4), { p: [0.44, 1.9, 0] }],
+      ]);
+      // A white plume lies along the crest.
+      const crest = top(0);
+      addMany(g, mat(WHITE, 'satin'), [0, 1, 2, 3, 4, 5, 6].map((i) => {
+        const t = 0.12 + i * 0.13;
+        const at = crest.getPoint(t);
+        return [new THREE.SphereGeometry(1, 6, 5), { p: [at.x, at.y + 0.03, 0], s: [0.075, 0.04, 0.09 - Math.abs(t - 0.5) * 0.1], r: [0, 0, (0.5 - t) * 0.9] }];
+      }));
+      // Gold rosette on the front, with a little glowing star.
+      add(g, new THREE.CylinderGeometry(0.05, 0.05, 0.02, 10), a('metal'), { p: [0.27, 1.9, 0.175], r: [H, 0, 0] });
+      add(g, new THREE.TorusGeometry(0.05, 0.01, 4, 12), a('metal'), { p: [0.27, 1.9, 0.18] });
+      add(g, new THREE.OctahedronGeometry(0.03), a('glow'), { p: [0.27, 1.9, 0.195], s: [1, 1, 0.5] });
+      sparkles(g, 0xfff1a8, 2.0, 0.5);
+      break;
+    }
     case 'visor':
       // Dealer's Visor: an open felt band, a gold rim and a green brim.
       add(g, new THREE.CylinderGeometry(0.205, 0.215, 0.08, 14, 1, true), mat(c.color, 'satin', THREE.DoubleSide), { p: [0, 1.72, 0] });
@@ -384,6 +422,15 @@ function shirtModel(c: Cosmetic, g: THREE.Group): void {
       for (const s of [-1, 1]) for (const y of [0.72, 0.9, 1.08]) btn.push([new THREE.SphereGeometry(0.028, 6, 4), { p: [s * 0.09, y, front(y) - 0.005], s: [1, 1, 0.6] }]);
       addMany(g, a('metal'), btn);
       addMany(g, m(0.7, 'satin'), [hoop(0.335, 0.02, 0.5)]);
+      break;
+    }
+    case 'slicker': {
+      // Storm Slicker: waxed yellow rain jacket with a rolled hood, three wooden toggles and a reflective band.
+      torso(g, m(1, 'satin'));
+      add(g, new THREE.TorusGeometry(0.2, 0.05, 5, 14), m(0.85, 'satin'), { p: [0, 1.42, -0.03], r: [H - 0.3, 0, 0] });
+      add(g, new THREE.SphereGeometry(0.12, 7, 5), m(0.85, 'satin'), { p: [0, 1.38, -0.22], s: [1.3, 0.8, 0.7] });
+      addMany(g, mat(0x7a4a24), [0.66, 0.81, 0.96].map((y) => [new THREE.CapsuleGeometry(0.014, 0.05, 2, 5), { p: [0, y, front(y) + 0.005], r: [0, 0, H] }]));
+      addMany(g, a('satin'), [hoop(rAt(1.15) + 0.006, 0.03, 1.15)]);
       break;
     }
     case 'cloak': {
@@ -478,6 +525,19 @@ function jewelryModel(c: Cosmetic, g: THREE.Group): void {
       add(g, new THREE.OctahedronGeometry(0.1), mat(c.accent, 'glow'), { p: [hx, hy - 0.03, hz + 0.02], s: [0.85, 1.25, 0.55] });
       sparkles(g, 0xffffff, 1.2, 0.48, 5, 1.2);
       break;
+    case 'compass': {
+      // Brass Compass: a round case with a pale glass face and a red needle that swings back and forth.
+      chain(g, mat(c.color, 'metal'), 0.011);
+      add(g, new THREE.CylinderGeometry(0.08, 0.08, 0.03, 14), mat(c.color, 'metal'), { p: [hx, hy - 0.02, hz], r: [H, 0, 0] });
+      add(g, new THREE.TorusGeometry(0.08, 0.011, 4, 14), mat(shade(c.color, 1.2), 'metal'), { p: [hx, hy - 0.02, hz + 0.015] });
+      add(g, new THREE.CylinderGeometry(0.065, 0.065, 0.01, 14), mat(0xdff3f2, 'gem'), { p: [hx, hy - 0.02, hz + 0.018], r: [H, 0, 0] });
+      add(g, new THREE.CylinderGeometry(0.012, 0.012, 0.04, 5), mat(c.color, 'metal'), { p: [hx, hy + 0.07, hz] });
+      const needle = add(g, new THREE.OctahedronGeometry(0.05), mat(c.accent, 'glow'), { s: [0.2, 1, 0.1] });
+      needle.position.set(hx, hy - 0.02, hz + 0.028);
+      needle.castShadow = false;
+      needle.userData.sway = 0.5;
+      break;
+    }
     case 'dice': {
       // Lucky Dice Chain: gold links and a pair of red dice showing seven.
       chain(g, mat(c.color, 'metal'), 0.014);
@@ -533,6 +593,8 @@ export class Character {
   private outfit = new THREE.Group();
   /** Legendary sparkles that turn in `tick`. */
   private spinners: THREE.Object3D[] = [];
+  /** Things that swing back and forth in `tick`, like a compass needle. */
+  private swayers: THREE.Object3D[] = [];
   private key = '';
 
   constructor(look: Look) {
@@ -554,12 +616,14 @@ export class Character {
     // Pieces are clones of shared templates, so there is nothing to dispose.
     this.outfit.clear();
     this.spinners = [];
+    this.swayers = [];
     for (const slot of ['hat', 'shirt', 'jewelry'] as const) {
       const c = cosById(look[slot]);
       if (!c) continue;
       const piece = outfitPiece(c);
       piece.traverse((o) => {
         if (o.userData.spin) this.spinners.push(o);
+        if (o.userData.sway) this.swayers.push(o);
       });
       this.outfit.add(piece);
     }
@@ -578,6 +642,7 @@ export class Character {
       o.rotation.y = t * (o.userData.spin as number);
       o.position.y = Math.sin(t * 1.7) * 0.03;
     }
+    for (const o of this.swayers) o.rotation.z = Math.sin(t * 1.3) * (o.userData.sway as number);
   }
 }
 

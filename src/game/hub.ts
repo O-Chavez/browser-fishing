@@ -113,6 +113,7 @@ export interface LeaderRow {
   tier: number;
   color: string;
   shiny?: boolean;
+  title?: string | null;
 }
 
 /** The town hub: vendor stall with its keeper and the gate to the next map. */

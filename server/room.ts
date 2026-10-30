@@ -96,6 +96,8 @@ export class Room {
   recordGamble: (acct: Account, win: boolean, g: Gamble) => boolean = () => false;
   /** The casino's all-time biggest win and loss; the server points this at the account store. */
   records: () => CasinoRecords = () => NO_RECORDS;
+  /** Dev console `/backpay`: lists, or with `apply` pays, the XP the old level-50 cap threw away. The server points this at the account store. */
+  backPay: (apply: boolean) => string[] = () => ['No account store.'];
   /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -123,7 +125,7 @@ export class Room {
     const id = this.nextId++;
     const map = this.maps[acct.save.location] ?? Object.values(this.maps)[0];
     acct.save.location = map.id;
-    const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null };
+    const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
     const m: Member = { info, conn, acct, pending: null, spin: null, bj: null };
     acct.online = true;
     const it = acct.save.slots[acct.save.held];
@@ -233,6 +235,14 @@ export class Room {
       case 'lure':
         changed = eco.setLure(s, msg.on);
         break;
+      case 'title':
+        changed = eco.setTitle(s, msg.id === null ? null : str(msg.id));
+        if (changed) {
+          m.info.title = s.title;
+          this.broadcast({ t: 'title', id, title: s.title });
+          this.hallStale();
+        }
+        break;
       case 'reset':
         m.pending = null;
         this.resetAccount(m);
@@ -290,6 +300,8 @@ export class Room {
     s.look = look;
     this.setAct(m, null);
     this.broadcast({ t: 'look', id: m.info.id, look });
+    m.info.title = null;
+    this.broadcast({ t: 'title', id: m.info.id, title: null });
   }
 
   private stocks(m: Member): { rods: string[]; bait: string[] } {
@@ -390,6 +402,10 @@ export class Room {
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply([this.setSupporter(who, !off)]);
     }
+    if (cmd === 'backpay') {
+      console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
+      return reply(this.backPay(args[0] === 'apply'));
+    }
     if (cmd === 'resetpass') {
       // The last word is the password, so names with spaces work; it never reaches the log.
       if (args.length < 2) return reply(['Usage: /resetpass <name> <new password>']);
@@ -413,6 +429,15 @@ export class Room {
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: m.acct.save });
+  }
+
+  /** After `/backpay apply`: an online player gets their new save and hears what it paid. */
+  paidBack(acct: Account, levels: number): void {
+    for (const m of this.members.values()) {
+      if (m.acct !== acct) continue;
+      m.conn.send({ t: 'state', save: acct.save });
+      if (levels > 0) m.conn.send({ t: 'notice', msg: `⚓ Back pay: your catches since level 50 earned you ${levels} level${levels === 1 ? '' : 's'}!` });
+    }
   }
 
   private teleport(m: Member, map: string): void {
@@ -545,10 +570,12 @@ export class Room {
       this.setAct(m, null);
       return false;
     }
-    if (!eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny).stored) {
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny);
+    if (!res.stored) {
       this.setAct(m, null);
       return false;
     }
+    for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
     const bonus = eco.charmBonus(m.acct.save);
     this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(bonus > 0 ? { mult: 1 + bonus } : {}) });
     return true;
@@ -673,4 +700,5 @@ export class Room {
 const finite = (...n: number[]) => n.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e4);
 const round = (v: number) => Math.round(v * 100) / 100;
 const snapEntry = (m: Member): [number, number, number, number] => [m.info.id, round(m.info.x), round(m.info.z), round(m.info.yaw)];
-const str = (v: unknown) => String(v ?? '').slice(0, 32);
+/** Untrusted ids: only strings and numbers count, since `String()` throws on objects like `{ toString: null }`. */
+const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 32) : typeof v === 'number' ? String(v) : '');

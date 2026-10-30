@@ -180,3 +180,24 @@ describe('accounts', () => {
     expect(again.find((m) => m.t === 'welcome')).toMatchObject({ hasPass: true });
   });
 });
+
+describe('back pay for the old level cap', () => {
+  const vet = () => {
+    const save: Record<string, unknown> = { ...newSave(), level: 50, xp: 0, dex: { constellation: { count: 3000, best: 250 } } };
+    delete save.backPay;
+    return save;
+  };
+  it('previews what each account is owed, then pays it once', () => {
+    const store = new AccountStore({ ann: { name: 'Ann', tokens: ['x'], save: vet() }, bob: { name: 'Bob', tokens: ['y'], save: { ...newSave(), level: 12 } } });
+    const preview = store.backPay(false);
+    expect(preview.paid).toEqual([]);
+    expect(preview.lines[0]).toMatch(/^Ann: Lv 50 → \d+ \(\+[\d,]+ XP\)$/);
+    expect(preview.lines.at(-1)).toContain('1 account owed');
+    const ann = store.all().find((a) => a.name === 'Ann')!;
+    expect(ann.save.level).toBe(50);
+    const res = store.backPay(true);
+    expect(res.paid).toHaveLength(1);
+    expect(ann.save.level).toBe(50 + res.paid[0].levels);
+    expect(store.backPay(true).lines).toEqual(['No back pay owed.']);
+  });
+});
