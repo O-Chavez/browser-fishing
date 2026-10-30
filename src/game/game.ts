@@ -1359,6 +1359,11 @@ export class Game {
 
   private openMenu(tab: string): void {
     this.tab = tab;
+    // A shop opens on your own look; nothing is tried on until you pick an item.
+    if (tab === 'shop' || tab === 'casino') {
+      delete this.pick.cos;
+      delete this.pick.ccos;
+    }
     this.keepTab = true;
     this.holding = false;
     this.keys.clear();
@@ -3342,8 +3347,7 @@ export class Game {
     const items = COSMETICS.filter((c) => c.shop === shop);
     const money = shop === 'casino' ? s.chips : s.coins;
     const picked = cosById(this.pick[key]);
-    const chosen = picked?.shop === shop ? picked : (items.find((x) => !s.owned.includes(x.id)) ?? items[0]);
-    this.pick[key] = chosen.id;
+    const chosen = picked?.shop === shop ? picked : undefined;
     const sections = COS_SLOTS.map((slot) => {
       const cards = items
         .filter((c) => c.slot === slot)
@@ -3352,11 +3356,26 @@ export class Game {
           const has = s.owned.includes(c.id);
           const wearing = s.look[slot] === c.id;
           const sub = has ? (wearing ? 'Wearing' : 'Owned') : this.cosPrice(c);
-          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, on: chosen.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, on: chosen?.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
         })
         .join('');
       return cards ? `<h4>${this.slotTitle(slot)}</h4><div class="tiles">${cards}</div>` : '';
     }).join('');
+    const intro = shop === 'casino' ? '<p class="cos-intro">High-roller outfits sold only here, for chips. Nobody at the pond can sell you these.</p>' : '';
+    // Until an item is picked, the preview shows what you're wearing now.
+    if (!chosen) {
+      const yours = this.detail({
+        top: '<div id="pv-slot"></div>',
+        icon: '🪞',
+        name: 'Your look',
+        tier: 1,
+        badge: '<span class="badge" style="--c:var(--t1)">Wearing now</span>',
+        body: '',
+        note: 'Hover any item to try it on. Click one to see its price and buy it.',
+        actions: '',
+      });
+      return `<div class="cols"><div class="main">${intro}${sections}</div>${yours}</div>`;
+    }
     const has = s.owned.includes(chosen.id);
     const wearing = s.look[chosen.slot] === chosen.id;
     const action = wearing
@@ -3381,7 +3400,6 @@ export class Game {
       note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.'}`,
       actions: action,
     });
-    const intro = shop === 'casino' ? '<p class="cos-intro">High-roller outfits sold only here, for chips. Nobody at the pond can sell you these.</p>' : '';
     return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
   }
 
