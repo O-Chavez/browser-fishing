@@ -35,6 +35,8 @@ export type ClientMsg =
   /** The player jumped; others on the map replay the arc. */
   | { t: 'jump' }
   | { t: 'buyrod'; id: string }
+  /** The Aurora Rod's next level, at the stall (`levelRod`). */
+  | { t: 'levelrod' }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
   | { t: 'equiprod'; id: string }

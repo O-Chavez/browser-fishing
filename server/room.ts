@@ -229,6 +229,9 @@ export class Room {
       case 'buyrod':
         changed = this.atVendor(m) && this.stocks(m).rods.includes(str(msg.id)) && eco.buyRod(s, str(msg.id));
         break;
+      case 'levelrod':
+        changed = this.atVendor(m) && eco.levelRod(s);
+        break;
       case 'buybait':
         changed = this.atVendor(m) && this.stocks(m).bait.includes(str(msg.id)) && eco.buyBait(s, str(msg.id));
         break;

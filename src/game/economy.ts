@@ -1,6 +1,7 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
+import { ROD_LEVEL } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import type { DishId, StageId } from '../data/smokehouse';
@@ -103,6 +104,31 @@ export function equipRod(s: SaveData, id: string): boolean {
   s.rod = id;
   return true;
 }
+
+/** What taking the Aurora Rod from +n-1 to +n costs. */
+export function rodLevelCost(n: number): { coins: number; pearls: number } {
+  const L = ROD_LEVEL;
+  return { coins: Math.min(L.coinCap, L.coins + L.coinsPer * n), pearls: L.pearls + L.pearlsPer * n };
+}
+
+/** The next Aurora Rod level, paid in coins and Black Pearls. The level is the player's, so it stays if the rod is dropped. */
+export function levelRod(s: SaveData): boolean {
+  const cost = rodLevelCost(s.rodLevel + 1);
+  if (!ownsRod(s, ROD_LEVEL.rod) || s.coins < cost.coins || s.pearls < cost.pearls) return false;
+  s.coins -= cost.coins;
+  s.pearls -= cost.pearls;
+  s.rodLevel++;
+  return true;
+}
+
+/** The rod level a sea fight uses (`seaDifficulty`): the Aurora Rod's while it's the rod in use. */
+export const seaRodLevel = (s: SaveData): number => rodLevelOf(s, s.rod);
+
+/** This rod's level: the save's rod level for the Aurora Rod, 0 for the others. */
+export const rodLevelOf = (s: SaveData, id: string): number => (id === ROD_LEVEL.rod ? s.rodLevel : 0);
+
+/** A rod's level as shown after its name: " +12" on a levelled Aurora Rod, else nothing. */
+export const rodPlus = (s: SaveData, id: string): string => (rodLevelOf(s, id) > 0 ? ` +${s.rodLevel}` : '');
 
 /** Equips a bait type: the stack in the bait slot goes back to the locker and a fresh stack comes out. */
 export function equipBait(s: SaveData, id: string): boolean {

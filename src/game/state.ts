@@ -90,6 +90,10 @@ export interface SaveData {
   bottles: string[];
   /** Casino currency, earned by turning fish in at the prize shop. */
   chips: number;
+  /** Black Pearls, banked from sea dives and spent on rod levels. Never sold anywhere. */
+  pearls: number;
+  /** The Aurora Rod's level (+N), bought at the stall; each makes sea fights 3% easier (see `ROD_LEVEL`). */
+  rodLevel: number;
   /** Casino perks owned (see `PERKS`). */
   perks: string[];
   /** Shiny Lure casts left. */
@@ -137,6 +141,8 @@ export const newSave = (): SaveData => ({
   best: null,
   bottles: [],
   chips: 0,
+  pearls: 0,
+  rodLevel: 0,
   perks: [],
   lure: 0,
   lureOff: false,
@@ -288,6 +294,8 @@ export function migrate(raw: object): SaveData {
   if (!Array.isArray(out.perks)) out.perks = [];
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
+  out.pearls = Number.isFinite(out.pearls) ? Math.max(0, Math.floor(out.pearls)) : 0;
+  out.rodLevel = Number.isFinite(out.rodLevel) ? Math.max(0, Math.floor(out.rodLevel)) : 0;
   out.lureOff = out.lureOff === true;
   // Saves from before the tips only get them if they haven't started playing yet.
   out.tips = Array.isArray(data.tips) ? data.tips.filter(isTip) : isFreshSave(out) ? [] : [...TIP_IDS];

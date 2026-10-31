@@ -11,6 +11,9 @@ export const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&a
 /** The HUD's gold coin, sized to sit on a line of text. Prices use it instead of the 🪙 emoji, which looks different on every platform. */
 export const COIN = '<span class="coin t"></span>';
 
+/** A Black Pearl, sized like `COIN`: the dive currency that buys rod levels. */
+export const PEARL = '<span class="bpearl t"></span>';
+
 /** HTML with every 🪙 swapped for the gold coin: for text that also travels as plain text (server notices, casino results). */
 export const withCoins = (html: string): string => html.replaceAll('🪙', COIN);
 

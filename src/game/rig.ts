@@ -84,17 +84,31 @@ export class Rig {
     this.pivot.add(this.accent);
     this.glow.visible = false;
     this.tip.add(this.glow);
+    this.halo.visible = false;
+    this.tip.add(this.halo);
   }
 
   private accent = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.06, 8).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   private glow = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  /** A soft light around the tip of a levelled Aurora Rod, growing with each glow step. */
+  private halo = new THREE.Mesh(
+    new THREE.SphereGeometry(0.045, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  /** The last glow step cycles through the rainbow (see `update`). */
+  private rainbow = false;
 
-  /** Colors the rod's grip band by gear tier; high tiers also get a glowing tip. */
-  setLook(color: number, tier: number): void {
-    (this.accent.material as THREE.MeshBasicMaterial).color.setHex(color);
+  /**
+   * Colors the rod's grip band by gear tier; high tiers also get a glowing tip. `step` is the Aurora Rod's glow step
+   * (one per 5 rod levels, `GLOW_STEPS`): from 1 on the tip gets a halo that grows with it; `color` null is the rainbow.
+   */
+  setLook(color: number | null, tier: number, step = 0): void {
+    this.rainbow = color === null;
+    for (const m of [this.accent, this.glow, this.halo]) (m.material as THREE.MeshBasicMaterial).color.setHex(color ?? 0xffffff);
     this.accent.visible = tier > 1;
-    (this.glow.material as THREE.MeshBasicMaterial).color.setHex(color);
     this.glow.visible = tier >= 4;
+    this.halo.visible = step > 0;
+    this.halo.scale.setScalar(1 + 0.3 * Math.max(0, Math.min(step - 1, 5)));
   }
 
   pose(p: Pose): void {
@@ -133,6 +147,8 @@ export class Rig {
 
     this.crank.rotation.x += this.reelSpeed * dt;
     this.reelSpeed *= Math.exp(-4 * dt);
+
+    if (this.rainbow) for (const m of [this.accent, this.glow, this.halo]) (m.material as THREE.MeshBasicMaterial).color.setHSL((this.t * 0.12) % 1, 0.85, 0.62);
   }
 }
 

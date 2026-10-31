@@ -133,6 +133,22 @@ describe('Room economy', () => {
     expect(a.acct.save.coins).toBeLessThan(500);
   });
 
+  it('levels the Aurora Rod only at the vendor', () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    Object.assign(s, { level: 20, coins: 100_000, pearls: 200 });
+    s.locker.rods.push('aurora');
+    room.handle(a.id, { t: 'levelrod' });
+    expect(s.rodLevel).toBe(0);
+    atShop(a);
+    room.handle(a.id, { t: 'levelrod' });
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 88, coins: 46_000 });
+    expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 88 });
+    room.handle(a.id, { t: 'levelrod' });
+    expect(s.rodLevel).toBe(1);
+  });
+
   it('rolls fish on the server and rejects instant catches', () => {
     const { room, join, advance } = setup();
     const a = join('Ann');
