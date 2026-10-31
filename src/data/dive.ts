@@ -73,8 +73,12 @@ export const DIVE = {
   holdMs: 120_000,
 };
 
-/** Whether players can dive yet: Captain Reed's charters are open (D3), so the rod levels show to every Aurora Rod owner. */
-export const DIVES_OPEN = true;
+/**
+ * Whether players can start a charter at Captain Reed's seaplane. Closed while charters are being worked on: Reed's
+ * panel says his plane isn't ready, the server refuses `dive`, and only the dev console's `/sea` sails out. While
+ * closed, the rod levels only show to players who already have pearls or a level.
+ */
+export const DIVES_OPEN = false;
 
 /**
  * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's
