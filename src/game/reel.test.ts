@@ -206,7 +206,7 @@ describe('server-checked fights', () => {
   /** A bot fight with its button log, and the same fight replayed from the log. */
   const recorded = (d: number, seed: number, react = 0.25, style = STYLES[0]) => {
     const log = new HoldLog();
-    const live = botFight(d, react, style, mulberry(seed), mulberry(seed + 1), 600, log);
+    const live = botFight(d, react, style, mulberry(seed), mulberry(seed + 1), undefined, 600, log);
     return { live, log, replay: replayFight(d, seed, log.encode())! };
   };
 
