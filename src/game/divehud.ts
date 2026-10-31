@@ -103,8 +103,17 @@ function waterText(depth: number): string {
   return `${fight}. ${plural(pearlsAt(depth), 'pearl')} a fish.`;
 }
 
-/** Captain Reed's panel: where to start a charter from (the harbour or a charted marker), or what a charter needs. */
-export function reedHtml(o: { say: string; chart: Chart; pearls: number; ownsRod: boolean; pick: number }): string {
+/**
+ * Captain Reed's panel: where to start a charter from (the harbour or a charted marker), or what a charter needs.
+ * While charters are closed (`DIVES_OPEN`), what a charter is and that his seaplane isn't ready yet.
+ */
+export function reedHtml(o: { say: string; chart: Chart; pearls: number; ownsRod: boolean; pick: number; open: boolean }): string {
+  if (!o.open) {
+    const rod = byId(RODS, DIVE.rod);
+    return `<div class="reed"><p class="say">"Still tinkering with the old girl's engine. She'll be flying again soon, I promise."</p>
+      <div class="detail"><b>Charters are coming soon.</b> Reed flies you out to sea, and each fish you land takes the boat a league further out. Every ${DIVE.ledgeEvery} leagues there's a marker: head home with your haul, or sail on for a bigger one. The haul is only safe once you head home at a marker. Charters will need the ${rod.name}${o.ownsRod ? ', and you have one.' : `, which Marlow sells from level ${rod.unlockLevel}.`}</div>
+      <div class="btns"><button class="btn plain" data-act="close">OK</button></div></div>`;
+  }
   if (!o.ownsRod) {
     const rod = byId(RODS, DIVE.rod);
     return `<div class="reed"><p class="say">"The open sea snaps lesser rods like reeds. No offence to me."</p>

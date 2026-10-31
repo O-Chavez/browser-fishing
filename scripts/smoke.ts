@@ -805,11 +805,21 @@ async function tripChecks(): Promise<void> {
   await page.evaluate(() => window.__game.interact());
   await sleep(300);
   const reed = await tab();
-  check("charter: talking to Captain Reed opens his panel with the harbour to start from", reed.includes('tab-reed') && reed.includes('Harbour') && reed.includes('Cast off'), reed.slice(0, 160));
-  await page.click('#menu [data-act="castoff"]');
+  // Charters are closed while they're worked on (`DIVES_OPEN`): Reed explains them, and the dev console's /sea 0 sails
+  // from the harbour instead.
+  check("charter: talking to Captain Reed explains charters and that his seaplane isn't ready", reed.includes('tab-reed') && reed.includes('Charters are coming soon') && !reed.includes('Cast off'), reed.slice(0, 160));
+  await page.click('#menu [data-act="close"]');
+  const dev = async (line: string) => {
+    await page.keyboard.press('Enter');
+    await page.keyboard.type(line);
+    await page.keyboard.press('Enter');
+    await sleep(300);
+  };
+  await dev('/login smoke smoke-dev-pass');
+  await dev('/sea 0');
   await arrived(true);
   const hud = await page.evaluate(() => ({ shown: !document.getElementById('divehud')!.classList.contains('hidden'), text: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') }));
-  check('charter: Cast off sails out, with the strip showing the league, the line and the haul', hud.shown && hud.text.includes('league0') && hud.text.includes('300 m') && hud.text.includes('Marker 5'), hud.text);
+  check('charter: /sea 0 sails out from the harbour, with the strip showing the league, the line and the haul', hud.shown && hud.text.includes('league0') && hud.text.includes('300 m') && hud.text.includes('Marker 5'), hud.text);
 
   const seen = await landOne();
   const after = await page.evaluate(() => document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' '));
@@ -829,12 +839,7 @@ async function tripChecks(): Promise<void> {
   await page.click('#menu [data-act="close"]');
 
   // From league 4, one fish reaches the marker at 5: its choice waits for the catch card, then 1 heads home with the haul.
-  for (const line of ['/login smoke smoke-dev-pass', '/sea 4']) {
-    await page.keyboard.press('Enter');
-    await page.keyboard.type(line);
-    await page.keyboard.press('Enter');
-    await sleep(300);
-  }
+  await dev('/sea 4');
   await arrived(true);
   await sleep(500);
   await landOne();

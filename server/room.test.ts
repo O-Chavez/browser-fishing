@@ -1008,6 +1008,7 @@ describe('Smokehouse', () => {
 describe('dives', () => {
   type P = ReturnType<ReturnType<typeof setup>['join']>;
   const diver = (t: ReturnType<typeof setup>, name = 'Ann') => {
+    t.room.chartersOpen = true;
     const p = t.join(name);
     p.acct.save.locker.rods.push(DIVE.rod);
     t.room.place(p.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
@@ -1025,8 +1026,20 @@ describe('dives', () => {
     return f;
   };
 
+  it("refuses charters at Reed's seaplane while they're closed", () => {
+    const t = setup();
+    const a = t.join('Ann');
+    a.acct.save.locker.rods.push(DIVE.rod);
+    t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    expect(last(a.c, 'notice').msg).toMatch(/still working on his seaplane/);
+    expect(a.acct.save.location).toBe('pond');
+    expect(states(a)).toEqual([]);
+  });
+
   it("starts only at Captain Reed's seaplane, with the Aurora Rod, from the harbour or a charted ledge", () => {
     const t = setup();
+    t.room.chartersOpen = true;
     const a = t.join('Ann');
     const b = t.join('Bob');
     t.room.handle(a.id, { t: 'dive', from: 0 });

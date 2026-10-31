@@ -108,6 +108,10 @@ describe('dev commands in a room', () => {
     // Again at sea: a fresh dive at the new depth.
     room.handle(a.id, { t: 'cmd', text: '/sea' });
     expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { depth: 1, start: 1, line: 300 } });
+    // /sea 0 sails from the harbour, like a charter from Reed, even while his charters are closed.
+    room.handle(a.id, { t: 'cmd', text: '/sea 0' });
+    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { depth: 0, start: 0 } });
+    room.handle(a.id, { t: 'cmd', text: '/sea' });
     room.handle(a.id, { t: 'cmd', text: '/sea deep' });
     expect(devLines(a.log).at(-1)).toMatch(/Usage/);
     room.handle(a.id, { t: 'cmd', text: '/ledge up' });

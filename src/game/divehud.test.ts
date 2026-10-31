@@ -35,17 +35,29 @@ describe('dive HUD', () => {
   });
 
   it("lists the harbour and charted markers by zone in Reed's panel, or what a charter needs", () => {
-    const html = reedHtml({ say: 'Shall we?', chart: { ledges: [5, 10, 15, 20, 25], record: 25 }, pearls: 68, ownsRod: true, pick: 25 });
+    const html = reedHtml({ say: 'Shall we?', chart: { ledges: [5, 10, 15, 20, 25], record: 25 }, pearls: 68, ownsRod: true, pick: 25, open: true });
     const t = text(html);
     expect(t).toMatch(/The Shelf Harbour league 0 5 marker 10 marker 15 marker The Drop-off 20 marker 25 marker/);
     expect(html).toContain('class="chip sel rec" data-act="divefrom" data-id="25"');
     expect(t).toContain('Start at marker 25 in The Drop-off. Runners: long pulls that take line. 2 pearls a fish.');
     expect(html).toContain('data-act="castoff" data-id="25"');
     expect(t).toContain('Furthest marker: 25');
-    expect(text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: true, pick: 0 }))).toContain('Start at the harbour, into The Shelf. Steady fish, no tricks. 1 pearl a fish.');
-    const locked = text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: false, pick: 0 }));
+    expect(text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: true, pick: 0, open: true }))).toContain('Start at the harbour, into The Shelf. Steady fish, no tricks. 1 pearl a fish.');
+    const locked = text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: false, pick: 0, open: true }));
     expect(locked).toContain('need the Aurora Rod');
     expect(locked).not.toContain('Cast off');
+  });
+
+  it("explains charters and that Reed's seaplane isn't ready while charters are closed", () => {
+    const closed = (ownsRod: boolean) => reedHtml({ say: 'Shall we?', chart: { ledges: [5], record: 5 }, pearls: 3, ownsRod, pick: 5, open: false });
+    const t = text(closed(true));
+    expect(t).toContain('Charters are coming soon.');
+    expect(t).toContain('Every 5 leagues there\'s a marker: head home with your haul, or sail on');
+    expect(t).toContain('Aurora Rod, and you have one.');
+    expect(t).not.toContain('Shall we?');
+    expect(closed(true)).not.toContain('castoff');
+    expect(closed(true)).not.toContain('divefrom');
+    expect(text(closed(false))).toMatch(/Aurora Rod, which Marlow sells from level \d+\./);
   });
 
   it('offers head home or sail on at a marker, with the haul each way', () => {

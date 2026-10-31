@@ -1,5 +1,5 @@
 import { FISH, RODS, byId } from '../src/data/content';
-import { DIVE, type Behaviour } from '../src/data/dive';
+import { DIVE, DIVES_OPEN, type Behaviour } from '../src/data/dive';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
@@ -94,6 +94,8 @@ const NO_RECORDS: CasinoRecords = { win: null, loss: null };
 export class Room {
   private members = new Map<number, Member>();
   private nextId = 1;
+  /** Whether Reed's seaplane takes players out (`DIVES_OPEN`); tests open it. */
+  chartersOpen = DIVES_OPEN;
   readonly drops: Drops;
   private maps: Record<string, MapDef>;
   private lastBoard = '';
@@ -657,6 +659,7 @@ export class Room {
     const h = this.maps[m.info.map]?.harbour;
     if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Charters start at Captain Reed's seaplane on the west beach.");
     if (m.acct.dive || m.pending) return false;
+    if (!this.chartersOpen) return this.deny(m, "Reed's still working on his seaplane. Charters open soon!");
     if (!eco.ownsRod(s, DIVE.rod)) return this.deny(m, `Charters need the ${byId(RODS, DIVE.rod).name}.`);
     const start = int(from);
     if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, "Reed sails from the harbour or a marker you've charted.");

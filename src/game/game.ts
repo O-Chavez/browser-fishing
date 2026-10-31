@@ -3209,7 +3209,7 @@ export class Game {
         el.innerHTML = this.peekHtml();
         break;
       case 'reed':
-        el.innerHTML = reedHtml({ say: this.reedSay, chart: this.s.sea, pearls: this.s.pearls, ownsRod: eco.ownsRod(this.s, DIVE.rod), pick: this.reedPick() });
+        el.innerHTML = reedHtml({ say: this.reedSay, chart: this.s.sea, pearls: this.s.pearls, ownsRod: eco.ownsRod(this.s, DIVE.rod), pick: this.reedPick(), open: DIVES_OPEN });
         break;
       case 'marker':
         el.innerHTML = this.diveHud.view ? markerHtml(this.diveHud.view) : '';

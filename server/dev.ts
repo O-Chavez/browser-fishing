@@ -71,7 +71,7 @@ export const HELP = [
   '/coins N · /chips N · /pearls N · /level N · /rodlevel N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
-  '/sea [depth] (start a dive there) · /ledge on|up (at a ledge)',
+  '/sea [depth] (start a dive there; 0 is the harbour) · /ledge on|up (at a ledge)',
   '/dig (reset worm cooldown) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
   '/resetpass <name> <new password>',
@@ -172,8 +172,8 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       return ok(`Teleported to ${m.name}.`);
     }
     case 'sea': {
-      const depth = args[0] === undefined ? 1 : int(args[0], 1, MAX_DEV_DEPTH);
-      if (depth === null) return say(`Usage: /sea [depth 1-${MAX_DEV_DEPTH}]`);
+      const depth = args[0] === undefined ? 1 : int(args[0], 0, MAX_DEV_DEPTH);
+      if (depth === null) return say(`Usage: /sea [depth 0-${MAX_DEV_DEPTH}]`);
       const sea = Object.values(t.maps).find((m) => m.sea);
       if (!sea) return say('There is no sea on this server.');
       t.setDepth(depth);
