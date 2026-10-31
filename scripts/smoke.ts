@@ -75,6 +75,7 @@ try {
   await pondChecks();
   await casinoChecks();
   await chatChecks();
+  await fightChecks();
   await noWebglChecks();
   // Last: it stops the server.
   await offlineChecks();
@@ -647,6 +648,41 @@ async function casinoChecks(): Promise<void> {
 }
 
 // Global chat: a line reaches a player in the same room (log + bubble) and one in another room (log only).
+// ---------- online fight: the server replays it ----------
+
+async function fightChecks(): Promise<void> {
+  const ctx = await browser.createBrowserContext();
+  const page = await openPage(`http://localhost:${VITE_PORT}/?name=Fay&room=fight`, ctx, 'Fay-token-0123456789abcdef');
+  await page.waitForFunction(() => window.__game.online(), { timeout: 15000 });
+  await page.evaluate(() => window.__game.activate());
+  await page.keyboard.press('1');
+  await page.evaluate(() => { window.__game.teleport(0, -5); window.__game.look(0, -0.1); });
+  await sleep(500);
+  // A real bite wait this time (no skipWait): the server refuses a fight faster than the clock.
+  const run = await page.evaluate(async () => {
+    const g = window.__game;
+    const seen = new Set<string>();
+    g.press();
+    await new Promise((r) => setTimeout(r, 400));
+    g.release();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 60000) {
+      const st = g.state();
+      seen.add(st.phase);
+      if (st.phase === 'bite') g.press();
+      else if (st.phase === 'reeling') g.hold(st.surging ? (st.tension ?? 0) < 0.7 : (st.tension ?? 0) < 0.6);
+      else if (st.phase === 'result' || (st.phase === 'idle' && seen.has('reeling'))) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    g.hold(false);
+    // The client shows its own catch at once; the server's save follows if the replay landed it.
+    await new Promise((r) => setTimeout(r, 1500));
+    return { seen: [...seen], fish: g.s.slots.filter((x: { k: string } | null) => x?.k === 'fish').length };
+  });
+  check('fight: the server replays an online fight and keeps the fish', run.seen.includes('result') && run.fish === 1, `${run.seen.join(' > ')}, ${run.fish} fish`);
+  await ctx.close();
+}
+
 async function chatChecks(): Promise<void> {
   const join = async (name: string, room: string) => {
     const ctx = await browser.createBrowserContext();

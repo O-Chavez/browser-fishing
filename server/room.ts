@@ -4,6 +4,7 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
+import { replayFight } from '../src/game/reel';
 import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
@@ -28,8 +29,11 @@ interface Pending {
   fishId: string;
   size: number;
   shiny: boolean;
-  /** Earliest time a catch is believable: the bite plus a minimum fight. */
-  readyAt: number;
+  /** The fight's reel seed and difficulty, sent with `castok`. */
+  seed: number;
+  d: number;
+  /** When the fish bites: a catch must come at least a whole fight after this. */
+  biteAt: number;
 }
 
 interface Member {
@@ -56,7 +60,8 @@ interface Member {
 const VENDOR_RANGE = 5;
 /** A jump lasts about 0.6 s and can't be repeated mid-air, so faster ones are dropped. */
 const JUMP_GAP_MS = 450;
-const MIN_FIGHT_MS = 1500;
+/** Leeway on the fight's length against the real time since the bite (clock steps, frame timing). */
+const FIGHT_SLACK_MS = 500;
 export const SPIN_MS = 3800;
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
 export const BOARD_MS = 1000;
@@ -337,7 +342,7 @@ export class Room {
         changed = this.cast(m, msg.x, msg.z, msg.perfect === true);
         break;
       case 'catch':
-        changed = this.land(m, msg.clean === true);
+        changed = this.land(m, msg.h);
         break;
       case 'lost':
         if (m.pending || m.info.act) this.setAct(m, null);
@@ -647,21 +652,32 @@ export class Room {
       return false;
     }
     const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
-    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, readyAt: this.now() + roll.wait * 1000 + MIN_FIGHT_MS } : null;
+    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000 } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
     return true;
   }
 
-  /** Completes the pending catch, if the client waited long enough for the bite and the fight. */
-  private land(m: Member, clean: boolean): boolean {
+  /**
+   * Completes the pending catch if replaying the fight from its seed and the button log `h` lands the fish, and the
+   * fight fits in the time since the bite. The replay's `wear` (frays, line taken) is what the dive will spend.
+   */
+  private land(m: Member, h: unknown): boolean {
     const p = m.pending;
     m.pending = null;
-    if (!p || this.now() < p.readyAt) {
+    if (!p) {
       this.setAct(m, null);
       return false;
     }
-    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, clean);
+    const fight = typeof h === 'string' ? replayFight(p.d, p.seed, h) : null;
+    const why = !fight ? 'bad log' : fight.status !== 'caught' ? `replay ${fight.status}`
+      : this.now() < p.biteAt + fight.elapsed * 1000 - FIGHT_SLACK_MS ? 'too fast' : null;
+    if (!fight || why) {
+      console.warn(`catch refused (${why}): ${m.acct.name}, ${p.fishId} at difficulty ${p.d}`);
+      this.setAct(m, null);
+      return false;
+    }
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean);
     if (!res.stored) {
       this.setAct(m, null);
       return false;

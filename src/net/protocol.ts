@@ -57,8 +57,8 @@ export type ClientMsg =
   | { t: 'drop' }
   | { t: 'pickup'; id: number }
   | { t: 'cast'; x: number; z: number; perfect?: boolean }
-  /** `clean`: landed without fraying the line (trusted until the server replays fights). */
-  | { t: 'catch'; clean?: boolean }
+  /** `h`: the button over the fight, one bit per 1/60 s step (`HoldLog`); the server replays it to check the catch. */
+  | { t: 'catch'; h: string }
   | { t: 'lost' }
   | { t: 'gamble' }
   /** Walk through the gate to another map. */
@@ -115,7 +115,8 @@ export type ServerMsg =
   | { t: 'stages'; ids: StageId[]; intro: boolean }
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
-  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }
+  /** With a fish, `seed` and `d` set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: number }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; win: boolean; ms: number }
   | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }

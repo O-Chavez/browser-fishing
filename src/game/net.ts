@@ -1,6 +1,7 @@
 import type { Activity, CasinoRecords, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { RENAME_COOLDOWN_MS, SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
+import type { Roll } from './economy';
 import type { Drop } from './drops';
 import type { StageId } from '../data/smokehouse';
 import type { SaveData } from './state';
@@ -19,7 +20,7 @@ export interface NetEvents {
   onRecords(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
   onJump(id: number): void;
-  onCast(roll: { fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }): void;
+  onCast(roll: Roll): void;
   onCastFail(msg: string): void;
   /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
   onError(msg: string, need?: 'password'): void;

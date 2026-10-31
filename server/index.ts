@@ -203,8 +203,9 @@ function kofiHook(req: IncomingMessage, res: ServerResponse): void {
     res.writeHead(onTip(body)).end();
   });
 }
-// Room for a full-length feedback report (500 characters, up to 4 bytes each).
-const wss = new WebSocketServer({ server: http, maxPayload: 4096 });
+// Room for a full-length feedback report (500 characters, up to 4 bytes each) and a catch's button log (at most
+// 6,000 characters, for a 10-minute fight).
+const wss = new WebSocketServer({ server: http, maxPayload: 8192 });
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const r = room((url.searchParams.get('room') ?? 'lobby').replace(/[^\w-]/g, '').slice(0, 24) || 'lobby');

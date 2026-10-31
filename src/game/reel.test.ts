@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FISH, RODS, byId } from '../data/content';
 import { mulberry } from './env';
 import { reelDifficulty } from './progression';
-import { GOOD_MAX, Reel, SWEET_MIN, expArith } from './reel';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, SWEET_MIN, decodeHolds, expArith, lnArith, powArith, replayFight } from './reel';
 import { NAIVE, STYLES, botCell, botFight, botSweep } from './reelbot';
 
 /**
@@ -191,5 +191,119 @@ describe('tension reel fight', () => {
 
   it('computes e^x without Math.exp, to within rounding', () => {
     for (const x of [-4, -1.4, -0.3, 0, 0.5, 1.1, 2.6]) expect(expArith(x) / Math.exp(x)).toBeCloseTo(1, 10);
+  });
+
+  it('computes ln x and powers without Math.log or Math.pow, to within rounding', () => {
+    for (const x of [1e-6, 0.2, 0.5, 1, 1.5, 2, 3, 40, 1e6]) expect(lnArith(x)).toBeCloseTo(Math.log(x), 11);
+    expect(powArith(0.37, 2)).toBe(0.37 * 0.37);
+    expect(powArith(1.7, 1)).toBe(1.7);
+    expect(powArith(5, 0)).toBe(1);
+    expect(powArith(2, 0.5)).toBeCloseTo(Math.SQRT2, 11);
+  });
+});
+
+describe('server-checked fights', () => {
+  /** A bot fight with its button log, and the same fight replayed from the log. */
+  const recorded = (d: number, seed: number, react = 0.25, style = STYLES[0]) => {
+    const log = new HoldLog();
+    const live = botFight(d, react, style, mulberry(seed), mulberry(seed + 1), 600, log);
+    return { live, log, replay: replayFight(d, seed, log.encode())! };
+  };
+
+  it('the button log round-trips through base64, and a 10-minute fight fits the socket limit', () => {
+    for (const n of [0, 1, 7, 8, 9, 23, 24, 25, 1001]) {
+      const log = new HoldLog();
+      const bits: boolean[] = [];
+      const rng = mulberry(n);
+      for (let i = 0; i < n; i++) {
+        bits.push(rng() < 0.5);
+        log.push(bits[i]);
+      }
+      const back = decodeHolds(log.encode())!;
+      expect(back.length).toBe((n + 7) >> 3);
+      expect(bits.every((b, i) => (((back[i >> 3] >> (i & 7)) & 1) === 1) === b)).toBe(true);
+    }
+    const full = new HoldLog();
+    for (let i = 0; i < MAX_FIGHT_STEPS + 50; i++) full.push(true);
+    expect(full.steps).toBe(MAX_FIGHT_STEPS);
+    expect(full.encode().length).toBeLessThan(8192 - 100);
+    expect(decodeHolds(full.encode())).not.toBeNull();
+    expect(decodeHolds('')?.length).toBe(0);
+    for (const bad of ['abc', 'ab=c', '!!!!', 'A'.repeat(full.encode().length + 4)]) expect(decodeHolds(bad)).toBeNull();
+  });
+
+  it('a fight recorded on the client replays on the server to the same end, frays and line taken', () => {
+    const ends = new Set<string>();
+    for (const d of [0.8, 1.5, 2.2, 2.7, 3.1, 3.6]) {
+      for (let seed = 1; seed <= 8; seed++) {
+        const { live, replay } = recorded(d, seed * 31, seed % 2 ? 0.25 : 0.7);
+        ends.add(live.status);
+        expect(replay.status).toBe(live.status);
+        expect(replay.wear.frays).toBe(live.frays);
+        expect(replay.wear.lineOut).toBe(live.lineOut);
+        expect(replay.elapsed).toBeCloseTo(live.t, 9);
+      }
+    }
+    // The grid covers landed, snapped and run-off fights.
+    expect([...ends].sort()).toEqual(['caught', 'escaped', 'snapped']);
+  });
+
+  it('tampered button logs do not land a fish the real inputs lost', () => {
+    let lost = 0;
+    for (let seed = 1; lost < 12 && seed < 400; seed++) {
+      const { live, log } = recorded(2.9, seed, 0.7);
+      if (live.status === 'caught') continue;
+      lost++;
+      const h = decodeHolds(log.encode())!;
+      const rng = mulberry(seed * 13);
+      for (let k = 0; k < 20; k++) {
+        const bent = h.slice();
+        for (let j = 0; j < 40; j++) {
+          const i = Math.floor(rng() * log.steps);
+          bent[i >> 3] ^= 1 << (i & 7);
+        }
+        const enc = new HoldLog();
+        for (let i = 0; i < log.steps; i++) enc.push(((bent[i >> 3] >> (i & 7)) & 1) === 1);
+        expect(replayFight(2.9, seed, enc.encode())!.status).not.toBe('caught');
+      }
+    }
+    expect(lost).toBe(12);
+  });
+
+  it('a log cut short leaves the fish on the line, and the wrong seed or difficulty does not replay a win', () => {
+    let checked = 0;
+    for (let seed = 1; checked < 10; seed++) {
+      const { live, log, replay } = recorded(2.2, seed);
+      if (live.status !== 'caught') continue;
+      checked++;
+      const half = new HoldLog();
+      const bits = decodeHolds(log.encode())!;
+      for (let i = 0; i < log.steps / 2; i++) half.push(((bits[i >> 3] >> (i & 7)) & 1) === 1);
+      expect(replayFight(2.2, seed, half.encode())!.status).toBe('reeling');
+      expect(replay.status).toBe('caught');
+      // Same buttons on another fish: the trace differs (it may still land, but not the same way).
+      const other = replayFight(2.2, seed + 1000, log.encode())!;
+      expect([other.status, other.elapsed]).not.toEqual([replay.status, replay.elapsed]);
+    }
+  });
+
+  it('holding all the way, or never, never lands a fish too strong for the gear', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const hold of [true, false]) {
+        const log = new HoldLog();
+        for (let i = 0; i < MAX_FIGHT_STEPS; i++) log.push(hold);
+        expect(replayFight(3.6, seed, log.encode())!.status).toBe(hold ? 'snapped' : 'escaped');
+      }
+    }
+  });
+
+  it('replaying a fight costs the server well under a millisecond per fight-second', () => {
+    const logs = [1.2, 1.8, 2.4, 2.8].map((d) => ({ d, ...recorded(d, 5) }));
+    const steps = logs.reduce((n, l) => n + l.log.steps, 0);
+    const t0 = performance.now();
+    for (let k = 0; k < 20; k++) for (const l of logs) replayFight(l.d, 5, l.log.encode());
+    const perStep = (performance.now() - t0) / (20 * steps);
+    console.log(`replay: ${(perStep * 1e6).toFixed(0)} ns per step, ${(perStep * 3600).toFixed(2)} ms for a 60 s fight`);
+    expect(perStep / FIGHT_DT).toBeLessThan(1); // ms per fight-second
   });
 });
