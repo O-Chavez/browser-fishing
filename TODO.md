@@ -13,6 +13,8 @@ Finished items move to [DONE.md](DONE.md).
   - It also pops in at full strength and only fades out (0.5 s). Fade it in as well, and soften the fade out, so going to and from the loading card feels smoother
 - Charter entry message that explains the loop (Oscar, 2026-10-31), something like "Catch enough fish to reach the next marker, then head home with your haul or risk it and sail on further out". There's no quota as such: each landed fish moves the boat one league (`dive.depth++`, `src/game/dive.ts`), a marker comes every 5 leagues (`ledgeEvery`, `src/data/dive.ts`), and the haul is only safe once you head home at a marker; the one spool of line is what runs out
   - Decide when it shows (the first charter only, like a tip in `src/game/tips.ts`, or a short line on every cast off) and keep the charter wording (charter, league, marker, Head home / Sail on)
+- 🎨 Much darker night skies further out (Oscar, 2026-10-31), a follow-up to S1 (DONE.md). At night the sea's sky only dims a little more with distance: the night term (`1 - 0.75 * n` / `1 - 0.8 * n`) and the gloom past the Drop-off (`gloomAt`, up to 40-45%) in `World` (`src/game/world.ts`, the sky block around `uSkyH` / `uSkyT`). Make the night darken steeply with the league, so the far zones at night are close to black
+  - Keep the fog colour, sea (`uShallow` / `uDeep` in `src/game/sea.ts`), lightning flash and the player's view of the boat still readable; check with headless screenshots at a few leagues by night
 
 ## Ideas
 
