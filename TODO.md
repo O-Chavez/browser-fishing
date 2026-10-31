@@ -7,6 +7,8 @@ Finished items move to [DONE.md](DONE.md).
 ## Up next
 
 - D6, the Furthest Out board at the harbour (the name Oscar OK'd in D3, 2026-10-31, replacing "Deepest Dive"); the record is the furthest marker a player headed home from (the deepest ledge surfaced from, in code). `server/accounts.ts`, `town.ts`. Needs D2, H1 and F2. Gameplan: "Shared: seeing it and fishing together"
+- Charter discovery: nothing tells a player that charters exist. The "Next:" goal (`nextGoal`, `src/game/progression.ts`) stops at ranks and the Fishdex, and no tip (`src/game/tips.ts`) sends Aurora Rod owners to Captain Reed on the harbour pier. Add a one-time tip and/or a "Next:" line once the player owns the Aurora Rod
+- 🎨 Charter fares from level gifts: every 5th level past 50 banks a fare for the charters (`gifts.fares` in `src/game/state.ts`, `levelGifts` in `progression.ts`, `BACKPAY_GIFTS` in `economy.ts`), but the charters as built have no fares, and players can't see them. Decide what they become (Black Pearls, say) or retire them
 
 ## Ideas
 
