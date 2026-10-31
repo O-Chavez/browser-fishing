@@ -420,3 +420,15 @@ describe('the Kitchen opening and level gifts', () => {
     expect(res.gift).toEqual({ id: 'banquet', n: res.level - 50 });
   });
 });
+
+describe('sea fish at the Smokehouse', () => {
+  it('stay off the smoker, and a sea catch opens no stage', () => {
+    const s = carrying('pewtercod', ofTier(1));
+    expect(smoke.smokeFish(s, FISH_SLOT, T0)).toMatch(/pond fish/);
+    expect(smoke.smokeAll(s, T0)).toBeNull();
+    expect(s.smoke.spots.filter(Boolean)).toHaveLength(1);
+    expect(s.slots[FISH_SLOT]).toMatchObject({ fishId: 'pewtercod' });
+    expect(smoke.reachedTier({ dex: { pewtercod: { count: 1, best: 150 } } }, 4)).toBe(false);
+    expect(smoke.reachedTier({ dex: { ghostcarp: { count: 1, best: 200 } } }, 4)).toBe(true);
+  });
+});

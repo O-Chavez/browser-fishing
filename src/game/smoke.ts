@@ -22,7 +22,7 @@ const SNACK_MAX_MS = SNACK_MAX_MINUTES * 60_000;
 export const smokerOpen = (s: Pick<SaveData, 'level'>): boolean => s.level >= SMOKE_LEVEL;
 
 /** Whether the Fishdex has a fish of this tier or higher: a tier 4 catch opens everything a tier 3 one would. */
-export const reachedTier = (s: Pick<SaveData, 'dex'>, tier: number): boolean => Object.keys(s.dex).some((id) => (FISH.find((f) => f.id === id)?.tier ?? 0) >= tier);
+export const reachedTier = (s: Pick<SaveData, 'dex'>, tier: number): boolean => Object.keys(s.dex).some((id) => { const f = FISH.find((x) => x.id === id); return !!f && !f.sea && f.tier >= tier; });
 
 /** Whether a stage is open: Small Fry by level, the others by a first catch of their lowest tier or higher, read from the Fishdex. */
 export function stageOpen(s: Pick<SaveData, 'level' | 'dex'>, st: Stage): boolean {
@@ -63,6 +63,7 @@ export function smokeFish(s: SaveData, slot: number, now: number): string | null
   if (!smokerOpen(s)) return `Mags opens up at level ${SMOKE_LEVEL}.`;
   const item = Number.isInteger(slot) ? s.slots[slot] : null;
   if (item?.k !== 'fish') return 'Pick a fish from your hotbar.';
+  if (byId(FISH, item.fishId).sea) return 'Mags only smokes pond fish. Sell sea fish at the stall.';
   const at = freeSpot(s);
   if (at < 0) return 'The smoker is full. A spot frees up when a fish is done.';
   s.smoke.spots[at] = { fish: item, doneAt: now + smokeSeconds(byId(FISH, item.fishId).tier) * 1000 };
@@ -75,7 +76,7 @@ export function smokeAllSlots(s: SaveData): number[] {
   const out: number[] = [];
   for (let i = FISH_SLOT; i < s.slots.length; i++) {
     const it = s.slots[i];
-    if (it?.k === 'fish' && !it.shiny) out.push(i);
+    if (it?.k === 'fish' && !it.shiny && !byId(FISH, it.fishId).sea) out.push(i);
   }
   return out.slice(0, s.smoke.spots.filter((x) => !x).length);
 }

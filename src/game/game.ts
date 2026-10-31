@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {
   BAITS,
   FISH,
+  POND_FISH,
+  SEA_FISH,
   LOCATIONS,
   RARITY_COLOR,
   RODS,
@@ -27,7 +29,7 @@ import { FEEDBACK_MAX, FEEDBACK_WAIT_MS, FeedbackForm, OFFLINE_MSG, type Feedbac
 import { fishIcon } from './fishicon';
 import { rodIcon } from './rodicon';
 import { cosIcon } from './cosicon';
-import { FISH_BLURB, FISH_LOOK, TIER_THEME } from '../data/fishlook';
+import { FISH_BLURB, FISH_LOOK, SEA_THEME, TIER_THEME } from '../data/fishlook';
 import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
@@ -2966,7 +2968,7 @@ export class Game {
       }
       body += tag;
       if (i === BAIT_SLOT && eco.lureOn(s)) body += `<b class="lure">✨${s.lure}</b>`;
-      const smokable = sl?.k === 'fish' && this.menuOpen && this.tab === 'smoke' && this.smokeTab === 'smoker' && smoke.freeSpot(this.s) >= 0;
+      const smokable = sl?.k === 'fish' && !byId(FISH, sl.fishId).sea && this.menuOpen && this.tab === 'smoke' && this.smokeTab === 'smoker' && smoke.freeSpot(this.s) >= 0;
       const sellable = smokable || (sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino'));
       if (sellable) cls += ' sellable';
       const sell = smokable ? `🔥 Smoke · ${smokeSeconds(byId(FISH, sl.fishId).tier)} s` : sellable ? `Sell · ${eco.sellPrice(this.s, sl)} ${COIN}` : '';
@@ -3734,23 +3736,27 @@ export class Game {
   // ---------- Fishdex ----------
 
   private dexHtml(): string {
-    const found = FISH.filter((f) => this.s.dex[f.id]).length;
+    // Completion counts the pond and lake species only: the Sea page below is extra, so no one is suddenly incomplete.
+    const found = POND_FISH.filter((f) => this.s.dex[f.id]).length;
     const card = (f: (typeof FISH)[number]) => {
       const e = this.s.dex[f.id];
       const moon = f.night ? '<span class="moon" title="Only bites at night">🌙</span>' : '';
       const size = `${f.minSize}-${f.maxSize} cm`;
-      if (e) return `<div class="fish" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.id)}<b>${f.name}</b><p>${FISH_BLURB[f.id] ?? ''}</p><span>Caught ${e.count} · best ${e.best} cm</span></div>`;
+      if (e) return `<div class="fish" style="--c:var(--t${f.sea ? 3 : f.tier})">${moon}${fishIcon(f.id)}<b>${f.name}</b><p>${FISH_BLURB[f.id] ?? ''}</p><span>Caught ${e.count} · best ${e.best} cm</span></div>`;
+      if (f.sea) return `<div class="fish unknown" style="--c:var(--t3)">${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}</p><span>Out at sea, off the ${f.locations[0] === 'shelf' ? 'Shelf' : 'Drop-off'}</span></div>`;
       const rodName = shortRod(RODS.find((r) => r.tier === f.tier)!.name);
       const baitName = BAITS.find((b) => b.tier === f.tier)!.name;
       return `<div class="fish unknown" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}${f.night ? ' · bites at night' : ''}</p><span>Try a ${rodName} rod with ${baitName}</span></div>`;
     };
     // One section per tier, under its theme name, so the ladder from Shallows to Spirit fish reads at a glance.
     const sections = TIER_THEME.map((theme, i) => {
-      const fish = FISH.filter((f) => f.tier === i + 1);
+      const fish = POND_FISH.filter((f) => f.tier === i + 1);
       const got = fish.filter((f) => this.s.dex[f.id]).length;
       return `<h4 class="dex-tier"><span class="badge" style="--c:var(--t${i + 1})">Tier ${i + 1} · ${tierName(i + 1)}</span> ${theme}<small>${got} / ${fish.length}</small></h4><div class="dex">${fish.map(card).join('')}</div>`;
     }).join('');
-    return `<div class="dex-head"><b>${found} / ${FISH.length}</b> species discovered<div class="meter big"><i style="width:${(found / FISH.length) * 100}%;--c:var(--gold)"></i></div></div>${sections}`;
+    const sea = SEA_FISH.filter((f) => this.s.dex[f.id]).length;
+    const seaPage = `<h4 class="dex-tier"><span class="badge" style="--c:var(--t3)">Sea</span> ${SEA_THEME}<small>${sea} / ${SEA_FISH.length}</small></h4><div class="dex">${SEA_FISH.map(card).join('')}</div>`;
+    return `<div class="dex-head"><b>${found} / ${POND_FISH.length}</b> species discovered<div class="meter big"><i style="width:${(found / POND_FISH.length) * 100}%;--c:var(--gold)"></i></div></div>${sections}${seaPage}`;
   }
 
   // ---------- Anglers ----------

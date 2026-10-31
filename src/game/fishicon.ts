@@ -86,7 +86,9 @@ export function fishIcon(id: string, opts: { hidden?: boolean; shiny?: boolean }
     extras += `<path d="M${HEAD - 2} ${MID + 1} q2 ${len * 0.6} ${-len * 0.4} ${len}" stroke="${ink}" stroke-width=".9" fill="none"/>`;
   }
   if (!opts.hidden && ex.includes('lantern')) extras += `<path d="M${HEAD - 4} ${topAt(0.1)} q3 -8 7 -7" stroke="${fin}" stroke-width="1" fill="none"/><circle cx="${HEAD + 3}" cy="${topAt(0.1) - 7}" r="2.3" fill="${hex(look.accent ?? 0x7dffd8)}"/>`;
-  const tier = opts.hidden ? 1 : (FISH.find((f) => f.id === id)?.tier ?? 1);
+  const def = FISH.find((f) => f.id === id);
+  // Sea fish are tier 5 for gear but draw with the plain lake-giant finish: no glow, gems or crown.
+  const tier = opts.hidden ? 1 : def?.sea ? Math.min(def.tier, 3) : (def?.tier ?? 1);
   const accent = hex(opts.shiny ? 0xffe27a : look.accent ?? mix(look.fin, 0xffffff, 0.4));
   const eyeT = look.shape === 'eel' ? 0.07 : 0.11;
   const ex0 = HEAD - eyeT * PX;
