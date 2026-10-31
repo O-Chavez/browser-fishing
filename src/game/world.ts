@@ -14,6 +14,7 @@ import {
   mulberry,
   onDock,
   padWeight,
+  setAtSea,
   setPad,
   smooth,
   WATER_ORDER,
@@ -24,6 +25,9 @@ import { Town } from './town';
 import type { Bystander } from './npcwalk';
 import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
+import { Boat } from './boat';
+import { Sea } from './sea';
+import { gloomAt, seaMood } from '../data/sea';
 import { FX } from './fx';
 import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
@@ -33,6 +37,7 @@ import { groundTexture, plankTexture, speckleTexture } from './textures';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.38, -0.85).normalize();
+const NO_TILT = new THREE.Quaternion();
 
 const WAVE_GLSL = `
 float wave(vec2 p, float t){
@@ -79,13 +84,15 @@ void main(){
 
 const skyVert = `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
 const skyFrag = `
-uniform vec3 uHorizon, uTop, uSunDir, uSunCol; varying vec3 vDir;
+uniform vec3 uHorizon, uTop, uSunDir, uSunCol; uniform float uSunVis; varying vec3 vDir;
 void main(){
   vec3 d = normalize(vDir);
   float h = max(d.y, 0.0);
   vec3 col = mix(uHorizon, uTop, pow(h, 0.55));
   float s = max(dot(d, uSunDir), 0.0);
-  col += uSunCol * (pow(s, 900.0) * 6.0 + pow(s, 24.0) * 0.35 + pow(s, 4.0) * 0.08);
+  // uSunVis < 1 hides the sun behind cloud (at sea), leaving a soft glow where it is.
+  col += uSunCol * uSunVis * (pow(s, 900.0) * 6.0 + pow(s, 24.0) * 0.35 + pow(s, 4.0) * 0.08);
+  col += uSunCol * (1.0 - uSunVis) * pow(s, 6.0) * 0.12;
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -110,6 +117,12 @@ export class World {
   hub: Hub | null = null;
   town: Town | null = null;
   hall: CasinoHall | null = null;
+  /** At sea: the swell, cloud and spray, and the charter boat everyone stands on. */
+  sea: Sea | null = null;
+  boat: Boat | null = null;
+  /** The sea's roughness (see `seaMood`), easing toward the current depth's. */
+  mood = 0;
+  private moodTarget = 0;
   private indoor = false;
   private lite = false;
   /** Skip drawing (a full-screen notice covers the view); the scene still updates. */
@@ -167,6 +180,7 @@ export class World {
     uFogColor: { value: new THREE.Color() },
     uFogNear: { value: 30 },
     uFogFar: { value: 280 },
+    uSunVis: { value: 1 },
   };
   /** Grass tufts and flowers: thousands of tiny instances, hidden in lite graphics. */
   private clutter: THREE.Object3D[] = [];
@@ -177,6 +191,7 @@ export class World {
     uTop: this.waterU.uSkyT,
     uSunDir: this.waterU.uSunDir,
     uSunCol: this.waterU.uSunCol,
+    uSunVis: this.waterU.uSunVis,
   };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -242,6 +257,7 @@ export class World {
     const changed = on !== this.lite;
     this.lite = on;
     this.applyQuality();
+    this.sea?.setLite(on);
     // Shadows on or off changes most shader programs (before the first map is built there's nothing to compile).
     if (changed && this.decor.children.length) this.prewarm();
   }
@@ -279,6 +295,11 @@ export class World {
 
   get isLite(): boolean {
     return this.lite;
+  }
+
+  /** False while the current map's shaders are still compiling (see `prewarm`). */
+  get ready(): boolean {
+    return !this.warming;
   }
 
   private applyQuality(): void {
@@ -451,25 +472,59 @@ export class World {
     const nightT = new THREE.Color(0x050a19);
     u.uSkyH.value.copy(b.sky).lerp(nightH, n).lerp(new THREE.Color(0xff8a4a), tw * 0.7);
     u.uSkyT.value.copy(b.top).lerp(nightT, n).lerp(new THREE.Color(0x5a4a8a), tw * 0.35);
+    // At sea the mood brings in a warm lilac-grey overcast and closer fog (never cold steel grey).
+    const m = this.sea ? Math.min(1, this.mood) : 0;
+    if (m > 0) {
+      u.uSkyH.value.lerp(new THREE.Color(0xc8bcc6).multiplyScalar(1 - 0.75 * n), m);
+      u.uSkyT.value.lerp(new THREE.Color(0x8c86a0).multiplyScalar(1 - 0.8 * n), m);
+    }
+    // Past the Drop-off the deep zones darken and the fog closes in.
+    const gloom = this.sea ? gloomAt(this.mood) : 0;
+    if (gloom > 0) {
+      u.uSkyH.value.multiplyScalar(1 - 0.4 * gloom);
+      u.uSkyT.value.multiplyScalar(1 - 0.45 * gloom);
+    }
+    u.uSunVis.value = 1 - 0.85 * m;
+    u.uFogNear.value = 30 - 18 * m - 6 * gloom;
+    u.uFogFar.value = 280 - 90 * m - 70 * gloom;
+    // A lightning strike lights the whole sky for a moment.
+    const flash = this.sea?.lightning.flash ?? 0;
+    if (flash > 0) {
+      const glow = new THREE.Color(0xd9d2f2);
+      u.uSkyH.value.lerp(glow, 0.7 * flash);
+      u.uSkyT.value.lerp(glow, 0.5 * flash);
+    }
     u.uFogColor.value.copy(u.uSkyH.value);
-    (this.scene.fog as THREE.Fog | null)?.color.copy(u.uSkyH.value);
+    const fog = this.scene.fog as THREE.Fog | null;
+    if (fog) {
+      fog.color.copy(u.uSkyH.value);
+      fog.near = u.uFogNear.value;
+      fog.far = u.uFogFar.value;
+    }
     u.uShallow.value.copy(b.water).multiplyScalar(1 - 0.75 * n);
     u.uDeep.value.copy(b.deep).multiplyScalar(1 - 0.67 * n);
     u.uSunCol.value.set(0xfff2d8).lerp(new THREE.Color(0xff9a55), tw).multiplyScalar(1 - n);
+    // No sun at all through the deep zones' storm cloud.
+    if (gloom > 0) u.uSunCol.value.multiplyScalar(1 - 0.9 * gloom);
     const el = 0.38 * (1 - n) + 0.13 * n + 0.1 * tw;
     u.uSunDir.value.set(SUN_DIR.x, el, SUN_DIR.z).normalize();
-    this.hemi.intensity = 1.1 * (1 - n) + 0.56 * n;
-    this.hemi.color.copy(b.top).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(0x7088cc), n);
-    this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(new THREE.Color(0x1d2a48), n);
-    this.sun.intensity = 3 * (1 - n) + 0.72 * n;
+    this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * (1 - 0.3 * gloom) + 2.5 * flash;
+    this.hemi.color.copy(b.top).lerp(new THREE.Color(0x8c86a0), m).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(0x7088cc), n);
+    // At sea the light bouncing up comes off the deck's warm planks, so the shaded inside of the rails reads warm, not grey.
+    if (this.sea) this.hemi.groundColor.copy(b.water).multiplyScalar(0.5).lerp(new THREE.Color(0xb08458), 0.75).lerp(new THREE.Color(0x1d2a48), n);
+    else this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(new THREE.Color(0x1d2a48), n);
+    this.sun.intensity = (3 * (1 - n) + 0.72 * n) * (1 - 0.55 * m) * (1 - 0.4 * gloom);
     this.sun.color.set(0xfff0d6).lerp(new THREE.Color(0xff9a55), tw * 0.8).lerp(new THREE.Color(0x84a0ff), n);
-    this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
-    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, (n - 0.4) / 0.6);
+    this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5).lerp(new THREE.Color(0xc4bac6).multiplyScalar(1 - 0.7 * n), m);
+    // Clear nights at sea get the pond's full starfield; the overcast rolling in toward the Drop-off hides it.
+    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, (n - 0.4) / 0.6) * (1 - THREE.MathUtils.smoothstep(m, 0.35, 0.65));
     this.dockGlow.color.set(0x6a5a3a).lerp(new THREE.Color(0xffd27a), 0.35 + 0.65 * n);
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
-    for (const m of this.mtMats) m.mat.color.copy(m.base).multiplyScalar(1 - 0.75 * n).lerp(u.uSkyH.value, m.haze);
+    this.boat?.setNight(n);
+    this.sea?.setColors(n, tw, b);
+    for (const mt of this.mtMats) mt.mat.color.copy(mt.base).multiplyScalar(1 - 0.75 * n).lerp(u.uSkyH.value, mt.haze);
 
     const fl = this.flies;
     if (fl) {
@@ -489,9 +544,18 @@ export class World {
     }
   }
 
+  /** Sets the dive depth the sea's look follows; the mood eases toward it, or jumps there with `snap` (and on arrival). */
+  setDepth(depth: number, snap = false): void {
+    this.moodTarget = seaMood(depth);
+    if (snap) this.mood = this.moodTarget;
+  }
+
   setLocation(loc: Location, map: MapDef): void {
     this.indoor = !!map.casino;
     setPad(map.pad);
+    setAtSea(!!map.sea);
+    this.sea = null;
+    this.boat = null;
     this.scene.remove(this.decor);
     disposeTree(this.decor);
     this.decor = new THREE.Group();
@@ -521,6 +585,7 @@ export class World {
     }
 
     const u = this.waterU;
+    this.flies = null;
     u.uShallow.value.set(loc.water);
     u.uDeep.value.set(loc.deep);
     u.uSkyH.value.set(loc.sky);
@@ -533,6 +598,22 @@ export class World {
     this.base.top.set(loc.skyTop);
     this.base.grass.set(loc.grass);
     this.scene.background = null;
+
+    if (map.sea) {
+      this.sea = new Sea(this.waterU);
+      this.sea.lightning.onStrike = (d) => audio.thunder(d);
+      this.sea.setLite(this.lite);
+      this.boat = new Boat();
+      this.decor.add(this.sea.frame, this.sea.onBoat, this.boat.group);
+      this.mood = this.moodTarget;
+      this.hub = null;
+      this.town = null;
+      this.hall = null;
+      this.lightPool.collect(this.decor);
+      this.glow = null;
+      this.prewarm();
+      return;
+    }
 
     const water = new THREE.Mesh(
       new THREE.PlaneGeometry(420, 420, 110, 110).rotateX(-Math.PI / 2),
@@ -1131,6 +1212,7 @@ export class World {
   }
 
   surface(x: number, z: number): number {
+    if (this.sea) return this.sea.surface(x, z);
     return waveHeight(x, z, this.time);
   }
 
@@ -1142,9 +1224,22 @@ export class World {
     this.time += dt;
     const t = this.time;
     this.waterU.uTime.value = t;
+    if (this.sea) {
+      // A change of depth rolls the weather in over about three seconds.
+      this.mood += (this.moodTarget - this.mood) * Math.min(1, dt);
+      this.sea.update(t, dt, this.mood);
+    }
     this.updateDaylight(t);
     this.stars.position.copy(this.camera.position);
     this.sky.position.copy(this.camera.position);
+    // At sea the horizon heaves and rolls with the sea's frame: the sky, stars and high cloud tilt with it,
+    // or in big seas the far edge of the ocean would swing up over a level sky.
+    const tilt = this.sea ? this.sea.tilt : NO_TILT;
+    this.sky.quaternion.copy(tilt);
+    this.stars.quaternion.copy(tilt);
+    this.clouds.quaternion.copy(tilt);
+    // Under the sea's overcast the pond's high puffs would show through as dark blobs (worst in a lightning flash).
+    this.clouds.visible = !this.indoor && !(this.sea && this.mood > 0.7);
     for (const c of this.clouds.children) {
       c.position.x += dt * 1.6;
       if (c.position.x > 600) c.position.x = -600;

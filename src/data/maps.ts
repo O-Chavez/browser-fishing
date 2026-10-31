@@ -1,4 +1,5 @@
 import { CASINO_LEVEL } from './casino';
+import { BOAT } from './sea';
 import type { FaceId } from './cosmetics';
 
 export interface Spot {
@@ -122,6 +123,8 @@ export interface MapDef {
   smokehouse?: Spot;
   /** The East Landing's dive stand (Captain Reed). */
   harbour?: { stand: Spot; diveStart: { x: number; z: number } };
+  /** The open sea: players stand on the charter boat's deck (`BOAT` in sea.ts) instead of the shore. */
+  sea?: boolean;
   /** Casino maps: where the tables and prize counter stand. */
   casino?: { roulette: Spot; blackjack: Spot; prizes: Spot; mirror: Spot; records: Spot; hall: { x: number; z: number; w: number; d: number } };
   /** Player level needed to travel here. */
@@ -338,4 +341,28 @@ MAPS.push({
     boats: [],
     flowers: [],
   },
+});
+
+/**
+ * The open sea of the dives: the charter boat alone on open water, where players fish off the rails.
+ * The look follows the dive's depth (`seaMood`). For now only the dev console's `/sea` comes here;
+ * the trip from Captain Reed's stand (D3) and a sea per dive (D2) come later.
+ */
+MAPS.push({
+  ...pond,
+  id: 'sea',
+  locationId: 'shelf',
+  name: 'The Open Sea',
+  sea: true,
+  next: null,
+  spawn: { ...BOAT.spawn },
+  gateArrival: undefined,
+  pad: { x: 0, z: 0, r: 0, h: 0 },
+  radius: BOAT.len / 2 + 1,
+  // Nothing on board is a gate; this keeps the gate's prompt out of reach.
+  gate: { x: 0, z: 1e4, facing: 0 },
+  worms: undefined,
+  smokehouse: undefined,
+  harbour: undefined,
+  town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [] },
 });

@@ -151,6 +151,10 @@ try {
     plazaDay: ['pond', () => { window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.1); window.__game.day(0.1); }],
     plazaNight: ['pond', () => { window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.1); window.__game.day(0.7); }],
     casino: ['casino', () => { const s = window.__bench.spawn('casino'); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.1); }],
+    // The dive's open sea at the Shelf (calm, the headland) and the Drop-off (low cloud, whitecaps, spray).
+    seaShelf: ['sea', () => { const s = window.__bench.spawn('sea'); window.__game.world.setDepth(1, true); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.1); }],
+    seaDropoff: ['sea', () => { const s = window.__bench.spawn('sea'); window.__game.world.setDepth(30, true); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.1); }],
+    seaDropoffNight: ['sea', () => { const s = window.__bench.spawn('sea'); window.__game.world.setDepth(30, true); window.__game.teleport(s.x, s.z); window.__game.look(s.yaw, -0.12); window.__game.day(0.7); }],
   };
   const runs = {};
   let map = '';
@@ -158,8 +162,9 @@ try {
     for (const [name, [id, setup]] of Object.entries(SCENES)) {
       if (map !== id) {
         const visit = await page.evaluate((id) => window.__bench.goto(id), (map = id));
-        // The very first casino visit pays for compiling its shaders; later visits hit the cache.
+        // The very first casino (and sea) visit pays for compiling its shaders; later visits hit the cache.
         if (id === 'casino' && !R.firstVisit) R.firstVisit = { firstCasinoVisitBuildMs: visit.build, firstCasinoVisitRenderMs: visit.firstRender };
+        if (id === 'sea' && !R.firstSeaVisit) R.firstSeaVisit = { firstSeaVisitBuildMs: visit.build, firstSeaVisitRenderMs: visit.firstRender };
       }
       (runs[name] ??= []).push(await scene(setup));
     }
@@ -178,13 +183,15 @@ try {
     culled.forEach((o) => (o.frustumCulled = true));
     const i = w.renderer.info;
     return { geometries: i.memory.geometries, textures: i.memory.textures, programs: i.programs.length }; });
-  await page.evaluate(() => { window.__game.day(0.1); window.__bench.goto('casino'); window.__bench.goto('pond'); }); // warm-up trip
+  await page.evaluate(() => { window.__game.day(0.1); window.__bench.goto('casino'); window.__bench.goto('pond'); window.__bench.goto('sea'); window.__bench.goto('pond'); }); // warm-up trip
   const before = await mem();
   const trips = [];
   for (let i = 0; i < 3; i++) {
     const casino = await page.evaluate(() => window.__bench.goto('casino'));
     const pond = await page.evaluate(() => window.__bench.goto('pond'));
-    trips.push({ casino, pond });
+    const sea = await page.evaluate(() => window.__bench.goto('sea'));
+    await page.evaluate(() => window.__bench.goto('pond'));
+    trips.push({ casino, pond, sea });
   }
   const after = await mem();
   R.mapChange = {
@@ -192,12 +199,16 @@ try {
     pondFirstRenderMs: median(trips.map((t) => t.pond.firstRender)),
     casinoBuildMs: median(trips.map((t) => t.casino.build)),
     casinoFirstRenderMs: median(trips.map((t) => t.casino.firstRender)),
+    seaBuildMs: median(trips.map((t) => t.sea.build)),
+    seaFirstRenderMs: median(trips.map((t) => t.sea.firstRender)),
     leakedGeometriesPerTrip: (after.geometries - before.geometries) / 3,
     leakedTexturesPerTrip: (after.textures - before.textures) / 3,
     newProgramsPerTrip: (after.programs - before.programs) / 3,
     ...R.firstVisit,
+    ...R.firstSeaVisit,
   };
   delete R.firstVisit;
+  delete R.firstSeaVisit;
 
   const out = path.join(OUT_DIR, `${label}.json`);
   fs.mkdirSync(path.dirname(out), { recursive: true });

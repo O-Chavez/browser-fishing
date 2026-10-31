@@ -33,7 +33,7 @@ export interface NetEvents {
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
   /** Slash command replies; `time` is set when a command changed the day/night override, `sent` on a feedback answer. */
-  onDev(lines: string[], time: number | null | undefined, sent: boolean | undefined): void;
+  onDev(lines: string[], time: number | null | undefined, sent: boolean | undefined, depth: number | undefined): void;
   onClose(): void;
   /** The socket closed before the server accepted the join. */
   onFailed(): void;
@@ -167,7 +167,7 @@ export class NetClient {
         this.events.onSys(m.text);
         break;
       case 'dev':
-        this.events.onDev(m.lines, m.time, m.sent);
+        this.events.onDev(m.lines, m.time, m.sent, m.depth);
         break;
       case 'error':
         this.events.onError(m.msg, m.need);

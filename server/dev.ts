@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { BAITS, FISH, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
+import { zoneAt } from '../src/data/sea';
 import * as eco from '../src/game/economy';
 import { DISHES } from '../src/data/smokehouse';
 import * as smoke from '../src/game/smoke';
@@ -53,6 +54,8 @@ export interface DevTarget {
   teleport(map: string): void;
   /** A day fraction (see `dayFraction`), or null to follow the clock again. */
   setTime(f: number | null): void;
+  /** The dive depth the sea's look follows, for this player only. */
+  setDepth(depth: number): void;
   clearDig(): void;
 }
 
@@ -62,6 +65,7 @@ export const HELP = [
   '/coins N · /chips N · /level N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /time day|dusk|night|dawn|auto',
+  '/sea [depth] (the dives\' open sea; /tp pond to come back)',
   '/dig (reset worm cooldown) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
   '/resetpass <name> <new password>',
@@ -70,6 +74,8 @@ export const HELP = [
 
 /** There is no level cap; this only keeps `/level` typos sane. */
 const MAX_DEV_LEVEL = 999;
+/** Dives have no bottom either; this keeps `/sea` typos sane. */
+const MAX_DEV_DEPTH = 999;
 
 const int = (v: string | undefined, lo: number, hi: number): number | null => {
   const n = Number(v);
@@ -149,6 +155,17 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       if (!m) return say(`Map ids: ${Object.keys(t.maps).join(', ')}`);
       t.teleport(m.id);
       return ok(`Teleported to ${m.name}.`);
+    }
+    case 'sea': {
+      const depth = args[0] === undefined ? 1 : int(args[0], 1, MAX_DEV_DEPTH);
+      if (depth === null) return say(`Usage: /sea [depth 1-${MAX_DEV_DEPTH}]`);
+      const sea = Object.values(t.maps).find((m) => m.sea);
+      if (!sea) return say('There is no sea on this server.');
+      t.setDepth(depth);
+      const line = `At sea: ${zoneAt(depth).name}, depth ${depth}.`;
+      if (s.location === sea.id) return say(line);
+      t.teleport(sea.id);
+      return ok(line);
     }
     case 'time': {
       const k = args[0];

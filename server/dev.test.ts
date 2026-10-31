@@ -86,6 +86,33 @@ describe('dev commands in a room', () => {
     expect(devLines(a.log).at(-1)).toMatch(/Fish ids:/);
   });
 
+  it('takes a player to the open sea at a depth, only for them, and never back there on rejoin', () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(a.id, { t: 'cmd', text: '/sea 20' });
+    expect(a.save.location).toBe('sea');
+    // The depth reaches the client before the save that moves it, so the sea is built at that depth.
+    const dev = a.log.findIndex((m) => m.t === 'dev' && m.depth === 20);
+    const state = a.log.findIndex((m) => m.t === 'state' && m.save.location === 'sea');
+    expect(dev).toBeGreaterThanOrEqual(0);
+    expect(state).toBeGreaterThan(dev);
+    expect(devLines(a.log).at(-1)).toBe('At sea: The Drop-off, depth 20.');
+    expect(b.log.some((m) => m.t === 'dev')).toBe(false);
+    // Already at sea: only the depth changes.
+    room.handle(a.id, { t: 'cmd', text: '/sea' });
+    expect(a.log.at(-1)).toMatchObject({ t: 'dev', depth: 1 });
+    room.handle(a.id, { t: 'cmd', text: '/sea deep' });
+    expect(devLines(a.log).at(-1)).toMatch(/Usage/);
+    // The pond's gate doesn't lead to the sea, and a player who leaves at sea comes back at the pond.
+    room.handle(a.id, { t: 'travel', to: 'pond' });
+    expect(a.save.location).toBe('sea');
+    room.leave(a.id);
+    const again = join('Ann');
+    expect(again.save.location).toBe('pond');
+  });
+
   it('stocks the Pantry and finishes the smoker', () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');

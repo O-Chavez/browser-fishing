@@ -80,6 +80,8 @@ import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
 import { KOFI_URL } from '../data/support';
 import { World } from './world';
+import { ScreenSpray } from './screenspray';
+import { zoneAt } from '../data/sea';
 
 type Phase =
   | 'idle'
@@ -98,6 +100,16 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
+
+/** The "Casting off" card stays up at least this long (ms), so it reads as a moment rather than a flash. */
+const CAST_OFF_MS = 1400;
+/** Captain Reed's words on the card, going out to sea and coming back. */
+const CAST_OFF_LINES = [
+  'Feet wide, knees soft. She rolls more the further out we go.',
+  'Clear skies by the coast. Past the Drop-off the weather turns.',
+  'Cast over the rail and give them room. The sea is bigger than the pond.',
+];
+const HEADING_IN_LINES = ['Lines in, angler. Taking her home.', 'Good sailing. The harbour light is in sight.'];
 
 const CAMP_TIPS = [
   'Tip: hold the cast longer for a farther throw.',
@@ -137,6 +149,11 @@ export class Game {
   private lureShown = '';
   /** The dev console's /time froze this player's sky (the screenshot scripts' own override doesn't count). */
   private devTime = false;
+  /** The dive depth the sea looks like (dev console `/sea` for now; the dive sets it later). */
+  private seaDepth = 1;
+  /** When the "Casting off" card went up, while it covers a trip to or from the sea. */
+  private castOffAt: number | null = null;
+  private screenSpray = new ScreenSpray();
   private timer = 0;
 
   private origin = new THREE.Vector3();
@@ -299,7 +316,7 @@ export class Game {
         if (!self && m.room === this.net.room && m.map === this.map.id) this.avatars.say(m.id, m.text);
       },
       onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
-      onDev: (lines, time, sent) => {
+      onDev: (lines, time, sent, depth) => {
         // The answer to a report from the feedback form goes to the form; /bug typed in chat answers in chat.
         if (sent !== undefined && this.fb.answer(sent, lines[0] ?? '')) {
           clearTimeout(this.fbTimer);
@@ -309,6 +326,10 @@ export class Game {
         if (time !== undefined) {
           this.world.dayOverride = time;
           this.devTime = time !== null;
+        }
+        if (depth !== undefined) {
+          this.seaDepth = depth;
+          this.world.setDepth(depth);
         }
       },
       onDrops: (list) => {
@@ -656,6 +677,7 @@ export class Game {
         return run();
       },
       day: (f: number | null) => { this.world.dayOverride = f; },
+      splash: (k = 1) => this.screenSpray.burst(k),
       interact: () => this.interact(),
       openMenu: (tab: string) => this.openMenu(tab),
       closeMenu: () => this.setMenu(false),
@@ -1421,7 +1443,9 @@ export class Game {
 
   /** Builds the current map and places the player: at the gate when coming back from `from`, else at the spawn. */
   private applyLocation(from?: string): void {
+    const left = MAPS.find((m) => m.id === from);
     this.map = MAPS.find((m) => m.id === this.s.location) ?? MAPS[0];
+    if (this.map.sea || left?.sea) this.showCastOff(!!this.map.sea);
     this.s.location = this.map.id;
     this.world.setLocation(byId(LOCATIONS, this.map.locationId), this.map);
     this.setGateSign();
@@ -1436,6 +1460,28 @@ export class Game {
     this.world.hub?.setLeaders(this.anglers());
     this.world.hub?.setSupporters(this.net.supporters);
     this.world.hall?.records.set(this.net.records);
+  }
+
+  /** Covers the trip to or from the sea until the new map's shaders are ready; `tick` takes it down. */
+  private showCastOff(out: boolean): void {
+    const z = zoneAt(this.seaDepth);
+    $('castoff-title').textContent = out ? 'Casting off' : 'Heading in';
+    $('castoff-where').textContent = out ? `${z.name} · depth ${this.seaDepth}` : 'The harbour';
+    const lines = out ? CAST_OFF_LINES : HEADING_IN_LINES;
+    $('castoff-line').textContent = `Captain Reed: "${lines[Math.floor(Math.random() * lines.length)]}"`;
+    const el = $('castoff');
+    el.classList.remove('hidden', 'fade');
+    this.castOffAt = performance.now();
+  }
+
+  private updateCastOff(): void {
+    if (this.castOffAt === null || !this.world.ready || performance.now() - this.castOffAt < CAST_OFF_MS) return;
+    this.castOffAt = null;
+    const el = $('castoff');
+    el.classList.add('fade');
+    window.setTimeout(() => {
+      if (this.castOffAt === null) el.classList.add('hidden');
+    }, 500);
   }
 
   // ---------- walking & interaction ----------
@@ -2353,9 +2399,13 @@ export class Game {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.tick(dt);
-    // Behind the join screen, wait for the background shader compile instead of stalling on it.
-    this.world.holdForShaders = !$('join').classList.contains('hidden');
+    // Behind the join screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
+    this.updateCastOff();
+    this.world.holdForShaders = !$('join').classList.contains('hidden') || this.castOffAt !== null;
     this.world.update(dt);
+    const sea = this.world.sea;
+    this.screenSpray.update(dt, sea ? this.world.mood : 0, sea?.slam ?? 0, this.world.night);
+    audio.seaSound(dt, sea ? { mood: this.world.mood, slam: sea.slam, rise: sea.swell > 0.05 ? Math.max(-1, Math.min(1, sea.motion.heave / sea.swell)) : 0 } : null);
     this.drawGauge(now / 1000);
     if (this.phase !== this.shownPhase) {
       // CSS hides parts of the touch HUD by phase (e.g. the hotbar during a fight).
@@ -2401,7 +2451,8 @@ export class Game {
 
   private updateSpot(): void {
     if (this.phase !== 'idle' && this.phase !== 'charging') return;
-    if (this.map.casino) {
+    // Pier spots are a pond thing: the whole rail is open water at sea.
+    if (this.map.casino || this.map.sea) {
       if (this.spotShown) {
         $('spot').className = 'hidden';
         this.spotShown = '';

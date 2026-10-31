@@ -1,5 +1,5 @@
 // End-to-end smoke test: plays the game in headless Chrome and checks the flows most likely to
-// break silently (merged scenery, the wardrobe preview, map travel, the casino tables).
+// break silently (merged scenery, the wardrobe preview, map travel, the casino tables, the dive's open sea).
 //
 //   npm run smoke
 //
@@ -57,7 +57,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
 
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
   // No Discord webhooks: the feedback check below must not post a real report.
-  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '' },
+  // Dev console on, for `/sea`.
+  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '', DEV_USER: 'smoke', DEV_PASS: 'smoke-dev-pass' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 await waitForLine(server, /fishing server on port/);
@@ -74,6 +75,7 @@ const browser = await puppeteer.launch({
 try {
   await pondChecks();
   await casinoChecks();
+  await seaChecks();
   await chatChecks();
   await noWebglChecks();
   // Last: it stops the server.
@@ -642,6 +644,97 @@ async function casinoChecks(): Promise<void> {
     const want = MAPS[0].gateArrival!;
     check('travel: back from the casino at the pond gate, facing town', Math.hypot(at.x - want.x, at.z - want.z) < 0.5 && Math.abs(at.yaw - want.yaw) < 0.01, JSON.stringify(at));
     await page.screenshot({ path: `${SHOTS}/pond-after-travel.png` });
+  }
+  await ctx.close();
+}
+
+// ---------- the open sea (dev console; the dive trip comes later) ----------
+
+async function seaChecks(): Promise<void> {
+  const ctx = await browser.createBrowserContext();
+  const page = await openPage(`http://localhost:${VITE_PORT}/?name=Smoke&room=smoke`, ctx, TOKEN);
+  await page.waitForFunction(() => window.__game.online() && (window.__game.world as any).hub, { timeout: 15000 });
+  await page.evaluate(() => { window.__game.activate(); window.__game.day(0.1); });
+  await sleep(600);
+  const say = async (text: string) => {
+    await page.keyboard.press('Enter');
+    await page.keyboard.type(text);
+    await page.keyboard.press('Enter');
+    await sleep(300);
+  };
+  await say('/login smoke smoke-dev-pass');
+  await say('/sea 20');
+  const trip = await page.evaluate(async () => {
+    const card = document.getElementById('castoff')!;
+    const t0 = performance.now();
+    let shown = '';
+    while (performance.now() - t0 < 15000) {
+      if (!card.classList.contains('hidden') && !shown) shown = card.textContent ?? '';
+      if ((window.__game.world as any).sea && shown && card.classList.contains('hidden')) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const w = window.__game.world as any;
+    return { sea: !!w.sea, boat: !!w.boat, hub: !!w.hub, mood: w.mood, shown, gone: card.classList.contains('hidden') };
+  });
+  check('sea: /sea takes you to the open sea, with the boat and no pond hub', trip.sea && trip.boat && !trip.hub, JSON.stringify(trip));
+  check('sea: the "Casting off" card covers the trip, names the zone, then clears', trip.shown.includes('Casting off') && trip.shown.includes('The Drop-off') && trip.gone, trip.shown);
+  check('sea: depth 20 sets the Drop-off mood', Math.abs(trip.mood - 2 / 3) < 0.01, String(trip.mood));
+  if (!trip.sea) return void (await ctx.close());
+
+  // Walk toward the rail and beyond: the deck holds you.
+  const walk = await page.evaluate(async () => {
+    const env = await import('/src/game/env.ts' as any);
+    const g = window.__game;
+    const start = g.player();
+    g.look(0, -0.1);
+    return { start, onDeck: env.onDock(start.x, start.z) };
+  });
+  await page.keyboard.down('KeyW');
+  await sleep(1500);
+  await page.keyboard.up('KeyW');
+  const after = await page.evaluate(async () => {
+    const env = await import('/src/game/env.ts' as any);
+    const p = window.__game.player();
+    return { ...p, onDeck: env.onDock(p.x, p.z) };
+  });
+  check('sea: you spawn on the deck at eye height', walk.onDeck && Math.abs(walk.start.y - (0.45 + 1.7)) < 0.05, JSON.stringify(walk.start));
+  check('sea: walking into the rail keeps you on board', after.onDeck && after.z < walk.start.z - 0.5, JSON.stringify(after));
+
+  // Cast over the rail: the bobber lands in the water and rides the swell.
+  await page.keyboard.press('1');
+  await sleep(300);
+  const cast = await page.evaluate(async () => {
+    const g = window.__game;
+    const w = g.world as any;
+    g.press();
+    await new Promise((r) => setTimeout(r, 400));
+    g.release();
+    await new Promise((r) => setTimeout(r, 2500));
+    const b = w.bobber.position;
+    return { phase: g.state().phase, visible: w.bobber.visible, gap: Math.abs(b.y - w.surface(b.x, b.z)), z: b.z };
+  });
+  await page.screenshot({ path: `${SHOTS}/sea.png` });
+  check('sea: a cast over the rail lands in the water and floats on the swell', cast.visible && cast.z < -3 && cast.gap < 0.2 && cast.phase !== 'idle', JSON.stringify(cast));
+  await page.evaluate(() => window.__game.press());
+  await sleep(300);
+
+  await say('/tp pond');
+  const home = await page.evaluate(async () => {
+    const card = document.getElementById('castoff')!;
+    const t0 = performance.now();
+    let shown = '';
+    while (performance.now() - t0 < 15000) {
+      if (!card.classList.contains('hidden') && !shown) shown = card.textContent ?? '';
+      if ((window.__game.world as any).hub && shown && card.classList.contains('hidden')) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return { hub: !!(window.__game.world as any).hub, sea: !!(window.__game.world as any).sea, shown };
+  });
+  check('sea: /tp pond heads back in, with its own card, to the pond', home.hub && !home.sea && home.shown.includes('Heading in'), JSON.stringify(home));
+  if (home.hub) {
+    await sleep(500);
+    const hub = await page.evaluate(() => window.__smoke.attachedReport('hub'));
+    check('sea: pond hub intact after the trip', hub.missing.length === 0, hub.missing.join(', '));
   }
   await ctx.close();
 }

@@ -139,7 +139,9 @@ export class Room {
   join(conn: Conn, acct: Account, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
     const id = this.nextId++;
-    const map = this.maps[acct.save.location] ?? Object.values(this.maps)[0];
+    const saved = this.maps[acct.save.location];
+    // The sea is only for a dive, which doesn't outlast a session yet: come back at the pond.
+    const map = (saved && !saved.sea ? saved : null) ?? Object.values(this.maps)[0];
     acct.save.location = map.id;
     const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
     const m: Member = { info, conn, acct, pending: null, spin: null, bj: null, smokeAt: this.now() };
@@ -443,7 +445,7 @@ export class Room {
   private command(m: Member, text: unknown): void {
     if (typeof text !== 'string' || !text.startsWith('/')) return;
     const [cmd = '', ...args] = text.slice(1, 200).trim().split(/\s+/);
-    const reply = (lines: string[], extra: { time?: number | null; sent?: boolean } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
+    const reply = (lines: string[], extra: { time?: number | null; depth?: number; sent?: boolean } = {}) => m.conn.send({ t: 'dev', lines, ...extra });
     const kind = cmd.toLowerCase() as FeedbackKind;
     if (FEEDBACK_KINDS.includes(kind)) return this.feedback(m, kind, text.replace(/^\/\S*\s*/, ''), reply);
     if (cmd === 'login') {
@@ -481,14 +483,17 @@ export class Room {
     console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
     if (m.spin || m.bj) return reply(['Finish the spin or hand first.']);
     let time: number | null | undefined;
+    let depth: number | undefined;
     const res = runDev({
       save: m.acct.save,
       maps: this.maps,
       teleport: (map) => this.teleport(m, map),
       setTime: (f) => { m.dayFrac = time = f; },
+      setDepth: (d) => { depth = d; },
       clearDig: () => this.dugAt.delete(m.acct),
     }, cmd.toLowerCase(), args);
-    reply(res.lines, time === undefined ? {} : { time });
+    // Before the new save: the client builds the sea for this depth when the save moves it there.
+    reply(res.lines, { ...(time === undefined ? {} : { time }), ...(depth === undefined ? {} : { depth }) });
     if (!res.changed) return;
     this.syncCarry(m);
     this.onChange();
