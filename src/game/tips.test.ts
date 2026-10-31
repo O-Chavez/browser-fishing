@@ -25,6 +25,9 @@ describe('new-player tips', () => {
     expect(tipText('catch', newSave(), 'Marlow')).toContain('Marlow');
     expect(tipText('catch', newSave(), 'Marlow', true)).not.toContain('<kbd>E</kbd>');
     expect(tipText('start', newSave(), 'Marlow', true)).not.toContain('Click');
+    expect(tipText('reel', newSave(), 'Marlow')).toContain('green');
+    expect(tipText('fray', newSave(), 'Marlow')).toContain('10% more');
+    expect(tipText('slack', newSave(), 'Marlow', true)).toContain('hold the button');
   });
 
   it('gives saves from before tips none if they are fresh, and all of them otherwise', () => {

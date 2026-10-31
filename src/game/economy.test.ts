@@ -26,6 +26,19 @@ describe('best catch', () => {
   });
 });
 
+describe('clean catch', () => {
+  it('a fish landed without fraying the line is worth 10% more', () => {
+    const f = FISH[FISH.length - 1];
+    const plain = newSave();
+    eco.applyCatch(plain, f, f.maxSize);
+    const clean = newSave();
+    const res = eco.applyCatch(clean, f, f.maxSize, false, true);
+    expect(res.mult).toBeCloseTo(1 + eco.CLEAN_BONUS);
+    const item = (s: SaveData) => s.slots.find((sl) => sl?.k === 'fish') as { fishId: string; size: number; mult?: number };
+    expect(eco.fishValue(item(clean)) / eco.fishValue(item(plain))).toBeCloseTo(1 + eco.CLEAN_BONUS);
+  });
+});
+
 describe('carry slots', () => {
   it('starts with a rod, a worm stack and three free slots', () => {
     const s = newSave();

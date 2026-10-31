@@ -1,6 +1,6 @@
 import { CASINO_LEVEL } from '../data/casino';
 import { BAITS, FISH, RODS, type Rod } from '../data/content';
-import { BAIT_PACK } from './economy';
+import { BAIT_PACK, CLEAN_BONUS } from './economy';
 import { COIN } from './format';
 import type { SaveData } from './state';
 
@@ -8,7 +8,7 @@ import type { SaveData } from './state';
  * One-time tips that walk a new player through the core loop: cast, reel, sell, buy better bait,
  * catch better fish. Each shows once per account; the ids seen are kept in the save.
  */
-export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier', 'smoker', 'snack', 'dish'] as const;
+export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier', 'smoker', 'snack', 'dish', 'fray', 'slack'] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export const isTip = (id: unknown): id is TipId => TIP_IDS.includes(id as TipId);
@@ -36,7 +36,12 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
         ? '<b>Hold the cast button</b> to wind up, let go to cast. Wait for the <b>!</b>, then tap it to hook the fish.'
         : '<b>Hold Click</b> to wind up, let go to cast. Wait for the <b>!</b>, then click to hook the fish.';
     case 'reel':
-      return `<b>${touch ? 'Hold the button' : 'Hold Click'}</b> to reel in. Ease off when the fish surges, or the line can snap.`;
+      return `<b>${touch ? 'Hold the button' : 'Hold Click'}</b> to reel in. When the fish surges, keep the gauge <b>green</b>: ease off before the red, and tighten before the fish takes your line.`;
+    case 'fray':
+      // Shown at the first fray, so players from before the fight rework learn the new rule too.
+      return `Line frayed! You held in the red too long: ease off when it says <b>EASE OFF!</b>. Two frays snap the line, and a fish landed with none is a <b>clean catch</b>, worth ${Math.round(CLEAN_BONUS * 100)}% more.`;
+    case 'slack':
+      return `The fish took all your line! When it surges, keep the gauge above the white marker: ${touch ? 'hold the button' : 'hold Click'} to tighten the line when it says <b>TIGHTEN!</b>.`;
     case 'catch':
       return `Your first fish! Sell it to <b>${vendor}</b> at the striped stall by the pier: walk up and ${touch ? 'tap the prompt' : 'press <kbd>E</kbd>'}.`;
     case 'sold': {

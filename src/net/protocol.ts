@@ -57,7 +57,8 @@ export type ClientMsg =
   | { t: 'drop' }
   | { t: 'pickup'; id: number }
   | { t: 'cast'; x: number; z: number; perfect?: boolean }
-  | { t: 'catch' }
+  /** `clean`: landed without fraying the line (trusted until the server replays fights). */
+  | { t: 'catch'; clean?: boolean }
   | { t: 'lost' }
   | { t: 'gamble' }
   /** Walk through the gate to another map. */

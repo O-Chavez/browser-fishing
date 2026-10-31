@@ -403,11 +403,14 @@ export interface CatchResult {
   stages: StageId[];
   /** Level gifts past 50 this catch turned into dishes in the Pantry. */
   gift?: { id: DishId; n: number };
-  /** The fish's value multiplier: Lucky Charm and 💰 snack or dish. */
+  /** The fish's value multiplier: Lucky Charm, 💰 snack or dish, and the clean catch bonus. */
   mult: number;
 }
 
-export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false): CatchResult {
+/** A clean catch (landed without fraying the line) is worth this much more. */
+export const CLEAN_BONUS = 0.1;
+
+export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false): CatchResult {
   const slot = freeFishSlot(s);
   if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
@@ -420,7 +423,7 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false)
   const record = !!entry && size > entry.best;
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
-  const mult = catchMult(s);
+  const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1);
   s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
   const value = Math.round(sellValue(fish, size, shiny) * mult);
   if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
