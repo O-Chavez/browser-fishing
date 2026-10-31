@@ -42,8 +42,9 @@ export interface DiveView {
   ledges: number;
   /** Pearls in the haul, before its growth (`haulBonus(ledges)`). */
   pearls: number;
-  /** Fish landed this dive. */
+  /** Fish landed this dive, and the coins they sold for. */
   fish: number;
+  coins: number;
   /** Metres the last fight wore off the spool, and why it was lost if it was. */
   worn?: number;
   lost?: LossReason | 'gone';
@@ -51,12 +52,12 @@ export interface DiveView {
 
 /**
  * How a dive ended. Surfaced: the haul banked with its growth, and the ledge charted. Sunk: the line ran out (`line`),
- * the player was away longer than the dive waits (`away`), or reset their account (`quit`); the fish were sold as
- * they were landed either way.
+ * the player was away longer than the dive waits (`away`), headed home between ledges (`home`), or reset their
+ * account (`quit`); the fish were sold as they were landed either way, for `coins`.
  */
 export type DiveEnd =
-  | { result: 'surfaced'; ledge: number; pearls: number; record: boolean; fish: number }
-  | { result: 'sunk'; why: 'line' | 'away' | 'quit'; depth: number; pearls: number; fish: number; lost?: LossReason | 'gone' };
+  | { result: 'surfaced'; ledge: number; pearls: number; record: boolean; fish: number; coins: number }
+  | { result: 'sunk'; why: 'line' | 'away' | 'home' | 'quit'; depth: number; pearls: number; fish: number; coins: number; lost?: LossReason | 'gone' };
 
 export type Activity =
   | { a: 'cast'; x: number; z: number }
@@ -101,6 +102,8 @@ export type ClientMsg =
   | { t: 'dive'; from: number }
   /** At a ledge: dive on, or surface with the haul. */
   | { t: 'ledge'; a: 'on' | 'surface' }
+  /** Head home between ledges: the dive ends and its haul sinks. */
+  | { t: 'headhome' }
   | { t: 'gamble' }
   /** Walk through the gate to another map. */
   | { t: 'travel'; to: string }

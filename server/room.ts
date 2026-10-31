@@ -17,7 +17,7 @@ import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
-import { diveView, expired, newRun, type DiveRun } from './dive';
+import { diveView, expired, newRun, sunkEnd, type DiveRun } from './dive';
 import type { SmokeStats } from './smokestats';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
@@ -170,7 +170,7 @@ export class Room {
     let run = acct.dive ?? null;
     let sunk: DiveEnd | null = null;
     if (run && expired(run, this.now())) {
-      sunk = { result: 'sunk', why: 'away', depth: run.dive.depth, pearls: run.dive.pearls, fish: run.dive.fish.length };
+      sunk = sunkEnd(run, 'away');
       acct.dive = undefined;
       run = null;
     }
@@ -352,7 +352,7 @@ export class Room {
         break;
       case 'reset':
         m.pending = null;
-        if (this.runOf(m)) this.endDive(m, { result: 'sunk', why: 'quit', depth: m.acct.dive!.dive.depth, pearls: m.acct.dive!.dive.pearls, fish: m.acct.dive!.dive.fish.length });
+        if (this.runOf(m)) this.endDive(m, sunkEnd(m.acct.dive!, 'quit'));
         this.resetAccount(m);
         changed = true;
         break;
@@ -399,6 +399,9 @@ export class Room {
         break;
       case 'ledge':
         changed = this.ledge(m, msg.a);
+        break;
+      case 'headhome':
+        changed = this.headHome(m);
         break;
     }
     if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell' || msg.t === 'smoke' || msg.t === 'smokeall')) this.syncCarry(m);
@@ -649,11 +652,11 @@ export class Room {
   private startDive(m: Member, from: unknown): boolean {
     const s = m.acct.save;
     const h = this.maps[m.info.map]?.harbour;
-    if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Dives start at Captain Reed's stand on the harbour pier.");
+    if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Charters start at Captain Reed's stand on the harbour pier.");
     if (m.acct.dive || m.pending) return false;
-    if (!eco.ownsRod(s, DIVE.rod)) return this.deny(m, `Dives need the ${byId(RODS, DIVE.rod).name}.`);
+    if (!eco.ownsRod(s, DIVE.rod)) return this.deny(m, `Charters need the ${byId(RODS, DIVE.rod).name}.`);
     const start = int(from);
-    if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, 'A dive starts from the harbour or a ledge you have charted.');
+    if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, "Reed sails from the harbour or a marker you've charted.");
     return this.launch(m, start);
   }
 
@@ -683,7 +686,15 @@ export class Room {
     if (a !== 'surface') return false;
     const res = surface(run.dive, m.acct.save.sea)!;
     m.acct.save.pearls += res.pearls;
-    this.endDive(m, { result: 'surfaced', ledge: res.ledge, pearls: res.pearls, record: res.record, fish: res.fish.length });
+    this.endDive(m, { result: 'surfaced', ledge: res.ledge, pearls: res.pearls, record: res.record, fish: res.fish.length, coins: run.coins });
+    return true;
+  }
+
+  /** Between ledges: give up and head home. The haul sinks; the fish were already sold. Not mid-cast. */
+  private headHome(m: Member): boolean {
+    const run = this.runOf(m);
+    if (!run || run.dive.state !== 'fishing' || m.pending) return false;
+    this.endDive(m, sunkEnd(run, 'home'));
     return true;
   }
 
@@ -704,7 +715,7 @@ export class Room {
     run.worn = lineWorn(wear, landed);
     run.lost = lost;
     m.conn.send({ t: 'divestate', dive: diveView(run) });
-    if (run.dive.state === 'sunk') this.endDive(m, { result: 'sunk', why: 'line', depth: run.dive.depth, pearls, fish: run.dive.fish.length, ...(lost ? { lost } : {}) });
+    if (run.dive.state === 'sunk') this.endDive(m, sunkEnd(run, 'line', pearls, lost));
   }
 
   /**
@@ -871,8 +882,8 @@ export class Room {
       return false;
     };
     const run = this.runOf(m);
-    if (!run) return fail("You're not on a dive. Start one at Captain Reed's stand.");
-    if (run.dive.state !== 'fishing') return fail('Choose at the ledge first: dive on, or surface with the haul.');
+    if (!run) return fail("You're not on a charter. Book one at Captain Reed's stand.");
+    if (run.dive.state !== 'fishing') return fail('Choose at the marker first: head home with the haul, or sail on.');
     const can = finite(x, z) ? eco.canCastAt(s, true) : 'hands';
     if (can !== 'ok') return fail(eco.CAST_MESSAGES[can]);
     this.abandon(m);
@@ -914,7 +925,10 @@ export class Room {
     }
     for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
     this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(res.mult > 1 ? { mult: res.mult } : {}) });
-    if (run) this.fightOver(m, run, p, true, fight.wear);
+    if (run) {
+      run.coins += res.sold ?? 0;
+      this.fightOver(m, run, p, true, fight.wear);
+    }
     return true;
   }
 

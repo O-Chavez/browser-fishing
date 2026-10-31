@@ -635,3 +635,66 @@ body.touch #prompt b { font-size: 0; }
 body.touch #prompt b::after { content: '👆'; font-size: 20px; }
 /* Tips sit at the left, clear of the reel ring's centre text and the hotbar. */
 body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width: 470px; transform: none; }
+
+/* ---------- sea trips (src/game/divehud.ts): the strip at sea, Reed's panel, a marker's choice, the end cards ---------- */
+.pearl { display: inline-block; width: 15px; height: 15px; border-radius: 50%; vertical-align: -2px; background: radial-gradient(circle at 35% 30%, #fff 0 18%, #f3ecf6 30%, #cfc3dc 70%, #a597b8 100%); box-shadow: 0 0 0 1.5px rgba(0,0,0,.25), 0 0 6px rgba(255,255,255,.5); }
+#divehud { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; background: var(--hud-bg); box-shadow: var(--hud-edge), 0 6px 14px rgba(0,0,0,.3); border-radius: 16px; white-space: nowrap; }
+#divehud > div { padding: 7px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+#divehud > div + div { border-left: 2px solid rgba(255,255,255,.12); }
+#divehud .zone { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fd6e6; font-weight: 900; }
+#divehud .depth { font-size: 22px; font-weight: 900; line-height: 1; }
+#divehud .depth small { font-size: 12px; color: var(--cream-muted); font-weight: 800; margin-right: 5px; }
+#divehud .lab { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--cream-muted); font-weight: 900; }
+#divehud .linerow { display: flex; align-items: center; gap: 10px; }
+#divehud .bar { width: 150px; height: 12px; border-radius: 99px; background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.12); overflow: hidden; }
+#divehud .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(#f2dfb0, #c9a56a); transition: width .5s ease-out; }
+#divehud .line.low .bar i { background: linear-gradient(#ffc36b, #e08a2b); }
+#divehud .line.danger .bar i { background: linear-gradient(#ff8a70, #d9442b); }
+#divehud .line.danger .m { color: #ff9b7a; }
+#divehud .m { font-size: 16px; font-weight: 900; }
+#divehud .worn { font-size: 13px; font-weight: 900; color: #ff9b7a; animation: wornIn .3s ease-out both; }
+@keyframes wornIn { from { opacity: 0; transform: translateY(-4px); } }
+#divehud .haul { font-size: 19px; font-weight: 900; display: flex; align-items: center; gap: 6px; }
+#divehud .grow { font-size: 12px; font-weight: 900; padding: 1px 7px; border-radius: 99px; background: var(--gold); color: var(--gold-ink); }
+#divehud .dfish { font-size: 15px; color: var(--cream-muted); margin-left: 4px; }
+#divetag { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; background: #c96a2b; color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
+#divetag span { font-weight: 700; opacity: .9; }
+#divehud:not(.hidden) ~ #chat { top: 112px; }
+
+#menu.dive .win { width: min(560px, 94vw); }
+#menu.dive .sheet { padding: 16px 24px 20px; }
+.dcard { text-align: center; }
+.dcard h2 { margin: 2px 0; font-size: 30px; font-weight: 900; color: var(--gold); -webkit-text-stroke: 6px var(--wood-800); paint-order: stroke fill; }
+.dcard h2.blue { color: #8fd6e6; }
+.dcard .sub { font-size: 14px; font-weight: 800; color: var(--ink-muted); margin-bottom: 10px; }
+.dcard .rows, .reed .rows { display: grid; gap: 8px; margin: 10px 0 14px; text-align: left; }
+.dcard .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.1); font-size: 15px; }
+.dcard .row b { font-size: 17px; }
+.dcard .row .bar { flex: 1; height: 10px; margin: 0 6px; border-radius: 99px; background: var(--paper-2); overflow: hidden; }
+.dcard .row .bar i { display: block; height: 100%; background: #c9a56a; }
+.dcard .row.low .bar i { background: #e08a2b; }
+.dcard .row.danger .bar i { background: #d9442b; }
+.dcard .row.danger b { color: #b8341f; }
+.dcard .note { font-size: 13px; color: var(--ink-muted); font-weight: 700; margin: 0 0 14px; }
+.dcard .btns, .reed .btns { display: flex; gap: 10px; }
+.dcard .btns .btn, .reed .btns .btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.dcard .btns .btn small { font-size: 12px; font-weight: 800; opacity: .85; }
+.dcard .btn kbd { font-size: 11px; height: 20px; min-width: 20px; margin-right: 5px; background: rgba(0,0,0,.15); color: inherit; box-shadow: none; }
+body.touch .dcard .btn kbd { display: none; }
+.dcard .ribbon { display: inline-block; margin: 0 4px 6px; padding: 3px 12px; border-radius: 99px; font-size: 13px; font-weight: 900; color: #fff; background: #3fa65a; }
+.dcard .ribbon.gold { background: var(--gold); color: var(--gold-ink); }
+.dcard .big { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 40px; font-weight: 900; color: var(--gold-dark); margin: 4px 0 2px; }
+.dcard .big .pearl { width: 30px; height: 30px; }
+.dcard .big.lost { color: #8a7a6a; text-decoration: line-through; text-decoration-thickness: 3px; }
+.dcard .why { margin: 6px 0 10px; padding: 10px 14px; border-radius: 12px; background: #fde3d8; color: #8a2f1d; font-weight: 800; font-size: 15px; }
+.reed .say { margin: 0 0 6px; font-style: italic; color: var(--ink-muted); font-size: 15px; }
+.reed .zlab { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 900; color: var(--ink-muted); margin: 10px 0 6px; }
+.reed .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.reed .chip { min-width: 64px; padding: 8px 12px; border-radius: 12px; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.15); font: inherit; font-weight: 900; font-size: 15px; color: var(--ink); text-align: center; cursor: pointer; }
+.reed .chip small { display: block; font-size: 11px; color: var(--ink-muted); font-weight: 800; }
+.reed .chip.sel { background: var(--gold); box-shadow: 0 0 0 3px var(--wood-600); }
+.reed .chip.rec::after { content: '★'; margin-left: 4px; color: var(--gold-dark); }
+.reed .detail { margin: 14px 0; padding: 10px 14px; border-radius: 12px; background: var(--paper-2); font-size: 14px; line-height: 1.5; }
+.reed .foot { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-muted); font-weight: 800; margin-top: 12px; }
+.seastrip { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px; background: #d8ecef; font-size: 14px; font-weight: 800; }
+.seastrip .btn { flex: none; padding: 8px 14px; font-size: 14px; }

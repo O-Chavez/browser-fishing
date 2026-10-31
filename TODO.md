@@ -13,8 +13,16 @@ Finished items move to [DONE.md](DONE.md).
   - The `pos`-trust fix: moves are taken only as far as the player could sprint (a 20 m budget for bunched messages), clamped to the map's edge, and the client is sent back (`pos`) when a move was too far. Test teleports go through `/goto` (dev console, or `TEST_HOOKS=1` in the scripted runs).
   - Dev: `/sea [depth]` starts a real dive there, `/ledge on|up` chooses at a ledge until D3's HUD. Rod level reads `seaRodLevel()` in `economy.ts`, a 0 stub until D4, whose version replaces it. D4 adds `pearls` to the save too: keep one when merging.
   - Checked: build, tests (430) and `npm run smoke` (85/85, with an online sea fight landed and sold at depth 20, and no move corrections while walking). Next: Oscar's OK, then merge. D3 builds the HUD and cards on these messages. Gameplan: the build-steps table
-- 📋 D3, the dive client: the trip flow from Reed, depth, line and haul on the HUD, the ledge choice, surfaced and sunk cards with the loss reason, and the ledge picker. A new dive HUD module, hooks in `game.ts`. Needs D2, S1 and H1. Gameplan: the build-steps table
-- D6, the Deepest Dive board at the harbour; the record is the deepest ledge a player surfaced from. `server/accounts.ts`, `town.ts`. Needs D2, H1 and F2. Gameplan: "Shared: seeing it and fishing together"
+- 🚧 D3, the dive client (branch `d3-dive-client`, built on `d2-dive-server`): built and tested; next is Oscar's play test, then merge after D2. Decided (Oscar, 2026-10-31, from mockups): the HUD is one strip across the top; a marker's choice is a centred card; players can head home between markers (the haul sinks). On screen a dive sails out rather than down: depth is "league N", a ledge is a "marker" every 5 leagues, the choice is **Head home** or **Sail on**, and coming back with the haul is "Home safe!". The code keeps depth and ledge. The zone names stay (Shelf, Drop-off, Kelp Deep, Twilight, Abyss): they are the stretches of sea the markers sit in. The outing is a "charter" everywhere players read it, a marker is named by its league ("Marker 25", "+40% at marker 30"), and "league N" is only where the boat is now. Reed's sign says CHARTERS (wording can be tweaked later).
+  - `src/game/divehud.ts`, with hooks in `game.ts`:
+    - the strip: zone and league, the next marker, the line bar (orange under 60 m, red under 25 m) with the last fight's cost, and the haul with its growth and fish count; the hooked fish's behaviour tag under it;
+    - Captain Reed's panel (talk to him; he leads with his next line): the harbour and charted markers as chips grouped by zone, what the water holds, and Cast off; without the Aurora Rod it says where to get one;
+    - the marker card (keys 1 / 2; it waits for the catch card, and casting or E reopens it if closed);
+    - Head home from the Bag at sea, with a confirm;
+    - the end cards: "Home safe!" (pearls with the growth worked out, the marker charted, a new record, fish sold and their coins), and "The haul sank" or "Headed home" with the reason (line out and how the last fish was lost, away too long, or headed home).
+  - On the server: a `headhome` message (between markers, not mid-cast) and coins earned per dive (`DiveRun.coins`, in `DiveView` and `DiveEnd`). The trip's notices and Reed's lines use the new words. Sea fish on the catch card read "Sea fish · sold on the spot" instead of "Spirit fish".
+  - Checked: build, tests (438) and `npm run smoke` (91/91, with 6 new trip checks: Reed's panel, Cast off and the strip, a fish moving it a league, head home between markers, a marker's choice, and Home safe charting it), plus headless screenshots of each card. Gameplan: the build-steps table
+- D6, the Furthest Out board at the harbour (the name Oscar OK'd in D3, 2026-10-31, replacing "Deepest Dive"); the record is the furthest marker a player headed home from (the deepest ledge surfaced from, in code). `server/accounts.ts`, `town.ts`. Needs D2, H1 and F2. Gameplan: "Shared: seeing it and fishing together"
 
 ## Ideas
 
@@ -71,6 +79,7 @@ Finished items move to [DONE.md](DONE.md).
 ### World, NPCs and visuals
 
 - Sea motion comfort: a "Reduce boat motion" setting that flattens the horizon's roll at sea (`TILT` and `MAX_TILT` in `src/data/sea.ts`), if any player finds the roll queasy. S1 keeps it modest: about 1.4° at the Shelf, 2.5° at the Drop-off, 3° at most
+- At sea the hotbar still shows the bait slot, though sea casts use no bait (D2). Oscar (2026-10-31): maybe hide the whole hotbar at sea, but leave it until charters are closer to done
 - 🎨 A stylised "Casting off" card (Oscar, 2026-10-31): S1's is a plain panel over a sky-and-sea gradient (`#castoff`, `index.html` and `src/style.css`). A drawn harbour or the boat leaving the pier could replace it later
 - 🎨 East Landing at night: the harbour pier is dark after dusk (`World.lanterns` only covers the main pier, and each lantern is a point light); Reed's stand has just a glowing bulb. Decide whether the harbour gets a lantern or two once the map rework settles
 - 🎨 Townsfolk follow the day: head indoors at night (Granny Wren to her cottage) or gather at the campfire; their walks could take a different loop after dark (`nightLines` already exists for talk)

@@ -1017,7 +1017,7 @@ describe('dives', () => {
     expect(last(a.c, 'notice').msg).toMatch(/Reed's stand/);
     t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
     t.room.handle(a.id, { t: 'dive', from: 0 });
-    expect(last(a.c, 'notice').msg).toBe('Dives need the Aurora Rod.');
+    expect(last(a.c, 'notice').msg).toBe('Charters need the Aurora Rod.');
     a.acct.save.locker.rods.push('aurora');
     t.room.handle(a.id, { t: 'dive', from: 5 });
     expect(last(a.c, 'notice').msg).toMatch(/charted/);
@@ -1055,7 +1055,7 @@ describe('dives', () => {
     expect(lastDive(a)).toMatchObject({ depth: 5, fish: 5, pearls: 5, state: 'ledge', ledges: 1 });
     // At a ledge the player chooses before fishing again.
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
-    expect(last(a.c, 'castfail').msg).toMatch(/ledge/);
+    expect(last(a.c, 'castfail').msg).toMatch(/marker/);
     t.room.handle(a.id, { t: 'ledge', a: 'on' });
     expect(lastDive(a).state).toBe('fishing');
     for (let i = 0; i < 5; i++) fight(t, a);
@@ -1064,12 +1064,42 @@ describe('dives', () => {
     // Banked with two ledges' growth, charted, a new record, and back at the pier head.
     expect(s.pearls).toBe(Math.round(10 * haulBonus(2)));
     expect(s.sea).toEqual({ ledges: [10], record: 10 });
-    expect(last(a.c, 'diveend').end).toEqual({ result: 'surfaced', ledge: 10, pearls: 12, record: true, fish: 10 });
+    expect(last(a.c, 'diveend').end).toEqual({ result: 'surfaced', ledge: 10, pearls: 12, record: true, fish: 10, coins: s.coins - coins });
+    expect(s.coins - coins).toBeGreaterThan(10_000);
     expect(s.location).toBe('pond');
     expect(last(a.c, 'state').save.location).toBe('pond');
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     t.room.handle(a.id, { t: 'ledge', a: 'surface' });
     expect(s.pearls).toBe(12);
+  });
+
+  it('heads home between ledges, sinking the haul, but not mid-cast or at a ledge', () => {
+    const t = setup();
+    const a = diver(t);
+    const s = a.acct.save;
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    const coins = s.coins;
+    fight(t, a);
+    fight(t, a);
+    expect(lastDive(a)).toMatchObject({ depth: 2, pearls: 2, fish: 2, coins: s.coins - coins });
+    // Not with a line in the water.
+    t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
+    t.room.handle(a.id, { t: 'headhome' });
+    expect(s.location).toBe('sea');
+    t.advance(last(a.c, 'castok').wait * 1000 + 100);
+    t.room.handle(a.id, { t: 'lost' });
+    t.room.handle(a.id, { t: 'headhome' });
+    expect(last(a.c, 'diveend').end).toEqual({ result: 'sunk', why: 'home', depth: 2, pearls: 2, fish: 2, coins: s.coins - coins });
+    expect(s.location).toBe('pond');
+    expect(s.pearls).toBe(0);
+    expect(s.sea).toEqual({ ledges: [], record: 0 });
+    // At a ledge the choice is head home with the haul (`ledge`), so `headhome` does nothing there.
+    t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    for (let i = 0; i < 5; i++) fight(t, a);
+    expect(lastDive(a).state).toBe('ledge');
+    t.room.handle(a.id, { t: 'headhome' });
+    expect(s.location).toBe('sea');
   });
 
   it('charges a lost fight its replay, a snap for a fish dropped mid-fight, and nothing for a missed bite', () => {
