@@ -490,14 +490,14 @@ Players who enjoy the game can tip Oscar on Ko-fi (`KOFI_URL` in `src/data/suppo
 
 ## 38. Endgame (planned)
 
-Planned 2026-10-30; the build steps are the "Endgame step N of 8" items in TODO.md. Not built yet.
+Planned 2026-10-30; the build steps are the "Endgame step N of 8" items in TODO.md. Step 1 (§38.4) is built. Step 2, the Smokehouse (§38.2), has a v1 on the `smokehouse` branch and is being reworked there before it merges; the rest are not built.
 
 **The problem:** everything unlocks by level 15 (~3,200 XP). Levels 16-50 take ~66,000 more XP (~1,000 catches with top gear) and give nothing, and a maxed player earns ~1,100-3,100 coins a catch with little left to buy once the cosmetics and casino perks (455 chips) are owned. Coins, fish, XP and chips all stop mattering at about the same time.
 
 **The plan:** four loops that feed each other, with no resets or prestige (decided).
 
 - **Charters** (§38.1) are the endless ladder: they spend coins and give sea fish.
-- **The Smokehouse** (§38.2) turns spare fish into buffs that help push deeper.
+- **The Smokehouse** (§38.2) turns spare fish, cheap ones included, into snacks and dishes: buffs that earn more coins and help push deeper.
 - **The Weekly Derby** (§38.3) gives a reason to log in each week.
 - **Titles, level rewards and levels past 50** (§38.4) give the long tail.
 
@@ -539,7 +539,15 @@ Two goals (decided 2026-10-30): charters get harder but never impossible, and ev
 - **Things to find:** each zone adds 1-2 sea species to the Fishdex and has one rare zone legend (about 1 cast in 40) worth a lot. Size ranges grow with depth, so personal records keep breaking.
 - **Boat upgrades**, a coin sink with visible progress, a few levels each: Fighting Chair (+reel control), Sonar (shows the bite's tier before the hook), Bigger Hold (10 casts per fare), Storm Canopy (calms the camera sway).
 - **Being seen:** the all-time Deepest Charter board, the weekly deepest for the Derby, and a chat line when someone enters a new zone.
-- **Ingredients:** sea fish are smoked into the provisions for the next zone down, and into the Spirit Feast, the Captain's Feast and Chef's Specials (§38.2).
+- **Ingredients:** sea fish go on Mags's smoker like pond fish, and some make the charter spices (§38.2).
+
+**Smokehouse hooks** (planned with the Smokehouse rework, 2026-10-30; settle the details when charters are planned). The Smokehouse is optional, but it is how a stuck player gets deeper, so the trip has to point there:
+- **Spices are the charter lever.** Each charter challenge has a spice that answers it (⚓ Storm Pepper: fights 15% easier). When charters add a new mechanic (runs, a shorter snap window), a spice for it comes with it. Some are made from sea fish, so trips feed back into Mags's kitchen.
+- **Casino perks lead in:** charters open (level 20) while most players are still buying casino perks, and the Quick-Reel Gloves matter most from Kelp Deep. Reed says so ("Those gloves'll help when we hit the kelp").
+- **Packing:** before the trip, at Reed, the player packs spiced dishes from the Pantry into the provision slots. The picker marks the spice that helps at the target depth. If the player has none, it says where it comes from ("Storm Pepper: Mags sells it").
+- **Failure card:** a failed trip names that spice next to the Sea Legs line.
+- **Sea fish smoke like pond fish.** Their tier sets their buff, like pond fish; any sea-only effect is decided with the sea species.
+- **Tests:** "with the zone's provision" in the reel-bot tests means a dish with that zone's spice is packed. The trip summary credits what each packed dish did.
 
 **Positive feedback while playing**
 - A trip HUD: "Depth 14 · 2 of 3 landed · 5 casts left".
@@ -556,36 +564,116 @@ Two goals (decided 2026-10-30): charters get harder but never impossible, and ev
 
 ### 38.2 Smokehouse
 
-Decided 2026-10-30: optional, but the way deeper into the charters. Small buffs alone are easy to ignore, so smoked goods **change the rules of a charter trip**, and the best ones are smoked from charter fish.
+**Status:** v1 was built 2026-10-30 on the `smokehouse` branch: Mags's shack, the menu, the Pantry and online-time buffs. Oscar's demo found the multi-fish racks too slow. After two rounds of planning, Oscar settled on a simpler model in three stages, written up below, which replaced v1's racks and recipes. R1 (the smoker, snacks and stages) and R2 (dishes) are built, after which it merges and players test it at the pond before charters exist. R3 (charter spices) comes with charters (TODO.md).
 
-- **The counter:** a smoker NPC at the Smokehouse cottage. Hand fish into a recipe; it smokes on a rack in real time (minutes for town recipes, longer for sea recipes) and keeps going offline, then goes to the Pantry, kept in the save, not the hotbar. Two racks, a third at level 30. Fill the racks before logging off and come back to a stocked pantry.
-- **Eat it or pack it.** Every smoked item has two uses:
-  - **Eaten at the pond:** a 10-minute buff counted in **online time only**. Different kinds stack, the same kind refreshes, at most 3 at once. Trophy-size ingredients (top 20% of the size range) add 50% time. Buffs multiply with the casino perks; the shiny buff does nothing on a Shiny Lure cast.
-  - **Packed for a charter:** it works for the whole trip. Two provision slots, a third at level 40. Reed remarks on what was packed, and the trip summary credits it ("Second Wind saved a Kelp Grouper").
+**Why it exists**
+- **Before the endgame:** a use for the cheap fish everyone sells for a few coins, so no catch is wasted.
+- **In the endgame:** a steady boost to coins and XP per hour, and, with charters, what gets a player past a hard depth.
+- **Kept simple on purpose** (Oscar, 2026-10-30): three buffs, one for each thing the player is grinding at that stage.
 
-**Town recipes** (from pond fish, so every pond tier stays useful)
+**The loop:** catch, then smoke the fish (seconds). Sell it smoked for more, eat it as a **snack**, or cook smoked fish into a **dish** that gives several buffs at once. With charters, a **spice** (coins) added to a dish will make it last longer, hit harder or help on a trip.
 
-| Item | Made from | Eaten at the pond | Packed for a charter | Unlock |
+**Three stages, each opened by a first catch** (decided 2026-10-30). The stages are named after their fish, not early, mid and end (Oscar, 2026-10-30), because they all open by about level 12; "endgame" means charters only.
+
+| Stage | Opens | Fish | Smoked fish give | Kitchen |
 |---|---|---|---|---|
-| Minnow Bites | 6 tier 1 fish | Bites come 25% sooner | +1 cast (9 per fare) | — |
-| Kippers | 4 tier 2 fish, one a Largemouth Bass | +20% luck | The first 2 casts hook the zone's best tier | — |
-| Pike Jerky | 3 tier 3 fish, one a Northern Pike | +20% reel control | Steady Hands: fights 15% easier | — |
-| Lantern Glaze | 2 Lantern Eels + any 🌙 fish | Night bite starts at dusk; 🌙 fish ×1.5 | Night trip: 🌙 sea fish appear, shiny chance ×3 | — |
-| Jewel Platter | 3 tier 4 fish | Shiny chance ×1.5 | Zone legend chance ×3 | Level 20 |
-| Spirit Feast | 1 tier 5 fish + 1 sea fish | — | Second Wind: the first lost fish gives its cast back | Level 30 |
+| Small Fry | Level 3 | Tiers 1-2 | ⭐ XP: tier 1 +25%, tier 2 +50% (the grind here is levels; big enough to see on a 6 XP catch) | None yet |
+| Lake Giants | First tier 3 catch (or higher) | Tier 3 | 💰 Coins +15% (the grind here is paying for gear, then chips for the casino perks) | Dishes open: Small Fry and Lake Giants together |
+| Jewels & Spirits | First tier 4 catch (or higher), then tier 5 | Tiers 4-5 | ✨ Shiny chance (more coins, chips and XP per hour); dish ingredient only | Dishes with all three buffs |
 
-**Sea recipes** (from charter fish; each softens the next zone's twist)
+- **Unlocks are announced:** each stage opens with a banner and Mags's line ("📖 Now that's a fish worth cooking. New recipes!"). Locked recipes show their goal ("Catch a tier 4 fish"), so the next step is always visible.
+- **Opening from the Fishdex:** stages open from the Fishdex, and a higher tier counts too (Oscar, 2026-10-30: a player whose first big catch is tier 4 or 5 still gets the Kitchen), so existing players get every stage they've already reached on their first join. They see it once as "New in town: Mags's Smokehouse".
 
-| Item | Made from | Packed for a charter |
-|---|---|---|
-| Shelf Chowder | 3 Shelf fish | Drop-off fights are no longer than usual |
-| Drop-off Smoke | 3 Drop-off fish | Kelp Deep runs are half as strong |
-| Kelp Cure | 3 Kelp Deep fish | The Twilight's snap window stays at Kelp Deep's |
-| Twilight Fillet | 3 Twilight fish | Calm water in the Abyss: no camera sway and a slower snap |
-| Captain's Feast | 1 zone legend + 2 tier 5 fish | Fair Winds: passing the trip opens two depths |
+**Where it fits in the game's phases** (agreed with Oscar 2026-10-30)
 
-- **Well-smoked ★:** smoking a recipe 10 times makes it Well-smoked, and each batch then yields two. Shown on the recipe card with a count toward it.
-- **Chef's Special:** one recipe a day, picked from the date, asking for given species, sizes or a shiny; it gives a double-strength item.
+| Phase | Levels | The grind | What the Smokehouse does |
+|---|---|---|---|
+| Gear | 1-15 | Levels and coins for rods and bait (the Aurora Rod is 20,000 coins at level 15) | ⭐ XP snacks, then 💰 dishes for the next rod |
+| Casino | 15 on | Chips for the perks: 455 chips, about 230 top-gear catches turned in without betting | ✨ and 💰 dishes speed the chips up; spices (with charters) will use up the coins that have nothing else to buy |
+| Charters | 20 on, endless | Depth | Charter spices get players past hard depths (R3) |
+
+- **Charters overlap the casino, on purpose.** They open about 50 catches after level 15, about a quarter of the way through the perk grind. The Shelf and Drop-off need only skill. The hard zones start at Kelp Deep, about when a player has the Quick-Reel Gloves, so the perks become what carries a player through the hard zones.
+- **No casino rework for now.** If the play test shows the chip grind is off, `CHIP_COINS` and the perk prices in `src/data/casino.ts` tune it.
+- **Buffs apply at catch, like the Lucky Charms** (Oscar, 2026-10-30). 💰 multiplies into the fish's `mult` when it lands (`land` in `src/game/economy.ts`), so it raises the chips a fish turns into as well as its sale price. ✨ makes more shinies, each worth 5× in coins or chips. That makes the Jewels & Spirits dishes the casino accelerator.
+
+Every number in this section is a starting value, to be tuned in play.
+
+**The smoker (R1)**
+- **Loading:** at Mags's counter, click a hotbar fish, or press **Smoke all**, to put it on the smoker. It has 5 spots, one fish each. Smoke all skips shinies, because a shiny sells for 5×.
+- **Times by tier:** 5 s, 10 s, 20 s, 1 min, 2 min.
+- **Offline:** smoking finishes on server time, offline too. Top-tier fish can be loaded before logging off, ready on the next visit.
+- **Into the Pantry:** finished fish go there, stacked by species ("Smoked Rainbow Trout ×4"). The hotbar is freed just like selling.
+- **Selling smoked fish:** smoked tier 1-2 fish sell to Mags for 1.5× their raw price. It's small money, but it is a newcomer's simplest first visit (fish in, wait, more coins out).
+
+**Snacks: eating one smoked fish (R1)**
+- **Which tiers:** tiers 1-3 only. Smoked tier 4-5 fish go into dishes only; a legend is never worth a 5-minute snack.
+- **Where:** from the Pantry or the Bag, anywhere except the casino.
+- **Duration:** 5 minutes of online time each. More of the same adds time, up to 30 minutes, and **Eat all** does it in one click.
+- **One snack at a time:** a different one replaces it; if more than a minute is left, the game asks first.
+
+**Dishes (R2)**
+- **The rule, one sentence each:**
+  - **The tiers in a dish decide what it does:** each kind of buff at twice the best snack in it.
+  - **The number of fish decides how long it lasts:** 3 minutes a fish.
+  - Shiny strength for tiers 4 and 5 is defined for dishes only: ×1.5 and ×2.
+  - **One exception, XP:** a dish's ⭐ is the best snack's, not twice it, so at most +50%. Past level 50 every level gifts a dish, and a +100% XP dish would nearly pay for the next gift on its own.
+- **Cooking:** instant, at Mags's counter, from smoked fish in the Pantry: any species of the right tier, the cheapest first (the best stay for selling, like eating snacks). The cooked dish goes into the Pantry (Oscar, 2026-10-30), to be eaten from there or the Bag whenever the player likes, so dishes can be cooked ahead.
+- **Unlocking:** each dish unlocks once the player has caught its top tier or higher (Fish Cakes and Angler's Supper with the Kitchen, the Jewel Platter with tier 4, the Spirit Banquet with tier 5).
+
+| Dish | Made from | Does | Lasts |
+|---|---|---|---|
+| Fish Cakes | 3 tier 1 + 1 tier 3 | ⭐ +25% XP, 💰 +30% coins | 12 min |
+| Angler's Supper | 2 tier 2 + 2 tier 3 | ⭐ +50%, 💰 +30% | 12 min |
+| Jewel Platter | 2 tier 1 + 1 tier 2 + 1 tier 3 + 1 tier 4 | ⭐ +50%, 💰 +30%, ✨ ×1.5 | 15 min |
+| Spirit Banquet | 2 tier 1 + 2 tier 2 + 1 tier 3 + 1 tier 5 | ⭐ +50%, 💰 +30%, ✨ ×2 | 18 min |
+
+- **Cheap fish matter at every stage:** every dish has tier 1-2 fish in it, so even the top dish needs them.
+- **One dish at a time,** on top of the snack. If both give the same kind of buff, **the stronger counts**, with no adding up. That means no stacking maths for players and no caps to explain.
+- **Eating the same dish again** adds its time, up to an hour (Oscar, 2026-10-30), like snacks add time up to 30 minutes. A different dish replaces it, asking first if over a minute is left.
+- **Free dishes:** Mags hands over a Fish Cakes when the Kitchen opens, and each level past 50 gifts the best dish unlocked into the Pantry (gifts banked before the Kitchen opened arrive on the next join).
+- **Each card shows the gain plainly:** "+50% XP · +30% coins · ×1.5 shinies · 15 min", next to what eating the fish one by one would give ("As snacks, one at a time: ⭐ +50% · 10 min, 💰 +15% · 10 min").
+
+**Spices (shelved to R3, with charters)**
+- **Shelved (Oscar, 2026-10-30):** R2 shipped Hickory and Chili with a picker in the Kitchen, but they were taken out before the merge to keep the play test to dishes alone. Pond and charter spices come back together with charters (R3). `/smokestats` will show whether players pile up coins with nothing to spend them on in the meantime.
+- **What they are:** bought from Mags with coins when cooking; one per dish, optional. They are the Smokehouse's coin sink.
+- **Pond spices:**
+  - 🌰 **Hickory:** the dish lasts twice as long.
+  - 🌶 **Chili:** the dish's buffs are a quarter stronger. On a multiplier it's the bonus that grows, so ✨ ×2 becomes ×2.25.
+- **Price:** set by the dish, the same for both spices; the shelved build used 100 coins (Fish Cakes), 500 (Angler's Supper), 5,000 (Jewel Platter) and 20,000 (Spirit Banquet). The aim is about a third of what a spice adds for a player at that gear, so it always pays back.
+- **Charter spices (R3):** each one answers a charter challenge, for example ⚓ **Storm Pepper:** fights 15% easier on a trip. When charters add a new mechanic (runs, a shorter snap window), a new spice answers it, so the Smokehouse grows with the charters without new systems. Some charter spices are made from sea fish instead of bought, which links the trips back to Mags.
+
+**Play-testing (after R2).** Players test it at the pond before charters exist. A `/smokestats` dev command shows whether it's working: fish smoked and sold by tier, snacks eaten, and dishes cooked and eaten, all by stage, plus the share of online players with a buff running. The counts are saved with the accounts (Oscar, 2026-10-30), so a redeploy doesn't wipe a multi-day play test. Watch night shinies: ✨ ×2 on the night's 15% is 30%.
+
+**Seeing the payoff**
+- The catch card credits the buff: "+120 XP ⭐ Smoked Perch", "+540 🪙 Angler's Supper", "✨ Shiny! Spirit Banquet".
+- HUD chips show the snack and the dish with their time left.
+
+**The player's path**
+1. **Levels 1-2, before it opens.** The shack stands across from Marlow's, smoking. Mags says "Come back at level 3 and I'll show you what to do with your small fry", and the next-goal line names the unlock.
+2. **Level 3: Smokehouse open** (Oscar, 2026-10-30: level 4 was too late, since Minnow bait brings tier 3 fish at level 4 and the Small Fry stage would last minutes; at level 3 the Fly is bringing tier 2 fish and tier 1 catches pile up).
+   - A banner, and 3 free smoked tier 1 fish in the Pantry.
+   - **Tip `smoker`** on the next tier 1 catch: smoke it instead of selling it.
+   - **Tip `snack`** on the first smoked fish: eat it from the Bag for more XP.
+3. **First tier 3 catch: the kitchen opens.** A banner, Fish Cakes unlocked, and Mags hands over one Fish Cakes to try. The tip names what to smoke for the next one ("3 tier 1 fish and your Golden Koi"). **Tip `dish`:** a dish combines its fish's buffs, stronger and longer.
+4. **First tier 4 catch, then tier 5:** the Jewel Platter, then the Spirit Banquet, each with a banner.
+5. **Charters (step 4):** charter spices. A failed trip's card names the spice that would help (§38.1, "Smokehouse hooks").
+6. **Past level 50:** each level gifts the best dish unlocked.
+
+**From v1**
+- **Kept:**
+  - Mags and her shack beside the Lucky Wheel (and the E priority over the wheel).
+  - The menu frame (list and detail pane, Ingredients rows, intro line). Its tabs become Smoker, Kitchen and Pantry, and the intro line now reads "smoke fish to sell or snack on, cook them into dishes".
+  - The Pantry and its Bag section, HUD chips, and buffs ticking down in online time only on the server.
+  - No eating in the casino, the server checks with the "Get closer" notice, dev `/smoke`, and level gifts going to the Pantry.
+- **Dropped:** multi-fish racks, rack times, loading over several trips, the five v1 recipes and their buffs (luck, reel control, the dusk bite), Prime trophy fish, Well-smoked ★ and the third rack.
+- **Later:** smoker upgrades and mastery are in TODO.md Ideas; the Chef's Special is still step 6.
+- **No save migration:** Smokehouse data has never shipped on main; only dev and demo saves need `cleanSmoke` to drop v1's racks.
+- **v1 details still useful**
+  - Mags is stout, with a red headscarf and a leather apron over a rust shirt; warm but brisk.
+  - The shack is `buildSmokehouse` in `src/game/town.ts`, with its spot in `src/data/maps.ts`.
+  - Rules live in `src/game/smoke.ts`, tuning in `src/data/smokehouse.ts`, saves in `SaveData.smoke`.
+  - Buffs tick in the server's 100 ms snapshot.
+  - A smoke finished while away is announced on joining.
 
 ### 38.3 Weekly Derby
 
@@ -594,16 +682,17 @@ Decided 2026-10-30: optional, but the way deeper into the charters. Small buffs 
 
 ### 38.4 Titles, level rewards and levels past 50
 
-Built 2026-10-30 (step 1). The charter, rack, recipe and provision-slot unlocks and the banked gifts take effect when steps 2 and 4 ship. Decided 2026-10-30: a mix of titles, earned outfits and Smokehouse and charter unlocks; level titles are nautical ranks, because everyone knows their order, so a rank reads as progress at a glance.
+Built 2026-10-30 (step 1). With step 2 (on its branch), provision gifts go to the Smokehouse Pantry as the best dish unlocked; the charters, provision slots and fares wait for step 4. Decided 2026-10-30: a mix of titles, earned outfits and Smokehouse and charter unlocks; level titles are nautical ranks, because everyone knows their order, so a rank reads as progress at a glance.
 
 - **Titles:** one is chosen in the Wardrobe and shown under the name tag and in the Anglers list. Level ranks, charter zone titles, and Derby titles all go in the same list.
+- **Before the ranks** (Smokehouse rework, §38.2): level 3 opens the Smokehouse. The kitchen and its dishes open on the first tier 3, 4 and 5 catches, each with a banner, and the next-goal HUD line names the level 3 unlock beforehand, so players meet the Smokehouse well before the endgame relies on it.
 - **Level rewards** (the catches between milestones grow from ~54 to ~250, so rewards grow too):
 
 | Level | Rank | Also earned |
 |---|---|---|
-| 20 | Deckhand | Charters open; the Jewel Platter recipe |
+| 20 | Deckhand | Charters open |
 | 25 | Bosun | Oilskin Sou'wester (hat, Rare) |
-| 30 | First Mate | A third Smokehouse rack; the Spirit Feast recipe |
+| 30 | First Mate | (Smokehouse reward dropped in the rework; to be decided) |
 | 35 | Skipper | Storm Slicker (shirt, Epic) |
 | 40 | Captain | A third provision slot on charters |
 | 45 | Commodore | Brass Compass (jewelry, Mythic) |
@@ -628,10 +717,10 @@ Today the server rolls the fish and size and enforces a minimum fight time, but 
 ### 38.6 Build order
 
 1. Titles, level rewards, no level cap (with back pay), shiny counts.
-2. Smokehouse v1: the counter, racks and Pantry, the town recipes eaten as pond buffs, Well-smoked.
+2. Smokehouse: the three-stage rework replaced v1's racks. R1 (the smoker, snacks and stages) and R2 (the dishes) are built, after which it merges and is play-tested; R3 is the spices (pond and charter) and packing, built with step 4.
 3. Server-checked fights.
 4. Charters v1: the instance, trips, zones and the difficulty curve with its bot tests, Sea Legs, fast track, milestones and zone titles, the trip HUD and summary card, the sea species, provision slots with the town recipes' charter effects, and the sea recipes. Big; may be split when planned.
 5. Charter rewards: boat upgrades, zone legends and the Captain's Feast, the Deepest Charter board, zone chat lines.
-6. Spirit Feast and the Chef's Special.
+6. The Chef's Special (the Spirit Feast becomes a charter spice in the Smokehouse's R3).
 7. Weekly Derby.
 8. Later: group charters and species mastery.

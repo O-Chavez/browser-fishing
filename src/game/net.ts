@@ -2,6 +2,7 @@ import type { Activity, CasinoRecords, ClientMsg, HallRow, PlayerInfo, ServerMsg
 import { RENAME_COOLDOWN_MS, SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Drop } from './drops';
+import type { StageId } from '../data/smokehouse';
 import type { SaveData } from './state';
 
 export interface NetEvents {
@@ -27,6 +28,8 @@ export interface NetEvents {
   /** This account's name changed: renamed here (`now`), or elsewhere before this join. */
   onName(now: boolean): void;
   onNotice(msg: string): void;
+  /** Smokehouse stages opened on joining. */
+  onStages(ids: StageId[], intro: boolean): void;
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
   /** Slash command replies; `time` is set when a command changed the day/night override, `sent` on a feedback answer. */
@@ -153,6 +156,9 @@ export class NetClient {
         break;
       case 'notice':
         this.events.onNotice(m.msg);
+        break;
+      case 'stages':
+        this.events.onStages(m.ids, m.intro);
         break;
       case 'chat':
         this.events.onChat(m);

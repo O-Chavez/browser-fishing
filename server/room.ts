@@ -7,11 +7,14 @@ import { fishingSpot } from '../src/game/progression';
 import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
-import { newSave, type Slot } from '../src/game/state';
+import { SMOKE_RANGE, dishById } from '../src/data/smokehouse';
+import * as smoke from '../src/game/smoke';
+import { newSave, type SaveData, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
+import type { SmokeStats } from './smokestats';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
 export interface Conn {
@@ -46,6 +49,8 @@ interface Member {
   moved?: boolean;
   /** When this player last jumped, to rate-limit jump relays. */
   jumpAt?: number;
+  /** When their buffs last ticked down: buffs only run while the player is online. */
+  smokeAt: number;
 }
 
 const VENDOR_RANGE = 5;
@@ -100,6 +105,10 @@ export class Room {
   records: () => CasinoRecords = () => NO_RECORDS;
   /** Dev console `/backpay`: lists, or with `apply` pays, the XP the old level-50 cap threw away. The server points this at the account store. */
   backPay: (apply: boolean) => string[] = () => ['No account store.'];
+  /** The Smokehouse's play-test counters; the server shares one between rooms and saves it with the accounts. */
+  smokeStats: SmokeStats | null = null;
+  /** Dev console `/smokestats`; the server reports across every room. */
+  smokeReport: () => string[] = () => ['No Smokehouse stats on this server.'];
   /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -121,6 +130,11 @@ export class Room {
     return this.members.size;
   }
 
+  /** The saves of everyone here, for `/smokestats`. */
+  onlineSaves(): SaveData[] {
+    return [...this.members.values()].map((m) => m.acct.save);
+  }
+
   /** The player starts where their save says; only `travel` (behind the level gate) moves them between maps. */
   join(conn: Conn, acct: Account, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
@@ -128,8 +142,14 @@ export class Room {
     const map = this.maps[acct.save.location] ?? Object.values(this.maps)[0];
     acct.save.location = map.id;
     const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
-    const m: Member = { info, conn, acct, pending: null, spin: null, bj: null };
+    const m: Member = { info, conn, acct, pending: null, spin: null, bj: null, smokeAt: this.now() };
     acct.online = true;
+    // The smoker kept going while they were away, stages they reached before the Smokehouse open now,
+    // and level gifts banked before the Kitchen opened become dishes.
+    const smoked = smoke.collect(acct.save, this.now());
+    const stages = smoke.openStages(acct.save);
+    const gift = smoke.serveGifts(acct.save);
+    if (smoked.length || stages.ids.length || gift) this.onChange();
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
     conn.send({
@@ -151,6 +171,9 @@ export class Room {
     // Before adding the member, so everyone else on the server hears it but not the joiner.
     this.say({ t: 'sys', text: `${acct.name} has joined` });
     this.members.set(id, m);
+    if (smoked.length) conn.send({ t: 'notice', msg: `🔥 While you were away, Mags smoked your ${smokedText(smoked)}. It's in your Pantry.` });
+    if (stages.ids.length) conn.send({ t: 'stages', ...stages });
+    if (gift) conn.send({ t: 'notice', msg: smoke.giftText(gift) });
     return id;
   }
 
@@ -160,6 +183,8 @@ export class Room {
     if (m.spin) m.spin.at = 0;
     if (m.bj) this.bjAct(m, 'stand');
     this.settle(m);
+    this.tickSmoke(m);
+    this.onChange();
     m.acct.online = false;
     this.members.delete(id);
     this.broadcast({ t: 'left', id });
@@ -236,6 +261,40 @@ export class Room {
       case 'tip':
         changed = markTip(s, msg.id);
         break;
+      case 'smoke': {
+        const it = s.slots[int(msg.i)];
+        changed = this.atSmoker(m) && this.ok(m, smoke.smokeFish(s, int(msg.i), this.now()));
+        if (changed && it?.k === 'fish') this.smokeStats?.fish('smoked', byId(FISH, it.fishId).tier);
+        break;
+      }
+      case 'smokeall': {
+        const tiers = smoke.smokeAllSlots(s).map((i) => byId(FISH, (s.slots[i] as { fishId: string }).fishId).tier);
+        changed = this.atSmoker(m) && this.ok(m, smoke.smokeAll(s, this.now()));
+        if (changed) for (const t of tiers) this.smokeStats?.fish('smoked', t);
+        break;
+      }
+      case 'sellsmoked': {
+        const id = str(msg.id);
+        const n = msg.all === true ? smoke.pantryCount(s, id) : 1;
+        changed = this.atSmoker(m) && this.ok(m, smoke.sellSmoked(s, id, msg.all === true));
+        if (changed) this.smokeStats?.fish('sold', byId(FISH, id).tier, n);
+        break;
+      }
+      case 'eat': {
+        const id = str(msg.id);
+        const n = smoke.pantryCount(s, id);
+        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eat(s, id, msg.all === true));
+        if (changed) this.smokeStats?.fish('snacks', byId(FISH, id).tier, n - smoke.pantryCount(s, id));
+        break;
+      }
+      case 'cook':
+        changed = this.atSmoker(m) && this.ok(m, smoke.cook(s, msg.id));
+        if (changed) this.smokeStats?.cooked(dishById(msg.id)!.id);
+        break;
+      case 'eatdish':
+        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eatDish(s, msg.id));
+        if (changed) this.smokeStats?.eaten(dishById(msg.id)!.id);
+        break;
       case 'lure':
         changed = eco.setLure(s, msg.on);
         break;
@@ -286,7 +345,7 @@ export class Room {
         this.syncCarry(m);
         return;
     }
-    if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell')) this.syncCarry(m);
+    if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell' || msg.t === 'smoke' || msg.t === 'smokeall')) this.syncCarry(m);
     if (changed && (msg.t === 'equip' || msg.t === 'color' || msg.t === 'face')) this.broadcast({ t: 'look', id, look: s.look });
     if (changed) {
       this.onChange();
@@ -406,6 +465,7 @@ export class Room {
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply([this.setSupporter(who, !off)]);
     }
+    if (cmd === 'smokestats') return reply(this.smokeReport());
     if (cmd === 'backpay') {
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply(this.backPay(args[0] === 'apply'));
@@ -543,6 +603,33 @@ export class Room {
     return true;
   }
 
+  private atSmoker(m: Member): boolean {
+    const c = this.maps[m.info.map]?.smokehouse;
+    return (!!c && Math.hypot(m.info.x - c.x, m.info.z - c.z) <= SMOKE_RANGE) || this.deny(m, "Get closer to Mags's counter.");
+  }
+
+  /** True when a rule check passed; otherwise tells the player why not. */
+  private ok(m: Member, why: string | null): boolean {
+    if (why) m.conn.send({ t: 'notice', msg: why });
+    return !why;
+  }
+
+  /** Runs the snack down by the online time since the last tick and moves finished fish to the Pantry. */
+  private tickSmoke(m: Member): void {
+    const now = this.now();
+    const s = m.acct.save;
+    const worn = smoke.tickBuffs(s, now - m.smokeAt);
+    m.smokeAt = now;
+    const done = smoke.collect(s, now);
+    if (done.length) m.conn.send({ t: 'notice', msg: `🔥 Smoked ${smokedText(done)}: it's in your Pantry.` });
+    if (worn.snack) m.conn.send({ t: 'notice', msg: 'Your snack wore off. Mags has more at the Smokehouse.' });
+    if (worn.dish) m.conn.send({ t: 'notice', msg: 'Your dish wore off. Mags cooks more in her Kitchen.' });
+    // Buffs running down only reach the save file when one runs out, or with the next real change.
+    if (!worn.snack && !worn.dish && !done.length) return;
+    this.onChange();
+    m.conn.send({ t: 'state', save: s });
+  }
+
   private atVendor(m: Member): boolean {
     const v = this.maps[m.info.map]?.vendor.shop;
     return !!v && Math.hypot(m.info.x - v.x, m.info.z - v.z) <= VENDOR_RANGE;
@@ -580,8 +667,7 @@ export class Room {
       return false;
     }
     for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
-    const bonus = eco.charmBonus(m.acct.save);
-    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(bonus > 0 ? { mult: 1 + bonus } : {}) });
+    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(res.mult > 1 ? { mult: res.mult } : {}) });
     return true;
   }
 
@@ -621,7 +707,10 @@ export class Room {
 
   snapshot(): void {
     if (this.drops.expire()) this.broadcast({ t: 'drops', list: this.drops.all() });
-    for (const m of this.members.values()) this.settle(m);
+    for (const m of this.members.values()) {
+      this.settle(m);
+      this.tickSmoke(m);
+    }
     if (this.now() - this.boardAt >= BOARD_MS) this.board();
     if (this.now() - this.clockAt >= CLOCK_MS) {
       this.clockAt = this.now();
@@ -710,8 +799,16 @@ export class Room {
   }
 }
 
+/** "Yellow Perch ×2 and Northern Pike". */
+const smokedText = (list: { fishId: string; n: number }[]): string => {
+  const parts = list.map((d) => `${byId(FISH, d.fishId).name}${d.n > 1 ? ` ×${d.n}` : ''}`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
+};
+
 const finite = (...n: number[]) => n.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e4);
 const round = (v: number) => Math.round(v * 100) / 100;
 const snapEntry = (m: Member): [number, number, number, number] => [m.info.id, round(m.info.x), round(m.info.z), round(m.info.yaw)];
 /** Untrusted ids: only strings and numbers count, since `String()` throws on objects like `{ toString: null }`. */
+/** A client-sent index; anything but a number (an object with no `toString` would make `Number()` throw) is NaN. */
+const int = (v: unknown) => (typeof v === 'number' ? Math.floor(v) : NaN);
 const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 32) : typeof v === 'number' ? String(v) : '');

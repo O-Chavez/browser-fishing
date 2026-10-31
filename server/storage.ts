@@ -5,6 +5,8 @@ import pg from 'pg';
 /** Older versions also stored a `rooms` record of Town Fund totals; it is no longer read or written. */
 export interface GameData {
   accounts: Record<string, unknown>;
+  /** The Smokehouse's play-test counters (`server/smokestats.ts`). */
+  smokeStats?: unknown;
 }
 
 export interface Storage {
@@ -41,11 +43,12 @@ export class FileStorage implements Storage {
   }
 
   async load(): Promise<GameData> {
-    return { accounts: this.read('accounts.json', {}) };
+    return { accounts: this.read('accounts.json', {}), smokeStats: this.read('smokestats.json', null) };
   }
 
   async save(data: GameData): Promise<void> {
     this.write('accounts.json', data.accounts);
+    if (data.smokeStats) this.write('smokestats.json', data.smokeStats);
   }
 
   async saveFeedback(report: object): Promise<void> {
@@ -67,12 +70,13 @@ export class PgStorage implements Storage {
     await this.pool.query('CREATE TABLE IF NOT EXISTS game_state (key text PRIMARY KEY, value jsonb NOT NULL)');
     const { rows } = await this.pool.query('SELECT key, value FROM game_state');
     const get = (k: string) => rows.find((r) => r.key === k)?.value ?? {};
-    return { accounts: get('accounts') };
+    return { accounts: get('accounts'), smokeStats: get('smokestats') };
   }
 
   async save(data: GameData): Promise<void> {
     const sql = 'INSERT INTO game_state (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value';
     await this.pool.query(sql, ['accounts', JSON.stringify(data.accounts)]);
+    if (data.smokeStats) await this.pool.query(sql, ['smokestats', JSON.stringify(data.smokeStats)]);
   }
 
   async saveFeedback(report: object): Promise<void> {

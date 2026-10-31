@@ -3,7 +3,9 @@ import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
-import { BAIT_SLOT, BAIT_STACK, FISH_SLOT, ROD_SLOT, slotCount, type SaveData, type Slot } from './state';
+import type { DishId, StageId } from '../data/smokehouse';
+import { buff, openStages, serveGifts, shinyMult } from './smoke';
+import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
 
@@ -12,27 +14,7 @@ const ROD_LEVEL_OK = (s: SaveData, id: string) => {
   return !!r && s.level >= r.unlockLevel;
 };
 
-/** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
-export const freeSlots = (s: SaveData): number => {
-  let n = 0;
-  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) n++;
-  return n;
-};
-const freeFishSlot = (s: SaveData): number => {
-  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) return i;
-  return -1;
-};
-
-/** Empties a fish slot. An extra slot past the hotbar size (fish left over from an older save) goes away instead. */
-export function clearSlot(s: SaveData, i: number): void {
-  if (i < slotCount(s)) {
-    s.slots[i] = null;
-    return;
-  }
-  s.slots.splice(i, 1);
-  if (s.held > i) s.held--;
-  s.held = Math.min(s.held, s.slots.length - 1);
-}
+export { clearSlot, freeSlots } from './state';
 
 export const hasRod = (s: SaveData, id: string): boolean => s.slots.some((sl) => sl?.k === 'rod' && sl.id === id);
 /** Carried in the hotbar or kept in the locker. */
@@ -156,6 +138,9 @@ export const WHEEL_RANGE = 4;
 /** What a carried fish sells for, including any wheel winnings. */
 export const fishValue = (item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
   sellValue(byId(FISH, item.fishId), item.size, item.shiny) * (item.mult ?? 1);
+
+/** A fresh catch's value multiplier: the best Lucky Charm times a 💰 snack or dish. */
+export const catchMult = (s: Pick<SaveData, 'perks' | 'smoke'>): number => (1 + charmBonus(s)) * (1 + (buff(s, 'coins')?.bonus ?? 0));
 
 /** Sell-value bonus from the best Lucky Charm owned. */
 export function charmBonus(s: Pick<SaveData, 'perks'>): number {
@@ -395,7 +380,8 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
     fishId: fish?.id ?? null,
     size: fish ? rollSize(fish, rng) : 0,
     wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait,
-    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE)),
+    // A dish's ✨ multiplies the shiny chance.
+    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE) * shinyMult(s)),
   };
 }
 
@@ -409,24 +395,43 @@ export interface CatchResult {
   level: number;
   /** Ranks reached with this catch (their titles and outfits are already given). */
   ranks: Rank[];
+  /** The snack or dish that added XP, coins or the shiny chance to this catch, for the catch card's credit. */
+  xpFrom?: string;
+  coinFrom?: string;
+  shinyFrom?: string;
+  /** Smokehouse stages this catch opened. */
+  stages: StageId[];
+  /** Level gifts past 50 this catch turned into dishes in the Pantry. */
+  gift?: { id: DishId; n: number };
+  /** The fish's value multiplier: Lucky Charm and 💰 snack or dish. */
+  mult: number;
 }
 
 export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false): CatchResult {
   const slot = freeFishSlot(s);
-  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [] };
+  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
   const first = !entry;
-  const gained = catchXp(fish, size, first, shiny);
+  // Smokehouse snacks and dishes apply at catch, like the Lucky Charms: ⭐ into the XP, 💰 into the fish's value.
+  const xp = buff(s, 'xp');
+  const coin = buff(s, 'coins');
+  const sh = shiny ? buff(s, 'shiny') : null;
+  const gained = Math.round(catchXp(fish, size, first, shiny) * (1 + (xp?.bonus ?? 0)));
   const record = !!entry && size > entry.best;
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
-  const bonus = charmBonus(s);
-  s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(bonus > 0 ? { mult: 1 + bonus } : {}) };
-  const value = Math.round(sellValue(fish, size, shiny) * (1 + bonus));
+  const mult = catchMult(s);
+  s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
+  const value = Math.round(sellValue(fish, size, shiny) * mult);
   if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
   const before = s.level;
   const ranks = gainXp(s, gained);
-  return { stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks };
+  const stages = openStages(s).ids;
+  const gift = serveGifts(s);
+  return {
+    stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult,
+    ...(xp ? { xpFrom: xp.from } : {}), ...(coin ? { coinFrom: coin.from } : {}), ...(sh ? { shinyFrom: sh.from } : {}), ...(gift ? { gift } : {}),
+  };
 }
 
 /** Adds XP: levels up, gives the gifts for levels past 50 and any ranks reached, and returns those ranks. */

@@ -6,6 +6,7 @@ import {
 import { CASINO_LEVEL } from '../data/casino';
 import { cosById } from '../data/cosmetics';
 import { RANKS, nextRank, type Rank } from '../data/ranks';
+import { SMOKE_LEVEL } from '../data/smokehouse';
 import { onDock } from './env';
 
 /** There is no level cap: from this level on every level costs the same, so the pace never slows. */
@@ -55,9 +56,9 @@ export function applyXp(level: number, xp: number, gained: number): { level: num
   return { level: lvl, xp: total, leveledUp };
 }
 
-/** Free rewards for levels past `FLAT_LEVEL`, kept until the Smokehouse and the charters can use them. */
+/** Free rewards for levels past `FLAT_LEVEL`. Provisions become dishes once the Kitchen is open (`serveGifts`); fares wait for the charters. */
 export interface Gifts {
-  /** Smoked provisions: one per level past 50. */
+  /** Dishes: one per level past 50, banked until the Kitchen opens. */
   provisions: number;
   /** Charter fares: one every 5th level past 50. */
   fares: number;
@@ -215,6 +216,7 @@ export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = f
 /** Next unlock, for the "next goal" HUD hint: the next rod, then the next rank and its reward. */
 export function nextGoal(level: number, dex: Record<string, unknown> = {}): string {
   const rod = RODS.find((r) => r.unlockLevel > level);
+  if (level < SMOKE_LEVEL) return `Level ${SMOKE_LEVEL}: Mags's Smokehouse opens${rod?.unlockLevel === SMOKE_LEVEL ? ` and the ${rod.name} becomes available` : ''}`;
   if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
   const rank = nextRank(level);
   if (rank) return `Level ${rank.level}: ${rankReward(rank)}`;

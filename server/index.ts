@@ -12,11 +12,13 @@ import { JoinFeed, NOT_FORUM, postWebhook } from './discord';
 import { FeedbackGate, feedbackPost, parseTags, type FeedbackReport } from './feedback';
 import { matchTip, parseKofi, tipMessage } from './kofi';
 import { Room } from './room';
+import { SmokeStats } from './smokestats';
 import { createStorage } from './storage';
 
 const storage = createStorage(process.env, fileURLToPath(new URL('./', import.meta.url)));
 const data = await storage.load();
 const accounts = new AccountStore(data.accounts);
+const smokeStats = new SmokeStats(data.smokeStats);
 const rooms = new Map<string, Room>();
 /** Open sockets per room, joined or not, so a room is only dropped when nobody can still join it. */
 const sockets = new Map<Room, number>();
@@ -98,7 +100,7 @@ async function flush(): Promise<void> {
   if (!accts) return;
   saving = true;
   try {
-    await storage.save({ accounts: accts });
+    await storage.save({ accounts: accts, smokeStats: smokeStats.data });
   } catch (e) {
     console.error('save failed, will retry', e);
     accounts.markDirty();
@@ -134,6 +136,8 @@ function room(name: string): Room {
     r.setSupporter = setSupporter;
     r.renameWait = (a) => accounts.renameWait(a);
     r.backPay = backPay;
+    r.smokeStats = smokeStats;
+    r.smokeReport = () => smokeStats.report([...rooms.values()].flatMap((x) => x.onlineSaves()));
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     rooms.set(name, r);
   }

@@ -91,6 +91,7 @@ export class Town {
     this.buildStreets();
     this.buildSquare(t.square);
     t.houses.forEach((h, i) => this.buildHouse(h, i));
+    if (map.smokehouse) this.buildSmokehouse(map.smokehouse);
     t.npcs.forEach((n) => this.buildNpc(n));
     t.racks.forEach((r) => this.buildRack(r));
     t.boats.forEach((b) => this.buildBoat(b));
@@ -349,7 +350,14 @@ export class Town {
     const head = new THREE.Group();
     head.position.y = 1.75;
     head.add(faceHead(0.22, def.face));
-    if (def.hat !== undefined) {
+    if (def.scarf !== undefined) {
+      // A headscarf: a snug cap with a knot at the back.
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.42), mat(def.scarf));
+      cap.position.y = 0.06;
+      const knot = ball(0.07, def.scarf, 1.2, 0.8, 0.8);
+      knot.position.set(0, 0.08, -0.24);
+      head.add(cap, knot);
+    } else if (def.hat !== undefined) {
       const brim = cyl(0.34, 0.34, 0.035, def.hat, 20);
       brim.position.y = 0.17;
       const dome = new THREE.Mesh(new THREE.SphereGeometry(0.23, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(def.hat));
@@ -361,6 +369,14 @@ export class Town {
       head.add(hair);
     }
     body.add(torso, head);
+    if (def.apron !== undefined) {
+      const apron = rbox(0.44, 0.78, 0.05, def.apron, 0.02);
+      apron.position.set(0, 0.9, 0.28);
+      apron.rotation.x = -0.06;
+      const bib = rbox(0.32, 0.34, 0.05, def.apron, 0.02);
+      bib.position.set(0, 1.3, 0.27);
+      body.add(apron, bib);
+    }
     // Each arm hangs from a shoulder pivot, so walking can swing it.
     const arms = [-1, 1].map((sx) => {
       const shoulder = new THREE.Group();
@@ -379,6 +395,166 @@ export class Town {
     const walker = def.walk && new NpcWalker({ ...def, walk: def.walk });
     this.npcs.push({ def, pos, next: 0, walker });
     this.heads.push({ head, body, arms, pos, yaw: def.facing, model: p, walker });
+  }
+
+  /**
+   * Mags Cinder's smoke shack: a dark timber lean-to, open at the front, with a counter of smoked fish,
+   * more hanging under the eave and on the back wall, a lantern, a SMOKEHOUSE sign up high, and a stone
+   * smoker behind it whose pipe puffs smoke over the roof. `sh` is the middle of the counter; the shack
+   * stands behind it. It sits right beside the Lucky Wheel, so nothing juts out at the sides.
+   * Dark and smoky on purpose, so it reads as a different place from Marlow's striped stall.
+   */
+  private buildSmokehouse(sh: Spot): void {
+    const g = new THREE.Group();
+    const W = 3.4;
+    const BACK = -2.1;
+    const FRONT = 0.25;
+    const LOW = 2.3;
+    const HIGH = 2.95;
+    const plank = this.painted(0x5a3e2b, sidingTexture());
+    // Back wall and the two side walls, whose tops follow the roof's slope.
+    const back = rbox(W, HIGH, 0.16, 0x5a3e2b, 0.03);
+    boxUV(back.geometry, 1.05);
+    back.material = plank;
+    back.position.set(0, HIGH / 2, BACK);
+    g.add(back);
+    const side = new THREE.Shape();
+    side.moveTo(BACK, 0);
+    side.lineTo(FRONT, 0);
+    side.lineTo(FRONT, LOW);
+    side.lineTo(BACK, HIGH);
+    side.closePath();
+    for (const sx of [-1, 1]) {
+      const wall = new THREE.Mesh(boxUV(new THREE.ExtrudeGeometry(side, { depth: 0.16, bevelEnabled: false }).rotateY(-Math.PI / 2), 1.05), plank);
+      wall.position.x = sx * (W / 2) + (sx > 0 ? 0 : 0.16);
+      wall.castShadow = wall.receiveShadow = true;
+      g.add(wall);
+    }
+    // A shingled roof sloping down to the front, overhanging the counter.
+    const run = FRONT + 0.25 - (BACK - 0.2);
+    const rise = HIGH - LOW;
+    const roof = rbox(W + 0.5, 0.12, Math.hypot(run, rise), 0x3d3a37, 0.03);
+    boxUV(roof.geometry, 1.5);
+    roof.material = this.painted(0x4a4440, shingleTexture());
+    roof.position.set(0, (LOW + HIGH) / 2 + 0.1, (FRONT + 0.25 + BACK - 0.2) / 2);
+    roof.rotation.x = Math.atan2(rise, run);
+    g.add(roof);
+    // The counter, with smoked fish laid out on top, each with a tail.
+    const front = rbox(W - 0.5, 0.92, 0.55, WOOD, 0.03);
+    front.position.y = 0.46;
+    const top = rbox(W - 0.3, 0.08, 0.72, 0x6b4a2b, 0.02);
+    top.position.y = 0.96;
+    g.add(front, top);
+    const browns = [0xb0692e, 0x9a5a28, 0xc47f3a, 0x8a4f22];
+    const smoked = (i: number) => {
+      const f = new THREE.Group();
+      const body = ball(0.08, browns[i % 4], 2.4, 0.5, 1.1);
+      const tail = cyl(0, 0.09, 0.15, browns[i % 4], 4);
+      tail.rotation.z = -Math.PI / 2;
+      tail.scale.set(0.35, 1, 1);
+      tail.position.x = -0.26;
+      f.add(body, tail);
+      return f;
+    };
+    for (let i = 0; i < 5; i++) {
+      const f = smoked(i);
+      f.position.set(-1.1 + i * 0.55, 1.03, i % 2 ? 0.14 : -0.12);
+      f.rotation.y = i % 2 ? 0.35 : -0.3;
+      g.add(f);
+    }
+    // Corner posts, a pole under the eave with fish hanging from it, and two rows on the back wall.
+    for (const sx of [-1, 1]) {
+      const post = cyl(0.07, 0.08, LOW, DARK, 8);
+      post.position.set(sx * (W / 2 - 0.08), LOW / 2, FRONT);
+      g.add(post);
+    }
+    const pole = cyl(0.035, 0.035, W - 0.2, DARK, 6);
+    pole.rotation.z = Math.PI / 2;
+    pole.position.set(0, 2.08, FRONT);
+    g.add(pole);
+    const hang = (x: number, y: number, z: number, i: number) => {
+      const f = smoked(i);
+      f.rotation.z = Math.PI / 2;
+      f.position.set(x, y, z);
+      g.add(f);
+    };
+    for (let i = 0; i < 6; i++) hang(-1.25 + i * 0.5, 1.78, FRONT, i);
+    for (const y of [1.45, 2.15]) for (let i = 0; i < 5; i++) hang(-1.0 + i * 0.5, y, BACK + 0.14, i + 1);
+    // A lantern at the front corner, lit at night like the porch lamps.
+    const lamp = ball(0.11, 0xffd27a);
+    (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
+    lamp.position.set(-W / 2 + 0.08, 1.9, FRONT + 0.14);
+    glowTag(lamp, 0.7);
+    this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
+    g.add(lamp);
+    // The back faces the campfire: a shuttered window and a stack of firewood, so it isn't a blank wall.
+    const frame = rbox(0.9, 0.75, 0.08, 0x3a2a1e, 0.02);
+    frame.position.set(-0.3, 1.55, BACK - 0.1);
+    g.add(frame);
+    for (const sx of [-1, 1]) {
+      const shutter = rbox(0.4, 0.66, 0.06, 0x6b7f5a, 0.02);
+      shutter.position.set(-0.3 + sx * 0.21, 1.55, BACK - 0.16);
+      g.add(shutter);
+    }
+    for (let r = 0; r < 3; r++) {
+      for (let i = 0; i < 5 - r; i++) {
+        const log = cyl(0.1, 0.1, 0.55, 0x7a5232, 7);
+        log.rotation.x = Math.PI / 2;
+        log.position.set(-1.1 + (i - (4 - r) / 2) * 0.21, 0.1 + r * 0.18, BACK - 0.38);
+        g.add(log);
+      }
+    }
+    // The sign stands on the roof's front edge, up where Marlow's is.
+    const sign = textPlane(2.4, 0.55, 512);
+    woodSign(sign.ctx, 'SMOKEHOUSE');
+    sign.tex.needsUpdate = true;
+    sign.mesh.position.set(0, LOW + 0.55, FRONT + 0.32);
+    sign.mesh.rotation.x = -0.12;
+    g.add(sign.mesh);
+    // The stone smoker stands behind the shack, its iron door and glowing coals turned to the side,
+    // and a tall pipe so the smoke rises over the roof.
+    const SX = 0.9;
+    const SZ = BACK - 0.75;
+    const sm = new THREE.Group();
+    const box = rbox(1.0, 1.2, 1.0, 0x8d6e63, 0.04);
+    boxUV(box.geometry, 1.2);
+    box.material = this.painted(0x9a8a7c, stoneTexture());
+    box.position.y = 0.6;
+    const door = rbox(0.55, 0.5, 0.06, 0x2e2a28, 0.02);
+    door.position.set(0, 0.55, 0.5);
+    const ember = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.07), new THREE.MeshBasicMaterial({ color: 0xff7a2a }));
+    ember.position.set(0, 0.42, 0.54);
+    glowTag(ember, 0.6);
+    const pipe = cyl(0.09, 0.09, 2.4, 0x3a3532, 10);
+    pipe.position.set(0, 2.4, -0.15);
+    const cap = cyl(0.17, 0.12, 0.08, 0x3a3532, 10);
+    cap.position.set(0, 3.63, -0.15);
+    sm.add(box, door, ember, pipe, cap);
+    for (let i = 0; i < 3; i++) {
+      const log = cyl(0.09, 0.09, 0.7, 0x7a5232, 8);
+      log.rotation.x = Math.PI / 2;
+      log.position.set(0.62 + (i === 2 ? 0.09 : i * 0.18), i === 2 ? 0.24 : 0.09, 0);
+      sm.add(log);
+    }
+    sm.position.set(SX, 0, SZ);
+    sm.rotation.y = Math.PI / 2;
+    g.add(sm);
+    this.at(g, sh.x, sh.z, sh.facing);
+    const sin = Math.sin(sh.facing);
+    const cos = Math.cos(sh.facing);
+    const world = (lx: number, lz: number) => ({ x: sh.x + lx * cos + lz * sin, z: sh.z - lx * sin + lz * cos });
+    for (const [lx, lz, r] of [[-1, 0, 0.5], [0, 0, 0.5], [1, 0, 0.5], [-1.2, BACK, 0.5], [0, BACK, 0.5], [1.2, BACK, 0.5], [-1, BACK - 0.38, 0.5], [-W / 2, -1, 0.6], [W / 2, -1, 0.6], [SX, SZ, 0.75]] as const) {
+      const c = world(lx, lz);
+      this.solid(c.x, c.z, r);
+    }
+    // The pipe sits 0.15 behind the smoker's middle; the smoker is turned a quarter, so that's along local x.
+    const top2 = world(SX - 0.15, SZ);
+    const base = new THREE.Vector3(top2.x, groundHeight(sh.x, sh.z) + 3.75, top2.z);
+    for (let n = 0; n < 4; n++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xcfcfcf, transparent: true, opacity: 0.5, depthWrite: false }));
+      this.group.add(m);
+      this.smoke.push({ m, base, ph: n / 4 });
+    }
   }
 
   private buildRack(s: Spot): void {

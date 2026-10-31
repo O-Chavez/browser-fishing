@@ -16,3 +16,9 @@ export const withCoins = (html: string): string => html.replaceAll('🪙', COIN)
 
 /** Plain text (a toast, a chat line) as HTML, with the gold coin in place of 🪙. */
 export const coinText = (text: string): string => withCoins(escapeHtml(text));
+
+/** A countdown as m:ss, rounded up so it never shows 0:00 early. */
+export function clock(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}

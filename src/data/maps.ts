@@ -11,6 +11,11 @@ export interface Spot {
 /** Facing that points an object at a world position. */
 export const faceToward = (x: number, z: number, tx: number, tz: number): number => Math.atan2(tx - x, tz - z);
 
+/** Right beside the Lucky Wheel, facing Marlow's stall across the main path. */
+const SMOKEHOUSE: Spot = { x: -5.8, z: 21.9, facing: Math.PI / 2 };
+/** Where Mags stands: inside the shack, behind her counter. */
+const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOUSE.z - 0.75 * Math.cos(SMOKEHOUSE.facing) };
+
 export interface HouseDef extends Spot {
   /** Wall and roof colours. */
   wall: number;
@@ -29,6 +34,10 @@ export interface NpcDef extends Spot {
   hat?: number;
   /** Painted face, from `FACES` (defaults to a smile). */
   face?: FaceId;
+  /** A headscarf instead of a hat or hair. */
+  scarf?: number;
+  /** A work apron over the coat. */
+  apron?: number;
   /** A loop they stroll around; without one they stand still. */
   walk?: NpcWalk;
 }
@@ -96,6 +105,8 @@ export interface MapDef {
   /** Walkable radius from the map origin. */
   radius: number;
   town: TownDef;
+  /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
+  smokehouse?: Spot;
   /** Casino maps: where the tables and prize counter stand. */
   casino?: { roulette: Spot; blackjack: Spot; prizes: Spot; mirror: Spot; records: Spot; hall: { x: number; z: number; w: number; d: number } };
   /** Player level needed to travel here. */
@@ -127,6 +138,7 @@ export const MAPS: MapDef[] = [
     mirror: { x: -8.5, z: 40, facing: faceToward(-8.5, 40, 0, 32) },
     campfire: { x: -15, z: 24, facing: 0 },
     worms: { x: -8.5, z: 10.5 },
+    smokehouse: SMOKEHOUSE,
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
@@ -134,7 +146,7 @@ export const MAPS: MapDef[] = [
       square: { x: 0, z: 32, r: 5.5 },
       houses: [
         { x: -15, z: 43, facing: faceToward(-15, 43, 0, 35), wall: 0xe8d7b0, roof: 0xb5473a, sign: "Wren's Cottage" },
-        { x: 15, z: 43, facing: faceToward(15, 43, 0, 35), wall: 0xc9d9e0, roof: 0x3f6f8f, sign: 'Smokehouse' },
+        { x: 15, z: 43, facing: faceToward(15, 43, 0, 35), wall: 0xc9d9e0, roof: 0x3f6f8f },
         { x: -9, z: 51, facing: faceToward(-9, 51, 0, 40), wall: 0xe0c3a0, roof: 0x6b4a8a },
         { x: 9, z: 51, facing: faceToward(9, 51, 0, 40), wall: 0xd8e0c0, roof: 0x8a5a2b },
         { x: 17, z: 28, facing: faceToward(17, 28, 4, 31), wall: 0xe6c9c9, roof: 0x4a7a4a, sign: 'Fishmonger' },
@@ -206,6 +218,17 @@ export const MAPS: MapDef[] = [
           nightLines: ['Mind the dark paths, dear. Follow the lamps.'],
         },
         {
+          // Stands behind her counter; the counter itself opens the Smokehouse menu.
+          name: 'Mags Cinder', face: 'grin', ...MAGS, facing: SMOKEHOUSE.facing, coat: 0xb5654a, scarf: 0xc0392b, apron: 0x5a3a24,
+          lines: [
+            "Fish in, smoke out. Don't touch the racks.",
+            "Bring me fish, a few at a time if you must. The rack keeps what you've brought.",
+            'Smoke keeps going while you sleep. Fill my racks before you head off.',
+            "Ten batches of the same and you'll have the knack of it. Then I'll smoke you two for one.",
+          ],
+          nightLines: ["Lantern Glaze, that's the night angler's secret. The eels bite from dusk with a bit of that in you."],
+        },
+        {
           name: 'Captain Reed', face: 'grin', x: 4, z: 53.5, facing: faceToward(4, 53.5, 0, 56), coat: 0x2f4f4f, hat: 0x2b2b2b,
           // Paces in front of the gate he keeps.
           walk: { speed: 1.1, wait: 5, stops: [{ x: -4, z: 53.5, wait: 5, face: faceToward(-4, 53.5, 0, 56) }] },
@@ -261,6 +284,7 @@ MAPS.push({
   gate: { x: 0, z: 27.4, facing: 0 },
   gateArrival: undefined,
   worms: undefined,
+  smokehouse: undefined,
   casino: {
     hall: { x: 0, z: 43, w: 34, d: 34 },
     roulette: { x: -9, z: 43, facing: toward(-9, 43) },

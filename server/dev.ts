@@ -2,7 +2,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { BAITS, FISH, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
 import * as eco from '../src/game/economy';
-import { grantRanks } from '../src/game/progression';
+import { DISHES } from '../src/data/smokehouse';
+import * as smoke from '../src/game/smoke';
+import { grantRanks, sellValue } from '../src/game/progression';
 import type { SaveData } from '../src/game/state';
 import { Lockout } from './lockout';
 
@@ -60,7 +62,9 @@ export const HELP = [
   '/coins N · /chips N · /level N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /time day|dusk|night|dawn|auto',
-  '/dig (reset worm cooldown) · /resetpass <name> <new password>',
+  '/dig (reset worm cooldown) · /smoke (finish the smoker) · /smoke <fish> [N]',
+  '/dish <dish> [N] · /smokestats (Smokehouse play test)',
+  '/resetpass <name> <new password>',
   '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
 ];
 
@@ -120,6 +124,25 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       const shiny = args.includes('shiny');
       if (!eco.takeItem(s, { k: 'fish', fishId: f.id, size, ...(shiny ? { shiny } : {}) })) return say('Your fish slots are full.');
       return ok(`Added a ${shiny ? 'shiny ' : ''}${size} cm ${f.name}.`);
+    }
+    case 'smoke': {
+      if (!args[0]) {
+        const busy = s.smoke.spots.filter((x) => x);
+        for (const x of busy) x!.doneAt = 1;
+        return busy.length ? ok(`Finished ${busy.length} fish on the smoker.`) : say('Nothing is on the smoker.');
+      }
+      const f = FISH.find((x) => x.id === args[0]);
+      if (!f) return say(`Fish ids: ${ids(FISH)}`);
+      const n = int(args[1] ?? '1', 1, 50)!;
+      smoke.stock(s, f.id, sellValue(f, (f.minSize + f.maxSize) / 2), n);
+      return ok(`Added ${n} smoked ${f.name} to your Pantry.`);
+    }
+    case 'dish': {
+      const d = DISHES.find((x) => x.id === args[0]);
+      if (!d) return say(`Dish ids: ${ids(DISHES)}`);
+      const n = int(args[1] ?? '1', 1, 50)!;
+      smoke.addCooked(s, d.id, n);
+      return ok(`Added ${n} ${d.name} to your Pantry.`);
     }
     case 'tp': {
       const m = t.maps[args[0]];

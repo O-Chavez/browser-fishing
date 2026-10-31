@@ -487,13 +487,15 @@ describe('ranks, titles and back pay', () => {
     eco.applyCatch(s, eel, 250, true);
     expect(s.dex[eel.id]).toMatchObject({ count: 3, shiny: 2 });
   });
-  it('keeps levelling past 50 and banks the gifts', () => {
+  it('keeps levelling past 50, banking the fare and cooking the provision into a dish', () => {
     const s = newSave();
     s.level = FLAT_LEVEL + 4;
     s.xp = xpForNextLevel(FLAT_LEVEL) - 1;
-    eco.applyCatch(s, eel, 250);
+    const res = eco.applyCatch(s, eel, 250);
     expect(s.level).toBe(FLAT_LEVEL + 5);
-    expect(s.gifts).toEqual({ provisions: 1, fares: 1 });
+    expect(s.gifts).toEqual({ provisions: 0, fares: 1 });
+    // A tier 5 catch opens the Kitchen and every dish, so the gift is the Spirit Banquet.
+    expect(res.gift).toEqual({ id: 'banquet', n: 1 });
   });
   it('wears only an earned title', () => {
     const s = newSave();

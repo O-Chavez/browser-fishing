@@ -16,6 +16,7 @@ import puppeteer, { type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { FISH } from '../src/data/content';
 import { MAPS } from '../src/data/maps';
+import { STAGES } from '../src/data/smokehouse';
 import { CARD_SLIDE_MS, RESULT_BEAT_MS } from '../src/game/tablepace';
 import { newSave } from '../src/game/state';
 
@@ -46,6 +47,8 @@ const fish = (i: number) => ({ k: 'fish' as const, fishId: FISH[i % FISH.length]
 // The last slot holds a top-tier fish: anything worth under 1 chip is refused at the tray.
 const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, size: 60 };
 const save = { ...newSave(), level: 20, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
+// Smokehouse stages already seen, so their banner and jingle don't land in the middle of the casino checks.
+save.smoke.seen = STAGES.map((st) => st.id);
 fs.writeFileSync(
   path.join(dataDir, 'accounts.json'),
   JSON.stringify({ smoke: { name: 'Smoke', hash: createHash('sha256').update(TOKEN).digest('hex'), save } }),

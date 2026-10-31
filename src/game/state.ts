@@ -2,6 +2,7 @@ import { BAITS, FISH, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { TITLES } from '../data/ranks';
+import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
 
@@ -31,6 +32,38 @@ export type Slot =
   | { k: 'bait'; id: BaitType; n: number }
   | { k: 'fish'; fishId: string; size: number; shiny?: boolean; /** Value multiplier won at the wheel and casino tables. */ mult?: number }
   | { k: 'rod'; id: string };
+
+export type FishItem = Extract<Slot, { k: 'fish' }>;
+
+/** A fish on Mags's smoker, done at server time `doneAt`. */
+export interface SmokeSpot {
+  fish: FishItem;
+  doneAt: number;
+}
+
+/** The Smokehouse (see `src/game/smoke.ts`). */
+export interface Smoke {
+  /** Always `SMOKER_SPOTS` long, one fish per spot. */
+  spots: (SmokeSpot | null)[];
+  /** Smoked fish by species: each one's raw sale value, highest first. */
+  pantry: Partial<Record<string, number[]>>;
+  /** The snack being eaten, with the online milliseconds it has left. */
+  snack: { fishId: string; ms: number } | null;
+  /** Cooked dishes waiting in the Pantry. */
+  cooked: CookedDish[];
+  /** The dish being eaten, with the online milliseconds it has left. */
+  dish: { id: DishId; ms: number } | null;
+  /** Stages whose opening has been announced. */
+  seen: StageId[];
+}
+
+/** A stack of cooked dishes in the Pantry. */
+export interface CookedDish {
+  id: DishId;
+  n: number;
+}
+
+export const newSmoke = (): Smoke => ({ spots: Array.from({ length: SMOKER_SPOTS }, () => null), pantry: {}, snack: null, cooked: [], dish: null, seen: [] });
 
 export interface SaveData {
   version: 1;
@@ -68,8 +101,9 @@ export interface SaveData {
   /** Titles earned (ids from `TITLES`), and the one worn under the name tag. */
   titles: string[];
   title: string | null;
-  /** Rewards for levels past 50, kept until the Smokehouse and the charters can use them. */
+  /** Rewards for levels past 50 not handed out yet: dishes until the Kitchen opens, fares until the charters. */
   gifts: Gifts;
+  smoke: Smoke;
   /**
    * XP thrown away at the old level-50 cap, estimated once from the Fishdex when the cap was lifted.
    * The dev console's `/backpay` pays it out; `paid` keeps it from being paid twice.
@@ -110,8 +144,66 @@ export const newSave = (): SaveData => ({
   titles: [],
   title: null,
   gifts: { provisions: 0, fares: 0 },
+  smoke: newSmoke(),
   backPay: { xp: 0, paid: true },
 });
+
+/** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
+export const freeSlots = (s: SaveData): number => {
+  let n = 0;
+  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) n++;
+  return n;
+};
+
+export const freeFishSlot = (s: SaveData): number => {
+  for (let i = FISH_SLOT; i < Math.min(s.slots.length, slotCount(s)); i++) if (!s.slots[i]) return i;
+  return -1;
+};
+
+/** Empties a fish slot. An extra slot past the hotbar size (fish left over from an older save) goes away instead. */
+export function clearSlot(s: SaveData, i: number): void {
+  if (i < slotCount(s)) {
+    s.slots[i] = null;
+    return;
+  }
+  s.slots.splice(i, 1);
+  if (s.held > i) s.held--;
+  s.held = Math.min(s.held, s.slots.length - 1);
+}
+
+const isFishItem = (x: unknown): x is FishItem => {
+  const f = x as FishItem | null;
+  return !!f && f.k === 'fish' && FISH.some((d) => d.id === f.fishId) && Number.isFinite(f.size);
+};
+
+/** Keeps only well-formed spots, pantry fish, dishes, buffs and stages from a saved Smokehouse; v1's racks and recipes are dropped. */
+function cleanSmoke(raw: unknown): Smoke {
+  const d = (raw ?? {}) as Partial<Smoke>;
+  const out = newSmoke();
+  const num = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
+  const known = (id: unknown) => FISH.some((f) => f.id === id);
+  if (Array.isArray(d.spots))
+    d.spots.slice(0, SMOKER_SPOTS).forEach((sp, i) => {
+      if (sp && isFishItem(sp.fish) && num(sp.doneAt)) out.spots[i] = { fish: sp.fish, doneAt: sp.doneAt };
+    });
+  for (const [id, list] of Object.entries(d.pantry ?? {})) {
+    const items = Array.isArray(list) ? list.filter(num).map(Math.round) : [];
+    if (known(id) && items.length) out.pantry[id] = items.sort((a, b) => b - a);
+  }
+  if (d.snack && known(d.snack.fishId) && num(d.snack.ms)) out.snack = { fishId: d.snack.fishId, ms: Math.round(d.snack.ms) };
+  // Stacks of the same dish merge (dev saves from before spices were shelved kept them apart).
+  if (Array.isArray(d.cooked))
+    for (const c of d.cooked) {
+      if (!c || !dishById(c.id) || !num(c.n)) continue;
+      const same = out.cooked.find((x) => x.id === c.id);
+      if (same) same.n += Math.floor(c.n);
+      else out.cooked.push({ id: c.id, n: Math.floor(c.n) });
+    }
+  out.cooked = out.cooked.filter((c) => c.n > 0);
+  if (d.dish && dishById(d.dish.id) && num(d.dish.ms)) out.dish = { id: d.dish.id, ms: Math.round(d.dish.ms) };
+  if (Array.isArray(d.seen)) out.seen = [...new Set(d.seen.filter((id) => stageById(id)))];
+  return out;
+}
 
 /**
  * Puts the rod in use in the rod slot and the active bait in the bait slot; every other rod and bait
@@ -212,6 +304,7 @@ export function migrate(raw: object): SaveData {
   const g = (data.gifts ?? {}) as Partial<Gifts>;
   const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
   out.gifts = { provisions: count(g.provisions), fares: count(g.fares) };
+  out.smoke = cleanSmoke(data.smoke);
   // Saves from before the cap was lifted: a level-50 player's thrown-away XP is estimated now,
   // before any new catches land in the Fishdex, and waits for the dev console to pay it.
   // An unpaid estimate from an older version is redone; catches since the cap was lifted are in the
