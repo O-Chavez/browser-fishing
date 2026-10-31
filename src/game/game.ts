@@ -34,7 +34,9 @@ import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
-import { placeOf, waitText, type DiveEnd } from '../net/protocol';
+import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
+import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
+import type { Behaviour } from '../data/dive';
 import { BEHAVIOUR_TUNE } from './dive';
 import { Player } from './player';
 import {
@@ -128,12 +130,9 @@ const CAMP_TIPS = [
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const GRAVITY = 9.8;
+/** Menu tabs drawn as small cards for the sea trips: Reed's panel, a marker's choice, heading home and the end card. */
+const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
 
-/** A stand-in line for the end of a dive until D3's surfaced and sunk cards. */
-const diveEndText = (e: DiveEnd): string =>
-  e.result === 'surfaced'
-    ? `⚓ Surfaced from depth ${e.ledge}${e.record ? ' (a new record!)' : ''}: +${e.pearls} pearls.`
-    : `🌊 ${e.why === 'line' ? 'Out of line' : e.why === 'away' ? 'The dive waited too long for you' : 'Dive ended'}: the haul sank at depth ${e.depth}.`;
 /** 'full' or 'lite', remembered per browser; unset means the device's default. */
 const GRAPHICS_KEY = 'fishing-graphics';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
@@ -190,6 +189,17 @@ export class Game {
   private fightD = 1;
   /** A sea fish's behaviour, as reel levers. */
   private fightTune: ReelTune | undefined;
+  private fightB: Behaviour | undefined;
+  /** The dive on screen: the strip at sea, and the cards waiting for a quiet moment (`showDiveDue`). */
+  private diveHud = new DiveHud($('divehud'), $('divetag'));
+  private diveDue: 'marker' | 'diveend' | null = null;
+  private diveEnd: DiveEnd | null = null;
+  /** The dive as it stood before it ended, for the end card's haul growth. */
+  private diveLast: DiveView | null = null;
+  /** The start picked in Captain Reed's panel; null shows the furthest charted marker. */
+  private divePick: number | null = null;
+  /** What Reed said as his panel opened (his next line). */
+  private reedSay = '';
   /** Moves the server sent back (for the smoke test: walking should never trip its check). */
   private corrections = 0;
   /** The button at each fixed reel step, sent with the catch. */
@@ -395,13 +405,23 @@ export class Game {
       onCastFail: (msg) => {
         if (this.phase === 'flying' || this.phase === 'swing') this.reset(msg);
       },
-      // The dive HUD and cards come with D3; for now the sea follows the depth and a toast says what happened.
+      // The sea follows the depth; the strip shows the dive, and a marker's choice waits for the catch card.
       onDive: (d) => {
         this.seaDepth = d.depth;
         this.world.setDepth(d.depth);
-        if (d.state === 'ledge') this.toast(`⚓ Ledge at depth ${d.depth}: ${Math.round(d.line)} m of line left.`, 4);
+        const at = d.state === 'ledge' && this.diveHud.view?.state !== 'ledge';
+        this.diveHud.set(d);
+        if (at) this.diveDue = 'marker';
+        else if (d.state !== 'ledge' && this.diveDue === 'marker') this.diveDue = null;
+        if (this.menuOpen && (this.tab === 'marker' || this.tab === 'headhome') && d.state !== (this.tab === 'marker' ? 'ledge' : 'fishing')) this.closeMenu();
       },
-      onDiveEnd: (end) => this.toast(diveEndText(end), 5),
+      onDiveEnd: (end) => {
+        this.diveEnd = end;
+        this.diveLast = this.diveHud.view;
+        this.diveHud.set(null);
+        this.diveDue = 'diveend';
+        if (this.menuOpen && (this.tab === 'marker' || this.tab === 'headhome')) this.closeMenu();
+      },
       onCorrect: (x, z) => {
         this.corrections++;
         this.player.teleport(x, z);
@@ -894,6 +914,8 @@ export class Game {
         this.escClosedAt = performance.now();
         return this.closeMenu();
       }
+      // A marker's choice by key: 1 heads home, 2 sails on.
+      if (this.menuOpen && this.tab === 'marker' && !e.repeat && /^(?:Digit|Numpad)[12]$/.test(e.code)) return this.markerChoice(e.code.endsWith('1'));
       if (e.repeat || this.menuOpen || !this.active) return;
       // By key position, not e.key: holding Shift to sprint turns "1" into "!".
       const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
@@ -1063,6 +1085,11 @@ export class Game {
     else if (act === 'equipbait') this.equipBait(id!);
     else if (act === 'buycos') this.buyCosmetic(id!);
     else if (act === 'equip') this.equip(btn.dataset.slot as CosSlot, id || null);
+    else if (act === 'divefrom') this.divePick = Number(id);
+    else if (act === 'castoff') return this.castOffFrom(Number(id));
+    else if (act === 'markerhome' || act === 'markeron') return this.markerChoice(act === 'markerhome');
+    else if (act === 'askhome') this.tab = 'headhome';
+    else if (act === 'headhome') return this.headHome();
     else if (act === 'color') this.recolor(Number(id));
     else if (act === 'face') this.reface(id!);
     else if (act === 'title') this.wearTitle(id || null);
@@ -1499,6 +1526,7 @@ export class Game {
     const left = MAPS.find((m) => m.id === from);
     this.map = MAPS.find((m) => m.id === this.s.location) ?? MAPS[0];
     if (this.map.sea || left?.sea) this.showCastOff(!!this.map.sea);
+    if (!this.map.sea) this.diveHud.set(null);
     this.s.location = this.map.id;
     this.world.setLocation(byId(LOCATIONS, this.map.locationId), this.map);
     this.setGateSign();
@@ -1519,7 +1547,7 @@ export class Game {
   private showCastOff(out: boolean): void {
     const z = zoneAt(this.seaDepth);
     $('castoff-title').textContent = out ? 'Casting off' : 'Heading in';
-    $('castoff-where').textContent = out ? `${z.name} · depth ${this.seaDepth}` : 'The harbour';
+    $('castoff-where').textContent = out ? startText(this.seaDepth) : 'The harbour';
     const lines = out ? CAST_OFF_LINES : HEADING_IN_LINES;
     $('castoff-line').textContent = `Captain Reed: "${lines[Math.floor(Math.random() * lines.length)]}"`;
     const el = $('castoff');
@@ -1535,6 +1563,58 @@ export class Game {
     window.setTimeout(() => {
       if (this.castOffAt === null) el.classList.add('hidden');
     }, 500);
+  }
+
+  // ---------- sea trips ----------
+
+  /** Captain Reed's trip panel; it needs the server, which runs the dive. */
+  private openReed(say: string): void {
+    if (!this.net.connected) return this.toast('Charters need a server connection.');
+    this.divePick = null;
+    this.reedSay = say;
+    this.openMenu('reed');
+  }
+
+  /** The start Reed's panel shows: the one picked, else the furthest charted marker. */
+  private reedPick(): number {
+    const { ledges, record } = this.s.sea;
+    return this.divePick !== null && (this.divePick === 0 || ledges.includes(this.divePick)) ? this.divePick : ledges.includes(record) ? record : 0;
+  }
+
+  private castOffFrom(from: number): void {
+    this.net.send({ t: 'dive', from });
+    this.closeMenu();
+  }
+
+  private markerChoice(home: boolean): void {
+    if (this.diveHud.view?.state !== 'ledge') return this.closeMenu();
+    this.net.send({ t: 'ledge', a: home ? 'surface' : 'on' });
+    this.closeMenu();
+  }
+
+  private headHome(): void {
+    if (this.phase !== 'idle') return this.toast('Reel in first.');
+    this.net.send({ t: 'headhome' });
+    this.closeMenu();
+  }
+
+  /** The Bag's line at sea, with the way home between markers. */
+  private seaStrip(): string {
+    const v = this.diveHud.view;
+    if (!this.map.sea || !v) return '';
+    const btn = v.state === 'ledge'
+      ? `<button class="btn" data-tab="marker">🚩 Marker ${v.depth}: choose</button>`
+      : `<button class="btn bad" data-act="askhome"${this.phase === 'idle' ? '' : ' disabled'}>Head home</button>`;
+    return `<div class="seastrip"><span>⛵ Charter · ${zoneAt(v.depth).name}, league ${v.depth}. ${v.state === 'ledge' ? 'At a marker, heading home banks the haul.' : `Heading home before marker ${nextMarker(v.depth)} sinks the haul.`}</span>${btn}</div>`;
+  }
+
+  /** Opens a marker's choice or the end card once nothing else is on screen: no catch card, menu or "Casting off". */
+  private showDiveDue(): void {
+    if (!this.diveDue || this.phase !== 'idle' || this.menuOpen || this.castOffAt !== null || !$('castoff').classList.contains('hidden') || !$('join').classList.contains('hidden')) return;
+    const tab = this.diveDue;
+    this.diveDue = null;
+    if (tab === 'marker' && this.diveHud.view?.state !== 'ledge') return;
+    this.openMenu(tab);
   }
 
   // ---------- walking & interaction ----------
@@ -1872,8 +1952,15 @@ export class Game {
     const town = w.town;
     if (town) {
       town.setFound(this.s.bottles);
+      const stand = this.map.harbour?.stand;
       for (const npc of town.npcs) {
-        spots.push({ d: Math.hypot(npc.pos.x - x, npc.pos.z - z) - 0.5, label: `Talk to ${npc.def.name}`, act: () => this.toast(town.talk(npc, w.night > 0.5), 6) });
+        // Captain Reed stands at the harbour's dive stand, and talking to him opens the trip panel.
+        const reed = !!stand && npc.def.x === stand.x && npc.def.z === stand.z;
+        spots.push({
+          d: Math.hypot(npc.pos.x - x, npc.pos.z - z) - 0.5,
+          label: reed ? `Talk to ${npc.def.name} · charters` : `Talk to ${npc.def.name}`,
+          act: reed ? () => this.openReed(town.nextLine(npc, w.night > 0.5)) : () => this.toast(town.talk(npc, w.night > 0.5), 6),
+        });
       }
       for (const b of town.bottles) {
         if (this.s.bottles.includes(b.id)) continue;
@@ -1894,6 +1981,8 @@ export class Game {
       const dc = Math.hypot(sh.x - x, sh.z - z);
       if (dc < 2.8) spots.push({ d: dc - 2, label: smoke.smokerOpen(this.s) ? `Mags Cinder's Smokehouse · smoke fish to sell or snack on${smoke.kitchenOpen(this.s) ? ', cook dishes' : ''}` : `Mags Cinder's Smokehouse · opens at level ${SMOKE_LEVEL}`, act: () => this.openSmokehouse() });
     }
+
+    if (this.diveHud.view?.state === 'ledge') spots.push({ d: -50, label: `🚩 Marker ${this.diveHud.view.depth} · head home or sail on`, act: () => this.openMenu('marker') });
 
     const c = this.map.casino;
     this.updateTable(walking);
@@ -1980,6 +2069,7 @@ export class Game {
       {
         if (this.spin) return;
         if (this.map.casino) return this.tableClick();
+        if (this.diveHud.view?.state === 'ledge') return this.openMenu('marker');
         const can = eco.canCastAt(this.s, !!this.map.sea);
         if (can === 'nobait' && eco.canDig(this.s)) return this.toast(eco.DIG_HINT, 5);
         if (can !== 'ok') return this.toast(eco.CAST_MESSAGES[can]);
@@ -2068,6 +2158,7 @@ export class Game {
     this.fightSeed = roll.seed ?? 0;
     this.fightD = roll.d ?? 1;
     this.fightTune = roll.b && BEHAVIOUR_TUNE[roll.b];
+    this.fightB = roll.b;
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2169,6 +2260,7 @@ export class Game {
     $('alert').classList.add('hidden');
     const hard = this.fightD;
     this.reel = new Reel(hard, mulberry(this.fightSeed), this.fightTune);
+    this.diveHud.fight(this.fightB);
     this.holds = new HoldLog();
     this.reelAcc = 0;
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
@@ -2269,7 +2361,7 @@ export class Game {
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
       <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}
-      <div>${this.tierBadge(fish.tier)} ${TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
+      <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
@@ -2434,6 +2526,7 @@ export class Game {
   private endCast(next: Phase): void {
     const w = this.world;
     this.phase = next;
+    this.diveHud.fight(null);
     this.reel = null;
     this.hooked = null;
     this.removeShadow();
@@ -2461,6 +2554,7 @@ export class Game {
     this.tick(dt);
     // Behind the join screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
     this.updateCastOff();
+    this.showDiveDue();
     this.world.holdForShaders = !$('join').classList.contains('hidden') || this.castOffAt !== null;
     this.world.update(dt);
     const sea = this.world.sea;
@@ -3058,7 +3152,9 @@ export class Game {
     const vendor = this.tab === 'shop' || this.tab === 'casino' || this.tab === 'smoke';
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
     $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
-    $('menu').classList.toggle('fit', this.tab === 'peek');
+    const card = DIVE_TABS.includes(this.tab);
+    $('menu').classList.toggle('fit', this.tab === 'peek' || card);
+    $('menu').classList.toggle('dive', card);
     $('menu-who').innerHTML = this.menuWhoHtml();
     $('menu-tabs').innerHTML = this.menuTabsHtml();
     const el = $('tab');
@@ -3111,6 +3207,18 @@ export class Game {
         break;
       case 'peek':
         el.innerHTML = this.peekHtml();
+        break;
+      case 'reed':
+        el.innerHTML = reedHtml({ say: this.reedSay, chart: this.s.sea, pearls: this.s.pearls, ownsRod: eco.ownsRod(this.s, DIVE.rod), pick: this.reedPick() });
+        break;
+      case 'marker':
+        el.innerHTML = this.diveHud.view ? markerHtml(this.diveHud.view) : '';
+        break;
+      case 'headhome':
+        el.innerHTML = this.diveHud.view ? headHomeHtml(this.diveHud.view) : '';
+        break;
+      case 'diveend':
+        el.innerHTML = this.diveEnd ? endHtml(this.diveEnd, this.diveLast, this.s.pearls, this.s.sea.record) : '';
         break;
     }
     const slot = document.getElementById('pv-slot');
@@ -3231,6 +3339,8 @@ export class Game {
       const busy = this.s.smoke.spots.filter(Boolean).length;
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags's Smokehouse</b><span>${busy ? `${busy} fish smoking` : 'Smoker ready for fish'}</span></div>`;
     }
+    if (this.tab === 'reed') return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>Charters</span></div>`;
+    if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? `${zoneAt(this.diveHud.view.depth).name} · league ${this.diveHud.view.depth}` : 'Back at the harbour'}</span></div>`;
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
     return `<img src="${this.faceSrc(this.s.look.face as FaceId)}" alt=""><div><b>${escapeHtml(this.net.name || 'You')}</b><span>Level ${this.s.level} · ${this.s.coins.toLocaleString()} coins</span></div>`;
@@ -3251,7 +3361,7 @@ export class Game {
         tab('pantry', '🧺', `Pantry${n ? ` (${n})` : ''}`, this.smokeTab === 'pantry', 'data-smoke')
       );
     }
-    if (this.tab === 'peek') return '';
+    if (this.tab === 'peek' || DIVE_TABS.includes(this.tab)) return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
@@ -3477,7 +3587,7 @@ export class Game {
 
   /** What the Smokehouse is for, at the top of every tab. */
   private smokeIntroHtml(): string {
-    return `<div class="smoke-intro"><b>🔥 Smoke fish to sell or snack on, cook them into dishes.</b> A snack gives ${SNACK_MINUTES} minutes of ⭐ more XP or 💰 more coins on every catch; a dish gives several at once, stronger and longer.<span><i class="soon">Coming soon</i> Spices for Captain Reed's deep-sea dives.</span></div>`;
+    return `<div class="smoke-intro"><b>🔥 Smoke fish to sell or snack on, cook them into dishes.</b> A snack gives ${SNACK_MINUTES} minutes of ⭐ more XP or 💰 more coins on every catch; a dish gives several at once, stronger and longer.<span><i class="soon">Coming soon</i> Spices for Captain Reed's charters.</span></div>`;
   }
 
   private smokeHtml(): string {
@@ -3791,7 +3901,7 @@ export class Game {
       return this.itemTile({ icon: BAIT_ICON[b.id] ?? '🪱', name: b.name, sub, price: `${this.baitPackPrice(b)} / ${eco.BAIT_PACK}`, tier: b.tier, on: sel === `bait:${b.id}`, check: equipped, ghost: n <= 0, attrs: `data-pick="bag" data-id="bait:${b.id}"` });
     }).join('');
 
-    return `<div class="cols"><div class="main">
+    return `${this.seaStrip()}<div class="cols"><div class="main">
         <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex)}</p>
         <h4>Your setup</h4>
         <div class="setup"><span class="big">${rodIcon(rod.tier, eco.rodLevelOf(s, rod.id))}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>

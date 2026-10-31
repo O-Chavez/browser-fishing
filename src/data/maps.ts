@@ -249,10 +249,11 @@ export const MAPS: MapDef[] = [
         },
         {
           name: 'Captain Reed', face: 'grin', ...HARBOUR.stand, coat: 0x2f4f4f, hat: 0x2b2b2b,
+          // Talking to Reed opens his charter panel (`reedHtml`, src/game/divehud.ts), which leads with his next line.
           lines: [
-            "She's a good boat, but she's not fit for deep water yet. I'm still fitting her out.",
-            'Dives will open soon. Keep your rod mended and your line strong.',
-            'Come back when the hull is ready, angler. The deep water will keep.',
+            'Every fish you land takes us a league further out. Every five, a marker: head home with the haul, or sail on.',
+            'One spool of line a charter. Run it out and the haul goes over the side.',
+            "Chart a marker and I'll sail you straight back to it next time.",
           ],
         },
       ],

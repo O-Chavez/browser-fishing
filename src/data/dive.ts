@@ -73,8 +73,8 @@ export const DIVE = {
   holdMs: 120_000,
 };
 
-/** Whether players can dive yet. Until D3 adds the trip from Reed, rod levels only show to players with pearls or a level (dev). */
-export const DIVES_OPEN = false;
+/** Whether players can dive yet: Captain Reed's charters are open (D3), so the rod levels show to every Aurora Rod owner. */
+export const DIVES_OPEN = true;
 
 /**
  * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's

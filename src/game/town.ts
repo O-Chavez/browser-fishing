@@ -560,7 +560,7 @@ export class Town {
 
   /**
    * Captain Reed's dive stand on the East Landing: two posts holding up a sea-green awning over where he
-   * stands, a DEEP DIVES sign on its front edge, a crate and a lifebuoy by the posts, and a lantern.
+   * stands, a CHARTERS sign on its front edge, a crate and a lifebuoy by the posts, and a lantern.
    * `s` is where Reed stands; the stand opens toward `s.facing`. Decoration only (the deck is narrow).
    */
   private buildDiveStand(s: Spot): void {
@@ -579,7 +579,7 @@ export class Town {
     awning.rotation.x = 0.1;
     g.add(awning);
     const sign = textPlane(1.9, 0.45, 512);
-    woodSign(sign.ctx, 'DEEP DIVES');
+    woodSign(sign.ctx, 'CHARTERS');
     sign.tex.needsUpdate = true;
     sign.mesh.position.set(0, H - 0.3, 0.78);
     g.add(sign.mesh);
@@ -931,13 +931,18 @@ export class Town {
     for (const l of this.lights) l.intensity = 8 * n;
   }
 
-  /** The line this townsperson says next. */
+  /** The line this townsperson says next, with their name. */
   talk(npc: TownNpc, night: boolean): string {
+    return `${npc.def.name}: "${this.nextLine(npc, night)}"`;
+  }
+
+  /** The line this townsperson says next; they stop to say it. */
+  nextLine(npc: TownNpc, night: boolean): string {
     const lines = night && npc.def.nightLines ? [...npc.def.nightLines, ...npc.def.lines] : npc.def.lines;
     const line = lines[npc.next % lines.length];
     npc.next++;
     npc.walker?.listen();
-    return `${npc.def.name}: "${line}"`;
+    return line;
   }
 
   /** `you` is the local player; `others` are the other players on this map, whom walking townsfolk keep clear of too. */

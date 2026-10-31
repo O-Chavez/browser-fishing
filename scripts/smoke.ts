@@ -49,6 +49,8 @@ const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, s
 const save = { ...newSave(), level: 20, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
 // Smokehouse stages already seen, so their banner and jingle don't land in the middle of the casino checks.
 save.smoke.seen = STAGES.map((st) => st.id);
+// The Aurora Rod in the locker, for a trip out to sea from Captain Reed's stand.
+save.locker.rods.push('aurora');
 fs.writeFileSync(
   path.join(dataDir, 'accounts.json'),
   JSON.stringify({ smoke: { name: 'Smoke', hash: createHash('sha256').update(TOKEN).digest('hex'), save } }),
@@ -76,6 +78,7 @@ try {
   await pondChecks();
   await casinoChecks();
   await seaChecks();
+  await tripChecks();
   await chatChecks();
   await fightChecks();
   await noWebglChecks();
@@ -761,6 +764,91 @@ async function seaChecks(): Promise<void> {
     const hub = await page.evaluate(() => window.__smoke.attachedReport('hub'));
     check('sea: pond hub intact after the trip', hub.missing.length === 0, hub.missing.join(', '));
   }
+  await ctx.close();
+}
+
+// ---------- a charter from Captain Reed (D3) ----------
+
+async function tripChecks(): Promise<void> {
+  const ctx = await browser.createBrowserContext();
+  const page = await openPage(`http://localhost:${VITE_PORT}/?name=Smoke&room=smoke`, ctx, TOKEN);
+  await page.waitForFunction(() => window.__game.online() && (window.__game.world as any).hub, { timeout: 15000 });
+  await page.evaluate(() => { window.__game.activate(); window.__game.day(0.4); });
+  const tab = () => page.evaluate(() => (document.getElementById('menu')!.classList.contains('hidden') ? '' : document.getElementById('tab')!.className + ' ' + document.getElementById('tab')!.textContent));
+  const arrived = (sea: boolean) => page.waitForFunction((sea) => !!(window.__game.world as any)[sea ? 'sea' : 'hub'] && document.getElementById('castoff')!.classList.contains('hidden'), { timeout: 20000, polling: 100 }, sea);
+  /** Casts and fights a fish out, letting go in the red, then clears the catch card. */
+  const landOne = () => page.evaluate(async () => {
+    const g = window.__game;
+    const seen = new Set<string>();
+    g.press();
+    await new Promise((r) => setTimeout(r, 400));
+    g.release();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 60000) {
+      const st = g.state();
+      seen.add(st.phase);
+      if (st.phase === 'bite') g.press();
+      else if (st.phase === 'reeling') g.hold(st.surging ? (st.tension ?? 0) < 0.7 : (st.tension ?? 0) < 0.6);
+      else if (st.phase === 'result' || (st.phase === 'idle' && seen.has('reeling'))) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    g.hold(false);
+    await new Promise((r) => setTimeout(r, 1500));
+    if (g.state().phase === 'result') g.press();
+    g.release();
+    await new Promise((r) => setTimeout(r, 1200));
+    return [...seen];
+  });
+
+  await page.evaluate(() => { window.__game.teleport(16.1, 7.2); window.__game.look(0, -0.05); });
+  await sleep(600);
+  await page.evaluate(() => window.__game.interact());
+  await sleep(300);
+  const reed = await tab();
+  check("charter: talking to Captain Reed opens his panel with the harbour to start from", reed.includes('tab-reed') && reed.includes('Harbour') && reed.includes('Cast off'), reed.slice(0, 160));
+  await page.click('#menu [data-act="castoff"]');
+  await arrived(true);
+  const hud = await page.evaluate(() => ({ shown: !document.getElementById('divehud')!.classList.contains('hidden'), text: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') }));
+  check('charter: Cast off sails out, with the strip showing the league, the line and the haul', hud.shown && hud.text.includes('league0') && hud.text.includes('300 m') && hud.text.includes('Marker 5'), hud.text);
+
+  const seen = await landOne();
+  const after = await page.evaluate(() => document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' '));
+  check('charter: a landed fish moves the strip a league out', seen.includes('reeling') && after.includes('league1') && after.includes('🐟 1'), `${seen.join(',')} · ${after}`);
+
+  // Head home between markers, from the Bag: the haul sinks and the card says so.
+  await page.evaluate(() => window.__game.openMenu('inventory'));
+  await sleep(200);
+  await page.click('#menu [data-act="askhome"]');
+  await sleep(200);
+  const ask = await tab();
+  await page.click('#menu [data-act="headhome"]');
+  await arrived(false);
+  await sleep(800);
+  const sank = await tab();
+  check('charter: heading home between markers asks first, then brings you back with the "Headed home" card', ask.includes('tab-headhome') && sank.includes('Headed home') && sank.includes('Fish sold along the way'), `${ask.slice(0, 60)} | ${sank.slice(0, 120)}`);
+  await page.click('#menu [data-act="close"]');
+
+  // From league 4, one fish reaches the marker at 5: its choice waits for the catch card, then 1 heads home with the haul.
+  for (const line of ['/login smoke smoke-dev-pass', '/sea 4']) {
+    await page.keyboard.press('Enter');
+    await page.keyboard.type(line);
+    await page.keyboard.press('Enter');
+    await sleep(300);
+  }
+  await arrived(true);
+  await sleep(500);
+  await landOne();
+  await page.waitForFunction(() => document.getElementById('tab')!.classList.contains('tab-marker') && !document.getElementById('menu')!.classList.contains('hidden'), { timeout: 5000 }).catch(() => {});
+  const marker = await tab();
+  check('charter: reaching a marker offers Head home or Sail on', marker.includes('Marker 5') && marker.includes('Head home') && marker.includes('Sail on'), marker.slice(0, 160));
+  await page.screenshot({ path: `${SHOTS}/trip-marker.png` });
+  await page.keyboard.press('Digit1');
+  await arrived(false);
+  await sleep(800);
+  const safe = await tab();
+  const chart = await page.evaluate(() => window.__game.s.sea);
+  check('charter: Head home at a marker banks the haul, charts it and shows "Home safe!"', safe.includes('Home safe!') && safe.includes('Marker 5 charted') && chart.ledges.includes(5), `${safe.slice(0, 120)} · ${JSON.stringify(chart)}`);
+  await page.click('#menu [data-act="close"]');
   await ctx.close();
 }
 

@@ -6,8 +6,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
-- 📋 D3, the dive client: the trip flow from Reed, depth, line and haul on the HUD, the ledge choice, surfaced and sunk cards with the loss reason, and the ledge picker. A new dive HUD module, hooks in `game.ts`. Needs D2, S1 and H1. Gameplan: the build-steps table
-- D6, the Deepest Dive board at the harbour; the record is the deepest ledge a player surfaced from. `server/accounts.ts`, `town.ts`. Needs D2, H1 and F2. Gameplan: "Shared: seeing it and fishing together"
+- D6, the Furthest Out board at the harbour (the name Oscar OK'd in D3, 2026-10-31, replacing "Deepest Dive"); the record is the furthest marker a player headed home from (the deepest ledge surfaced from, in code). `server/accounts.ts`, `town.ts`. Needs D2, H1 and F2. Gameplan: "Shared: seeing it and fishing together"
 
 ## Ideas
 
@@ -65,6 +64,7 @@ Finished items move to [DONE.md](DONE.md).
 
 - 🎨 Other players see your rod level (Oscar, D4, 2026-10-31: not yet): today every other player's avatar holds the same plain brown stick (`Avatars`, `src/game/avatars.ts`) and the server doesn't send anyone's rod. Send the rod id and level in `PlayerInfo` and give remote rods the Aurora Rod's glow step (`glowStep` / `glowColor`, `src/data/dive.ts`), so anyone at the pond can tell how far someone has come (Endgame Gameplan, "The chase: rod levels")
 - Sea motion comfort: a "Reduce boat motion" setting that flattens the horizon's roll at sea (`TILT` and `MAX_TILT` in `src/data/sea.ts`), if any player finds the roll queasy. S1 keeps it modest: about 1.4° at the Shelf, 2.5° at the Drop-off, 3° at most
+- At sea the hotbar still shows the bait slot, though sea casts use no bait (D2). Oscar (2026-10-31): maybe hide the whole hotbar at sea, but leave it until charters are closer to done
 - 🎨 A stylised "Casting off" card (Oscar, 2026-10-31): S1's is a plain panel over a sky-and-sea gradient (`#castoff`, `index.html` and `src/style.css`). A drawn harbour or the boat leaving the pier could replace it later
 - 🎨 East Landing at night: the harbour pier is dark after dusk (`World.lanterns` only covers the main pier, and each lantern is a point light); Reed's stand has just a glowing bulb. Decide whether the harbour gets a lantern or two once the map rework settles
 - 🎨 Townsfolk follow the day: head indoors at night (Granny Wren to her cottage) or gather at the campfire; their walks could take a different loop after dark (`nightLines` already exists for talk)
