@@ -1,3 +1,5 @@
+import { BOAT, inHull, onDeck } from '../data/sea';
+
 export const EYE_HEIGHT = 1.7;
 export const DOCK_TOP = 0.7;
 /** Draw order of the see-through water; glows that skip the depth buffer draw after it, or it paints over them. */
@@ -10,6 +12,15 @@ const BANK_SLOPE = 0.3;
 let pad: Pad | null = null;
 export const setPad = (p: Pad | null): void => {
   pad = p;
+};
+
+/**
+ * At sea the only ground is the charter boat's deck (`BOAT` in sea.ts): docks, standing and water
+ * read it instead of the pond's shore and piers.
+ */
+let atSea = false;
+export const setAtSea = (on: boolean): void => {
+  atSea = on;
 };
 
 export function waveHeight(x: number, z: number, t: number): number {
@@ -36,6 +47,7 @@ export function padWeight(x: number, z: number): number {
 }
 
 export function groundHeight(x: number, z: number): number {
+  if (atSea) return -10;
   const raw = rawGroundHeight(x, z);
   const w = padWeight(x, z);
   if (!pad) return raw;
@@ -69,15 +81,16 @@ export const DOCK_RECTS: DockRect[] = [
 ];
 
 export const onDock = (x: number, z: number, pad = 0): boolean =>
-  DOCK_RECTS.some((r) => x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad);
+  atSea ? (pad > 0 ? inHull(x, z, pad) : onDeck(x, z)) : DOCK_RECTS.some((r) => x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad);
 
 /** Height of the surface a player stands on. */
 export const standHeight = (x: number, z: number): number => {
+  if (atSea) return BOAT.deck;
   const g = Math.max(groundHeight(x, z), -0.1);
   return onDock(x, z) ? Math.max(g, DOCK_TOP) : g;
 };
 
-export const isWater = (x: number, z: number): boolean => groundHeight(x, z) < -0.25 && !onDock(x, z, 0.3);
+export const isWater = (x: number, z: number): boolean => (atSea ? !inHull(x, z, 0.3) : groundHeight(x, z) < -0.25 && !onDock(x, z, 0.3));
 
 export function mulberry(seed: number): () => number {
   return () => {

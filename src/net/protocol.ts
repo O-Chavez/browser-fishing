@@ -147,10 +147,11 @@ export type ServerMsg =
   /** A server-wide notice for the chat window ("Ann has joined"). */
   | { t: 'sys'; text: string }
   /**
-   * Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night.
+   * Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night,
+   * `depth` sets the dive depth their sea looks like.
    * `sent` answers a /bug, /idea or /feedback: whether the report went through (the feedback form reads it).
    */
-  | { t: 'dev'; lines: string[]; time?: number | null; sent?: boolean };
+  | { t: 'dev'; lines: string[]; time?: number | null; depth?: number; sent?: boolean };
 
 export interface HallRow { name: string; level: number; best: BestCatch; title?: string | null }
 
