@@ -5,6 +5,7 @@ import { TITLES } from '../data/ranks';
 import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
+import type { Chart } from './dive';
 
 export interface DexEntry {
   count: number;
@@ -109,6 +110,10 @@ export interface SaveData {
    * The dev console's `/backpay` pays it out; `paid` keeps it from being paid twice.
    */
   backPay: { xp: number; paid: boolean; /** Which estimate made `xp` (see `BACKPAY_VERSION`). */ v?: number };
+  /** Sea dives (`src/game/dive.ts`): the ledges charted by surfacing there, where later dives may start, and the deepest. */
+  sea: Chart;
+  /** Pearls banked from dives, for rod levels. Only dives give them; they are never bought. */
+  pearls: number;
 }
 
 export interface BestCatch {
@@ -146,6 +151,8 @@ export const newSave = (): SaveData => ({
   gifts: { provisions: 0, fares: 0 },
   smoke: newSmoke(),
   backPay: { xp: 0, paid: true },
+  sea: { ledges: [], record: 0 },
+  pearls: 0,
 });
 
 /** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
@@ -203,6 +210,14 @@ function cleanSmoke(raw: unknown): Smoke {
   if (d.dish && dishById(d.dish.id) && num(d.dish.ms)) out.dish = { id: d.dish.id, ms: Math.round(d.dish.ms) };
   if (Array.isArray(d.seen)) out.seen = [...new Set(d.seen.filter((id) => stageById(id)))];
   return out;
+}
+
+/** Keeps whole, positive ledge depths (each once, shallowest first) and a record no shallower than the deepest. */
+function cleanChart(raw: unknown): Chart {
+  const c = (raw ?? {}) as Partial<Chart>;
+  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
+  const ledges = [...new Set(Array.isArray(c.ledges) ? c.ledges.filter(ok) : [])].sort((a, b) => a - b);
+  return { ledges, record: Math.max(ok(c.record) ? c.record : 0, ledges.at(-1) ?? 0) };
 }
 
 /**
@@ -315,6 +330,8 @@ export function migrate(raw: object): SaveData {
     : out.level >= FLAT_LEVEL ? { xp: backPayXp(out.dex, xpPastFlat(out)), paid: false, v: BACKPAY_VERSION }
     : { xp: 0, paid: true };
   for (const e of Object.values(out.dex)) if (e && e.shiny !== undefined) e.shiny = count(e.shiny);
+  out.sea = cleanChart(data.sea);
+  out.pearls = count(data.pearls);
   // Accounts from before faces get a random one.
   if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
   out.look = cleanLook(out.look, out.owned);

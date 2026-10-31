@@ -30,7 +30,7 @@ describe('feedback commands', () => {
     const { room, join, reports } = setup();
     const a = join('Ann');
     a.acct.save.level = 7;
-    room.handle(a.id, { t: 'pos', x: 3.14, z: -2, yaw: 0 });
+    room.place(a.id, 3.14, -2, 0);
     room.handle(a.id, { t: 'cmd', text: '/bug   my fish   vanished when I sold it' });
     expect(reports).toEqual([
       { kind: 'bug', text: 'my fish vanished when I sold it', name: 'Ann', level: 7, map: 'Starter Pond', x: 3.14, z: -2, room: 'lobby', browser: 'Chrome 141 on macOS', at: 1_700_000_000_000 },

@@ -56,7 +56,13 @@ export interface DevTarget {
   setTime(f: number | null): void;
   /** The dive depth the sea's look follows, for this player only. */
   setDepth(depth: number): void;
+  /** Starts a dive at this depth (any depth, charted or not), ending one under way without banking it. */
+  dive(depth: number): void;
+  /** At a ledge: dive on, or surface. True if the save changed. */
+  ledge(a: 'on' | 'surface'): boolean | null;
   clearDig(): void;
+  /** Puts the player at a spot on their map, past the server's move check. */
+  place(x: number, z: number): void;
 }
 
 export const TIMES: Record<string, number> = { day: 0.2, dusk: 0.5, night: 0.7, dawn: 0.93 };
@@ -64,8 +70,8 @@ export const TIMES: Record<string, number> = { day: 0.2, dusk: 0.5, night: 0.7, 
 export const HELP = [
   '/coins N · /chips N · /level N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
-  '/tp <map> · /time day|dusk|night|dawn|auto',
-  '/sea [depth] (the dives\' open sea; /tp pond to come back)',
+  '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
+  '/sea [depth] (start a dive there) · /ledge on|up (at a ledge)',
   '/dig (reset worm cooldown) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
   '/resetpass <name> <new password>',
@@ -162,10 +168,23 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       const sea = Object.values(t.maps).find((m) => m.sea);
       if (!sea) return say('There is no sea on this server.');
       t.setDepth(depth);
-      const line = `At sea: ${zoneAt(depth).name}, depth ${depth}.`;
-      if (s.location === sea.id) return say(line);
-      t.teleport(sea.id);
-      return ok(line);
+      t.dive(depth);
+      return ok(`Diving from ${zoneAt(depth).name}, depth ${depth}.`);
+    }
+    case 'ledge': {
+      const a = args[0] === 'on' ? 'on' : args[0] === 'up' ? 'surface' : null;
+      if (!a) return say('Usage: /ledge on|up');
+      const res = t.ledge(a);
+      if (res === null) return say("You're not at a ledge.");
+      return { lines: [a === 'on' ? 'Diving on.' : 'Surfaced.'], changed: res };
+    }
+    case 'goto': {
+      const x = Number(args[0]);
+      const z = Number(args[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z) || Math.abs(x) > 1e4 || Math.abs(z) > 1e4) return say('Usage: /goto x z');
+      t.place(x, z);
+      // Silent: the test hook's teleports go through here, often many times.
+      return { lines: [], changed: false };
     }
     case 'time': {
       const k = args[0];

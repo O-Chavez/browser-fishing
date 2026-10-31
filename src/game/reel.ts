@@ -393,12 +393,12 @@ export function decodeHolds(h: string): Uint8Array | null {
 
 /**
  * Replays a fight from its seed, difficulty and button log (`HoldLog.encode`), as the server does to check a catch.
- * Steps until the fight ends or the log runs out; null if the log doesn't decode.
+ * Steps until the fight ends or the log runs out; null if the log doesn't decode. `tune` is a sea fish's behaviour.
  */
-export function replayFight(difficulty: number, seed: number, h: string): Reel | null {
+export function replayFight(difficulty: number, seed: number, h: string, tune?: ReelTune): Reel | null {
   const bits = decodeHolds(h);
   if (!bits) return null;
-  const r = new Reel(difficulty, mulberry(seed));
+  const r = new Reel(difficulty, mulberry(seed), tune);
   const n = Math.min(MAX_FIGHT_STEPS, bits.length * 8);
   for (let i = 0; i < n && r.status === 'reeling'; i++) r.update(FIGHT_DT, ((bits[i >> 3] >> (i & 7)) & 1) === 1);
   return r;

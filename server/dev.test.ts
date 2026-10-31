@@ -86,7 +86,7 @@ describe('dev commands in a room', () => {
     expect(devLines(a.log).at(-1)).toMatch(/Fish ids:/);
   });
 
-  it('takes a player to the open sea at a depth, only for them, and never back there on rejoin', () => {
+  it('starts a dive at any depth, only for them, which waits for them on a quick rejoin', () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');
     const b = join('Bob');
@@ -94,23 +94,47 @@ describe('dev commands in a room', () => {
     room.handle(a.id, { t: 'cmd', text: '/sea 20' });
     expect(a.save.location).toBe('sea');
     // The depth reaches the client before the save that moves it, so the sea is built at that depth.
+    const dive = a.log.findIndex((m) => m.t === 'divestate' && m.dive.depth === 20);
     const dev = a.log.findIndex((m) => m.t === 'dev' && m.depth === 20);
     const state = a.log.findIndex((m) => m.t === 'state' && m.save.location === 'sea');
+    expect(dive).toBeGreaterThanOrEqual(0);
     expect(dev).toBeGreaterThanOrEqual(0);
-    expect(state).toBeGreaterThan(dev);
-    expect(devLines(a.log).at(-1)).toBe('At sea: The Drop-off, depth 20.');
-    expect(b.log.some((m) => m.t === 'dev')).toBe(false);
-    // Already at sea: only the depth changes.
+    expect(state).toBeGreaterThan(Math.max(dive, dev));
+    expect(devLines(a.log).at(-1)).toBe('Diving from The Drop-off, depth 20.');
+    expect(b.log.some((m) => m.t === 'dev' || m.t === 'divestate')).toBe(false);
+    // Again at sea: a fresh dive at the new depth.
     room.handle(a.id, { t: 'cmd', text: '/sea' });
-    expect(a.log.at(-1)).toMatchObject({ t: 'dev', depth: 1 });
+    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { depth: 1, start: 1, line: 300 } });
     room.handle(a.id, { t: 'cmd', text: '/sea deep' });
     expect(devLines(a.log).at(-1)).toMatch(/Usage/);
-    // The pond's gate doesn't lead to the sea, and a player who leaves at sea comes back at the pond.
+    room.handle(a.id, { t: 'cmd', text: '/ledge up' });
+    expect(devLines(a.log).at(-1)).toBe("You're not at a ledge.");
+    // The pond's gate doesn't lead to the sea, and a player who drops out comes back to the dive.
     room.handle(a.id, { t: 'travel', to: 'pond' });
     expect(a.save.location).toBe('sea');
     room.leave(a.id);
     const again = join('Ann');
-    expect(again.save.location).toBe('pond');
+    expect(again.save.location).toBe('sea');
+    expect(again.log.find((m) => m.t === 'welcome')).toMatchObject({ dive: { depth: 1 } });
+    // Leaving the sea with /tp leaves the dive too.
+    room.handle(again.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(again.id, { t: 'cmd', text: '/tp pond' });
+    room.leave(again.id);
+    expect(join('Ann').save.location).toBe('pond');
+  });
+
+  it('places a player with /goto: dev only, or silently on a test server', () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cmd', text: '/goto 30 -40' });
+    expect(devLines(a.log).at(-1)).toMatch(/Unknown command/);
+    room.testHooks = true;
+    a.log.length = 0;
+    room.handle(a.id, { t: 'cmd', text: '/goto 30 -40' });
+    expect(devLines(a.log)).toEqual([]);
+    // The server now has them there: a short step from it isn't sent back.
+    room.handle(a.id, { t: 'pos', x: 31, z: -40, yaw: 0 });
+    expect(a.log.some((m) => m.t === 'pos')).toBe(false);
   });
 
   it('stocks the Pantry and finishes the smoker', () => {

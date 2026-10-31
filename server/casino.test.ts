@@ -33,7 +33,7 @@ const setup = () => {
 
 const casino = MAPS.find((m) => m.id === 'casino')!;
 const pond = MAPS[0];
-const goTo = (room: Room, id: number, s: { x: number; z: number }) => room.handle(id, { t: 'pos', x: s.x, z: s.z, yaw: 0 });
+const goTo = (room: Room, id: number, s: { x: number; z: number }) => room.place(id, s.x, s.z, 0);
 const dear = FISH[FISH.length - 1];
 
 describe('casino travel', () => {

@@ -1,4 +1,4 @@
-import type { Activity, CasinoRecords, ClientMsg, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
+import type { Activity, CasinoRecords, ClientMsg, DiveEnd, DiveView, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { RENAME_COOLDOWN_MS, SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Roll } from './economy';
@@ -22,6 +22,11 @@ export interface NetEvents {
   onJump(id: number): void;
   onCast(roll: Roll): void;
   onCastFail(msg: string): void;
+  /** The player's dive changed (or resumed on joining); comes before the save that takes them to sea. */
+  onDive(dive: DiveView): void;
+  onDiveEnd(end: DiveEnd): void;
+  /** The server refused a move and put the player back here. */
+  onCorrect(x: number, z: number): void;
   /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
   onError(msg: string, need?: 'password'): void;
   /** The server answered a password change; `msg` is set if it was refused. */
@@ -45,6 +50,8 @@ export class NetClient {
   connected = false;
   id = 0;
   room = '';
+  /** This player's dive instance, or 0: other players show only on the same map and dive (`placeOf`). */
+  dive = 0;
   players = new Map<number, PlayerInfo>();
   private ws: WebSocket | null = null;
   private sendTimer = 0;
@@ -139,6 +146,8 @@ export class NetClient {
         this.renameAt = Date.now() + m.renameIn;
         this.setClock(m.now);
         m.players.forEach((p) => this.players.set(p.id, p));
+        this.dive = m.dive?.id ?? 0;
+        if (m.dive) this.events.onDive(m.dive);
         if (m.name !== this.name) {
           this.name = m.name;
           this.events.onName(false);
@@ -180,6 +189,16 @@ export class NetClient {
       case 'castok':
         this.events.onCast(m);
         break;
+      case 'divestate':
+        this.dive = m.dive.id;
+        this.events.onDive(m.dive);
+        break;
+      case 'diveend':
+        this.events.onDiveEnd(m.end);
+        break;
+      case 'pos':
+        this.events.onCorrect(m.x, m.z);
+        break;
       case 'wheel':
         this.events.onWheel(m.win, m.ms);
         break;
@@ -202,7 +221,8 @@ export class NetClient {
         break;
       case 'moved': {
         const p = this.players.get(m.id);
-        if (p) p.map = m.map;
+        if (p) Object.assign(p, { map: m.map, dive: m.dive });
+        if (m.id === this.id) this.dive = m.dive ?? 0;
         this.events.onPlayers();
         break;
       }

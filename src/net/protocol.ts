@@ -4,6 +4,9 @@ import type { RouletteBet } from '../data/casino';
 import type { DishId, StageId } from '../data/smokehouse';
 import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
+import type { Behaviour } from '../data/dive';
+import type { DiveState } from '../game/dive';
+import type { LossReason } from '../game/reel';
 
 export interface PlayerInfo {
   id: number;
@@ -20,7 +23,40 @@ export interface PlayerInfo {
   title?: string | null;
   /** Current fishing activity, for other players' avatars. */
   act?: Activity;
+  /** The dive this player is on: players only see the others on the same map and the same dive. */
+  dive?: number;
 }
+
+/** Where a player is for seeing each other: the map, or the dive's own sea. */
+export const placeOf = (p: { map: string; dive?: number }): string => (p.dive ? `${p.map}#${p.dive}` : p.map);
+
+/** A dive as its player sees it (`Dive` in `src/game/dive.ts`, with the fish counted). */
+export interface DiveView {
+  /** The dive's instance (`PlayerInfo.dive`). */
+  id: number;
+  start: number;
+  depth: number;
+  /** Metres of line left. */
+  line: number;
+  state: DiveState;
+  ledges: number;
+  /** Pearls in the haul, before its growth (`haulBonus(ledges)`). */
+  pearls: number;
+  /** Fish landed this dive. */
+  fish: number;
+  /** Metres the last fight wore off the spool, and why it was lost if it was. */
+  worn?: number;
+  lost?: LossReason | 'gone';
+}
+
+/**
+ * How a dive ended. Surfaced: the haul banked with its growth, and the ledge charted. Sunk: the line ran out (`line`),
+ * the player was away longer than the dive waits (`away`), or reset their account (`quit`); the fish were sold as
+ * they were landed either way.
+ */
+export type DiveEnd =
+  | { result: 'surfaced'; ledge: number; pearls: number; record: boolean; fish: number }
+  | { result: 'sunk'; why: 'line' | 'away' | 'quit'; depth: number; pearls: number; fish: number; lost?: LossReason | 'gone' };
 
 export type Activity =
   | { a: 'cast'; x: number; z: number }
@@ -59,7 +95,12 @@ export type ClientMsg =
   | { t: 'cast'; x: number; z: number; perfect?: boolean }
   /** `h`: the button over the fight, one bit per 1/60 s step (`HoldLog`); the server replays it to check the catch. */
   | { t: 'catch'; h: string }
-  | { t: 'lost' }
+  /** A fish got away (or the cast ended). On a dive `h` is the lost fight's button log, which the line pays for. */
+  | { t: 'lost'; h?: string }
+  /** Start a dive at Captain Reed's stand, from the harbour (0) or a charted ledge. */
+  | { t: 'dive'; from: number }
+  /** At a ledge: dive on, or surface with the haul. */
+  | { t: 'ledge'; a: 'on' | 'surface' }
   | { t: 'gamble' }
   /** Walk through the gate to another map. */
   | { t: 'travel'; to: string }
@@ -102,7 +143,7 @@ export type ServerMsg =
    * `name` is the account's current name, which differs from the joined one after a rename; `renameIn` is ms until it can change again.
    * `now` is the server's clock (ms), so every player's sky follows the same day instead of their device's clock.
    */
-  | { t: 'welcome'; id: number; room: string; name: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean; renameIn: number; now: number }
+  | { t: 'welcome'; id: number; room: string; name: string; save: SaveData; players: PlayerInfo[]; hasPass: boolean; renameIn: number; now: number; /** A dive that waited for this player to come back. */ dive?: DiveView }
   /** The server's clock again (every CLOCK_MS), in case the device's clock jumps mid-session. */
   | { t: 'clock'; now: number }
   /** `need: 'password'`: the name has a password and this browser isn't one of its devices yet. */
@@ -116,7 +157,8 @@ export type ServerMsg =
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
   /** With a fish, `seed` and `d` set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
-  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: number }
+  /** `b`: a sea fish's behaviour, whose reel levers (`BEHAVIOUR_TUNE`) the fight uses. */
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: number; b?: Behaviour }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; win: boolean; ms: number }
   | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }
@@ -125,7 +167,13 @@ export type ServerMsg =
   | { t: 'left'; id: number }
   /** [id, x, z, yaw] of the players on the receiver's map who moved since the last snap. */
   | { t: 'snap'; p: [number, number, number, number][] }
-  | { t: 'moved'; id: number; map: string }
+  | { t: 'moved'; id: number; map: string; dive?: number }
+  /** The server refused a move (too far, too fast): the player goes back here. */
+  | { t: 'pos'; x: number; z: number }
+  /** The player's dive after a fight or a ledge choice. Sent before the save that takes them to sea. */
+  | { t: 'divestate'; dive: DiveView }
+  /** The dive is over; the save that brings the player back to the harbour follows. */
+  | { t: 'diveend'; end: DiveEnd }
   | { t: 'act'; id: number; act: Activity | null }
   /** Player `id` jumped (sent to the others on their map). */
   | { t: 'jump'; id: number }

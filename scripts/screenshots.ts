@@ -72,7 +72,8 @@ const accounts = {
 fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify(accounts));
 
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
-  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '' },
+  // TEST_HOOKS: the test hook's teleports get past the server's move check.
+  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '', TEST_HOOKS: '1' },
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 await new Promise<void>((res) => server.stdout!.on('data', (d) => /fishing server on port/.test(String(d)) && res()));

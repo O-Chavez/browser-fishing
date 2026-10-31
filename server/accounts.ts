@@ -5,6 +5,7 @@ import { payBack } from '../src/game/economy';
 import { XP_TO_FLAT, applyXp, earnedXp } from '../src/game/progression';
 import { migrate, newSave, type SaveData } from '../src/game/state';
 import { rudeName } from './chat';
+import type { DiveRun } from './dive';
 import { Lockout } from './lockout';
 
 const num = (n: number) => n.toLocaleString('en-US');
@@ -27,6 +28,8 @@ export interface Account {
   renamed?: number;
   /** The name before the last change, lowercase, so browsers that still have it saved follow the account. */
   prev?: string;
+  /** The dive under way, which waits a while for a player who drops out. Never saved: a server restart ends it. */
+  dive?: DiveRun;
 }
 
 interface PassHash {

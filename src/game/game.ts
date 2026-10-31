@@ -34,7 +34,8 @@ import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
 import { COIN, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
-import { waitText } from '../net/protocol';
+import { placeOf, waitText, type DiveEnd } from '../net/protocol';
+import { BEHAVIOUR_TUNE } from './dive';
 import { Player } from './player';
 import {
   animateFish,
@@ -69,7 +70,7 @@ import {
   BUFF_ICON, DISHES, DISH_MAX_MINUTES, FREE_FISH, SELL_TIER, SMOKED_SELL, SMOKER_SPOTS, SMOKE_LEVEL, SNACKS, SNACK_MAX_MINUTES, SNACK_MINUTES, STAGES,
   dishById, smokeSeconds, stageById, type BuffKind, type Dish, type DishId, type StageId,
 } from '../data/smokehouse';
-import { FIGHT_DT, GOOD_MAX, GOOD_MIN, HoldLog, MAX_FIGHT_STEPS, Reel } from './reel';
+import { FIGHT_DT, GOOD_MAX, GOOD_MIN, HoldLog, MAX_FIGHT_STEPS, Reel, type ReelTune } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
@@ -123,6 +124,12 @@ const CAMP_TIPS = [
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const GRAVITY = 9.8;
+
+/** A stand-in line for the end of a dive until D3's surfaced and sunk cards. */
+const diveEndText = (e: DiveEnd): string =>
+  e.result === 'surfaced'
+    ? `⚓ Surfaced from depth ${e.ledge}${e.record ? ' (a new record!)' : ''}: +${e.pearls} pearls.`
+    : `🌊 ${e.why === 'line' ? 'Out of line' : e.why === 'away' ? 'The dive waited too long for you' : 'Dive ended'}: the haul sank at depth ${e.depth}.`;
 /** 'full' or 'lite', remembered per browser; unset means the device's default. */
 const GRAPHICS_KEY = 'fishing-graphics';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
@@ -177,6 +184,10 @@ export class Game {
   /** The hooked fish's fight, from the cast roll: the reel seed and difficulty the server replays the catch with. */
   private fightSeed = 0;
   private fightD = 1;
+  /** A sea fish's behaviour, as reel levers. */
+  private fightTune: ReelTune | undefined;
+  /** Moves the server sent back (for the smoke test: walking should never trip its check). */
+  private corrections = 0;
   /** The button at each fixed reel step, sent with the catch. */
   private holds = new HoldLog();
   /** Frame time not yet stepped into the reel. */
@@ -319,7 +330,7 @@ export class Game {
       onChat: (m) => {
         const self = m.room === this.net.room && m.id === this.net.id;
         this.chat.add({ name: m.name, map: m.map, text: m.text, self, sup: this.net.isSupporter(m.name) });
-        if (!self && m.room === this.net.room && m.map === this.map.id) this.avatars.say(m.id, m.text);
+        if (!self && m.room === this.net.room && m.map === this.map.id && this.net.players.get(m.id)?.dive === (this.net.dive || undefined)) this.avatars.say(m.id, m.text);
       },
       onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
       onDev: (lines, time, sent, depth) => {
@@ -348,7 +359,7 @@ export class Game {
       },
       onSupporters: () => {
         this.world.hub?.setSupporters(this.net.supporters);
-        this.avatars.sync(this.net.players, this.net.id, this.map.id);
+        this.avatars.sync(this.net.players, this.net.id, this.here());
         if (this.menuOpen && (this.tab === 'players' || this.tab === 'settings')) this.renderMenu();
       },
       onRecords: () => {
@@ -365,12 +376,12 @@ export class Game {
       onPlayers: () => {
         this.world.hub?.setLeaders(this.anglers());
         if (this.menuOpen && (this.tab === 'players' || this.tab === 'inventory')) this.renderMenu();
-        this.avatars.sync(this.net.players, this.net.id, this.map.id);
+        this.avatars.sync(this.net.players, this.net.id, this.here());
         this.refreshHud();
       },
       onAct: (p, act) => {
         const f = act?.a === 'hold' ? FISH.find((x) => x.id === act.fish) : null;
-        if (f && act?.a === 'hold' && (act.shiny || (f.rarity !== 'common' && f.rarity !== 'uncommon')) && p.map === this.map.id)
+        if (f && act?.a === 'hold' && (act.shiny || (f.rarity !== 'common' && f.rarity !== 'uncommon')) && placeOf(p) === this.here())
           this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${Math.round(sellValue(f, act.size, act.shiny) * (act.mult ?? 1))} 🪙)!`);
       },
       onJump: (id) => this.avatars.jump(id),
@@ -379,6 +390,17 @@ export class Game {
       },
       onCastFail: (msg) => {
         if (this.phase === 'flying' || this.phase === 'swing') this.reset(msg);
+      },
+      // The dive HUD and cards come with D3; for now the sea follows the depth and a toast says what happened.
+      onDive: (d) => {
+        this.seaDepth = d.depth;
+        this.world.setDepth(d.depth);
+        if (d.state === 'ledge') this.toast(`⚓ Ledge at depth ${d.depth}: ${Math.round(d.line)} m of line left.`, 4);
+      },
+      onDiveEnd: (end) => this.toast(diveEndText(end), 5),
+      onCorrect: (x, z) => {
+        this.corrections++;
+        this.player.teleport(x, z);
       },
       onError: (msg, need) => {
         if (this.joining) {
@@ -655,7 +677,14 @@ export class Game {
         if (down) this.keys.add(code);
         else this.keys.delete(code);
       },
-      teleport: (x: number, z: number) => this.player.teleport(x, z),
+      teleport: (x: number, z: number) => {
+        this.player.teleport(x, z);
+        // The server checks moves, so online the jump goes through /goto (scripted runs' TEST_HOOKS, or the dev console).
+        if (this.net.connected) this.net.send({ t: 'cmd', text: `/goto ${x} ${z}` });
+      },
+      cmd: (text: string) => this.net.send({ t: 'cmd', text }),
+      corrections: () => this.corrections,
+      seaDepth: () => this.seaDepth,
       online: () => this.net.connected,
       preview: () => this.preview,
       perf: () => {
@@ -977,7 +1006,7 @@ export class Game {
     switch (this.phase) {
       case 'idle':
         if (this.map.casino) t.setAction('🎰', 'PLAY', this.table ? 'gold' : 'quiet');
-        else t.setAction('🎣', 'CAST', eco.canCast(this.s) === 'ok' ? 'gold' : 'quiet');
+        else t.setAction('🎣', 'CAST', eco.canCastAt(this.s, !!this.map.sea) === 'ok' ? 'gold' : 'quiet');
         break;
       case 'charging':
         t.setAction('🎣', 'RELEASE', 'gold');
@@ -1461,7 +1490,7 @@ export class Game {
     const at = arrivalSpot(this.map, from);
     this.player.teleport(at.x, at.z);
     this.world.yaw = at.yaw;
-    this.avatars.sync(this.net.players, this.net.id, this.map.id);
+    this.avatars.sync(this.net.players, this.net.id, this.here());
     // A new hub starts with an empty board, and the server only resends it when someone's stats change.
     this.world.hub?.setLeaders(this.anglers());
     this.world.hub?.setSupporters(this.net.supporters);
@@ -1933,7 +1962,7 @@ export class Game {
       {
         if (this.spin) return;
         if (this.map.casino) return this.tableClick();
-        const can = eco.canCast(this.s);
+        const can = eco.canCastAt(this.s, !!this.map.sea);
         if (can === 'nobait' && eco.canDig(this.s)) return this.toast(eco.DIG_HINT, 5);
         if (can !== 'ok') return this.toast(eco.CAST_MESSAGES[can]);
       }
@@ -1961,7 +1990,7 @@ export class Game {
       return this.toast("You can't cast there - face the water.");
     }
     this.target.copy(t);
-    eco.spendBait(this.s);
+    if (!this.map.sea) eco.spendBait(this.s);
     this.roll = null;
     this.castSpot = fishingSpot(this.player.x, this.player.z);
     this.perfect = this.power >= PERFECT_MIN && this.power <= PERFECT_MAX;
@@ -2020,6 +2049,7 @@ export class Game {
     this.waitTotal = roll.wait;
     this.fightSeed = roll.seed ?? 0;
     this.fightD = roll.d ?? 1;
+    this.fightTune = roll.b && BEHAVIOUR_TUNE[roll.b];
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2120,7 +2150,7 @@ export class Game {
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
     const hard = this.fightD;
-    this.reel = new Reel(hard, mulberry(this.fightSeed));
+    this.reel = new Reel(hard, mulberry(this.fightSeed), this.fightTune);
     this.holds = new HoldLog();
     this.reelAcc = 0;
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
@@ -2198,7 +2228,7 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean);
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch', h: this.holds.encode() });
     this.stagesWaiting.push(...stages);
@@ -2377,7 +2407,8 @@ export class Game {
   private reset(msg: string): void {
     this.toast(msg);
     this.roll = null;
-    this.net.send({ t: 'lost' });
+    // A lost fight's button log, so a dive's line pays for what the fight really took.
+    this.net.send(this.phase === 'reeling' ? { t: 'lost', h: this.holds.encode() } : { t: 'lost' });
     this.endCast('idle');
   }
 
@@ -2485,13 +2516,18 @@ export class Game {
     $('ctx').classList.toggle('hidden', !fishing);
   }
 
+  /** Where this player is for seeing others: the map, or their dive's sea. */
+  private here(): string {
+    return placeOf({ map: this.map.id, dive: this.net.dive || undefined });
+  }
+
   /** Tells the townsfolk who's around and who's fishing, so they don't walk into anyone or wander off mid-cast. */
   private syncBystanders(): void {
     this.world.fishing = this.phase !== 'idle';
     const others = this.world.others;
     others.length = 0;
     for (const p of this.net.players.values()) {
-      if (p.id === this.net.id || p.map !== this.map.id) continue;
+      if (p.id === this.net.id || placeOf(p) !== this.here()) continue;
       others.push({ x: p.x, z: p.z, fishing: p.act?.a === 'cast' || p.act?.a === 'hold' });
     }
   }

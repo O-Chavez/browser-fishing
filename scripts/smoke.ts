@@ -57,8 +57,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
 
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
   // No Discord webhooks: the feedback check below must not post a real report.
-  // Dev console on, for `/sea`.
-  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '', DEV_USER: 'smoke', DEV_PASS: 'smoke-dev-pass' },
+  // Dev console on, for `/sea`; TEST_HOOKS lets the test teleports past the server's move check (`/goto`).
+  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '', DEV_USER: 'smoke', DEV_PASS: 'smoke-dev-pass', TEST_HOOKS: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 await waitForLine(server, /fishing server on port/);
@@ -700,6 +700,8 @@ async function seaChecks(): Promise<void> {
   });
   check('sea: you spawn on the deck at eye height', walk.onDeck && Math.abs(walk.start.y - (0.45 + 1.7)) < 0.05, JSON.stringify(walk.start));
   check('sea: walking into the rail keeps you on board', after.onDeck && after.z < walk.start.z - 0.5, JSON.stringify(after));
+  const fixes = await page.evaluate(() => window.__game.corrections());
+  check("moves: walking and teleporting never trip the server's move check", fixes === 0, String(fixes));
 
   // Cast over the rail: the bobber lands in the water and rides the swell.
   await page.keyboard.press('1');
@@ -716,6 +718,28 @@ async function seaChecks(): Promise<void> {
   });
   await page.screenshot({ path: `${SHOTS}/sea.png` });
   check('sea: a cast over the rail lands in the water and floats on the swell', cast.visible && cast.z < -3 && cast.gap < 0.2 && cast.phase !== 'idle', JSON.stringify(cast));
+
+  // Fight the sea fish out: the server replays it with its behaviour, sells it as it lands and takes the boat deeper.
+  const sea = await page.evaluate(async () => {
+    const g = window.__game;
+    const coins = g.s.coins as number;
+    const fishIn = () => g.s.slots.filter((x: { k: string } | null) => x?.k === 'fish').length;
+    const fish0 = fishIn();
+    const seen = new Set<string>();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 60000) {
+      const st = g.state();
+      seen.add(st.phase);
+      if (st.phase === 'bite') g.press();
+      else if (st.phase === 'reeling') g.hold(st.surging ? (st.tension ?? 0) < 0.7 : (st.tension ?? 0) < 0.6);
+      else if (st.phase === 'result' || (st.phase === 'idle' && seen.has('reeling'))) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    g.hold(false);
+    await new Promise((r) => setTimeout(r, 1500));
+    return { seen: [...seen], gained: (g.s.coins as number) - coins, newFish: fishIn() - fish0, depth: g.seaDepth() };
+  });
+  check('sea: a landed sea fish is sold on the spot and the boat goes a depth deeper', sea.seen.includes('result') && sea.gained > 1000 && sea.newFish === 0 && sea.depth === 21, JSON.stringify(sea));
   await page.evaluate(() => window.__game.press());
   await sleep(300);
 

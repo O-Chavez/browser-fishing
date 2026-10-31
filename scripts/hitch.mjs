@@ -38,7 +38,7 @@ let game = null;
 if (ONLINE) {
   const SERVER_PORT = Number(opt('--server-port', 8797));
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fishing-hitch-'));
-  game = spawn('npx', ['tsx', 'server/index.ts'], { cwd: ROOT, env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_WEBHOOK: '' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  game = spawn('npx', ['tsx', 'server/index.ts'], { cwd: ROOT, env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_WEBHOOK: '', TEST_HOOKS: '1' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res) => game.stdout.on('data', (d) => /fishing server on port/.test(String(d)) && res()));
   process.env.VITE_SERVER_URL = `ws://localhost:${SERVER_PORT}`;
 }
