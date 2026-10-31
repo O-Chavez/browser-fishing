@@ -92,6 +92,7 @@ export class Town {
     this.buildSquare(t.square);
     t.houses.forEach((h, i) => this.buildHouse(h, i));
     if (map.smokehouse) this.buildSmokehouse(map.smokehouse);
+    if (map.harbour) this.buildDiveStand(map.harbour.stand);
     t.npcs.forEach((n) => this.buildNpc(n));
     t.racks.forEach((r) => this.buildRack(r));
     t.boats.forEach((b) => this.buildBoat(b));
@@ -390,7 +391,7 @@ export class Town {
     });
     p.add(body);
     // Townsfolk don't block: they stand on the main street to and from the casino gate.
-    this.at(p, def.x, def.z, def.facing);
+    this.at(p, def.x, def.z, def.facing, standHeight(def.x, def.z));
     const pos = p.position.clone();
     const walker = def.walk && new NpcWalker({ ...def, walk: def.walk });
     this.npcs.push({ def, pos, next: 0, walker });
@@ -555,6 +556,56 @@ export class Town {
       this.group.add(m);
       this.smoke.push({ m, base, ph: n / 4 });
     }
+  }
+
+  /**
+   * Captain Reed's dive stand on the East Landing: two posts holding up a sea-green awning over where he
+   * stands, a DEEP DIVES sign on its front edge, a crate and a lifebuoy by the posts, and a lantern.
+   * `s` is where Reed stands; the stand opens toward `s.facing`. Decoration only (the deck is narrow).
+   */
+  private buildDiveStand(s: Spot): void {
+    const g = new THREE.Group();
+    const deck = standHeight(s.x, s.z);
+    const W = 2.6;
+    const H = 2.5;
+    for (const sx of [-1, 1]) {
+      const post = cyl(0.07, 0.08, H, DARK, 8);
+      post.position.set(sx * (W / 2 - 0.1), H / 2, -0.6);
+      g.add(post);
+    }
+    // The awning slopes down toward the back so rain would run off behind him.
+    const awning = rbox(W, 0.08, 1.7, 0x6f9e96, 0.03);
+    awning.position.set(0, H + 0.05, -0.1);
+    awning.rotation.x = 0.1;
+    g.add(awning);
+    const sign = textPlane(1.9, 0.45, 512);
+    woodSign(sign.ctx, 'DEEP DIVES');
+    sign.tex.needsUpdate = true;
+    sign.mesh.position.set(0, H - 0.3, 0.78);
+    g.add(sign.mesh);
+    // A crate and a lifebuoy (a cream ring with red bands) by the posts.
+    const crate = rbox(0.6, 0.5, 0.6, WOOD, 0.04);
+    crate.position.set(-W / 2 + 0.25, 0.25, 0.1);
+    crate.rotation.y = 0.3;
+    g.add(crate);
+    const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.09, 8, 16), mat(0xe8e0d0));
+    buoy.position.set(W / 2 - 0.1, 1.2, -0.5);
+    buoy.rotation.y = Math.PI / 2;
+    buoy.castShadow = true;
+    g.add(buoy);
+    for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      const band = rbox(0.12, 0.2, 0.2, 0xc0392b, 0.02);
+      band.position.set(W / 2 - 0.1, 1.2 + Math.sin(a) * 0.28, -0.5 + Math.cos(a) * 0.28);
+      band.rotation.x = -a;
+      g.add(band);
+    }
+    const lamp = ball(0.11, 0xffd27a);
+    (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
+    lamp.position.set(-W / 2 + 0.1, H - 0.2, 0.2);
+    glowTag(lamp, 0.7);
+    this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
+    g.add(lamp);
+    this.at(g, s.x, s.z, s.facing, deck);
   }
 
   private buildRack(s: Spot): void {

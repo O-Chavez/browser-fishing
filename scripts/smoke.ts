@@ -141,7 +141,7 @@ async function pondChecks(): Promise<void> {
   const blocked = await page.evaluate(() => {
     const cs = (window.__game.world as any).colliders as { x: number; z: number; r: number }[];
     const hit = (x: number, z: number) => cs.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.05);
-    return { bucket: hit(-0.8, 1.6), barrel: hit(7.8, 4.5), reed: hit(4, 53.5), stallBarrel: hit(8.4, 19.2) };
+    return { bucket: hit(-0.8, 1.6), barrel: hit(7.8, 4.5), reed: hit(16.1, 5.5), stallBarrel: hit(8.4, 19.2) };
   });
   check('pond: dock props and NPCs can be walked through', !blocked.bucket && !blocked.barrel && !blocked.reed, JSON.stringify(blocked));
   check('pond: shore props still block', blocked.stallBarrel, JSON.stringify(blocked));
@@ -169,7 +169,7 @@ async function pondChecks(): Promise<void> {
     }
     return { walkers: w.town.npcs.filter((n: any) => n.walker).length, bad: [...new Set(bad)] };
   });
-  check('pond: townsfolk walks stay clear of props', walks.walkers === 4 && walks.bad.length === 0, walks.bad.slice(0, 3).join(', ') || `${walks.walkers} walkers`);
+  check('pond: townsfolk walks stay clear of props', walks.walkers === 3 && walks.bad.length === 0, walks.bad.slice(0, 3).join(', ') || `${walks.walkers} walkers`);
   // They actually move (far from the player, so nobody stops to chat). Most start with a 5-8 s pause at
   // home, so only Pip is sure to be on the move this soon after loading.
   const home = await page.evaluate(() => window.__game.player());

@@ -780,7 +780,8 @@ export class World {
     const planks = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 0.08, 1),
       lambert(0xffffff, { map: plankTexture() }),
-      260,
+      // One plank per 0.28 m of each dock rect, with a little to spare.
+      DOCK_RECTS.reduce((t, r) => t + Math.ceil(Math.max(r.x1 - r.x0, r.z1 - r.z0) / 0.28), 8),
     );
     // Every plank is laid out as a long x box so the grain runs along it; planks across x piers are turned.
     const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
