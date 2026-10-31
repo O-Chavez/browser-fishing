@@ -91,6 +91,10 @@ export interface SaveData {
   bottles: string[];
   /** Casino currency, earned by turning fish in at the prize shop. */
   chips: number;
+  /** Black Pearls, banked from sea dives and spent on rod levels. Never sold anywhere. */
+  pearls: number;
+  /** The Aurora Rod's level (+N), bought at the stall; each makes sea fights 3% easier (see `ROD_LEVEL`). */
+  rodLevel: number;
   /** Casino perks owned (see `PERKS`). */
   perks: string[];
   /** Shiny Lure casts left. */
@@ -112,8 +116,6 @@ export interface SaveData {
   backPay: { xp: number; paid: boolean; /** Which estimate made `xp` (see `BACKPAY_VERSION`). */ v?: number };
   /** Sea dives (`src/game/dive.ts`): the ledges charted by surfacing there, where later dives may start, and the deepest. */
   sea: Chart;
-  /** Pearls banked from dives, for rod levels. Only dives give them; they are never bought. */
-  pearls: number;
 }
 
 export interface BestCatch {
@@ -142,6 +144,8 @@ export const newSave = (): SaveData => ({
   best: null,
   bottles: [],
   chips: 0,
+  pearls: 0,
+  rodLevel: 0,
   perks: [],
   lure: 0,
   lureOff: false,
@@ -152,7 +156,6 @@ export const newSave = (): SaveData => ({
   smoke: newSmoke(),
   backPay: { xp: 0, paid: true },
   sea: { ledges: [], record: 0 },
-  pearls: 0,
 });
 
 /** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
@@ -303,6 +306,8 @@ export function migrate(raw: object): SaveData {
   if (!Array.isArray(out.perks)) out.perks = [];
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
+  out.pearls = Number.isFinite(out.pearls) ? Math.max(0, Math.floor(out.pearls)) : 0;
+  out.rodLevel = Number.isFinite(out.rodLevel) ? Math.max(0, Math.floor(out.rodLevel)) : 0;
   out.lureOff = out.lureOff === true;
   // Saves from before the tips only get them if they haven't started playing yet.
   out.tips = Array.isArray(data.tips) ? data.tips.filter(isTip) : isFreshSave(out) ? [] : [...TIP_IDS];
@@ -331,7 +336,6 @@ export function migrate(raw: object): SaveData {
     : { xp: 0, paid: true };
   for (const e of Object.values(out.dex)) if (e && e.shiny !== undefined) e.shiny = count(e.shiny);
   out.sea = cleanChart(data.sea);
-  out.pearls = count(data.pearls);
   // Accounts from before faces get a random one.
   if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
   out.look = cleanLook(out.look, out.owned);

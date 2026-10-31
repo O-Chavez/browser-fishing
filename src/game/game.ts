@@ -33,7 +33,7 @@ import { FISH_BLURB, FISH_LOOK, SEA_THEME, TIER_THEME } from '../data/fishlook';
 import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { markTip, rodHintText, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
-import { COIN, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
+import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd } from '../net/protocol';
 import { BEHAVIOUR_TUNE } from './dive';
 import { Player } from './player';
@@ -82,6 +82,8 @@ import { KOFI_URL } from '../data/support';
 import { World } from './world';
 import { ScreenSpray } from './screenspray';
 import { zoneAt } from '../data/sea';
+import { DIVES_OPEN, DIVE, ROD_LEVEL, glowColor, glowStep } from '../data/dive';
+import { powInt } from './dive';
 
 type Phase =
   | 'idle'
@@ -98,6 +100,8 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 
 /** Item icons shared by the hotbar and the menus. */
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
+/** How much easier each Aurora Rod level makes sea fights, in percent. */
+const PER_LEVEL = Math.round((1 - DIVE.perRodLevel) * 100);
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
 
@@ -1083,6 +1087,7 @@ export class Game {
       this.net.send({ t: 'forget' });
     }
     else if (act === 'buyrod' || act === 'buybait') this.buy(act === 'buyrod' ? 'rod' : 'bait', id!);
+    else if (act === 'levelrod') this.levelRod();
     this.persist();
     this.refreshHud();
     this.renderMenu();
@@ -1158,6 +1163,19 @@ export class Game {
     }
     this.persist();
     this.refreshHud();
+  }
+
+  /** The Aurora Rod's next level, bought at the stall with coins and Black Pearls. */
+  private levelRod(): void {
+    if (this.spin) return;
+    const s = this.s;
+    const cost = eco.rodLevelCost(s.rodLevel + 1);
+    if (s.coins < cost.coins || s.pearls < cost.pearls) return this.toast(`+${s.rodLevel + 1} needs ${cost.coins.toLocaleString()} 🪙 and ${cost.pearls} Black Pearls.`);
+    if (!eco.levelRod(s)) return;
+    this.net.send({ t: 'levelrod' });
+    const glow = s.rodLevel % ROD_LEVEL.glowEvery === 0 ? ' · a new glow!' : '';
+    this.toast(`Aurora Rod +${s.rodLevel}: sea fights ${PER_LEVEL}% easier${glow}`, 3);
+    audio.jingle(glow ? 'legendary' : 'rare');
   }
 
   private equipRod(id: string): void {
@@ -2301,9 +2319,10 @@ export class Game {
     const key = it?.k === 'fish' ? `f:${it.fishId}:${it.size}:${it.shiny ? 1 : 0}` : it?.k === 'bait' ? `b:${it.id}` : '';
     const w = this.world;
     w.rig.root.visible = this.phase !== 'idle' || it?.k === 'rod';
-    if (this.rigLook !== this.s.rod) {
-      this.rigLook = this.s.rod;
-      w.rig.setLook(this.rod.color, this.rod.tier);
+    const step = glowStep(eco.rodLevelOf(this.s, this.s.rod));
+    if (this.rigLook !== `${this.s.rod}:${step}`) {
+      this.rigLook = `${this.s.rod}:${step}`;
+      w.rig.setLook(step > 0 ? glowColor(step) : this.rod.color, this.rod.tier, step);
     }
     if (this.carry && this.carry.key !== key) {
       w.camera.remove(this.carry.obj);
@@ -3125,7 +3144,7 @@ export class Game {
       if (sl?.k === 'bait') {
         body = `<span class="q">×${sl.n}</span><span class="ic">${BAIT_ICON[sl.id] ?? '🪱'}</span><span class="nm">${byId(BAITS, sl.id).name}</span>`;
       } else if (sl?.k === 'rod') {
-        body = `<span class="ic">${rodIcon(byId(RODS, sl.id).tier)}</span><span class="nm">${shortRod(byId(RODS, sl.id).name)}</span>`;
+        body = `<span class="ic">${rodIcon(byId(RODS, sl.id).tier, eco.rodLevelOf(this.s, sl.id))}</span><span class="nm">${shortRod(byId(RODS, sl.id).name)}${eco.rodPlus(this.s, sl.id)}</span>`;
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
         ring = sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity];
@@ -3181,7 +3200,7 @@ export class Game {
     if (!sl) return el.classList.remove('show');
     el.innerHTML =
       sl.k === 'fish' ? `${sl.shiny ? '✨ ' : ''}${byId(FISH, sl.fishId).name} · ${Math.round(eco.fishValue(sl))} ${COIN}`
-      : sl.k === 'rod' ? byId(RODS, sl.id).name
+      : sl.k === 'rod' ? `${byId(RODS, sl.id).name}${eco.rodPlus(this.s, sl.id)}`
       : `${byId(BAITS, sl.id).name} ×${sl.n}`;
     el.classList.remove('show');
     void el.offsetWidth;
@@ -3763,7 +3782,7 @@ export class Game {
       const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
       const owned = eco.ownsRod(s, r.id);
       const sub = equipped ? 'Equipped' : owned ? 'Owned' : s.level < r.unlockLevel ? `🔒 Lv ${r.unlockLevel}` : `At ${vendor}'s`;
-      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, price: this.rodPrice(r), tier: r.tier, on: sel === `rod:${r.id}`, check: equipped, ghost: !owned, attrs: `data-pick="bag" data-id="rod:${r.id}"` });
+      return this.itemTile({ icon: rodIcon(r.tier, eco.rodLevelOf(s, r.id)), name: `${shortRod(r.name)}${eco.rodPlus(s, r.id)}`, sub, price: this.rodPrice(r), tier: r.tier, on: sel === `rod:${r.id}`, check: equipped, ghost: !owned, attrs: `data-pick="bag" data-id="rod:${r.id}"` });
     }).join('');
     const baits = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
@@ -3775,7 +3794,7 @@ export class Game {
     return `<div class="cols"><div class="main">
         <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex)}</p>
         <h4>Your setup</h4>
-        <div class="setup"><span class="big">${rodIcon(rod.tier)}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>
+        <div class="setup"><span class="big">${rodIcon(rod.tier, eco.rodLevelOf(s, rod.id))}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>
           <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div></div><div class="pips">${pips}</div></div>
         <h4>Rods</h4><div class="tiles">${rods}</div>
         <h4>Bait</h4><div class="tiles">${baits}</div>
@@ -3831,13 +3850,14 @@ export class Game {
       : owned
         ? this.btn('Equip', `data-act="equiprod" data-id="${r.id}"`)
         : this.btn(`${s.level < r.unlockLevel ? `Unlocks at level ${r.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.rodPrice(r)}`, '', 'plain', true);
+    const lv = this.rodLevelPanel(r.id, false);
     return this.detail({
-      icon: rodIcon(r.tier),
-      name: r.name,
+      icon: rodIcon(r.tier, eco.rodLevelOf(s, r.id)),
+      name: `${r.name}${eco.rodPlus(s, r.id)}`,
       tier: r.tier,
-      body: this.meter('Cast reach', `${r.castDistance} m`, r.castDistance / 34, r.tier) + this.meter('Luck', `×${r.luck}`, r.luck / 2.5, r.tier) + this.meter('Easier fights', `×${r.control}`, r.control / 2.2, r.tier),
-      note: `Fights with fish up to ${tierName(r.tier)} feel easy. Rarer fish still bite, they just pull harder.`,
-      actions,
+      body: this.meter('Cast reach', `${r.castDistance} m`, r.castDistance / 34, r.tier) + this.meter('Luck', `×${r.luck}`, r.luck / 2.5, r.tier) + this.meter('Easier fights', `×${r.control}`, r.control / 2.2, r.tier) + (lv?.body ?? ''),
+      note: lv?.note ?? `Fights with fish up to ${tierName(r.tier)} feel easy. Rarer fish still bite, they just pull harder.`,
+      actions: actions + (lv?.action ?? ''),
     });
   }
 
@@ -4081,7 +4101,7 @@ export class Game {
       const has = eco.ownsRod(s, id);
       const lvl = s.level < r.unlockLevel;
       const sub = has ? 'Owned' : lvl ? `🔒 Lv ${r.unlockLevel}` : '';
-      return this.itemTile({ icon: rodIcon(r.tier), name: shortRod(r.name), sub, price: this.rodPrice(r), tier: r.tier, on: this.pick.gear === `rod:${id}`, check: has, ghost: !has && (lvl || s.coins < r.price), attrs: `data-pick="gear" data-id="rod:${id}"` });
+      return this.itemTile({ icon: rodIcon(r.tier, eco.rodLevelOf(s, id)), name: `${shortRod(r.name)}${eco.rodPlus(s, id)}`, sub, price: this.rodPrice(r), tier: r.tier, on: this.pick.gear === `rod:${id}`, check: has, ghost: !has && (lvl || s.coins < r.price), attrs: `data-pick="gear" data-id="rod:${id}"` });
     }).join('');
     const baits = this.map.stock.bait.map((id) => {
       const b = byId(BAITS, id);
@@ -4117,21 +4137,47 @@ export class Game {
     const r = byId(RODS, id);
     const has = eco.ownsRod(s, r.id);
     const lvl = s.level < r.unlockLevel;
+    const lv = this.rodLevelPanel(r.id, true);
     const action = has
-      ? this.btn('Owned ✓', '', 'ok', true)
+      ? lv?.action ?? this.btn('Owned ✓', '', 'ok', true)
       : lvl
         ? this.btn(`Unlocks at level ${r.unlockLevel} · ${this.rodPrice(r)}`, '', 'plain', true)
         : s.coins < r.price
           ? this.btn(`Need ${r.price.toLocaleString()} ${COIN}`, '', 'plain', true)
           : this.btn(r.price ? `Buy for ${r.price.toLocaleString()} ${COIN}` : 'Take it (free)', `data-act="buyrod" data-id="${r.id}"`);
     return this.detail({
-      icon: rodIcon(r.tier),
-      name: r.name,
+      icon: rodIcon(r.tier, eco.rodLevelOf(s, r.id)),
+      name: `${r.name}${eco.rodPlus(s, r.id)}`,
       tier: r.tier,
-      body: this.meter('Cast reach', `${r.castDistance} m`, r.castDistance / 34, r.tier) + this.meter('Luck', `×${r.luck}`, r.luck / 2.5, r.tier) + this.meter('Easier fights', `×${r.control}`, r.control / 2.2, r.tier),
-      note: `Fights with fish up to ${tierName(r.tier)} feel easy.`,
+      body: this.meter('Cast reach', `${r.castDistance} m`, r.castDistance / 34, r.tier) + this.meter('Luck', `×${r.luck}`, r.luck / 2.5, r.tier) + this.meter('Easier fights', `×${r.control}`, r.control / 2.2, r.tier) + (lv?.body ?? ''),
+      note: lv?.note ?? `Fights with fish up to ${tierName(r.tier)} feel easy.`,
       actions: action,
     });
+  }
+
+  /**
+   * The Aurora Rod's levels in its detail panel, once it's owned and dives are open (or the player already has
+   * pearls or a level): how much easier sea fights are, the Black Pearls on hand, and the next level's price.
+   * The Level up button only shows at the stall.
+   */
+  private rodLevelPanel(id: string, atStall: boolean): { body: string; note: string; action: string } | null {
+    const s = this.s;
+    if (id !== ROD_LEVEL.rod || !eco.ownsRod(s, id) || !(DIVES_OPEN || s.pearls > 0 || s.rodLevel > 0)) return null;
+    const next = s.rodLevel + 1;
+    const cost = eco.rodLevelCost(next);
+    const easier = Math.round((1 - powInt(DIVE.perRodLevel, s.rodLevel)) * 100);
+    const price = `${cost.coins.toLocaleString()} ${COIN} + ${cost.pearls.toLocaleString()} ${PEARL}`;
+    const body = this.meter('Sea fights', `${easier}% easier`, easier / 100, 5) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`;
+    const note = `+${s.rodLevel} → +${next}: sea fights ${PER_LEVEL}% easier · ${price}. Black Pearls come up from sea dives.`;
+    const coins = Math.max(0, cost.coins - s.coins);
+    const pearls = Math.max(0, cost.pearls - s.pearls);
+    const short = [coins && `${coins.toLocaleString()} ${COIN}`, pearls && `${pearls.toLocaleString()} ${PEARL}`].filter(Boolean).join(' + ');
+    const action = !atStall
+      ? this.btn(`Level up at ${this.map.vendor.name}'s stall`, '', 'plain', true)
+      : short
+        ? this.btn(`Need ${short} more`, '', 'plain', true)
+        : this.btn(`Level up to +${next}`, 'data-act="levelrod"');
+    return { body, note, action };
   }
 
   private rodPrice(r: Rod): string {

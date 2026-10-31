@@ -71,6 +71,9 @@ describe('dev commands in a room', () => {
     room.handle(a.id, { t: 'cmd', text: '/bait pearl 10' });
     room.handle(a.id, { t: 'cmd', text: '/fish koi 30 shiny' });
     room.handle(a.id, { t: 'cmd', text: '/rod graphite' });
+    room.handle(a.id, { t: 'cmd', text: '/pearls 300' });
+    room.handle(a.id, { t: 'cmd', text: '/rodlevel 12' });
+    expect(a.save).toMatchObject({ pearls: 300, rodLevel: 12 });
     expect(a.save.level).toBe(20);
     expect(a.save.slots.some((s) => s?.k === 'bait' && s.id === 'pearl')).toBe(true);
     expect(a.save.slots.some((s) => s?.k === 'fish' && s.fishId === 'koi' && s.shiny)).toBe(true);

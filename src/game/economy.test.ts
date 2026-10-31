@@ -567,3 +567,68 @@ describe('ranks, titles and back pay', () => {
     expect(migrate({ ...newSave(), level: 26, title: 'bosun' }).title).toBe('bosun');
   });
 });
+
+describe('rod levels', () => {
+  const aurora = () => {
+    const s = newSave();
+    s.level = 20;
+    s.locker.rods.push('aurora');
+    eco.equipRod(s, 'aurora');
+    return s;
+  };
+
+  it('costs 100 + 12N Black Pearls and 50k + 4k·N coins, the coins capped at 150k', () => {
+    expect(eco.rodLevelCost(1)).toEqual({ coins: 54_000, pearls: 112 });
+    expect(eco.rodLevelCost(10)).toEqual({ coins: 90_000, pearls: 220 });
+    expect(eco.rodLevelCost(25)).toEqual({ coins: 150_000, pearls: 400 });
+    expect(eco.rodLevelCost(40)).toEqual({ coins: 150_000, pearls: 580 });
+  });
+
+  it('levels the Aurora Rod for coins and pearls, and coins alone are never enough', () => {
+    const s = aurora();
+    s.coins = 10_000_000;
+    expect(eco.levelRod(s)).toBe(false);
+    s.pearls = 112;
+    expect(eco.levelRod(s)).toBe(true);
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 0, coins: 10_000_000 - 54_000 });
+    s.pearls = 123;
+    expect(eco.levelRod(s)).toBe(false);
+    s.coins = 57_999;
+    s.pearls = 1000;
+    expect(eco.levelRod(s)).toBe(false);
+    expect(s.rodLevel).toBe(1);
+  });
+
+  it('needs the Aurora Rod', () => {
+    const s = newSave();
+    s.coins = 1e6;
+    s.pearls = 1000;
+    expect(eco.levelRod(s)).toBe(false);
+    expect(s.rodLevel).toBe(0);
+  });
+
+  it('counts at sea only with the Aurora Rod in use, keeps the level if the rod is dropped, and shows it in the name', () => {
+    const s = aurora();
+    s.rodLevel = 7;
+    expect(eco.seaRodLevel(s)).toBe(7);
+    expect(eco.rodPlus(s, 'aurora')).toBe(' +7');
+    expect(eco.rodPlus(s, 'carbon')).toBe('');
+    s.locker.rods.push('carbon');
+    eco.equipRod(s, 'carbon');
+    expect(eco.seaRodLevel(s)).toBe(0);
+    eco.equipRod(s, 'aurora');
+    s.held = 0;
+    expect(eco.dropHeld(s)).toMatchObject({ k: 'rod', id: 'aurora' });
+    expect(s.rodLevel).toBe(7);
+    expect(eco.rodPlus(newSave(), 'aurora')).toBe('');
+  });
+
+  it('starts at 0 on old saves and cleans bad values', () => {
+    const old = newSave() as Partial<SaveData>;
+    delete old.pearls;
+    delete old.rodLevel;
+    expect(migrate(old)).toMatchObject({ pearls: 0, rodLevel: 0 });
+    expect(migrate({ ...newSave(), pearls: -5, rodLevel: 'x' })).toMatchObject({ pearls: 0, rodLevel: 0 });
+    expect(migrate({ ...newSave(), pearls: 41.7, rodLevel: 12 })).toMatchObject({ pearls: 41, rodLevel: 12 });
+  });
+});

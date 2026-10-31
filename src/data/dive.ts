@@ -72,3 +72,37 @@ export const DIVE = {
   /** A dive waits this long for a player who disconnected mid-dive; after that the haul sinks. */
   holdMs: 120_000,
 };
+
+/** Whether players can dive yet. Until D3 adds the trip from Reed, rod levels only show to players with pearls or a level (dev). */
+export const DIVES_OPEN = false;
+
+/**
+ * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's
+ * stall with no cap, each level making sea fights 3% easier (`DIVE.perRodLevel`); pond fights don't change. A level
+ * costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
+ */
+export const ROD_LEVEL = {
+  /** The rod that levels. */
+  rod: 'aurora',
+  /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
+  pearls: 100,
+  pearlsPer: 12,
+  /** ... and min(coinCap, coins + coinsPer·N) coins. */
+  coins: 50_000,
+  coinsPer: 4_000,
+  coinCap: 150_000,
+  /** The rod's tip glow changes colour every this many levels (`GLOW_STEPS`). */
+  glowEvery: 5,
+};
+
+/**
+ * The Aurora Rod's tip glow and grip band by glow step (every `ROD_LEVEL.glowEvery` levels): gold, teal, violet,
+ * rose, pearl white, then a cycling rainbow from +25. A default, to be tuned after a play test.
+ */
+export const GLOW_STEPS = [0xffc933, 0x3fe6c8, 0xa77bff, 0xff6fa8, 0xf2eeff];
+
+/** The Aurora Rod's glow step at this rod level: 0 below +5, then one more every `ROD_LEVEL.glowEvery`. */
+export const glowStep = (rodLevel: number): number => Math.floor(rodLevel / ROD_LEVEL.glowEvery);
+
+/** The glow colour for a step, or null for the rainbow past the last colour. */
+export const glowColor = (step: number): number | null => (step < GLOW_STEPS.length ? GLOW_STEPS[step] : null);
