@@ -1,5 +1,5 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS, RODS, type Rod } from '../data/content';
+import { BAITS, FISH, RODS, type Rod } from '../data/content';
 import { BAIT_PACK } from './economy';
 import { COIN } from './format';
 import type { SaveData } from './state';
@@ -8,7 +8,7 @@ import type { SaveData } from './state';
  * One-time tips that walk a new player through the core loop: cast, reel, sell, buy better bait,
  * catch better fish. Each shows once per account; the ids seen are kept in the save.
  */
-export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier', 'smoker', 'snack'] as const;
+export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier', 'smoker', 'snack', 'dish'] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export const isTip = (id: unknown): id is TipId => TIP_IDS.includes(id as TipId);
@@ -29,7 +29,7 @@ function nextBait(s: Pick<SaveData, 'slots' | 'locker'>) {
 }
 
 /** Tip text as HTML. Only game data goes in, so nothing needs escaping. `touch` words controls for the on-screen buttons. */
-export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker'>, vendor: string, touch = false): string {
+export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker' | 'dex'>, vendor: string, touch = false): string {
   switch (id) {
     case 'start':
       return touch
@@ -55,6 +55,11 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
       return 'Small fry? Smoke it instead of selling it: <b>Mags Cinder</b> at the Smokehouse, beside the Lucky Wheel, smokes it in seconds.';
     case 'snack':
       return `Smoked fish ready! Eat one from your <b>Bag</b> (${touch ? 'the 🎒 button' : '<kbd>Tab</kbd>'}) for ⭐ more XP on every catch.`;
+    case 'dish': {
+      // Names the player's own tier 3 catch, so the next Fish Cakes is easy to picture.
+      const t3 = FISH.filter((f) => f.tier === 3 && s.dex[f.id]).sort((a, b) => s.dex[b.id]!.count - s.dex[a.id]!.count)[0];
+      return `Mags's Kitchen is open! A dish combines its fish's buffs, stronger and longer than a snack: your free <b>Fish Cakes</b> is in the Pantry. For the next one, smoke <b>3 tier 1 fish and ${t3 ? `your ${t3.name}` : 'a tier 3 fish'}</b>.`;
+    }
   }
 }
 

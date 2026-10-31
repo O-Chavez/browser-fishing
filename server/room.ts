@@ -7,13 +7,14 @@ import { fishingSpot } from '../src/game/progression';
 import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
-import { SMOKE_RANGE } from '../src/data/smokehouse';
+import { SMOKE_RANGE, dishById } from '../src/data/smokehouse';
 import * as smoke from '../src/game/smoke';
-import { newSave, type Slot } from '../src/game/state';
+import { newSave, type SaveData, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
+import type { SmokeStats } from './smokestats';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
 export interface Conn {
@@ -102,6 +103,10 @@ export class Room {
   records: () => CasinoRecords = () => NO_RECORDS;
   /** Dev console `/backpay`: lists, or with `apply` pays, the XP the old level-50 cap threw away. The server points this at the account store. */
   backPay: (apply: boolean) => string[] = () => ['No account store.'];
+  /** The Smokehouse's play-test counters; the server shares one between rooms and saves it with the accounts. */
+  smokeStats: SmokeStats | null = null;
+  /** Dev console `/smokestats`; the server reports across every room. */
+  smokeReport: () => string[] = () => ['No Smokehouse stats on this server.'];
   /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -123,6 +128,11 @@ export class Room {
     return this.members.size;
   }
 
+  /** The saves of everyone here, for `/smokestats`. */
+  onlineSaves(): SaveData[] {
+    return [...this.members.values()].map((m) => m.acct.save);
+  }
+
   /** The player starts where their save says; only `travel` (behind the level gate) moves them between maps. */
   join(conn: Conn, acct: Account, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
@@ -132,10 +142,12 @@ export class Room {
     const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
     const m: Member = { info, conn, acct, pending: null, spin: null, bj: null, smokeAt: this.now() };
     acct.online = true;
-    // The smoker kept going while they were away, and stages they reached before the Smokehouse open now.
+    // The smoker kept going while they were away, stages they reached before the Smokehouse open now,
+    // and level gifts banked before the Kitchen opened become dishes.
     const smoked = smoke.collect(acct.save, this.now());
     const stages = smoke.openStages(acct.save);
-    if (smoked.length || stages.ids.length) this.onChange();
+    const gift = smoke.serveGifts(acct.save);
+    if (smoked.length || stages.ids.length || gift) this.onChange();
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
     conn.send({
@@ -157,6 +169,7 @@ export class Room {
     this.members.set(id, m);
     if (smoked.length) conn.send({ t: 'notice', msg: `🔥 While you were away, Mags smoked your ${smokedText(smoked)}. It's in your Pantry.` });
     if (stages.ids.length) conn.send({ t: 'stages', ...stages });
+    if (gift) conn.send({ t: 'notice', msg: smoke.giftText(gift) });
     return id;
   }
 
@@ -244,17 +257,39 @@ export class Room {
       case 'tip':
         changed = markTip(s, msg.id);
         break;
-      case 'smoke':
+      case 'smoke': {
+        const it = s.slots[int(msg.i)];
         changed = this.atSmoker(m) && this.ok(m, smoke.smokeFish(s, int(msg.i), this.now()));
+        if (changed && it?.k === 'fish') this.smokeStats?.fish('smoked', byId(FISH, it.fishId).tier);
         break;
-      case 'smokeall':
+      }
+      case 'smokeall': {
+        const tiers = smoke.smokeAllSlots(s).map((i) => byId(FISH, (s.slots[i] as { fishId: string }).fishId).tier);
         changed = this.atSmoker(m) && this.ok(m, smoke.smokeAll(s, this.now()));
+        if (changed) for (const t of tiers) this.smokeStats?.fish('smoked', t);
         break;
-      case 'sellsmoked':
-        changed = this.atSmoker(m) && this.ok(m, smoke.sellSmoked(s, str(msg.id), msg.all === true));
+      }
+      case 'sellsmoked': {
+        const id = str(msg.id);
+        const n = msg.all === true ? smoke.pantryCount(s, id) : 1;
+        changed = this.atSmoker(m) && this.ok(m, smoke.sellSmoked(s, id, msg.all === true));
+        if (changed) this.smokeStats?.fish('sold', byId(FISH, id).tier, n);
         break;
-      case 'eat':
-        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eat(s, str(msg.id), msg.all === true));
+      }
+      case 'eat': {
+        const id = str(msg.id);
+        const n = smoke.pantryCount(s, id);
+        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eat(s, id, msg.all === true));
+        if (changed) this.smokeStats?.fish('snacks', byId(FISH, id).tier, n - smoke.pantryCount(s, id));
+        break;
+      }
+      case 'cook':
+        changed = this.atSmoker(m) && this.ok(m, smoke.cook(s, msg.id));
+        if (changed) this.smokeStats?.cooked(dishById(msg.id)!.id);
+        break;
+      case 'eatdish':
+        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eatDish(s, msg.id));
+        if (changed) this.smokeStats?.eaten(dishById(msg.id)!.id);
         break;
       case 'lure':
         changed = eco.setLure(s, msg.on);
@@ -426,6 +461,7 @@ export class Room {
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply([this.setSupporter(who, !off)]);
     }
+    if (cmd === 'smokestats') return reply(this.smokeReport());
     if (cmd === 'backpay') {
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply(this.backPay(args[0] === 'apply'));
@@ -578,13 +614,14 @@ export class Room {
   private tickSmoke(m: Member): void {
     const now = this.now();
     const s = m.acct.save;
-    const worn = smoke.tickSnack(s, now - m.smokeAt);
+    const worn = smoke.tickBuffs(s, now - m.smokeAt);
     m.smokeAt = now;
     const done = smoke.collect(s, now);
     if (done.length) m.conn.send({ t: 'notice', msg: `🔥 Smoked ${smokedText(done)}: it's in your Pantry.` });
-    if (worn) m.conn.send({ t: 'notice', msg: 'Your snack wore off. Mags has more at the Smokehouse.' });
-    // A snack running down only reaches the save file when it runs out, or with the next real change.
-    if (!worn && !done.length) return;
+    if (worn.snack) m.conn.send({ t: 'notice', msg: 'Your snack wore off. Mags has more at the Smokehouse.' });
+    if (worn.dish) m.conn.send({ t: 'notice', msg: 'Your dish wore off. Mags cooks more in her Kitchen.' });
+    // Buffs running down only reach the save file when one runs out, or with the next real change.
+    if (!worn.snack && !worn.dish && !done.length) return;
     this.onChange();
     m.conn.send({ t: 'state', save: s });
   }

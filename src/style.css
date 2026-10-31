@@ -386,6 +386,14 @@ button.perk:hover { background: var(--paper-2); }
 .prow .txt { min-width: 0; display: flex; flex-direction: column; }
 .prow .txt b { font-size: 13px; font-weight: 900; }
 .prow .txt small { font-size: 12px; font-weight: 800; color: var(--ink-muted); }
+.prow.locked { opacity: .6; }
+.prow .dico { font-size: 26px; line-height: 1; }
+.prow .ready, .prow .need { flex: none; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 900; white-space: nowrap; }
+.prow .ready { color: #fff; background: var(--ok); }
+.prow .need { color: var(--ink-muted); background: var(--paper-2); }
+.detail .ingr { display: flex; flex-wrap: wrap; gap: 6px; }
+.detail .ingr span { padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 900; color: var(--ink); background: var(--paper-3); box-shadow: inset 0 0 0 2px var(--c); }
+.detail .ingr span.miss { opacity: .55; }
 .pbtns { flex: none; display: flex; align-items: center; gap: 6px; }
 .pbtns .btn { padding: 5px 12px; font-size: 12px; }
 .pbtns .ask { font-size: 12px; font-weight: 900; color: var(--bad); }

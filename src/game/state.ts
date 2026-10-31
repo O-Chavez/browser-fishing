@@ -2,7 +2,7 @@ import { BAITS, FISH, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { TITLES } from '../data/ranks';
-import { SMOKER_SPOTS, stageById, type StageId } from '../data/smokehouse';
+import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
 
@@ -49,11 +49,21 @@ export interface Smoke {
   pantry: Partial<Record<string, number[]>>;
   /** The snack being eaten, with the online milliseconds it has left. */
   snack: { fishId: string; ms: number } | null;
+  /** Cooked dishes waiting in the Pantry. */
+  cooked: CookedDish[];
+  /** The dish being eaten, with the online milliseconds it has left. */
+  dish: { id: DishId; ms: number } | null;
   /** Stages whose opening has been announced. */
   seen: StageId[];
 }
 
-export const newSmoke = (): Smoke => ({ spots: Array.from({ length: SMOKER_SPOTS }, () => null), pantry: {}, snack: null, seen: [] });
+/** A stack of cooked dishes in the Pantry. */
+export interface CookedDish {
+  id: DishId;
+  n: number;
+}
+
+export const newSmoke = (): Smoke => ({ spots: Array.from({ length: SMOKER_SPOTS }, () => null), pantry: {}, snack: null, cooked: [], dish: null, seen: [] });
 
 export interface SaveData {
   version: 1;
@@ -91,7 +101,7 @@ export interface SaveData {
   /** Titles earned (ids from `TITLES`), and the one worn under the name tag. */
   titles: string[];
   title: string | null;
-  /** Rewards for levels past 50, banked until the Smokehouse's dishes (R2) and the charters can use them. */
+  /** Rewards for levels past 50 not handed out yet: dishes until the Kitchen opens, fares until the charters. */
   gifts: Gifts;
   smoke: Smoke;
   /**
@@ -166,7 +176,7 @@ const isFishItem = (x: unknown): x is FishItem => {
   return !!f && f.k === 'fish' && FISH.some((d) => d.id === f.fishId) && Number.isFinite(f.size);
 };
 
-/** Keeps only well-formed spots, pantry fish, snack and stages from a saved Smokehouse; v1's racks and recipes are dropped. */
+/** Keeps only well-formed spots, pantry fish, dishes, buffs and stages from a saved Smokehouse; v1's racks and recipes are dropped. */
 function cleanSmoke(raw: unknown): Smoke {
   const d = (raw ?? {}) as Partial<Smoke>;
   const out = newSmoke();
@@ -181,6 +191,16 @@ function cleanSmoke(raw: unknown): Smoke {
     if (known(id) && items.length) out.pantry[id] = items.sort((a, b) => b - a);
   }
   if (d.snack && known(d.snack.fishId) && num(d.snack.ms)) out.snack = { fishId: d.snack.fishId, ms: Math.round(d.snack.ms) };
+  // Stacks of the same dish merge (dev saves from before spices were shelved kept them apart).
+  if (Array.isArray(d.cooked))
+    for (const c of d.cooked) {
+      if (!c || !dishById(c.id) || !num(c.n)) continue;
+      const same = out.cooked.find((x) => x.id === c.id);
+      if (same) same.n += Math.floor(c.n);
+      else out.cooked.push({ id: c.id, n: Math.floor(c.n) });
+    }
+  out.cooked = out.cooked.filter((c) => c.n > 0);
+  if (d.dish && dishById(d.dish.id) && num(d.dish.ms)) out.dish = { id: d.dish.id, ms: Math.round(d.dish.ms) };
   if (Array.isArray(d.seen)) out.seen = [...new Set(d.seen.filter((id) => stageById(id)))];
   return out;
 }

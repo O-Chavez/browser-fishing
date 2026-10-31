@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FISH, byId } from '../data/content';
-import { FREE_FISH, SMOKER_SPOTS, SMOKE_LEVEL } from '../data/smokehouse';
+import { DISHES, FREE_FISH, SMOKER_SPOTS, SMOKE_LEVEL, dishById } from '../data/smokehouse';
 import * as eco from './economy';
-import { catchXp, sellValue } from './progression';
+import { SHINY_CHANCE, catchXp, sellValue } from './progression';
 import * as smoke from './smoke';
 import { FISH_SLOT, migrate, newSave, type SaveData } from './state';
 
@@ -131,7 +131,7 @@ describe('snacks', () => {
     smoke.eat(s, ofTier(1));
     expect(smoke.wouldReplace(s, ofTier(1))).toBe(false);
     expect(smoke.wouldReplace(s, ofTier(3))).toBe(true);
-    smoke.tickSnack(s, 4.5 * MIN);
+    smoke.tickBuffs(s, 4.5 * MIN);
     expect(smoke.wouldReplace(s, ofTier(3))).toBe(false);
     smoke.eat(s, ofTier(3));
     expect(s.smoke.snack).toEqual({ fishId: ofTier(3), ms: 5 * MIN });
@@ -147,8 +147,8 @@ describe('snacks', () => {
     const s = carrying();
     smoke.stock(s, ofTier(2), 10);
     smoke.eat(s, ofTier(2));
-    expect(smoke.tickSnack(s, 4 * MIN)).toBe(false);
-    expect(smoke.tickSnack(s, MIN)).toBe(true);
+    expect(smoke.tickBuffs(s, 4 * MIN)).toEqual({ snack: false, dish: false });
+    expect(smoke.tickBuffs(s, MIN)).toEqual({ snack: true, dish: false });
     expect(s.smoke.snack).toBeNull();
   });
 });
@@ -163,8 +163,8 @@ describe('buffs at catch', () => {
     smoke.eat(s, ofTier(2));
     const res = eco.applyCatch(s, f, mid(f.id));
     expect(res.gained).toBe(Math.round(catchXp(f, mid(f.id), false) * 1.5));
-    expect(res.xpSnack).toBe(ofTier(2));
-    expect(res.coinSnack).toBeUndefined();
+    expect(res.xpFrom).toBe(`Smoked ${f.name}`);
+    expect(res.coinFrom).toBeUndefined();
   });
 
   it('💰 multiplies into the fish value beside the Lucky Charm', () => {
@@ -176,7 +176,7 @@ describe('buffs at catch', () => {
     const charm = eco.charmBonus(s);
     expect(res.mult).toBeCloseTo((1 + charm) * 1.15);
     expect(s.slots.find((x) => x?.k === 'fish')).toMatchObject({ mult: res.mult });
-    expect(res.coinSnack).toBe(ofTier(3));
+    expect(res.coinFrom).toBe(`Smoked ${byId(FISH, ofTier(3)).name}`);
   });
 });
 
@@ -241,6 +241,182 @@ describe('saving', () => {
     expect(s.spots.map((x) => x?.fish.fishId ?? null)).toEqual(['perch', null, null, null, null]);
     expect(s.snack).toEqual({ fishId: 'perch', ms: 9000 });
     expect(s.seen).toEqual(['smallfry']);
-    expect(Object.keys(s)).toEqual(['spots', 'pantry', 'snack', 'seen']);
+    expect(Object.keys(s)).toEqual(['spots', 'pantry', 'snack', 'cooked', 'dish', 'seen']);
+  });
+
+  it('keeps good dishes, merging stacks (old spiced ones too), and drops unknown ones', () => {
+    const raw = {
+      ...newSave(),
+      smoke: {
+        cooked: [{ id: 'supper', n: 2 }, { id: 'supper', n: 1 }, { id: 'supper', spice: 'chili', n: 1 }, { id: 'stew', n: 3 }, { id: 'platter', n: 1 }, { id: 'banquet', n: 0 }],
+        dish: { id: 'platter', spice: 'hickory', ms: 5000 },
+      },
+    };
+    const s = migrate(JSON.parse(JSON.stringify(raw))).smoke;
+    expect(s.cooked).toEqual([{ id: 'supper', n: 4 }, { id: 'platter', n: 1 }]);
+    expect(s.dish).toEqual({ id: 'platter', ms: 5000 });
+  });
+});
+
+/** A level-20 save that has caught every tier up to `top`. */
+const caught = (top: number): SaveData => {
+  const s = carrying();
+  s.level = 20;
+  for (let t = 1; t <= top; t++) s.dex[ofTier(t)] = { count: 1, best: 1 };
+  return s;
+};
+const dish = (id: string) => dishById(id)!;
+
+describe('dishes', () => {
+  it('follow the rule: tiers decide the buffs, fish count the time (GAME_DESIGN.md §38.2 table)', () => {
+    const fx = (id: string) => {
+      const b = smoke.dishBuffs(dish(id));
+      return [b.xp, Math.round(b.coins * 100) / 100, b.shiny, b.ms / MIN];
+    };
+    expect(fx('fishcakes')).toEqual([0.25, 0.3, 0, 12]);
+    expect(fx('supper')).toEqual([0.5, 0.3, 0, 12]);
+    expect(fx('platter')).toEqual([0.5, 0.3, 0.5, 15]);
+    expect(fx('banquet')).toEqual([0.5, 0.3, 1, 18]);
+  });
+
+  it('unlock once every tier they need has been caught', () => {
+    const open = (s: SaveData) => DISHES.filter((d) => smoke.dishOpen(s, d)).map((d) => d.id);
+    expect(open(caught(2))).toEqual([]);
+    expect(smoke.dishGoal(caught(2), dish('fishcakes'))).toBe('Catch a tier 3 fish');
+    expect(open(caught(3))).toEqual(['fishcakes', 'supper']);
+    expect(open(caught(4))).toEqual(['fishcakes', 'supper', 'platter']);
+    expect(smoke.dishGoal(caught(4), dish('banquet'))).toBe('Catch a tier 5 fish');
+    expect(open(caught(5))).toHaveLength(4);
+  });
+
+  it('open from a higher-tier catch too: a tier 4 or 5 catch opens the Kitchen without a tier 3 one', () => {
+    const s = carrying();
+    s.level = 20;
+    s.dex[ofTier(5)] = { count: 1, best: 1 };
+    expect(smoke.openStages(s).ids).toEqual(['smallfry', 'giants', 'jewels']);
+    expect(smoke.kitchenOpen(s)).toBe(true);
+    expect(DISHES.every((d) => smoke.dishOpen(s, d))).toBe(true);
+    expect(smoke.cookedCount(s, 'fishcakes')).toBe(1);
+    const t4 = carrying();
+    t4.level = 20;
+    t4.dex[ofTier(4)] = { count: 1, best: 1 };
+    expect(DISHES.filter((d) => smoke.dishOpen(t4, d)).map((d) => d.id)).toEqual(['fishcakes', 'supper', 'platter']);
+    expect(smoke.dishGoal(t4, dish('banquet'))).toBe('Catch a tier 5 fish');
+  });
+
+  it('cook from the cheapest smoked fish of each tier into the Pantry', () => {
+    const s = caught(3);
+    const [a, b] = FISH.filter((f) => f.tier === 1).map((f) => f.id);
+    smoke.stock(s, a, 10, 2);
+    smoke.stock(s, b, 5, 2);
+    smoke.stock(s, ofTier(3), 80, 1);
+    expect(smoke.shortfall(s, dish('fishcakes'))).toEqual([0, 0, 0, 0, 0]);
+    expect(smoke.cook(s, 'fishcakes')).toBeNull();
+    // Both 5-coin fish and one 10-coin fish went in; the best one is kept for selling.
+    expect(s.smoke.pantry).toEqual({ [a]: [10] });
+    expect(smoke.cookedCount(s, 'fishcakes')).toBe(1);
+    expect(smoke.cook(s, 'fishcakes')).toMatch(/Not enough smoked fish/);
+  });
+
+  it("won't cook a locked or unknown dish", () => {
+    const s = caught(3);
+    smoke.stock(s, ofTier(1), 10, 3);
+    smoke.stock(s, ofTier(3), 80, 1);
+    expect(smoke.cook(s, 'platter')).toMatch(/Catch a tier 4 fish/);
+    expect(smoke.pantryTotal(s)).toBe(4);
+    expect(smoke.cook(s, 'nope')).toMatch(/doesn't know/);
+  });
+
+  it('eat from the Pantry: the same dish adds time up to an hour, another replaces it', () => {
+    const s = caught(3);
+    smoke.addCooked(s, 'supper', 6);
+    smoke.addCooked(s, 'fishcakes', 1);
+    expect(smoke.eatDish(s, 'supper')).toBeNull();
+    expect(smoke.eatDish(s, 'supper')).toBeNull();
+    expect(s.smoke.dish).toEqual({ id: 'supper', ms: 24 * MIN });
+    for (let i = 0; i < 3; i++) smoke.eatDish(s, 'supper');
+    expect(s.smoke.dish!.ms).toBe(60 * MIN);
+    expect(smoke.eatDish(s, 'supper')).toMatch(/60 minutes/);
+    expect(smoke.cookedCount(s, 'supper')).toBe(1);
+    expect(smoke.wouldReplaceDish(s, 'fishcakes')).toBe(true);
+    expect(smoke.eatDish(s, 'fishcakes')).toBeNull();
+    expect(s.smoke.dish).toEqual({ id: 'fishcakes', ms: 12 * MIN });
+    expect(s.smoke.cooked).toEqual([{ id: 'supper', n: 1 }]);
+    expect(smoke.eatDish(s, 'fishcakes')).toMatch(/none in your Pantry/);
+  });
+
+  it('run beside a snack, wearing off on their own', () => {
+    const s = caught(3);
+    smoke.stock(s, ofTier(1), 10);
+    smoke.eat(s, ofTier(1));
+    smoke.addCooked(s, 'fishcakes', 1);
+    smoke.eatDish(s, 'fishcakes');
+    expect(smoke.tickBuffs(s, 5 * MIN)).toEqual({ snack: true, dish: false });
+    expect(smoke.tickBuffs(s, 7 * MIN)).toEqual({ snack: false, dish: true });
+    expect(s.smoke.dish).toBeNull();
+  });
+});
+
+describe('dish buffs at catch', () => {
+  it('the stronger of the snack and the dish counts, with no adding up', () => {
+    const s = caught(3);
+    smoke.stock(s, ofTier(2), 10);
+    smoke.eat(s, ofTier(2));
+    smoke.addCooked(s, 'fishcakes', 1);
+    smoke.eatDish(s, 'fishcakes');
+    // ⭐: the snack's +50% beats the Fish Cakes' +25%. 💰: only the dish has it.
+    expect(smoke.buff(s, 'xp')).toEqual({ bonus: 0.5, from: `Smoked ${byId(FISH, ofTier(2)).name}` });
+    expect(smoke.buff(s, 'coins')).toEqual({ bonus: 0.3, from: 'Fish Cakes' });
+    const res = eco.applyCatch(s, byId(FISH, ofTier(1)), mid(ofTier(1)));
+    expect(res.mult).toBeCloseTo(1.3);
+    expect(res.coinFrom).toBe('Fish Cakes');
+  });
+
+  it('✨ multiplies the shiny chance in the cast roll and credits the dish on a shiny', () => {
+    const s = caught(5);
+    s.bait = 'worm';
+    // A roll just over the day's shiny chance only lands with a ✨ dish.
+    const rolls = (r: number) => () => r;
+    const just = SHINY_CHANCE * 1.5;
+    const plain = eco.rollCast(s, 'pond', rolls(just));
+    smoke.addCooked(s, 'banquet', 1);
+    smoke.eatDish(s, 'banquet');
+    expect(smoke.shinyMult(s)).toBe(2);
+    const buffed = eco.rollCast(s, 'pond', rolls(just));
+    expect([plain.shiny, buffed.shiny]).toEqual([false, true]);
+    const res = eco.applyCatch(s, byId(FISH, ofTier(1)), mid(ofTier(1)), true);
+    expect(res.shinyFrom).toBe('Spirit Banquet');
+  });
+});
+
+describe('the Kitchen opening and level gifts', () => {
+  it('opening the Kitchen hands over a free Fish Cakes', () => {
+    const s = newSave();
+    s.level = SMOKE_LEVEL;
+    smoke.openStages(s);
+    expect(smoke.cookedTotal(s)).toBe(0);
+    s.dex[ofTier(3)] = { count: 1, best: 1 };
+    smoke.openStages(s);
+    expect(s.smoke.cooked).toEqual([{ id: 'fishcakes', n: 1 }]);
+  });
+
+  it('level gifts past 50 become the best dish unlocked; banked ones wait for the Kitchen', () => {
+    const s = caught(2);
+    s.gifts.provisions = 3;
+    expect(smoke.serveGifts(s)).toBeNull();
+    s.dex[ofTier(4)] = { count: 1, best: 1 };
+    s.dex[ofTier(3)] = { count: 1, best: 1 };
+    expect(smoke.serveGifts(s)).toEqual({ id: 'platter', n: 3 });
+    expect(s.gifts.provisions).toBe(0);
+    expect(smoke.cookedCount(s, 'platter')).toBe(3);
+  });
+
+  it('a catch levelling past 50 gifts a dish', () => {
+    const s = caught(5);
+    s.level = 50;
+    s.xp = 1e9;
+    const res = eco.applyCatch(s, byId(FISH, ofTier(1)), mid(ofTier(1)));
+    expect(res.level).toBeGreaterThan(50);
+    expect(res.gift).toEqual({ id: 'banquet', n: res.level - 50 });
   });
 });

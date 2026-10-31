@@ -56,9 +56,9 @@ export function applyXp(level: number, xp: number, gained: number): { level: num
   return { level: lvl, xp: total, leveledUp };
 }
 
-/** Free rewards for levels past `FLAT_LEVEL`, banked until the Smokehouse's dishes (R2) and the charters can use them. */
+/** Free rewards for levels past `FLAT_LEVEL`. Provisions become dishes once the Kitchen is open (`serveGifts`); fares wait for the charters. */
 export interface Gifts {
-  /** Smoked provisions: one per level past 50. */
+  /** Dishes: one per level past 50, banked until the Kitchen opens. */
   provisions: number;
   /** Charter fares: one every 5th level past 50. */
   fares: number;

@@ -30,7 +30,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![Inside the casino](src/assets/images/casino-preview.jpg)
 
-**🔥 Smoke your catch.** Mags Cinder's Smokehouse, across from the bait shop, turns spare fish into smoked goods. Load her racks with a recipe's fish, come back when they're done (they keep smoking while you're offline), and eat them at the pond for 10-minute buffs: quicker bites, better luck, an easier fight, an early night bite or more shinies. Coming soon: combine smoked goods into advanced recipes for deep-sea charters.
+**🔥 Smoke your catch.** From level 3, Mags Cinder's Smokehouse beside the Lucky Wheel smokes your spare fish in seconds (and keeps smoking while you're offline). Sell small fry smoked for more, eat one as a snack for ⭐ more XP or 💰 more coins on every catch, or cook smoked fish into dishes that give several buffs at once, up to ✨ more shinies. Coming soon: spices for deep-sea charters.
 
 **👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, and race for a spot on the **Top Anglers** leaderboard.
 
@@ -51,7 +51,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 - 5 rods, 5 baits and 50 levels of progression
 - Day/night cycle with night-only fish
 - Casino Cove with roulette, blackjack and a perk shop
-- A Smokehouse that turns spare fish into buffs, smoking in real time
+- A Smokehouse that turns spare fish into snacks and dishes that buff your catches
 - Fishdex, records and a live leaderboard
 - Character customisation: faces, colours, hats, shirts and jewellery
 - Your progress is saved on the server, so just log back in with your name

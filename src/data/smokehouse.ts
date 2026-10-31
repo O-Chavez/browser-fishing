@@ -12,9 +12,9 @@ export const smokeSeconds = (tier: number): number => SMOKE_SECONDS[Math.min(SMO
 export const SELL_TIER = 2;
 export const SMOKED_SELL = 1.5;
 
-/** What a snack does: ⭐ more XP or 💰 more coins at catch. ✨ shiny chance comes with dishes (R2). */
-export type BuffKind = 'xp' | 'coins';
-export const BUFF_ICON: Record<BuffKind, string> = { xp: '⭐', coins: '💰' };
+/** What a snack or dish does: ⭐ more XP or 💰 more coins at catch, or (dishes only) ✨ a higher shiny chance. */
+export type BuffKind = 'xp' | 'coins' | 'shiny';
+export const BUFF_ICON: Record<BuffKind, string> = { xp: '⭐', coins: '💰', shiny: '✨' };
 
 /** Snacks by tier: the fraction added to that kind. Smoked tier 4-5 fish are dish ingredients only. */
 export const SNACKS: Partial<Record<number, { kind: BuffKind; bonus: number }>> = {
@@ -55,3 +55,33 @@ export const FREE_FISH = 3;
 
 /** How close to Mags's counter you must stand to use the smoker. */
 export const SMOKE_RANGE = 4;
+
+// ---------- The Kitchen (R2) ----------
+
+export type DishId = 'fishcakes' | 'supper' | 'platter' | 'banquet';
+
+export interface Dish {
+  id: DishId;
+  name: string;
+  icon: string;
+  /** Smoked fish it takes, by tier (index 0 is tier 1); any species of the tier will do. */
+  needs: number[];
+}
+
+/** Tiers decide what a dish does (see `dishBuffs` in `src/game/smoke.ts`), fish count how long. */
+export const DISHES: Dish[] = [
+  { id: 'fishcakes', name: 'Fish Cakes', icon: '🍘', needs: [3, 0, 1, 0, 0] },
+  { id: 'supper', name: "Angler's Supper", icon: '🍲', needs: [0, 2, 2, 0, 0] },
+  { id: 'platter', name: 'Jewel Platter', icon: '🍱', needs: [2, 1, 1, 1, 0] },
+  { id: 'banquet', name: 'Spirit Banquet', icon: '🍖', needs: [2, 2, 1, 0, 1] },
+];
+export const dishById = (id: unknown): Dish | undefined => DISHES.find((d) => d.id === id);
+
+/** Each fish in a dish adds this much online time. */
+export const DISH_MINUTES_PER_FISH = 3;
+/** Eating the same dish again adds its time, up to this. */
+export const DISH_MAX_MINUTES = 60;
+/** A dish's 💰 is this many times its best snack's. Its ⭐ is the best snack's (level gifts past 50 are dishes). */
+export const DISH_COINS = 2;
+/** ✨ shiny chance multipliers from tier 4 and 5 fish, dishes only. */
+export const DISH_SHINY: Partial<Record<number, number>> = { 4: 1.5, 5: 2 };

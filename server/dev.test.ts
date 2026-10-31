@@ -100,4 +100,18 @@ describe('dev commands in a room', () => {
     expect(a.save.smoke.spots[1]).toBeNull();
     expect(a.save.smoke.pantry.pike).toHaveLength(1);
   });
+
+  it('stocks cooked dishes and reports the Smokehouse stats', () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(a.id, { t: 'cmd', text: '/dish banquet 3' });
+    room.handle(a.id, { t: 'cmd', text: '/dish supper' });
+    expect(a.save.smoke.cooked).toEqual([{ id: 'banquet', n: 3 }, { id: 'supper', n: 1 }]);
+    expect(devLines(a.log).at(-1)).toBe("Added 1 Angler's Supper to your Pantry.");
+    room.handle(a.id, { t: 'cmd', text: '/dish stew' });
+    expect(devLines(a.log).at(-1)).toMatch(/^Dish ids: fishcakes/);
+    room.handle(a.id, { t: 'cmd', text: '/smokestats' });
+    expect(devLines(a.log).at(-1)).toBe('No Smokehouse stats on this server.');
+  });
 });

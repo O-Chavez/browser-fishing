@@ -1,7 +1,7 @@
 import type { CosSlot, Look } from '../data/cosmetics';
 import type { Drop } from '../game/drops';
 import type { RouletteBet } from '../data/casino';
-import type { StageId } from '../data/smokehouse';
+import type { DishId, StageId } from '../data/smokehouse';
 import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 
@@ -79,6 +79,10 @@ export type ClientMsg =
   | { t: 'sellsmoked'; id: string; all?: boolean }
   /** Eat a smoked fish from the Pantry as a snack; `all` eats as many as fit under the cap. */
   | { t: 'eat'; id: string; all?: boolean }
+  /** Smokehouse Kitchen: cook a dish from smoked fish into the Pantry. */
+  | { t: 'cook'; id: DishId }
+  /** Eat a cooked dish from the Pantry. */
+  | { t: 'eatdish'; id: DishId }
   /** A new-player tip was shown, so it isn't shown again. */
   | { t: 'tip'; id: string }
   /** A global chat line. */

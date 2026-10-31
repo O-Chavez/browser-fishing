@@ -71,4 +71,11 @@ describe('rod upgrade hint', () => {
     expect(text).toContain(`Marlow's stall (1,200 ${COIN})`);
     expect(rodHintText('tough', rodUpgrade(s)!, 'Marlow')).toMatch(/^Tough fight!/);
   });
+
+  it('the dish tip names the player\'s own tier 3 fish', () => {
+    const s = newSave();
+    expect(tipText('dish', s, 'Marlow')).toContain('3 tier 1 fish and a tier 3 fish');
+    s.dex.pike = { count: 2, best: 60 };
+    expect(tipText('dish', s, 'Marlow')).toContain('3 tier 1 fish and your Northern Pike');
+  });
 });
