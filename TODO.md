@@ -11,6 +11,8 @@ Finished items move to [DONE.md](DONE.md).
 - 🎨 Charter fares from level gifts: every 5th level past 50 banks a fare for the charters (`gifts.fares` in `src/game/state.ts`, `levelGifts` in `progression.ts`, `BACKPAY_GIFTS` in `economy.ts`), but the charters as built have no fares, and players can't see them. Decide what they become (Black Pearls, say) or retire them
 - 🎨 Charter loading card matches where you're going: the "Casting off" / "Heading in" card (`showCastOff` / `updateCastOff`, `src/game/game.ts`; `#castoff` in `src/style.css`) is always the same daytime sky-and-sea gradient. Tint it to the time of day and the sea's mood at the zone being travelled to (`zoneAt`, `stormAt` in `src/data/sea.ts`), or the harbour's time of day when heading in
   - It also pops in at full strength and only fades out (0.5 s). Fade it in as well, and soften the fade out, so going to and from the loading card feels smoother
+- Charter entry message that explains the loop (Oscar, 2026-10-31), something like "Catch enough fish to reach the next marker, then head home with your haul or risk it and sail on further out". There's no quota as such: each landed fish moves the boat one league (`dive.depth++`, `src/game/dive.ts`), a marker comes every 5 leagues (`ledgeEvery`, `src/data/dive.ts`), and the haul is only safe once you head home at a marker; the one spool of line is what runs out
+  - Decide when it shows (the first charter only, like a tip in `src/game/tips.ts`, or a short line on every cast off) and keep the charter wording (charter, league, marker, Head home / Sail on)
 
 ## Ideas
 
