@@ -1,44 +1,187 @@
 export type ReelStatus = 'reeling' | 'caught' | 'snapped' | 'escaped';
+/** Why a fight was lost: held in the red through a surge or in the calm (snapped), or the fish took all the line. */
+export type LossReason = 'held-surge' | 'held-red' | 'ran';
 
 export const GOOD_MIN = 0.35;
 export const GOOD_MAX = 0.8;
 export const SWEET_MIN = 0.42;
 export const SWEET_MAX = 0.68;
 
-const SNAP_TIME = 0.9;
-const SLACK_TIME = 2.0;
-const EMPTY_TIME = 1.5;
+/**
+ * Fight levers. Pairs read as `base / (1 + k·(d - 0.4))` (`lever`) keep tightening past the pond's 3.2 cap (the
+ * sea has no cap) without ever reaching zero.
+ */
+export const P = {
+  /** Warning length (SURGE! in orange, before the surge): Wd = min(cap, w2·e^(-a·(d-2))); each surge's warning is Wd·U(min, 1). [w2, a, min, cap] */
+  warn: [1.7, 1.8, 0.02, 1.2],
+  /** Per-fish temperament: warnings ×(1+temper)^±1, log-uniform (a feisty or a lazy fish). */
+  temper: 2,
+  /** Calm time between surges, before the warning. */
+  gap: [2.6, 0.3],
+  /** Surge length, a·(1 + k·(d - 1)): longer on harder fish, so holding straight through one frays the line. */
+  surge: [1.3, 0.25],
+  /**
+   * Surge build-up: min(cap, r1·e^(-b·(d-1))) seconds, slow on easy fish, but never under `floor` seconds until the
+   * fish is far above the gear: the floor fades from f0 to f1 difficulty. [r1, b, cap, floor, f0, f1]
+   */
+  rise: [4.2, 2.48, 2.5, 0.4, 3.0, 3.8],
+  /**
+   * How hard a surge pulls, as the tension it takes to hold the line: a + b·d². Tension below it lets the fish take
+   * line; above GOOD_MAX it's red. So the safe band in a surge runs from here to the red, narrowing as fish get
+   * harder, and a fish whose pull reaches the red is too strong for the gear.
+   */
+  need: [0.3, 0.05],
+  /** ± share of random spread on warn, gap and surge length. */
+  jitter: 0.2,
+  /** ± share of random spread on each surge's strength. */
+  powerJitter: 0.2,
+  /** Per-fish strength: ×(1+fight)^±1, log-uniform (some fish of a kind pull harder than others). */
+  fight: 0.5,
+  /** Holding heads tension to the fish's pull plus this; letting go, to the pull times `slip`. */
+  hold: 0.5,
+  slip: 0.6,
+  /** Tension follow speed: a + b·d per second. Slow on easy fish, quick on hard ones. */
+  follow: [2, 1],
+  /** Base reel speed. */
+  reel: 0.08,
+  /** Reeling in a surge, with tension truly green (in the green band, above the fish's pull), on fish the gear can handle: this share of the reel speed up to d0, none from d1. [share, d0, d1] */
+  surgeReel: [0.8, 1.5, 2.0],
+  /** How much harder fish slow the reel: reel / (1 - k + k·d). */
+  reelK: 0.15,
+  /** Line the fish takes per second per unit of tension short of its pull. */
+  run: 1.5,
+  /**
+   * Drag: line a strong fish takes in a surge even with the gauge green, k·max(0, d - d0)^q per second at full pull.
+   * Riding high in the green saves up to `save` of it, most of that just below the red (h^p, h = 0 at the fish's
+   * pull, 1 at the red). So a fish too strong for the gear wins line faster than the calm can win it back. [k, d0, save, p, q]
+   */
+  drag: [0.07, 1.3, 0.9, 2, 1],
+  /** Where the fight starts on the line (0 = the fish has it all, 1 = landed). */
+  start: 0.35,
+  /** Seconds held in the red that fill one fray mark: a up to the first difficulty, down to b at the second. [a, b, d0, d1] */
+  fray: [2.5, 1.5, 1, 3],
+  /** Deeper red frays faster: fill speed ×(1 + k·(tension - GOOD_MAX) / 0.2), so a light touch of red takes the full time. */
+  deep: 5,
+  /** A part-filled fray mark drains back at this share of its fill speed once out of the red; a full one stays. */
+  drain: 0.5,
+  /**
+   * The green sweet spot's half-width (around 0.55) by difficulty, [d, half-width] points: wide on easy fights, the
+   * base on matched gear, a sliver when the fish outclasses the gear. Reeling in it is 35% faster.
+   */
+  sweet: [[0.6, 0.21], [2.0, 0.13], [3.2, 0.03]],
+};
+
+const lever = ([a, k]: number[], d: number) => a / (1 + k * Math.max(0, d - 0.4));
+const between = (d: number, d0: number, d1: number) => Math.min(1, Math.max(0, (d - d0) / (d1 - d0)));
+const SWEET_CENTER = (SWEET_MIN + SWEET_MAX) / 2;
+/** The sweet spot's half-width at difficulty d, straight between the `P.sweet` points. */
+function sweetHalf(d: number): number {
+  const pts = P.sweet;
+  if (d <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (d <= pts[i][0]) return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * between(d, pts[i - 1][0], pts[i][0]);
+  return pts[pts.length - 1][1];
+}
 
 /**
- * Tension-only reel fight. Progress only advances while the button is held (reeling), but raises tension; the fish periodically
- * surges, adding even more. Ease off during surges, reel in the gaps. Too much tension snaps the
- * line, too little lets the fish shake the hook. `surgeDir` only drives where the fish swims visually.
+ * e^x from + - × ÷ only, so a fight replays identically in every JS engine (`Math.exp` may round differently).
+ * Taylor series on x/1024, then squared ten times; relative error ~1e-12 for |x| < 10.
+ */
+export function expArith(x: number): number {
+  const y = x / 1024;
+  let e = 1 + y * (1 + (y / 2) * (1 + (y / 3) * (1 + (y / 4) * (1 + y / 5))));
+  for (let i = 0; i < 10; i++) e *= e;
+  return e;
+}
+const LN_TEMPER = 1.0986122886681098; // ln(1 + P.temper)
+
+/** Triangle wave 0..1 (no `Math.sin`, so replays match across JS engines). */
+const tri = (x: number) => {
+  const f = x - Math.floor(x);
+  return f < 0.5 ? 2 * f : 2 - 2 * f;
+};
+
+/** What a fight wore on the line, for the dive's spool. */
+export interface ReelWear {
+  /** Line the fish took, in fight progress (1 = the whole fight's length). */
+  lineOut: number;
+  /** Fray marks filled. */
+  frays: number;
+  snapped: boolean;
+}
+
+/**
+ * Tension reel fight: keep the gauge green. Holding reels the fish in and raises tension; letting go lowers it.
+ * Every few seconds, after a warning, the fish surges: it pulls with a set strength (`need`), taking line while
+ * tension is below it, and holding pushes tension into the red. So in a surge the player eases on and off to stay
+ * between the fish's pull and the red. Holding in the red fills a fray mark (two snap the line; letting go never
+ * frays), and the fish escapes if it takes all the line. Harder fish pull harder, move the needle faster, surge
+ * longer and fray quicker; a fish whose pull reaches the red is too strong for the gear.
+ * A clean catch is a landed fish with no frays. `surgeDir` only drives where the fish swims visually.
  */
 export class Reel {
   tension = 0.1;
-  progress = 0.12;
+  progress = P.start;
   stamina = 1;
   status: ReelStatus = 'reeling';
+  reason: LossReason | null = null;
   surgeDir: -1 | 0 | 1 = 0;
   surgePower = 0;
   pull = 0;
   lateral = 0;
   surgeCount = 0;
+  /** The tension it takes to hold the line right now: the fish's pull. */
+  need = 0;
+  /** Line a strong fish is dragging out right now, per second, even with the gauge green. */
+  drag = 0;
+  /** Line strain, 0..1: each half is a fray mark, filled while holding in the red; snaps at 1. */
+  strain = 0;
+  readonly wear: ReelWear = { lineOut: 0, frays: 0, snapped: false };
+  /** The sweet spot, wider on easier fights. */
+  readonly sweetMin: number;
+  readonly sweetMax: number;
 
   private t = 0;
   private surgeT = 0;
   private surgeDur = 0;
   private nextSurge: number;
-  private danger = 0;
-  private slack = 0;
-  private empty = 0;
+  private warnLen: number;
+  private inRed = false;
+  /** How far strain may build in this stretch of red: up to the next whole fray. */
+  private frayCap = 0.5;
+  private readonly fillRate: number;
+  private readonly warnMax: number;
+  private readonly riseLen: number;
+  private readonly strength: number;
+  private readonly follow: number;
+  private readonly dragRate: number;
+  private readonly surgeReel: number;
 
   constructor(
     private difficulty: number,
-    private control: number,
     private rng: () => number = Math.random,
   ) {
-    this.nextSurge = 0.9 + rng() * 0.8;
+    const d = difficulty;
+    const half = sweetHalf(d);
+    this.sweetMin = SWEET_CENTER - half;
+    this.sweetMax = SWEET_CENTER + half;
+    this.fillRate = 1 / (2 * (P.fray[0] + (P.fray[1] - P.fray[0]) * between(d, P.fray[2], P.fray[3])));
+    const floor = P.rise[3] - (P.rise[3] - 0.05) * between(d, P.rise[4], P.rise[5]);
+    this.riseLen = Math.min(P.rise[2], Math.max(floor, P.rise[0] * expArith(-P.rise[1] * (d - 1))));
+    this.strength = (P.need[0] + P.need[1] * d * d) * expArith((2 * rng() - 1) * Math.log1p(P.fight));
+    this.follow = P.follow[0] + P.follow[1] * d;
+    this.dragRate = P.drag[0] * Math.max(0, d - P.drag[1]) ** P.drag[4];
+    this.surgeReel = P.surgeReel[0] * (1 - between(d, P.surgeReel[1], P.surgeReel[2]));
+    this.warnMax = P.warn[0] * expArith(-P.warn[1] * (d - 2)) * expArith((2 * rng() - 1) * LN_TEMPER);
+    this.warnLen = this.rollWarn();
+    this.nextSurge = 1.2 + this.warnLen;
+  }
+
+  private rollWarn(): number {
+    return Math.min(P.warn[3], this.warnMax * (P.warn[2] + (1 - P.warn[2]) * this.rng()));
+  }
+
+  private spread(x: number, j = P.jitter): number {
+    return x * (1 - j + 2 * j * this.rng());
   }
 
   /** Seconds since the fight started. */
@@ -46,76 +189,118 @@ export class Reel {
     return this.t;
   }
 
-  /** Fish is actively yanking: let go. */
+  /** Fish is running: keep the gauge green. */
   get surging(): boolean {
-    return this.surgeDir !== 0 && this.pull > 0.25;
+    return this.surgeDir !== 0;
   }
 
   /** A surge is about to start. */
   get warning(): boolean {
-    return this.surgeDir === 0 && this.nextSurge < 0.45;
+    return this.surgeDir === 0 && this.nextSurge < this.warnLen;
   }
 
   get inSweetSpot(): boolean {
-    return this.tension >= SWEET_MIN && this.tension <= SWEET_MAX;
+    return this.tension >= this.sweetMin && this.tension <= this.sweetMax;
   }
 
   get inGoodZone(): boolean {
     return this.tension >= GOOD_MIN && this.tension <= GOOD_MAX;
   }
 
+  /** Holding with the gauge in the red: a fray mark is filling. */
+  get fraying(): boolean {
+    return this.inRed;
+  }
+
+  /** The fish is taking line: tension is below its pull. */
+  get losingLine(): boolean {
+    return this.tension < this.need;
+  }
+
+  /** A strong fish is dragging line out even with the gauge green. */
+  get dragging(): boolean {
+    return this.drag > 0.01 && !this.losingLine;
+  }
+
+  /** This surge pulls into the red: the gear can't hold the line without fraying it. */
+  get outmatched(): boolean {
+    return this.surging && this.need > GOOD_MAX;
+  }
+
+  /** Landed with no frays. */
+  get clean(): boolean {
+    return this.status === 'caught' && this.wear.frays === 0;
+  }
+
   update(dt: number, holding: boolean): void {
     if (this.status !== 'reeling') return;
+    const d = this.difficulty;
     this.t += dt;
 
     if (this.surgeDir !== 0) {
       this.surgeT += dt;
       if (this.surgeT >= this.surgeDur) {
         this.surgeDir = 0;
-        this.surgePower = 0;
-        // Harder fish rest less between surges.
-        this.nextSurge = (0.8 + this.rng() * 1.5) / (0.55 + 0.45 * Math.min(2.5, this.difficulty));
+        this.warnLen = this.rollWarn();
+        this.nextSurge = this.spread(lever(P.gap, d)) + this.warnLen;
       }
     } else {
       this.nextSurge -= dt;
       if (this.nextSurge <= 0) {
         this.surgeDir = this.rng() < 0.5 ? -1 : 1;
-        this.surgeDur = 1.0 + this.rng() * 1.0 + 0.25 * Math.max(0, this.difficulty - 1.5);
+        this.surgeDur = this.spread(P.surge[0] * (1 + P.surge[1] * Math.max(0, d - 1)));
         this.surgeT = 0;
         this.surgeCount++;
-        this.surgePower =
-          ((0.55 + 0.5 * this.rng()) * Math.min(1.75, 0.55 + 0.4 * this.difficulty) * (0.5 + 0.5 * this.stamina)) /
-          (0.8 + 0.2 * this.control);
+        this.surgePower = this.spread(1, P.powerJitter) * (0.85 + 0.15 * this.stamina);
       }
     }
 
     if (this.surgeDir !== 0) {
-      const env = Math.min(1, this.surgeT / 0.25) * Math.min(1, (this.surgeDur - this.surgeT) / 0.3);
-      this.pull = this.surgePower * Math.max(0, env);
+      const ramp = Math.max(0, Math.min(1, this.surgeT / this.riseLen, (this.surgeDur - this.surgeT) / 0.25));
+      this.need = this.strength * this.surgePower * ramp;
+      this.pull = this.surgePower * ramp;
     } else {
-      this.pull = 0.1 * this.difficulty * (0.6 + 0.4 * Math.sin(this.t * 3.1));
+      this.need = 0.04 * d * tri(this.t * 0.5);
+      this.pull = this.need;
     }
 
-    const hard = Math.max(0, this.difficulty - 1);
-    const target = (holding ? 0.55 : 0.04) + this.pull * (0.5 + 0.2 * hard);
-    this.tension = Math.min(1, Math.max(0, this.tension + (target - this.tension) * Math.min(1, 5 * dt)));
+    const target = holding ? this.need + P.hold : this.need * P.slip;
+    this.tension += (target - this.tension) * Math.min(1, this.follow * dt);
 
-    this.stamina = Math.max(0.2, this.stamina - dt * 0.06 * (this.inGoodZone ? 1 : 0.25));
+    this.stamina = Math.max(0.2, this.stamina - dt * 0.05 * (holding && this.inGoodZone ? 1 : 0.25));
 
-    const rate = holding
-      ? (0.17 / (0.6 + 0.4 * this.difficulty)) * (1 - 0.5 * Math.min(1, this.pull)) * (this.tension > 0.85 ? 0.4 : 1) * (this.inSweetSpot ? 1.35 : 1)
+    // Reeling in the calm; in a surge only on fish the gear can handle, with the gauge truly green.
+    const share = !this.surging ? 1 : this.inGoodZone && this.tension >= this.need ? this.surgeReel : 0;
+    const rate = holding && share > 0
+      ? share * (P.reel / (1 - P.reelK + P.reelK * d)) * (this.tension > GOOD_MAX ? 0.4 : this.inSweetSpot ? 1.35 : 1)
       : 0;
-    const loss = holding ? 0 : this.pull * 0.12 + 0.01;
+    // Below the fish's pull it takes line fast; above it, a strong fish still drags some out, less the higher you ride.
+    const high = this.need < GOOD_MAX ? Math.min(1, Math.max(0, (this.tension - this.need) / (GOOD_MAX - this.need))) : 0;
+    this.drag = this.surging ? this.dragRate * this.pull * (1 - P.drag[2] * high ** P.drag[3]) : 0;
+    const loss = P.run * Math.max(0, this.need - this.tension) + this.drag;
+    this.wear.lineOut += loss * dt;
     this.progress = Math.min(1, Math.max(0, this.progress + (rate - loss) * dt));
 
     this.lateral += (this.surgeDir * this.pull - this.lateral) * Math.min(1, 3 * dt);
 
-    this.danger = this.tension > 0.92 ? this.danger + dt : Math.max(0, this.danger - 1.5 * dt);
-    this.slack = this.tension < 0.1 ? this.slack + dt : Math.max(0, this.slack - dt);
-    this.empty = this.progress <= 0 ? this.empty + dt : Math.max(0, this.empty - dt);
+    // Each stretch of red held fills the next fray mark, and stops once it's whole: two chances before the line snaps.
+    // A part-filled mark drains back out of the red; a whole one stays.
+    const red = holding && this.tension > GOOD_MAX;
+    if (red) {
+      if (!this.inRed) this.frayCap = (this.wear.frays + 1) / 2;
+      this.strain = Math.min(this.frayCap, this.strain + this.fillRate * (1 + P.deep * (this.tension - GOOD_MAX) / 0.2) * dt);
+      this.wear.frays = Math.max(this.wear.frays, Math.floor(this.strain * 2));
+    } else this.strain = Math.max(this.wear.frays / 2, this.strain - P.drain * this.fillRate * dt);
+    this.inRed = red;
 
     if (this.progress >= 1) this.status = 'caught';
-    else if (this.danger >= SNAP_TIME / (1 + 0.3 * Math.max(0, this.difficulty - 1.5))) this.status = 'snapped';
-    else if (this.slack >= SLACK_TIME || this.empty >= EMPTY_TIME) this.status = 'escaped';
+    else if (this.wear.frays >= 2) {
+      this.status = 'snapped';
+      this.wear.snapped = true;
+      this.reason = this.surging ? 'held-surge' : 'held-red';
+    } else if (this.progress <= 0) {
+      this.status = 'escaped';
+      this.reason = 'ran';
+    }
   }
 }

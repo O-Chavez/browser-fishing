@@ -70,7 +70,7 @@ import {
   BUFF_ICON, DISHES, DISH_MAX_MINUTES, FREE_FISH, SELL_TIER, SMOKED_SELL, SMOKER_SPOTS, SMOKE_LEVEL, SNACKS, SNACK_MAX_MINUTES, SNACK_MINUTES, STAGES,
   dishById, smokeSeconds, stageById, type BuffKind, type Dish, type DishId, type StageId,
 } from '../data/smokehouse';
-import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
+import { GOOD_MAX, GOOD_MIN, Reel } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
@@ -101,7 +101,8 @@ const shortRod = (name: string) => name.replace(/ Rod$/, '');
 
 const CAMP_TIPS = [
   'Tip: hold the cast longer for a farther throw.',
-  'Tip: release the reel when the fish surges, or the line may snap.',
+  'Tip: when a fish surges, keep the gauge green: ease off before the red, tighten before it takes your line.',
+  `Tip: a fish landed without fraying the line is a clean catch, worth ${Math.round(eco.CLEAN_BONUS * 100)}% more.`,
   'Tip: shiny fish fight harder but sell for 5×.',
   'Tip: the Lucky Wheel can double a fish... or take it.',
   'Tip: bigger rods and better bait attract rarer fish.',
@@ -158,6 +159,11 @@ export class Game {
   private carry: { key: string; obj: THREE.Object3D; model: FishModel | null } | null = null;
   private reel: Reel | null = null;
   private lastSurges = 0;
+  private lastFrays = 0;
+  /** Seconds left on the strain arc's flash after a fray. */
+  private frayFlash = 0;
+  /** The fish being landed was a clean catch (no frays). */
+  private landedClean = false;
   private leapT = -1;
   private splashCd = 0;
   private tickCd = 0;
@@ -679,6 +685,11 @@ export class Game {
         progress: this.reel?.progress,
         status: this.reel?.status,
         pull: this.reel?.pull,
+        surging: this.reel?.surging,
+        warning: this.reel?.warning,
+        strain: this.reel?.strain,
+        frays: this.reel?.wear.frays,
+        reason: this.reel?.reason,
         hooked: this.hooked?.id,
         power: this.power,
       }),
@@ -689,9 +700,10 @@ export class Game {
         this.elapsed = this.waitTotal - 0.01;
       },
       /** Lands a given fish straight away (dev only), to check how each tier looks when caught. */
-      land: (id: string, size: number, shiny = false) => {
+      land: (id: string, size: number, shiny = false, clean = false) => {
         if (this.phase !== 'idle' && this.phase !== 'result') return;
         if (this.phase === 'result') this.dismissCatch();
+        this.landedClean = clean;
         this.hooked = byId(FISH, id);
         this.hookedSize = size;
         this.hookedShiny = shiny;
@@ -946,7 +958,9 @@ export class Game {
         t.setAction('❗', 'HOOK!', 'hook');
         break;
       case 'reeling':
-        if (this.reel?.surging) t.setAction('✋', 'LET GO', 'danger');
+        if (this.reel && this.reel.tension > GOOD_MAX) t.setAction('✋', 'EASE OFF', 'danger');
+        else if (this.reel?.surging && this.reel.losingLine) t.setAction('🎣', 'TIGHTEN', 'gold');
+        else if (this.reel?.warning) t.setAction('⚠️', 'SURGE', 'danger');
         else t.setAction('🎣', this.holding ? 'REELING' : 'HOLD', 'gold');
         break;
       case 'result':
@@ -2051,11 +2065,14 @@ export class Game {
     const w = this.world;
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
-    const hard = reelDifficulty(this.hooked!, { ...this.rod, control: eco.reelControl(this.s, this.rod.control) }, this.hookedShiny);
-    this.reel = new Reel(hard, eco.reelControl(this.s, this.rod.control));
+    const hard = reelDifficulty(this.hooked!, { ...this.rod, control: eco.reelControl(this.s, this.rod.control) }, this.hookedShiny, this.hookedSize);
+    this.reel = new Reel(hard);
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
     this.guide('reel');
     this.lastSurges = 0;
+    this.lastFrays = 0;
+    this.frayFlash = 0;
+    this.landedClean = false;
     this.leapT = -1;
     this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, this.hooked!.id);
     this.fish.group.scale.setScalar(waterScale(this.hookedSize, this.hooked!.tier));
@@ -2065,7 +2082,7 @@ export class Game {
     w.addShake(0.8);
     w.fx.splash(w.bobber.position, 36, 1.4);
     audio.splash(1);
-    this.toast(`Hooked! ${difficultyLabel(hard)} fight - reel when calm, ease off when it surges.`);
+    this.toast(`Hooked! ${difficultyLabel(hard)} fight.`);
   }
 
   private startLanding(): void {
@@ -2125,9 +2142,9 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny);
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean);
     if (!stored) return this.reset('No free slot - the fish got away!');
-    this.net.send({ t: 'catch' });
+    this.net.send({ t: 'catch', ...(this.landedClean ? { clean: true } : {}) });
     this.stagesWaiting.push(...stages);
     if (gift) this.toast(smoke.giftText(gift), 3.5);
     this.caughtTier = fish.tier;
@@ -2147,7 +2164,7 @@ export class Game {
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
-      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>
+      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}
       <div>${this.tierBadge(fish.tier)} ${TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
@@ -2564,6 +2581,15 @@ export class Game {
 
     r.update(dt, this.holding);
 
+    if (r.wear.frays !== this.lastFrays) {
+      this.lastFrays = r.wear.frays;
+      this.frayFlash = 0.6;
+      audio.tick(0.6);
+      w.addShake(0.6);
+      if (r.status === 'reeling') this.guide('fray');
+    }
+    this.frayFlash = Math.max(0, this.frayFlash - dt);
+
     if (r.surgeCount !== this.lastSurges) {
       this.lastSurges = r.surgeCount;
       w.fx.ripple(b, 3, 0, 1.2);
@@ -2640,16 +2666,19 @@ export class Game {
 
     if (r.status === 'caught') {
       this.toughCatch = r.elapsed > TOUGH_FIGHT_SECS;
+      this.landedClean = r.clean;
       this.startLanding();
     } else if (r.status === 'snapped') {
       audio.snap();
       w.rig.kick('pitch', -4);
       w.addShake(1.2);
+      // Only the short line here: the fray tip already explained snapping.
       this.reset('The line snapped!');
       this.rodHint('snapped');
     } else if (r.status === 'escaped') {
-      this.reset('The fish slipped off.');
-      this.rodHint('escaped');
+      this.reset('The fish took all your line!');
+      // The first time, say why; after that the rod hint (once a session) can show.
+      if (!this.guide('slack')) this.rodHint('escaped');
     }
   }
 
@@ -2765,70 +2794,109 @@ export class Game {
     }
 
     const r = this.reel;
-    const surge = r.surging || r.tension > GOOD_MAX;
+    // Keep the gauge green: red frays the line, and below the fish's pull (the white marker in a surge) it takes line.
+    const red = r.tension > GOOD_MAX;
+    const surge = r.surging;
+    const taking = surge && r.losingLine;
     const warn = !surge && r.warning;
-    const pulse = 0.5 + 0.5 * Math.sin(time * (surge ? 18 : 8));
-    const accent = surge ? '#ff3b30' : warn ? '#ffb020' : '#58e07a';
-    $('vignette').classList.toggle('surge', surge);
-    this.gauge.classList.toggle('surge', surge);
+    const danger = red || r.outmatched;
+    const pulse = 0.5 + 0.5 * Math.sin(time * (danger ? 18 : 8));
+    const accent = red ? '#ff3b30' : taking || warn ? '#ffb020' : '#58e07a';
+    $('vignette').classList.toggle('surge', danger);
+    this.gauge.classList.toggle('surge', danger);
 
-    if (surge || warn) {
+    if (danger || surge || warn) {
       ctx.beginPath();
       ctx.arc(cx, cy, 112, 0, Math.PI * 2);
-      ctx.strokeStyle = surge
+      ctx.strokeStyle = danger
         ? `rgba(255,59,48,${0.25 + 0.55 * pulse})`
         : `rgba(255,176,32,${0.2 + 0.3 * pulse})`;
-      ctx.lineWidth = surge ? 10 + 8 * pulse : 6;
+      ctx.lineWidth = danger ? 10 + 8 * pulse : 6;
       ctx.stroke();
     }
 
     arc(96, 0, 1, 'rgba(0,0,0,0.5)', 14);
     arc(96, GOOD_MIN, GOOD_MAX, 'rgba(255,255,255,0.18)', 14);
-    arc(96, SWEET_MIN, SWEET_MAX, 'rgba(88,224,122,0.55)', 14);
+    arc(96, r.sweetMin, r.sweetMax, 'rgba(88,224,122,0.55)', 14);
     arc(96, Math.max(0, GOOD_MAX), 1, 'rgba(255,59,48,0.45)', 14);
-    const hot = r.tension > GOOD_MAX;
     arc(
       96,
       0,
       Math.max(0.01, r.tension),
-      hot ? '#ff3b30' : r.tension < GOOD_MIN ? '#ffd23a' : '#7dff8a',
+      red ? '#ff3b30' : r.tension < GOOD_MIN || taking ? '#ffd23a' : '#7dff8a',
       7,
     );
+    // The fish's pull in a surge: below this marker it takes line; past the red, the rod can't hold it.
+    if (surge && r.need > 0.02) {
+      const ma = a0 + Math.min(1, r.need) * sweep;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ma) * 84, cy + Math.sin(ma) * 84);
+      ctx.lineTo(cx + Math.cos(ma) * 108, cy + Math.sin(ma) * 108);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
     const na = a0 + r.tension * sweep;
     ctx.beginPath();
     ctx.arc(
       cx + Math.cos(na) * 96,
       cy + Math.sin(na) * 96,
-      8 + (surge ? 3 * pulse : 0),
+      8 + (red ? 3 * pulse : 0),
       0,
       Math.PI * 2,
     );
-    ctx.fillStyle = surge ? '#ff7a70' : '#fff';
+    ctx.fillStyle = red ? '#ff7a70' : '#fff';
     ctx.fill();
 
     arc(76, 0, 1, 'rgba(0,0,0,0.45)', 9);
     arc(76, 0, Math.max(0.01, r.progress), '#58b6ff', 7);
 
+    // Fray marks: one half per fray (two snap the line). Holding in the red fills the next one up, blinking; a full
+    // one flashes white as it frays.
+    const halves: [number, number][] = [[0, 0.48], [0.52, 1]];
+    halves.forEach(([from, to], i) => {
+      const fill = Math.min(1, Math.max(0, r.strain * 2 - i));
+      const done = i < r.wear.frays;
+      const blink = 0.5 + 0.5 * Math.sin(time * 24);
+      const fresh = done && i === r.wear.frays - 1 && this.frayFlash > 0;
+      arc(62, from, to, 'rgba(0,0,0,0.4)', 5);
+      if (done) arc(62, from, to, fresh && blink > 0.5 ? '#ffffff' : '#ff3b30', 4);
+      else if (fill > 0) arc(62, from, from + (to - from) * fill, r.fraying ? `rgba(255,59,48,${0.55 + 0.45 * blink})` : 'rgba(255,59,48,0.7)', 4);
+    });
+
     ctx.textAlign = 'center';
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 6;
     ctx.fillStyle = accent;
-    ctx.font = `800 ${surge ? 34 + 4 * pulse : 28}px system-ui`;
-    const big = surge
-      ? 'LET GO!'
-      : warn
-        ? 'GET READY'
-        : this.holding
-          ? 'REELING'
-          : 'HOLD TO REEL';
+    ctx.font = `800 ${danger ? 34 + 4 * pulse : 28}px system-ui`;
+    const big = red
+      ? 'EASE OFF!'
+      : taking
+        ? 'TIGHTEN!'
+        : surge
+          ? 'KEEP IT GREEN'
+          : warn
+            ? 'SURGE!'
+            : this.holding
+              ? 'REELING'
+              : 'HOLD TO REEL';
     ctx.fillText(big, cx, cy + 150);
     ctx.font = '600 14px system-ui';
     ctx.fillStyle = '#fff';
-    const small = surge
-      ? this.touch ? 'Lift your thumb until it calms' : 'Release click until it calms'
-      : warn
-        ? 'Fish is about to surge'
-        : r.inSweetSpot
+    const small = r.outmatched
+      ? 'Too strong for your rod!'
+      : red
+        ? 'The line is fraying'
+        : taking
+          ? 'The fish is taking line'
+          : r.dragging
+            ? 'Strong fish! Ride high in the green to give less line'
+            : surge
+              ? 'Stay between the marker and the red'
+            : warn
+              ? 'Get ready to ease off'
+              : r.inSweetSpot
           ? 'Sweet spot — reeling fast!'
           : '';
     if (small) ctx.fillText(small, cx, cy + 172);
@@ -3795,7 +3863,7 @@ export class Game {
     const keys: [string, string][] = [
       ['W A S D', 'Walk'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Talk / interact'],
       ['Hold click', 'Charge a cast - let go in the gold zone for a perfect cast'], ['Click', 'Hook when the ! appears'],
-      ['Hold click', 'Reel - let go when the fish surges'], ['1-5 / Scroll', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['G', 'Drop the item in hand'],
+      ['Hold click', 'Reel - when the fish surges, keep the gauge green'], ['1-5 / Scroll', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['G', 'Drop the item in hand'],
       ['Tab', 'Open your bag'], ['Enter', 'Chat'], ['M', 'Music on / off'], ['Esc', 'Menu / close'],
     ];
     const controls = keys.map(([k, v]) => `<div class="key">${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</div><div>${v}</div>`).join('');

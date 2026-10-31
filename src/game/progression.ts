@@ -125,18 +125,43 @@ export function backPayXp(dex: Record<string, { count: number }>, since = 0): nu
 /** The best tier of fish you can hook is set by the bait; the rod only decides how hard the fight is. */
 export const gearTier = (_rod: Rod, bait: Bait): number => bait.tier;
 
-/** Extra fight difficulty for every tier a fish is above your rod. */
-export const UNDERGEAR_PENALTY = 0.35;
+/** Fight difficulty of a typical fish of each tier on a rod of the same tier: a light challenge that grows with the tiers. */
+export const MATCHED_DIFFICULTY = [1.2, 1.5, 1.6, 1.7, 1.8];
 
-/** How hard a hooked fish fights: its stamina, softened by a better rod and made much worse by an under-tier one. */
-export function reelDifficulty(fish: Fish, rod: Rod, shiny = false): number {
-  const gap = Math.max(0, fish.tier - rod.tier);
-  const d = ((fish.stamina * (shiny ? SHINY_DIFFICULTY : 1)) / Math.pow(rod.control, 0.45)) * (1 + UNDERGEAR_PENALTY * gap);
+/** Each tier a fish is above the rod multiplies its fight's difficulty by `TIER_UP`; each tier below, by `TIER_DOWN`. */
+export const TIER_UP = 1.2;
+export const TIER_DOWN = 0.85;
+
+/** How much a species' stamina sets it apart within its tier: difficulty ×(stamina / the tier's mean)^this. */
+export const STAMINA_SPREAD = 0.5;
+
+/** Fight difficulty for a species' smallest catch; its largest is the mirror above (×1.15), a mid-size one ×1. */
+export const SIZE_DIFFICULTY = 0.85;
+
+/** Mean stamina of each tier's pond fish. */
+const TIER_STAMINA = [1, 2, 3, 4, 5].map((t) => {
+  const s = POND_FISH.filter((f) => f.tier === t).map((f) => f.stamina);
+  return s.reduce((a, b) => a + b, 0) / s.length;
+});
+
+/**
+ * How hard a hooked fish fights, set by its tier against the rod's: a light challenge on matched gear, easier for
+ * each tier the rod is above the fish and harder for each tier below. Species stamina, size, a shiny and a rod
+ * boost (the gloves raise `control`) adjust it. Without a size it's a mid-size fish.
+ */
+export function reelDifficulty(fish: Fish, rod: Rod, shiny = false, size?: number): number {
+  const gap = fish.tier - rod.tier;
+  const tier = Math.min(5, Math.max(1, fish.tier)) - 1;
+  const species = Math.pow(fish.stamina / TIER_STAMINA[tier], STAMINA_SPREAD);
+  const big = size === undefined ? 1 : SIZE_DIFFICULTY + 2 * (1 - SIZE_DIFFICULTY) * Math.min(1, Math.max(0, sizeRatio(fish, size)));
+  const boost = Math.pow((RODS.find((r) => r.id === rod.id)?.control ?? rod.control) / rod.control, 0.45);
+  const step = gap > 0 ? Math.pow(TIER_UP, gap) : Math.pow(TIER_DOWN, -gap);
+  const d = MATCHED_DIFFICULTY[tier] * species * step * big * boost * (shiny ? SHINY_DIFFICULTY : 1);
   return Math.round(Math.min(3.2, Math.max(0.4, d)) * 100) / 100;
 }
 
 export function difficultyLabel(d: number): string {
-  return d < 0.7 ? 'Easy' : d < 1.0 ? 'Gentle' : d < 1.25 ? 'Medium' : d < 1.5 ? 'Hard' : 'Brutal';
+  return d < 1.0 ? 'Easy' : d < 1.4 ? 'Gentle' : d < 1.9 ? 'Medium' : d < 2.4 ? 'Hard' : 'Brutal';
 }
 
 export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: Bait, night = false): boolean {

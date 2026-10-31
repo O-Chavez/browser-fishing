@@ -337,7 +337,7 @@ export class Room {
         changed = this.cast(m, msg.x, msg.z, msg.perfect === true);
         break;
       case 'catch':
-        changed = this.land(m);
+        changed = this.land(m, msg.clean === true);
         break;
       case 'lost':
         if (m.pending || m.info.act) this.setAct(m, null);
@@ -654,14 +654,14 @@ export class Room {
   }
 
   /** Completes the pending catch, if the client waited long enough for the bite and the fight. */
-  private land(m: Member): boolean {
+  private land(m: Member, clean: boolean): boolean {
     const p = m.pending;
     m.pending = null;
     if (!p || this.now() < p.readyAt) {
       this.setAct(m, null);
       return false;
     }
-    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny);
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, clean);
     if (!res.stored) {
       this.setAct(m, null);
       return false;

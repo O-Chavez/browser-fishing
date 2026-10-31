@@ -153,9 +153,9 @@ try {
       await game(p, `G.press();`);
       // Reel in pulses, keeping tension mid-range, until the fight is about half done.
       for (let i = 0; i < 400; i++) {
-        const st = (await game(p, `return G.state();`)) as { phase: string; tension: number; progress: number };
+        const st = (await game(p, `return G.state();`)) as { phase: string; tension: number; progress: number; surging: boolean; warning: boolean };
         if (st.phase !== 'reeling') break;
-        await game(p, `G.hold(${st.tension < 0.55});`);
+        await game(p, `G.hold(${st.tension < 0.55 && !st.surging && !st.warning});`);
         if (st.progress > 0.45 && st.tension > 0.4 && st.tension < 0.7) {
           await shoot(p, 'reel');
           shot = true;

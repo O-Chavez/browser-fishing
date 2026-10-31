@@ -117,7 +117,16 @@ describe('tier progression', () => {
     const f = FISH.find((x) => x.tier === 3)!;
     const weak = reelDifficulty(f, RODS[0]);
     const matched = reelDifficulty(f, RODS[2]);
-    expect(weak).toBeGreaterThan(matched * 1.5);
+    // Two tiers above the rod: TIER_UP² harder.
+    expect(weak).toBeGreaterThan(matched * 1.4);
+  });
+  it('bigger fish of a species fight harder: x0.85 for the smallest up to x1.15 for the largest', () => {
+    const f = FISH.find((x) => x.id === 'aurorapike')!;
+    const rod = RODS.find((r) => r.id === 'aurora')!;
+    const mid = reelDifficulty(f, rod);
+    expect(reelDifficulty(f, rod, false, f.minSize)).toBeCloseTo(mid * 0.85, 1);
+    expect(reelDifficulty(f, rod, false, f.maxSize)).toBeCloseTo(mid * 1.15, 1);
+    expect(reelDifficulty(f, rod, false, (f.minSize + f.maxSize) / 2)).toBe(mid);
   });
 });
 
