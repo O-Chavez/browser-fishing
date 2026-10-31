@@ -71,12 +71,14 @@ export const P = {
   sweet: [[0.6, 0.21], [2.0, 0.13], [3.2, 0.03]],
 };
 
+/** Per-fight overrides of `P` (a fish's behaviour at sea, say); anything left out keeps its `P` value. */
+export type ReelTune = Partial<typeof P>;
+
 const lever = ([a, k]: number[], d: number) => a / (1 + k * Math.max(0, d - 0.4));
 const between = (d: number, d0: number, d1: number) => Math.min(1, Math.max(0, (d - d0) / (d1 - d0)));
 const SWEET_CENTER = (SWEET_MIN + SWEET_MAX) / 2;
-/** The sweet spot's half-width at difficulty d, straight between the `P.sweet` points. */
-function sweetHalf(d: number): number {
-  const pts = P.sweet;
+/** The sweet spot's half-width at difficulty d, straight between the `sweet` points. */
+function sweetHalf(pts: number[][], d: number): number {
   if (d <= pts[0][0]) return pts[0][1];
   for (let i = 1; i < pts.length; i++) if (d <= pts[i][0]) return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * between(d, pts[i - 1][0], pts[i][0]);
   return pts[pts.length - 1][1];
@@ -120,7 +122,7 @@ export interface ReelWear {
  */
 export class Reel {
   tension = 0.1;
-  progress = P.start;
+  progress: number;
   stamina = 1;
   status: ReelStatus = 'reeling';
   reason: LossReason | null = null;
@@ -155,32 +157,37 @@ export class Reel {
   private readonly follow: number;
   private readonly dragRate: number;
   private readonly surgeReel: number;
+  /** This fight's levers: `P` with the fight's overrides. */
+  private readonly p: typeof P;
 
   constructor(
     private difficulty: number,
     private rng: () => number = Math.random,
+    tune?: ReelTune,
   ) {
     const d = difficulty;
-    const half = sweetHalf(d);
+    this.p = tune ? { ...P, ...tune } : P;
+    this.progress = this.p.start;
+    const half = sweetHalf(this.p.sweet, d);
     this.sweetMin = SWEET_CENTER - half;
     this.sweetMax = SWEET_CENTER + half;
-    this.fillRate = 1 / (2 * (P.fray[0] + (P.fray[1] - P.fray[0]) * between(d, P.fray[2], P.fray[3])));
-    const floor = P.rise[3] - (P.rise[3] - 0.05) * between(d, P.rise[4], P.rise[5]);
-    this.riseLen = Math.min(P.rise[2], Math.max(floor, P.rise[0] * expArith(-P.rise[1] * (d - 1))));
-    this.strength = (P.need[0] + P.need[1] * d * d) * expArith((2 * rng() - 1) * Math.log1p(P.fight));
-    this.follow = P.follow[0] + P.follow[1] * d;
-    this.dragRate = P.drag[0] * Math.max(0, d - P.drag[1]) ** P.drag[4];
-    this.surgeReel = P.surgeReel[0] * (1 - between(d, P.surgeReel[1], P.surgeReel[2]));
-    this.warnMax = P.warn[0] * expArith(-P.warn[1] * (d - 2)) * expArith((2 * rng() - 1) * LN_TEMPER);
+    this.fillRate = 1 / (2 * (this.p.fray[0] + (this.p.fray[1] - this.p.fray[0]) * between(d, this.p.fray[2], this.p.fray[3])));
+    const floor = this.p.rise[3] - (this.p.rise[3] - 0.05) * between(d, this.p.rise[4], this.p.rise[5]);
+    this.riseLen = Math.min(this.p.rise[2], Math.max(floor, this.p.rise[0] * expArith(-this.p.rise[1] * (d - 1))));
+    this.strength = (this.p.need[0] + this.p.need[1] * d * d) * expArith((2 * rng() - 1) * Math.log1p(this.p.fight));
+    this.follow = this.p.follow[0] + this.p.follow[1] * d;
+    this.dragRate = this.p.drag[0] * Math.max(0, d - this.p.drag[1]) ** this.p.drag[4];
+    this.surgeReel = this.p.surgeReel[0] * (1 - between(d, this.p.surgeReel[1], this.p.surgeReel[2]));
+    this.warnMax = this.p.warn[0] * expArith(-this.p.warn[1] * (d - 2)) * expArith((2 * rng() - 1) * (this.p.temper === P.temper ? LN_TEMPER : Math.log1p(this.p.temper)));
     this.warnLen = this.rollWarn();
     this.nextSurge = 1.2 + this.warnLen;
   }
 
   private rollWarn(): number {
-    return Math.min(P.warn[3], this.warnMax * (P.warn[2] + (1 - P.warn[2]) * this.rng()));
+    return Math.min(this.p.warn[3], this.warnMax * (this.p.warn[2] + (1 - this.p.warn[2]) * this.rng()));
   }
 
-  private spread(x: number, j = P.jitter): number {
+  private spread(x: number, j = this.p.jitter): number {
     return x * (1 - j + 2 * j * this.rng());
   }
 
@@ -242,16 +249,16 @@ export class Reel {
       if (this.surgeT >= this.surgeDur) {
         this.surgeDir = 0;
         this.warnLen = this.rollWarn();
-        this.nextSurge = this.spread(lever(P.gap, d)) + this.warnLen;
+        this.nextSurge = this.spread(lever(this.p.gap, d)) + this.warnLen;
       }
     } else {
       this.nextSurge -= dt;
       if (this.nextSurge <= 0) {
         this.surgeDir = this.rng() < 0.5 ? -1 : 1;
-        this.surgeDur = this.spread(P.surge[0] * (1 + P.surge[1] * Math.max(0, d - 1)));
+        this.surgeDur = this.spread(this.p.surge[0] * (1 + this.p.surge[1] * Math.max(0, d - 1)));
         this.surgeT = 0;
         this.surgeCount++;
-        this.surgePower = this.spread(1, P.powerJitter) * (0.85 + 0.15 * this.stamina);
+        this.surgePower = this.spread(1, this.p.powerJitter) * (0.85 + 0.15 * this.stamina);
       }
     }
 
@@ -264,7 +271,7 @@ export class Reel {
       this.pull = this.need;
     }
 
-    const target = holding ? this.need + P.hold : this.need * P.slip;
+    const target = holding ? this.need + this.p.hold : this.need * this.p.slip;
     this.tension += (target - this.tension) * Math.min(1, this.follow * dt);
 
     this.stamina = Math.max(0.2, this.stamina - dt * 0.05 * (holding && this.inGoodZone ? 1 : 0.25));
@@ -272,12 +279,12 @@ export class Reel {
     // Reeling in the calm; in a surge only on fish the gear can handle, with the gauge truly green.
     const share = !this.surging ? 1 : this.inGoodZone && this.tension >= this.need ? this.surgeReel : 0;
     const rate = holding && share > 0
-      ? share * (P.reel / (1 - P.reelK + P.reelK * d)) * (this.tension > GOOD_MAX ? 0.4 : this.inSweetSpot ? 1.35 : 1)
+      ? share * (this.p.reel / (1 - this.p.reelK + this.p.reelK * d)) * (this.tension > GOOD_MAX ? 0.4 : this.inSweetSpot ? 1.35 : 1)
       : 0;
     // Below the fish's pull it takes line fast; above it, a strong fish still drags some out, less the higher you ride.
     const high = this.need < GOOD_MAX ? Math.min(1, Math.max(0, (this.tension - this.need) / (GOOD_MAX - this.need))) : 0;
-    this.drag = this.surging ? this.dragRate * this.pull * (1 - P.drag[2] * high ** P.drag[3]) : 0;
-    const loss = P.run * Math.max(0, this.need - this.tension) + this.drag;
+    this.drag = this.surging ? this.dragRate * this.pull * (1 - this.p.drag[2] * high ** this.p.drag[3]) : 0;
+    const loss = this.p.run * Math.max(0, this.need - this.tension) + this.drag;
     this.wear.lineOut += loss * dt;
     this.progress = Math.min(1, Math.max(0, this.progress + (rate - loss) * dt));
 
@@ -288,9 +295,9 @@ export class Reel {
     const red = holding && this.tension > GOOD_MAX;
     if (red) {
       if (!this.inRed) this.frayCap = (this.wear.frays + 1) / 2;
-      this.strain = Math.min(this.frayCap, this.strain + this.fillRate * (1 + P.deep * (this.tension - GOOD_MAX) / 0.2) * dt);
+      this.strain = Math.min(this.frayCap, this.strain + this.fillRate * (1 + this.p.deep * (this.tension - GOOD_MAX) / 0.2) * dt);
       this.wear.frays = Math.max(this.wear.frays, Math.floor(this.strain * 2));
-    } else this.strain = Math.max(this.wear.frays / 2, this.strain - P.drain * this.fillRate * dt);
+    } else this.strain = Math.max(this.wear.frays / 2, this.strain - this.p.drain * this.fillRate * dt);
     this.inRed = red;
 
     if (this.progress >= 1) this.status = 'caught';
