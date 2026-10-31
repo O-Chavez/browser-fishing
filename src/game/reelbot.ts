@@ -1,7 +1,7 @@
 // Reel bots for the fight tests (and later the dive's): simulated players with a reaction time, playing by what
 // the HUD shows. Test-only; the game never imports this.
 import { mulberry } from './env';
-import { GOOD_MAX, Reel, type ReelStatus } from './reel';
+import { FIGHT_DT, GOOD_MAX, Reel, type HoldLog, type ReelStatus } from './reel';
 
 /**
  * How a bot plays: it eases off once tension is within `hi` of the red, and takes up the line again once it's
@@ -38,11 +38,11 @@ export interface BotFight {
 
 /**
  * One fight at difficulty `d` by a bot that reacts `react` seconds late, jittered ±25% per reaction.
- * `rng` drives the fish, `brng` the bot. Fixed 1/60 s steps.
+ * `rng` drives the fish, `brng` the bot. Fixed 1/60 s steps, recorded into `log` if given (as the game does).
  */
-export function botFight(d: number, react: number, style: BotStyle, rng: () => number, brng: () => number, maxT = 600): BotFight {
+export function botFight(d: number, react: number, style: BotStyle, rng: () => number, brng: () => number, maxT = 600, log?: HoldLog): BotFight {
   const r = new Reel(d, rng);
-  const dt = 1 / 60;
+  const dt = FIGHT_DT;
   let holding = true;
   let desired = true;
   const queue: { at: number; v: boolean }[] = [];
@@ -57,6 +57,7 @@ export function botFight(d: number, react: number, style: BotStyle, rng: () => n
       queue.push({ at: t + react * (0.75 + 0.5 * brng()), v: want });
     }
     while (queue.length && queue[0].at <= t) holding = queue.shift()!.v;
+    log?.push(holding);
     r.update(dt, holding);
     t += dt;
   }

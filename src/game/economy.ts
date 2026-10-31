@@ -2,7 +2,7 @@ import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLO
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { TITLES, type Rank } from '../data/ranks';
-import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
+import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
 import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
@@ -366,6 +366,15 @@ export interface Roll {
   shiny?: boolean;
   perfect?: boolean;
   spot?: string;
+  /** The fight, with a fish: its reel seed and difficulty. The server replays the catch from these. */
+  seed?: number;
+  d?: number;
+}
+
+/** A hooked fish's fight difficulty on the save's rod, Quick-Reel Gloves included. */
+export function fightDifficulty(s: SaveData, fish: Fish, shiny: boolean, size: number): number {
+  const rod = byId(RODS, s.rod);
+  return reelDifficulty(fish, { ...rod, control: reelControl(s, rod.control) }, shiny, size);
 }
 
 export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Roll {
@@ -374,15 +383,16 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
   const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1);
   const lure = !!fish && lureOn(s);
   if (lure) s.lure--;
-  return {
-    perfect,
-    spot,
-    fishId: fish?.id ?? null,
-    size: fish ? rollSize(fish, rng) : 0,
-    wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait,
-    // A dish's ✨ multiplies the shiny chance.
-    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE) * shinyMult(s)),
-  };
+  const size = fish ? rollSize(fish, rng) : 0;
+  const wait = ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait;
+  // A dish's ✨ multiplies the shiny chance.
+  const shiny = lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE) * shinyMult(s));
+  const roll: Roll = { perfect, spot, fishId: fish?.id ?? null, size, wait, shiny };
+  if (fish) {
+    roll.seed = Math.floor(rng() * 4294967296);
+    roll.d = fightDifficulty(s, fish, shiny, size);
+  }
+  return roll;
 }
 
 export interface CatchResult {

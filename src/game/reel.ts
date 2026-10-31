@@ -1,3 +1,5 @@
+import { mulberry } from './env';
+
 export type ReelStatus = 'reeling' | 'caught' | 'snapped' | 'escaped';
 /** Why a fight was lost: held in the red through a surge or in the calm (snapped), or the fish took all the line. */
 export type LossReason = 'held-surge' | 'held-red' | 'ran';
@@ -94,6 +96,30 @@ export function expArith(x: number): number {
 }
 const LN_TEMPER = 1.0986122886681098; // ln(1 + P.temper)
 
+/** ln x (x > 0) from `expArith` and + - × ÷ only, by Newton's method on e^y = x. */
+export function lnArith(x: number): number {
+  let y = 0;
+  let k = 0;
+  // Scale into [0.5, 2] so a few steps converge: ln x = ln(x / 2^k) + k·ln 2.
+  while (x > 2) { x /= 2; k++; }
+  while (x < 0.5) { x *= 2; k--; }
+  for (let i = 0; i < 6; i++) {
+    const e = expArith(y);
+    y += (2 * (x - e)) / (x + e);
+  }
+  return y + k * 0.6931471805599453;
+}
+
+/** x^q for x ≥ 0 without `Math.pow`: repeated multiplication for whole q, else e^(q·ln x). */
+export function powArith(x: number, q: number): number {
+  if (Number.isInteger(q) && q >= 0 && q <= 16) {
+    let r = 1;
+    for (let i = 0; i < q; i++) r *= x;
+    return r;
+  }
+  return x <= 0 ? 0 : expArith(q * lnArith(x));
+}
+
 /** Triangle wave 0..1 (no `Math.sin`, so replays match across JS engines). */
 const tri = (x: number) => {
   const f = x - Math.floor(x);
@@ -167,9 +193,9 @@ export class Reel {
     this.fillRate = 1 / (2 * (P.fray[0] + (P.fray[1] - P.fray[0]) * between(d, P.fray[2], P.fray[3])));
     const floor = P.rise[3] - (P.rise[3] - 0.05) * between(d, P.rise[4], P.rise[5]);
     this.riseLen = Math.min(P.rise[2], Math.max(floor, P.rise[0] * expArith(-P.rise[1] * (d - 1))));
-    this.strength = (P.need[0] + P.need[1] * d * d) * expArith((2 * rng() - 1) * Math.log1p(P.fight));
+    this.strength = (P.need[0] + P.need[1] * d * d) * expArith((2 * rng() - 1) * lnArith(1 + P.fight));
     this.follow = P.follow[0] + P.follow[1] * d;
-    this.dragRate = P.drag[0] * Math.max(0, d - P.drag[1]) ** P.drag[4];
+    this.dragRate = P.drag[0] * powArith(Math.max(0, d - P.drag[1]), P.drag[4]);
     this.surgeReel = P.surgeReel[0] * (1 - between(d, P.surgeReel[1], P.surgeReel[2]));
     this.warnMax = P.warn[0] * expArith(-P.warn[1] * (d - 2)) * expArith((2 * rng() - 1) * LN_TEMPER);
     this.warnLen = this.rollWarn();
@@ -276,7 +302,7 @@ export class Reel {
       : 0;
     // Below the fish's pull it takes line fast; above it, a strong fish still drags some out, less the higher you ride.
     const high = this.need < GOOD_MAX ? Math.min(1, Math.max(0, (this.tension - this.need) / (GOOD_MAX - this.need))) : 0;
-    this.drag = this.surging ? this.dragRate * this.pull * (1 - P.drag[2] * high ** P.drag[3]) : 0;
+    this.drag = this.surging ? this.dragRate * this.pull * (1 - P.drag[2] * powArith(high, P.drag[3])) : 0;
     const loss = P.run * Math.max(0, this.need - this.tension) + this.drag;
     this.wear.lineOut += loss * dt;
     this.progress = Math.min(1, Math.max(0, this.progress + (rate - loss) * dt));
@@ -303,4 +329,70 @@ export class Reel {
       this.reason = 'ran';
     }
   }
+}
+
+/** The fight's fixed time step: the client steps the reel at this rate and the server replays it the same way. */
+export const FIGHT_DT = 1 / 60;
+/** Fights end here: past 10 minutes the fish gets away (the replay stops too). */
+export const MAX_FIGHT_STEPS = 10 * 60 * 60;
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** The button over a fight, one bit a step (bit i of byte i >> 3), sent with `catch` as base64 for the server's replay. */
+export class HoldLog {
+  private bytes = new Uint8Array(256);
+  steps = 0;
+
+  push(holding: boolean): void {
+    if (this.steps >= MAX_FIGHT_STEPS) return;
+    const i = this.steps++;
+    if (i >> 3 >= this.bytes.length) {
+      const grown = new Uint8Array(this.bytes.length * 2);
+      grown.set(this.bytes);
+      this.bytes = grown;
+    }
+    if (holding) this.bytes[i >> 3] |= 1 << (i & 7);
+  }
+
+  encode(): string {
+    const b = this.bytes;
+    const n = (this.steps + 7) >> 3;
+    let out = '';
+    for (let i = 0; i < n; i += 3) {
+      const v = (b[i] << 16) | ((i + 1 < n ? b[i + 1] : 0) << 8) | (i + 2 < n ? b[i + 2] : 0);
+      out += B64[(v >> 18) & 63] + B64[(v >> 12) & 63] + (i + 1 < n ? B64[(v >> 6) & 63] : '=') + (i + 2 < n ? B64[v & 63] : '=');
+    }
+    return out;
+  }
+}
+
+/** Decodes `HoldLog.encode`; null if it isn't base64 or is longer than the longest fight. */
+export function decodeHolds(h: string): Uint8Array | null {
+  if (typeof h !== 'string' || h.length % 4 || h.length > Math.ceil(MAX_FIGHT_STEPS / 24) * 4) return null;
+  const pad = h.endsWith('==') ? 2 : h.endsWith('=') ? 1 : 0;
+  const out = new Uint8Array((h.length / 4) * 3 - pad);
+  for (let i = 0, o = 0; i < h.length; i += 4) {
+    let v = 0;
+    for (let j = 0; j < 4; j++) {
+      const c = h[i + j];
+      const k = c === '=' && i + j >= h.length - pad ? 0 : B64.indexOf(c);
+      if (k < 0) return null;
+      v = (v << 6) | k;
+    }
+    for (let j = 0; j < 3 && o < out.length; j++) out[o++] = (v >> (16 - 8 * j)) & 255;
+  }
+  return out;
+}
+
+/**
+ * Replays a fight from its seed, difficulty and button log (`HoldLog.encode`), as the server does to check a catch.
+ * Steps until the fight ends or the log runs out; null if the log doesn't decode.
+ */
+export function replayFight(difficulty: number, seed: number, h: string): Reel | null {
+  const bits = decodeHolds(h);
+  if (!bits) return null;
+  const r = new Reel(difficulty, mulberry(seed));
+  const n = Math.min(MAX_FIGHT_STEPS, bits.length * 8);
+  for (let i = 0; i < n && r.status === 'reeling'; i++) r.update(FIGHT_DT, ((bits[i >> 3] >> (i & 7)) & 1) === 1);
+  return r;
 }

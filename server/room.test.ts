@@ -9,6 +9,8 @@ import { sellValue, xpForNextLevel } from '../src/game/progression';
 import { BOARD_MS, CLOCK_MS, Room } from './room';
 import * as smoke from '../src/game/smoke';
 import { SmokeStats } from './smokestats';
+import { mulberry } from '../src/game/env';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel } from '../src/game/reel';
 
 const conn = () => {
   const log: ServerMsg[] = [];
@@ -16,6 +18,23 @@ const conn = () => {
 };
 const last = <T extends ServerMsg['t']>(c: { log: ServerMsg[] }, t: T) =>
   [...c.log].reverse().find((m) => m.t === t) as Extract<ServerMsg, { t: T }>;
+
+/** Plays a fight with perfect reactions, staying in the green: the reel and the button log it wrote. */
+const playFight = (d: number, seed: number, hold = (r: Reel) => (r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6)) => {
+  const log = new HoldLog();
+  const r = new Reel(d, mulberry(seed));
+  while (r.status === 'reeling' && log.steps < MAX_FIGHT_STEPS) {
+    const h = hold(r);
+    log.push(h);
+    r.update(FIGHT_DT, h);
+  }
+  return { reel: r, h: log.encode(), ms: r.elapsed * 1000 };
+};
+/** The `catch` message for the fish in the latest `castok`, fought by `playFight`. */
+const fought = (c: { log: ServerMsg[] }) => {
+  const ok = last(c, 'castok');
+  return { t: 'catch', h: playFight(ok.d ?? 1, ok.seed ?? 0).h } as const;
+};
 
 const setup = () => {
   let now = 1_000_000;
@@ -122,15 +141,61 @@ describe('Room economy', () => {
     expect(ok.fishId).toBeTruthy();
     expect(eco.baitCount(a.acct.save, 'worm')).toBe(14);
 
-    room.handle(a.id, { t: 'catch' });
+    room.handle(a.id, fought(a.c));
     const fishCount = () => a.acct.save.slots.filter((x) => x?.k === 'fish').length;
     expect(fishCount()).toBe(0);
 
     room.handle(a.id, { t: 'cast', x: 0, z: -10 });
-    advance(ok.wait * 1000 + 2000);
-    room.handle(a.id, { t: 'catch' });
+    const f = playFight(last(a.c, 'castok').d!, last(a.c, 'castok').seed!);
+    advance(ok.wait * 1000 + f.ms);
+    room.handle(a.id, { t: 'catch', h: f.h });
     expect(fishCount()).toBe(1);
-    room.handle(a.id, { t: 'catch' });
+    room.handle(a.id, { t: 'catch', h: f.h });
+    expect(fishCount()).toBe(1);
+  });
+
+  it('replays the fight: refuses a lost fight, a fight faster than real time and a missing or broken log', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    const fishCount = () => a.acct.save.slots.filter((x) => x?.k === 'fish').length;
+    const cast = () => {
+      room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+      return last(a.c, 'castok');
+    };
+    let ok = cast();
+    expect(ok.seed).toBeTypeOf('number');
+    expect(ok.d).toBeGreaterThan(0);
+    // Letting go the whole fight: the fish takes all the line.
+    const lost = playFight(ok.d!, ok.seed!, () => false);
+    expect(lost.reel.status).toBe('escaped');
+    advance(60_000);
+    room.handle(a.id, { t: 'catch', h: lost.h });
+    expect(fishCount()).toBe(0);
+    expect(last(a.c, 'act').act).toBeNull();
+
+    // A real win, sent before the fight could have been played out.
+    ok = cast();
+    const won = playFight(ok.d!, ok.seed!);
+    expect(won.reel.status).toBe('caught');
+    advance(ok.wait * 1000 + won.ms / 2);
+    room.handle(a.id, { t: 'catch', h: won.h });
+    expect(fishCount()).toBe(0);
+
+    for (const h of [undefined, 42, 'not base64!', won.h.slice(0, 8), 'A'.repeat(8000)]) {
+      cast();
+      advance(60_000);
+      room.handle(a.id, { t: 'catch', h } as never);
+      expect(fishCount()).toBe(0);
+    }
+    // The old trusted flag lands nothing on its own.
+    cast();
+    advance(60_000);
+    room.handle(a.id, { t: 'catch', clean: true } as never);
+    expect(fishCount()).toBe(0);
+
+    ok = cast();
+    advance(ok.wait * 1000 + won.ms);
+    room.handle(a.id, { t: 'catch', h: won.h });
     expect(fishCount()).toBe(1);
   });
 
@@ -179,7 +244,7 @@ describe('Room economy', () => {
     const perch = { k: 'fish', fishId: 'perch', size: 20 } as const;
     a.acct.save.slots.splice(2, 3, perch, perch, perch);
     advance(ok.wait * 1000 + 2000);
-    room.handle(a.id, { t: 'catch' });
+    room.handle(a.id, fought(a.c));
     expect(a.acct.save.slots).toHaveLength(5);
     expect(a.acct.save.slots[1]).toMatchObject({ k: 'bait', id: 'worm', n: 14 });
   });
@@ -248,7 +313,7 @@ describe('Room economy', () => {
     room.handle(a.id, { t: 'cast', x: 1, z: -9 });
     expect(last(b.c, 'act').act).toMatchObject({ a: 'cast', x: 1 });
     advance(20_000);
-    room.handle(a.id, { t: 'catch' });
+    room.handle(a.id, fought(a.c));
     expect(last(b.c, 'act').act).toMatchObject({ a: 'hold' });
     room.handle(a.id, { t: 'lost' });
     expect(last(b.c, 'act').act).toBeNull();
@@ -260,18 +325,20 @@ describe('Room economy', () => {
     const b = join('Bob');
     room.handle(a.id, { t: 'cast', x: 1, z: -9 });
     advance(20_000);
-    room.handle(a.id, { t: 'catch' });
-    expect(last(b.c, 'act').act).toMatchObject({ a: 'hold' });
-    expect(last(b.c, 'act').act).not.toHaveProperty('mult');
+    room.handle(a.id, fought(a.c));
+    // A clean fight (the replay had no frays): only the clean bonus.
+    expect(last(b.c, 'act').act).toMatchObject({ a: 'hold', mult: 1 + eco.CLEAN_BONUS });
 
     a.acct.save.perks.push('charm1', 'charm2');
     room.handle(a.id, { t: 'cast', x: 1, z: -9 });
     advance(20_000);
-    room.handle(a.id, { t: 'catch' });
+    room.handle(a.id, fought(a.c));
     const act = last(b.c, 'act').act;
-    expect(act).toMatchObject({ a: 'hold', mult: 1.1 });
-    const stored = a.acct.save.slots.find((s) => s?.k === 'fish' && s.mult);
-    expect(stored).toMatchObject({ fishId: act?.a === 'hold' ? act.fish : '', mult: 1.1 });
+    expect(act).toMatchObject({ a: 'hold' });
+    const mult = act?.a === 'hold' ? act.mult : 0;
+    expect(mult).toBeCloseTo(1.1 * (1 + eco.CLEAN_BONUS), 9);
+    const stored = a.acct.save.slots.find((s) => s?.k === 'fish' && s.mult === mult);
+    expect(stored).toMatchObject({ fishId: act?.a === 'hold' ? act.fish : '' });
   });
 });
 
@@ -371,11 +438,12 @@ describe('shinies & fishing spots', () => {
     const roll = last(a.c, 'castok');
     expect(roll.shiny).toBe(true);
     advance(60_000);
-    room.handle(a.id, { t: 'catch' });
+    room.handle(a.id, fought(a.c));
     const fish = a.acct.save.slots.find((s) => s?.k === 'fish') as { fishId: string; size: number; shiny?: boolean };
     expect(fish.shiny).toBe(true);
     const plain = sellValue(FISH.find((f) => f.id === fish.fishId)!, fish.size);
-    expect(eco.fishValue(fish)).toBe(plain * 5);
+    // Fought clean, so the clean bonus rides on top.
+    expect(eco.fishValue(fish)).toBeCloseTo(plain * 5 * (1 + eco.CLEAN_BONUS), 9);
   });
 });
 
@@ -697,7 +765,7 @@ describe('ranks and titles', () => {
     a.acct.save.xp = xpForNextLevel(24) - 1;
     room.handle(a.id, { t: 'cast', x: 0, z: -10 });
     advance(60_000);
-    room.handle(a.id, { t: 'catch' });
+    room.handle(a.id, fought(a.c));
     expect(a.acct.save.level).toBe(25);
     expect(b.c.log.filter((m) => m.t === 'sys').map((m) => (m as { text: string }).text)).toContain('⚓ Ann made Bosun!');
   });

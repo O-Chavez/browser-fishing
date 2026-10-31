@@ -16,7 +16,7 @@ import {
 } from '../data/content';
 import { audio } from './audio';
 import { MAPS, arrivalSpot, type MapDef } from '../data/maps';
-import { isWater, standHeight } from './env';
+import { isWater, mulberry, standHeight } from './env';
 import { Avatars } from './avatars';
 import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
 import { DropsView, itemName } from './dropsview';
@@ -56,7 +56,6 @@ import {
   isFreshSave,
   sellValue,
   difficultyLabel,
-  reelDifficulty,
   xpForNextLevel,
   PERFECT_MIN,
   fishingSpot,
@@ -70,7 +69,7 @@ import {
   BUFF_ICON, DISHES, DISH_MAX_MINUTES, FREE_FISH, SELL_TIER, SMOKED_SELL, SMOKER_SPOTS, SMOKE_LEVEL, SNACKS, SNACK_MAX_MINUTES, SNACK_MINUTES, STAGES,
   dishById, smokeSeconds, stageById, type BuffKind, type Dish, type DishId, type StageId,
 } from '../data/smokehouse';
-import { GOOD_MAX, GOOD_MIN, Reel } from './reel';
+import { FIGHT_DT, GOOD_MAX, GOOD_MIN, HoldLog, MAX_FIGHT_STEPS, Reel } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
@@ -158,6 +157,13 @@ export class Game {
   private held: FishModel | null = null;
   private carry: { key: string; obj: THREE.Object3D; model: FishModel | null } | null = null;
   private reel: Reel | null = null;
+  /** The hooked fish's fight, from the cast roll: the reel seed and difficulty the server replays the catch with. */
+  private fightSeed = 0;
+  private fightD = 1;
+  /** The button at each fixed reel step, sent with the catch. */
+  private holds = new HoldLog();
+  /** Frame time not yet stepped into the reel. */
+  private reelAcc = 0;
   private lastSurges = 0;
   private lastFrays = 0;
   /** Seconds left on the strain arc's flash after a fray. */
@@ -1966,6 +1972,8 @@ export class Game {
     this.hookedSize = roll.size;
     this.hookedShiny = !!roll.shiny && !!roll.fishId;
     this.waitTotal = roll.wait;
+    this.fightSeed = roll.seed ?? 0;
+    this.fightD = roll.d ?? 1;
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2065,8 +2073,10 @@ export class Game {
     const w = this.world;
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
-    const hard = reelDifficulty(this.hooked!, { ...this.rod, control: eco.reelControl(this.s, this.rod.control) }, this.hookedShiny, this.hookedSize);
-    this.reel = new Reel(hard);
+    const hard = this.fightD;
+    this.reel = new Reel(hard, mulberry(this.fightSeed));
+    this.holds = new HoldLog();
+    this.reelAcc = 0;
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
     this.guide('reel');
     this.lastSurges = 0;
@@ -2144,7 +2154,7 @@ export class Game {
     const size = this.hookedSize;
     const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean);
     if (!stored) return this.reset('No free slot - the fish got away!');
-    this.net.send({ t: 'catch', ...(this.landedClean ? { clean: true } : {}) });
+    this.net.send({ t: 'catch', h: this.holds.encode() });
     this.stagesWaiting.push(...stages);
     if (gift) this.toast(smoke.giftText(gift), 3.5);
     this.caughtTier = fish.tier;
@@ -2579,7 +2589,13 @@ export class Game {
     const b = w.bobber.position;
     const fish = this.fish!;
 
-    r.update(dt, this.holding);
+    // Fixed steps, so the server can replay the fight from the button log.
+    this.reelAcc += dt;
+    while (this.reelAcc >= FIGHT_DT && r.status === 'reeling' && this.holds.steps < MAX_FIGHT_STEPS) {
+      this.reelAcc -= FIGHT_DT;
+      this.holds.push(this.holding);
+      r.update(FIGHT_DT, this.holding);
+    }
 
     if (r.wear.frays !== this.lastFrays) {
       this.lastFrays = r.wear.frays;
@@ -2679,6 +2695,8 @@ export class Game {
       this.reset('The fish took all your line!');
       // The first time, say why; after that the rod hint (once a session) can show.
       if (!this.guide('slack')) this.rodHint('escaped');
+    } else if (this.holds.steps >= MAX_FIGHT_STEPS) {
+      this.reset('The fish wore you out and got away...');
     }
   }
 
