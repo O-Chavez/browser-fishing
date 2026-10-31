@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FISH, byId } from '../data/content';
-import { BITE_WAIT, CONTROL_BUFF, MAX_BUFFS, RACK3_LEVEL, WELL_SMOKED, recipeById } from '../data/smokehouse';
-import { GLOVES_CONTROL } from '../data/casino';
+import { FREE_FISH, SMOKER_SPOTS, SMOKE_LEVEL } from '../data/smokehouse';
 import * as eco from './economy';
+import { catchXp, sellValue } from './progression';
 import * as smoke from './smoke';
 import { FISH_SLOT, migrate, newSave, type SaveData } from './state';
 
@@ -12,250 +12,235 @@ const mid = (id: string) => {
   const f = byId(FISH, id);
   return (f.minSize + f.maxSize) / 2;
 };
-const fish = (id: string, size = mid(id)) => ({ k: 'fish' as const, fishId: id, size });
-/** A save carrying these fish in its fish slots (the Tackle Vest makes room for five). */
+const fish = (id: string, shiny = false) => ({ k: 'fish' as const, fishId: id, size: mid(id), ...(shiny ? { shiny } : {}) });
+/** A level-3 save carrying these fish in its fish slots (the Tackle Vest makes room for five). */
 const carrying = (...ids: string[]): SaveData => {
   const s = newSave();
+  s.level = SMOKE_LEVEL;
   s.perks = ['vest'];
   s.slots = [...s.slots, null, null];
   ids.forEach((id, i) => (s.slots[FISH_SLOT + i] = fish(id)));
   return s;
 };
-const tier1 = FISH.filter((f) => f.tier === 1).map((f) => f.id);
+const ofTier = (t: number) => FISH.find((f) => f.tier === t)!.id;
 
-describe('loading a rack', () => {
-  it('keeps fish on the rack between trips and starts smoking once it is full', () => {
-    const s = carrying('minnow', 'bluegill', 'carp', 'minnow', 'carp');
-    for (let i = 0; i < 5; i++) expect(smoke.loadFish(s, 'minnowbites', FISH_SLOT + i, T0)).toBeNull();
-    const rack = s.smoke.racks[0]!;
-    expect(rack.fish.filter(Boolean)).toHaveLength(5);
-    expect(rack.doneAt).toBeUndefined();
+describe('the smoker', () => {
+  it('takes one fish per spot and smokes it by tier, then moves it to the Pantry', () => {
+    const s = carrying(ofTier(1), ofTier(3), ofTier(5));
+    expect(smoke.smokeFish(s, FISH_SLOT, T0)).toBeNull();
+    expect(smoke.smokeFish(s, FISH_SLOT + 1, T0)).toBeNull();
+    expect(smoke.smokeFish(s, FISH_SLOT + 2, T0)).toBeNull();
+    expect(s.smoke.spots.map((x) => x && x.doneAt - T0)).toEqual([5000, 20_000, 120_000, null, null]);
     expect(s.slots.slice(FISH_SLOT).every((x) => !x)).toBe(true);
-    // A second trip with the sixth fish.
-    s.slots[FISH_SLOT] = fish('bluegill');
-    expect(smoke.loadFish(s, 'minnowbites', FISH_SLOT, T0 + 5 * MIN)).toBeNull();
-    expect(rack.doneAt).toBe(T0 + 5 * MIN + recipeById('minnowbites')!.minutes * MIN);
+    expect(smoke.collect(s, T0 + 20_000)).toEqual([{ fishId: ofTier(1), n: 1 }, { fishId: ofTier(3), n: 1 }]);
+    expect(s.smoke.spots.filter(Boolean)).toHaveLength(1);
+    expect(smoke.pantryCount(s, ofTier(3))).toBe(1);
   });
 
-  it('fills the spot only a given species can fill, and says what is still missing', () => {
-    const s = carrying('perch', 'trout', 'midnightcat', 'perch', 'bass');
-    expect(smoke.loadFish(s, 'kippers', FISH_SLOT, T0)).toBeNull();
-    expect(smoke.loadFish(s, 'kippers', FISH_SLOT + 1, T0)).toBeNull();
-    expect(smoke.loadFish(s, 'kippers', FISH_SLOT + 2, T0)).toBeNull();
-    // Three tier 2 fish are in; the last spot takes only a bass.
-    expect(smoke.loadFish(s, 'kippers', FISH_SLOT + 3, T0)).toBe("Kippers doesn't take a Yellow Perch. It still needs: Largemouth Bass.");
-    expect(s.slots[FISH_SLOT + 3]?.k).toBe('fish');
-    expect(smoke.loadFish(s, 'kippers', FISH_SLOT + 4, T0)).toBeNull();
-    expect(s.smoke.racks[0]!.doneAt).toBeDefined();
+  it('is shut before level 3, and says when the smoker is full', () => {
+    const s = carrying(ofTier(1));
+    s.level = SMOKE_LEVEL - 1;
+    expect(smoke.smokeFish(s, FISH_SLOT, T0)).toBe(`Mags opens up at level ${SMOKE_LEVEL}.`);
+    s.level = SMOKE_LEVEL;
+    s.smoke.spots = s.smoke.spots.map(() => ({ fish: fish(ofTier(1)), doneAt: T0 + MIN }));
+    expect(smoke.smokeFish(s, FISH_SLOT, T0)).toMatch(/smoker is full/);
+    expect(smoke.smokeFish(s, 0, T0)).toBe('Pick a fish from your hotbar.');
   });
 
-  it('takes a bass or a pike for any tier spot once its own spot is filled', () => {
-    const s = carrying('pike', 'pike', 'gar');
-    for (let i = 0; i < 3; i++) expect(smoke.loadFish(s, 'pikejerky', FISH_SLOT + i, T0)).toBeNull();
-    expect(s.smoke.racks[0]!.fish.map((f) => f?.fishId)).toEqual(['pike', 'pike', 'gar']);
+  it('Smoke all skips shinies and stops when the spots run out', () => {
+    const s = carrying(ofTier(1), ofTier(2), ofTier(2), ofTier(1), ofTier(1));
+    s.slots[FISH_SLOT + 1] = fish(ofTier(2), true);
+    s.smoke.spots[0] = { fish: fish(ofTier(1)), doneAt: T0 + MIN };
+    expect(smoke.smokeAll(s, T0)).toBeNull();
+    expect(s.smoke.spots.filter(Boolean)).toHaveLength(SMOKER_SPOTS);
+    expect(s.slots[FISH_SLOT + 1]).toMatchObject({ shiny: true });
+    expect(s.slots.filter((x) => x?.k === 'fish')).toHaveLength(1);
+    const only = carrying();
+    only.slots[FISH_SLOT] = fish(ofTier(1), true);
+    expect(smoke.smokeAll(only, T0)).toMatch(/skips shinies/);
   });
 
-  it('takes any 🌙 fish for Lantern Glaze, eels included', () => {
-    const s = carrying('moonscale', 'lanterneel', 'lanterneel');
-    for (let i = 0; i < 3; i++) expect(smoke.loadFish(s, 'lanternglaze', FISH_SLOT + i, T0)).toBeNull();
-    expect(s.smoke.racks[0]!.fish.map((f) => f?.fishId)).toEqual(['lanterneel', 'lanterneel', 'moonscale']);
-    const t = carrying('lanterneel', 'lanterneel', 'lanterneel');
-    for (let i = 0; i < 3; i++) expect(smoke.loadFish(t, 'lanternglaze', FISH_SLOT + i, T0)).toBeNull();
-    expect(t.smoke.racks[0]!.doneAt).toBeDefined();
-    expect(smoke.loadFish(carrying('koi'), 'lanternglaze', FISH_SLOT, T0)).toMatch(/doesn't take a Golden Koi/);
-  });
-
-  it('uses two racks, and a third from level 30', () => {
-    const s = carrying('koi', 'koi', 'koi');
-    expect(smoke.loadFish(s, 'kippers', FISH_SLOT, T0)).toMatch(/doesn't take/);
-    s.slots[FISH_SLOT] = fish('minnow');
-    s.smoke.racks[0] = { r: 'kippers', fish: [null, null, null, null] };
-    s.smoke.racks[1] = { r: 'pikejerky', fish: [null, null, null] };
-    expect(smoke.loadFish(s, 'minnowbites', FISH_SLOT, T0)).toBe('Every rack is busy. Come back when one is done.');
-    s.level = RACK3_LEVEL;
-    expect(smoke.loadFish(s, 'minnowbites', FISH_SLOT, T0)).toBeNull();
-    expect(s.smoke.racks[2]!.r).toBe('minnowbites');
-  });
-
-  it('keeps the Jewel Platter for level 20, and turns down junk', () => {
-    const s = carrying('sturgeon');
-    expect(smoke.loadFish(s, 'jewelplatter', FISH_SLOT, T0)).toBe('Jewel Platter unlocks at level 20.');
-    expect(smoke.loadFish(s, 'nope', FISH_SLOT, T0)).toBe('Pick a recipe first.');
-    expect(smoke.loadFish(s, 'kippers', 0, T0)).toBe('Pick a fish from your hotbar.');
-    expect(smoke.loadFish(s, 'kippers', 1.5, T0)).toBe('Pick a fish from your hotbar.');
-    s.level = 20;
-    expect(smoke.loadFish(s, 'jewelplatter', FISH_SLOT, T0)).toBeNull();
-  });
-
-  it('gives fish back until the rack starts smoking', () => {
-    const s = carrying('pike', 'gar');
-    smoke.loadFish(s, 'pikejerky', FISH_SLOT, T0);
-    smoke.loadFish(s, 'pikejerky', FISH_SLOT + 1, T0);
-    expect(smoke.takeFish(s, 0, 0)).toBeNull();
-    expect(s.slots[FISH_SLOT]).toMatchObject({ fishId: 'pike' });
-    expect(smoke.takeFish(s, 0, 0)).toBe('Nothing there to take.');
-    expect(smoke.takeFish(s, 0, 1)).toBeNull();
-    expect(s.smoke.racks[0]).toBeNull();
-    const t = carrying('pike', 'gar', 'koi');
-    for (let i = 0; i < 3; i++) smoke.loadFish(t, 'pikejerky', FISH_SLOT + i, T0);
-    expect(smoke.takeFish(t, 0, 0)).toBe("It's already smoking.");
+  it('keeps a shiny smoked fish worth 5×', () => {
+    const s = carrying();
+    s.slots[FISH_SLOT] = fish(ofTier(1), true);
+    smoke.smokeFish(s, FISH_SLOT, T0);
+    smoke.collect(s, T0 + MIN);
+    expect(s.smoke.pantry[ofTier(1)]).toEqual([Math.round(sellValue(byId(FISH, ofTier(1)), mid(ofTier(1)), true))]);
   });
 });
 
-describe('smoking and the Pantry', () => {
-  const smoked = (s: SaveData, id: 'minnowbites' | 'kippers', at: number) => {
-    s.smoke.racks[0] = { r: id, fish: tier1.concat(tier1).map((f) => fish(f)).slice(0, 6), doneAt: at };
-  };
-
-  it('moves a finished rack to the Pantry, offline time included', () => {
-    const s = newSave();
-    smoked(s, 'minnowbites', T0 + 5 * MIN);
-    expect(smoke.collectRacks(s, T0 + 5 * MIN - 1)).toEqual([]);
-    expect(smoke.collectRacks(s, T0 + 60 * MIN)).toEqual([{ id: 'minnowbites', n: 1 }]);
-    expect(s.smoke.racks[0]).toBeNull();
-    expect(s.smoke.pantry.minnowbites).toEqual([600]);
-    expect(s.smoke.made.minnowbites).toBe(1);
-  });
-
-  it('yields two per batch once Well-smoked', () => {
-    const s = newSave();
-    s.smoke.made.minnowbites = WELL_SMOKED - 1;
-    smoked(s, 'minnowbites', T0);
-    expect(smoke.collectRacks(s, T0)).toEqual([{ id: 'minnowbites', n: 1 }]);
-    expect(smoke.wellSmoked(s, 'minnowbites')).toBe(true);
-    smoked(s, 'minnowbites', T0);
-    expect(smoke.collectRacks(s, T0)).toEqual([{ id: 'minnowbites', n: 2 }]);
-    expect(smoke.pantryCount(s, 'minnowbites')).toBe(3);
-  });
-
-  it('makes trophy-size batches last longer, by their share of trophies', () => {
-    const big = (id: string) => fish(id, byId(FISH, id).maxSize);
-    expect(smoke.isTrophy(big('pike'))).toBe(true);
-    expect(smoke.isTrophy(fish('pike'))).toBe(false);
-    expect(smoke.batchSeconds([fish('pike'), fish('gar')])).toBe(600);
-    expect(smoke.batchSeconds([big('pike'), fish('gar')])).toBe(750);
-    expect(smoke.batchSeconds([big('pike'), big('gar')])).toBe(900);
-  });
-
-  it('puts level gifts in the Pantry as the best recipe unlocked', () => {
-    const s = newSave();
-    s.level = 55;
-    s.gifts.provisions = 3;
-    expect(smoke.stockGifts(s)).toBe(3);
-    expect(s.smoke.pantry.jewelplatter).toEqual([600, 600, 600]);
-    expect(s.gifts.provisions).toBe(0);
-    expect(smoke.stockGifts(s)).toBe(0);
-    expect(smoke.bestRecipe({ level: 1 }).id).toBe('lanternglaze');
+describe('selling smoked fish', () => {
+  it('pays 1.5× the raw price for tier 1-2 only', () => {
+    const s = carrying();
+    smoke.stock(s, ofTier(2), 40, 3);
+    smoke.stock(s, ofTier(3), 100);
+    const coins = s.coins;
+    expect(smoke.sellSmoked(s, ofTier(3))).toMatch(/only buys smoked tier 1 and 2/);
+    expect(smoke.sellSmoked(s, ofTier(2), true)).toBeNull();
+    expect(s.coins - coins).toBe(180);
+    expect(smoke.pantryCount(s, ofTier(2))).toBe(0);
+    expect(smoke.sellSmoked(s, 'constructor')).toBe('There are none in your Pantry.');
   });
 });
 
-describe('eating', () => {
-  const stocked = () => {
-    const s = newSave();
-    smoke.stock(s, 'kippers', 600);
-    smoke.stock(s, 'kippers', 900);
-    smoke.stock(s, 'minnowbites', 600);
-    smoke.stock(s, 'pikejerky', 600);
-    smoke.stock(s, 'lanternglaze', 600);
-    return s;
-  };
-
-  it('eats the longest-lasting item first, and the same kind refreshes', () => {
-    const s = stocked();
-    expect(smoke.eat(s, 'kippers')).toBeNull();
-    expect(s.smoke.buffs).toEqual([{ id: 'kippers', ms: 900_000 }]);
-    expect(s.smoke.pantry.kippers).toEqual([600]);
-    smoke.tickBuffs(s, 500_000);
-    expect(smoke.eat(s, 'kippers')).toBeNull();
-    expect(s.smoke.buffs).toEqual([{ id: 'kippers', ms: 600_000 }]);
-    expect(s.smoke.pantry.kippers).toBeUndefined();
-    expect(smoke.eat(s, 'kippers')).toBe('There are none in your Pantry.');
-  });
-
-  it(`stacks up to ${MAX_BUFFS} kinds`, () => {
-    const s = stocked();
-    for (const id of ['kippers', 'minnowbites', 'pikejerky']) expect(smoke.eat(s, id)).toBeNull();
-    expect(smoke.eat(s, 'lanternglaze')).toBe(`You're full! At most ${MAX_BUFFS} kinds at once.`);
-    expect(smoke.eat(s, 'kippers')).toBeNull();
-  });
-
-  it('wears off with time', () => {
-    const s = stocked();
-    smoke.eat(s, 'minnowbites');
-    expect(smoke.tickBuffs(s, 599_000)).toBe(false);
-    expect(smoke.buffOn(s, 'minnowbites')).toBe(true);
-    expect(smoke.tickBuffs(s, 1000)).toBe(true);
-    expect(s.smoke.buffs).toEqual([]);
+describe('selling one', () => {
+  it('sells the most valuable one and keeps the rest', () => {
+    const s = carrying();
+    smoke.stock(s, ofTier(1), 10);
+    smoke.stock(s, ofTier(1), 30);
+    const coins = s.coins;
+    expect(smoke.smokedPrice(s, ofTier(1), true)).toBe(45);
+    expect(smoke.sellSmoked(s, ofTier(1))).toBeNull();
+    expect(s.coins - coins).toBe(45);
+    expect(s.smoke.pantry[ofTier(1)]).toEqual([10]);
+    expect(smoke.sellSmoked(s, ofTier(1))).toBeNull();
+    expect(s.smoke.pantry[ofTier(1)]).toBeUndefined();
   });
 });
 
-describe('buffs at the pond', () => {
-  const eaten = (...ids: ('minnowbites' | 'kippers' | 'pikejerky' | 'lanternglaze' | 'jewelplatter')[]) => {
-    const s = newSave();
-    s.smoke.buffs = ids.map((id) => ({ id, ms: 60_000 }));
-    return s;
-  };
-
-  it('Minnow Bites: bites come 25% sooner', () => {
-    const rng = () => 0.5;
-    const plain = eco.rollCast(newSave(), 'pond', rng).wait;
-    expect(eco.rollCast(eaten('minnowbites'), 'pond', rng).wait).toBeCloseTo(plain * BITE_WAIT);
+describe('snacks', () => {
+  it('plans eating: never stronger, only longer, and Eat all stops at the cap', () => {
+    const s = carrying();
+    smoke.stock(s, ofTier(1), 10, 10);
+    expect(smoke.eatPlan(s, ofTier(1))).toEqual({ n: 1, from: 0, ms: 5 * MIN });
+    expect(smoke.eatPlan(s, ofTier(1), true)).toEqual({ n: 6, from: 0, ms: 30 * MIN });
+    smoke.eat(s, ofTier(1));
+    expect(smoke.eatPlan(s, ofTier(1))).toEqual({ n: 1, from: 5 * MIN, ms: 10 * MIN });
+    expect(smoke.eatPlan(s, ofTier(1), true)).toEqual({ n: 5, from: 5 * MIN, ms: 30 * MIN });
+    expect(smoke.snack(s)!.bonus).toBe(0.25);
+    smoke.eat(s, ofTier(1), true);
+    expect(smoke.snack(s)!.bonus).toBe(0.25);
   });
 
-  it('Kippers: better luck hooks fewer common fish', () => {
-    const rare = (s: SaveData) => {
-      let seed = 7;
-      const rng = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-      s.rod = 'fiberglass';
-      s.bait = 'fly';
-      let n = 0;
-      for (let i = 0; i < 4000; i++) if (byId(FISH, eco.rollCast(s, 'pond', rng).fishId!).tier > 1) n++;
-      return n;
-    };
-    expect(rare(eaten('kippers'))).toBeGreaterThan(rare(newSave()) * 1.05);
+  it('adds 5 minutes per fish up to 30, and Eat all stops at the cap', () => {
+    const s = carrying();
+    const t1 = ofTier(1);
+    smoke.stock(s, t1, 10, 8);
+    expect(smoke.eat(s, t1)).toBeNull();
+    expect(s.smoke.snack).toEqual({ fishId: t1, ms: 5 * MIN });
+    expect(smoke.eat(s, t1, true)).toBeNull();
+    expect(s.smoke.snack!.ms).toBe(30 * MIN);
+    expect(smoke.pantryCount(s, t1)).toBe(2);
+    expect(smoke.eat(s, t1)).toMatch(/already 30 minutes/);
   });
 
-  it('Pike Jerky: more reel control, on top of the gloves', () => {
-    const s = eaten('pikejerky');
-    expect(eco.reelControl(s, 2)).toBeCloseTo(2 * CONTROL_BUFF);
-    s.perks = ['gloves'];
-    expect(eco.reelControl(s, 2)).toBeCloseTo(2 * CONTROL_BUFF * GLOVES_CONTROL);
+  it('replaces a different snack, asking first when over a minute is left', () => {
+    const s = carrying();
+    smoke.stock(s, ofTier(1), 10, 2);
+    smoke.stock(s, ofTier(3), 50, 1);
+    smoke.eat(s, ofTier(1));
+    expect(smoke.wouldReplace(s, ofTier(1))).toBe(false);
+    expect(smoke.wouldReplace(s, ofTier(3))).toBe(true);
+    smoke.tickSnack(s, 4.5 * MIN);
+    expect(smoke.wouldReplace(s, ofTier(3))).toBe(false);
+    smoke.eat(s, ofTier(3));
+    expect(s.smoke.snack).toEqual({ fishId: ofTier(3), ms: 5 * MIN });
   });
 
-  it('Lantern Glaze: the night bite starts at dusk', () => {
-    expect(smoke.nightBite(newSave(), 0.3)).toBe(false);
-    expect(smoke.nightBite(eaten('lanternglaze'), 0.3)).toBe(true);
-    expect(smoke.nightBite(eaten('lanternglaze'), 0.1)).toBe(false);
-    expect(smoke.nightBite(newSave(), 0.8)).toBe(true);
+  it("won't snack on tier 4-5 fish", () => {
+    const s = carrying();
+    smoke.stock(s, ofTier(4), 500);
+    expect(smoke.eat(s, ofTier(4))).toMatch(/for dishes/);
   });
 
-  it('Jewel Platter: shiny chance ×1.5', () => {
-    // 0.06 is above the 5% day shiny chance, but under 7.5%.
-    const rng = () => 0.06;
-    expect(eco.rollCast(newSave(), 'pond', rng).shiny).toBe(false);
-    expect(eco.rollCast(eaten('jewelplatter'), 'pond', rng).shiny).toBe(true);
+  it('runs down and wears off', () => {
+    const s = carrying();
+    smoke.stock(s, ofTier(2), 10);
+    smoke.eat(s, ofTier(2));
+    expect(smoke.tickSnack(s, 4 * MIN)).toBe(false);
+    expect(smoke.tickSnack(s, MIN)).toBe(true);
+    expect(s.smoke.snack).toBeNull();
   });
 });
 
-describe('saved Smokehouse', () => {
-  it('gives older saves an empty one and drops anything malformed', () => {
-    const old = { ...newSave() } as Partial<SaveData>;
-    delete old.smoke;
-    expect(migrate(old).smoke).toEqual({ racks: [null, null, null], pantry: {}, made: {}, buffs: [] });
-    const s = migrate({
+describe('buffs at catch', () => {
+  it('⭐ adds to the catch XP and credits the snack', () => {
+    const s = carrying();
+    s.xp = 0;
+    const f = byId(FISH, ofTier(2));
+    s.dex[f.id] = { count: 1, best: 1 };
+    smoke.stock(s, ofTier(2), 10);
+    smoke.eat(s, ofTier(2));
+    const res = eco.applyCatch(s, f, mid(f.id));
+    expect(res.gained).toBe(Math.round(catchXp(f, mid(f.id), false) * 1.5));
+    expect(res.xpSnack).toBe(ofTier(2));
+    expect(res.coinSnack).toBeUndefined();
+  });
+
+  it('💰 multiplies into the fish value beside the Lucky Charm', () => {
+    const s = carrying();
+    s.perks.push('charm1');
+    smoke.stock(s, ofTier(3), 10);
+    smoke.eat(s, ofTier(3));
+    const res = eco.applyCatch(s, byId(FISH, ofTier(1)), mid(ofTier(1)));
+    const charm = eco.charmBonus(s);
+    expect(res.mult).toBeCloseTo((1 + charm) * 1.15);
+    expect(s.slots.find((x) => x?.k === 'fish')).toMatchObject({ mult: res.mult });
+    expect(res.coinSnack).toBe(ofTier(3));
+  });
+});
+
+describe('stages', () => {
+  it('open with the level and the Fishdex, each announced once', () => {
+    const s = newSave();
+    s.level = 2;
+    expect(smoke.openStages(s).ids).toEqual([]);
+    s.level = SMOKE_LEVEL;
+    expect(smoke.openStages(s)).toEqual({ ids: ['smallfry'], intro: false });
+    expect(smoke.pantryTotal(s)).toBe(FREE_FISH);
+    s.dex[ofTier(3)] = { count: 1, best: 1 };
+    expect(smoke.openStages(s).ids).toEqual(['giants']);
+    expect(smoke.kitchenOpen(s)).toBe(true);
+    expect(smoke.openStages(s).ids).toEqual([]);
+  });
+
+  it('gives an existing player one "New in town" banner for every stage reached', () => {
+    const s = newSave();
+    s.level = 12;
+    s.dex[ofTier(3)] = { count: 4, best: 1 };
+    s.dex[ofTier(4)] = { count: 1, best: 1 };
+    expect(smoke.openStages(s)).toEqual({ ids: ['smallfry', 'giants', 'jewels'], intro: true });
+  });
+
+  it('the free smoked fish are the most-caught tier 1 species', () => {
+    const s = newSave();
+    s.level = SMOKE_LEVEL;
+    const t1 = FISH.filter((f) => f.tier === 1);
+    s.dex[t1[2].id] = { count: 9, best: 1 };
+    s.dex[t1[0].id] = { count: 2, best: 1 };
+    smoke.openStages(s);
+    expect(smoke.pantryCount(s, t1[2].id)).toBe(FREE_FISH);
+  });
+
+  it('a catch reaching level 3 opens Small Fry', () => {
+    const s = newSave();
+    s.level = 2;
+    s.xp = 10_000;
+    s.dex[ofTier(1)] = { count: 1, best: 1 };
+    const res = eco.applyCatch(s, byId(FISH, ofTier(1)), mid(ofTier(1)));
+    expect(res.level).toBeGreaterThanOrEqual(SMOKE_LEVEL);
+    expect(res.stages).toContain('smallfry');
+  });
+});
+
+describe('saving', () => {
+  it("drops v1's racks and recipes and keeps good R1 data", () => {
+    const raw = {
       ...newSave(),
       smoke: {
-        racks: [{ r: 'kippers', fish: [fish('bass'), null, { k: 'fish', fishId: 'shark', size: 3 }, null], doneAt: 5 }, { r: 'cake', fish: [] }, 'x'],
-        pantry: { kippers: [600, -1, 'a', 900], cake: [600] },
-        made: { kippers: 2.7, minnowbites: -3 },
-        buffs: [{ id: 'kippers', ms: 1000 }, { id: 'kippers', ms: 0 }, { id: 'cake', ms: 5 }],
+        racks: [{ r: 'kippers', fish: [] }],
+        pantry: { kippers: [600], perch: [30, 'x', 50], __proto__: [1] },
+        buffs: [{ id: 'kippers', ms: 1000 }],
+        spots: [{ fish: fish('perch'), doneAt: T0 }, { fish: { k: 'fish', fishId: 'nope', size: 1 }, doneAt: T0 }],
+        snack: { fishId: 'perch', ms: 9000 },
+        seen: ['smallfry', 'bogus', 'smallfry'],
       },
-    } as unknown as SaveData);
-    expect(s.smoke).toEqual({
-      racks: [{ r: 'kippers', fish: [fish('bass'), null, null, null], doneAt: 5 }, null, null],
-      pantry: { kippers: [900, 600] },
-      made: { kippers: 2 },
-      buffs: [{ id: 'kippers', ms: 1000 }],
-    });
+    };
+    const s = migrate(JSON.parse(JSON.stringify(raw))).smoke;
+    expect(s.pantry).toEqual({ perch: [50, 30] });
+    expect(s.spots.map((x) => x?.fish.fishId ?? null)).toEqual(['perch', null, null, null, null]);
+    expect(s.snack).toEqual({ fishId: 'perch', ms: 9000 });
+    expect(s.seen).toEqual(['smallfry']);
+    expect(Object.keys(s)).toEqual(['spots', 'pantry', 'snack', 'seen']);
   });
 });

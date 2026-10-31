@@ -2,7 +2,7 @@ import { BAITS, FISH, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { TITLES } from '../data/ranks';
-import { RACKS, recipeById, type RecipeId } from '../data/smokehouse';
+import { SMOKER_SPOTS, stageById, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
 
@@ -35,28 +35,25 @@ export type Slot =
 
 export type FishItem = Extract<Slot, { k: 'fish' }>;
 
-/** A rack at the Smokehouse, loaded with one recipe's fish over as many trips as it takes. */
-export interface Rack {
-  r: RecipeId;
-  /** One per spot in the recipe's `needs`, null until filled. */
-  fish: (FishItem | null)[];
-  /** Server time it is smoked; set once every spot is filled. */
-  doneAt?: number;
+/** A fish on Mags's smoker, done at server time `doneAt`. */
+export interface SmokeSpot {
+  fish: FishItem;
+  doneAt: number;
 }
 
 /** The Smokehouse (see `src/game/smoke.ts`). */
 export interface Smoke {
-  /** Always `RACKS` long; the last one opens at `RACK3_LEVEL`. */
-  racks: (Rack | null)[];
-  /** Smoked goods by recipe: each item's buff length in seconds, longest first. */
-  pantry: Partial<Record<RecipeId, number[]>>;
-  /** Batches smoked per recipe, toward Well-smoked. */
-  made: Partial<Record<RecipeId, number>>;
-  /** Buffs being eaten, with the online milliseconds each has left. */
-  buffs: { id: RecipeId; ms: number }[];
+  /** Always `SMOKER_SPOTS` long, one fish per spot. */
+  spots: (SmokeSpot | null)[];
+  /** Smoked fish by species: each one's raw sale value, highest first. */
+  pantry: Partial<Record<string, number[]>>;
+  /** The snack being eaten, with the online milliseconds it has left. */
+  snack: { fishId: string; ms: number } | null;
+  /** Stages whose opening has been announced. */
+  seen: StageId[];
 }
 
-export const newSmoke = (): Smoke => ({ racks: Array.from({ length: RACKS }, () => null), pantry: {}, made: {}, buffs: [] });
+export const newSmoke = (): Smoke => ({ spots: Array.from({ length: SMOKER_SPOTS }, () => null), pantry: {}, snack: null, seen: [] });
 
 export interface SaveData {
   version: 1;
@@ -94,7 +91,7 @@ export interface SaveData {
   /** Titles earned (ids from `TITLES`), and the one worn under the name tag. */
   titles: string[];
   title: string | null;
-  /** Rewards for levels past 50; provisions go straight to the Pantry, fares wait for the charters. */
+  /** Rewards for levels past 50, banked until the Smokehouse's dishes (R2) and the charters can use them. */
   gifts: Gifts;
   smoke: Smoke;
   /**
@@ -169,23 +166,22 @@ const isFishItem = (x: unknown): x is FishItem => {
   return !!f && f.k === 'fish' && FISH.some((d) => d.id === f.fishId) && Number.isFinite(f.size);
 };
 
-/** Keeps only well-formed racks, pantry items and buffs from a saved Smokehouse. */
+/** Keeps only well-formed spots, pantry fish, snack and stages from a saved Smokehouse; v1's racks and recipes are dropped. */
 function cleanSmoke(raw: unknown): Smoke {
   const d = (raw ?? {}) as Partial<Smoke>;
   const out = newSmoke();
-  const num = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n > 0;
-  if (Array.isArray(d.racks))
-    d.racks.slice(0, RACKS).forEach((r, i) => {
-      const rec = recipeById(r?.r);
-      if (!r || !rec || !Array.isArray(r.fish) || r.fish.length !== rec.needs.length) return;
-      out.racks[i] = { r: rec.id, fish: r.fish.map((f) => (isFishItem(f) ? f : null)), ...(num(r.doneAt) ? { doneAt: r.doneAt } : {}) };
+  const num = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
+  const known = (id: unknown) => FISH.some((f) => f.id === id);
+  if (Array.isArray(d.spots))
+    d.spots.slice(0, SMOKER_SPOTS).forEach((sp, i) => {
+      if (sp && isFishItem(sp.fish) && num(sp.doneAt)) out.spots[i] = { fish: sp.fish, doneAt: sp.doneAt };
     });
   for (const [id, list] of Object.entries(d.pantry ?? {})) {
     const items = Array.isArray(list) ? list.filter(num).map(Math.round) : [];
-    if (recipeById(id) && items.length) out.pantry[id as RecipeId] = items.sort((a, b) => b - a);
+    if (known(id) && items.length) out.pantry[id] = items.sort((a, b) => b - a);
   }
-  for (const [id, n] of Object.entries(d.made ?? {})) if (recipeById(id) && num(n)) out.made[id as RecipeId] = Math.floor(n);
-  if (Array.isArray(d.buffs)) out.buffs = d.buffs.filter((b) => recipeById(b?.id) && num(b.ms)).map((b) => ({ id: b.id, ms: Math.round(b.ms) }));
+  if (d.snack && known(d.snack.fishId) && num(d.snack.ms)) out.snack = { fishId: d.snack.fishId, ms: Math.round(d.snack.ms) };
+  if (Array.isArray(d.seen)) out.seen = [...new Set(d.seen.filter((id) => stageById(id)))];
   return out;
 }
 

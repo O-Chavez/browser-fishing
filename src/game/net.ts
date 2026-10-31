@@ -2,6 +2,7 @@ import type { Activity, CasinoRecords, ClientMsg, HallRow, PlayerInfo, ServerMsg
 import { SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Drop } from './drops';
+import type { StageId } from '../data/smokehouse';
 import type { SaveData } from './state';
 
 export interface NetEvents {
@@ -25,6 +26,8 @@ export interface NetEvents {
   /** The server answered a password change; `msg` is set if it was refused. */
   onAccount(msg?: string): void;
   onNotice(msg: string): void;
+  /** Smokehouse stages opened on joining. */
+  onStages(ids: StageId[], intro: boolean): void;
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
   /** Slash command replies; `time` is set when a command changed the day/night override, `sent` on a feedback answer. */
@@ -144,6 +147,9 @@ export class NetClient {
         break;
       case 'notice':
         this.events.onNotice(m.msg);
+        break;
+      case 'stages':
+        this.events.onStages(m.ids, m.intro);
         break;
       case 'chat':
         this.events.onChat(m);
