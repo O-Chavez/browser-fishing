@@ -38,6 +38,7 @@ Finished items move to [DONE.md](DONE.md).
 
 - The cosmetics stall and the Casino Cove Prize Counter tiles still swap the price for "Owned" / "Wearing" / "🔒 Locked" (`cosShopHtml` and the perk tiles in `casinoHtml`, `src/game/game.ts`); they could show the price above the status the same way the rod and bait tiles now do
 - Endgame step 8 of 8, later: group charters (friends share a boat and a depth), and species mastery (bronze/silver/gold per species for catch counts, a trophy size and a shiny) with a Shiny Fishdex page and mastery titles
+- 🎨 Move the Lucky Wheel off the main map (Oscar, 2026-10-30): some new players get stuck at the wheel (`wheel` spot in `src/data/maps.ts`, built in `src/game/hub.ts`), gambling away their fish and levelling slowly. The Smokehouse, where smoked fish sell for more, would become the way to get more for a fish early on. Decide where the wheel goes (into the casino at level 15?) or whether it goes at all
 
 ### Casino
 
