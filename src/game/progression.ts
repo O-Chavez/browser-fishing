@@ -6,6 +6,7 @@ import {
 import { CASINO_LEVEL } from '../data/casino';
 import { cosById } from '../data/cosmetics';
 import { RANKS, nextRank, type Rank } from '../data/ranks';
+import { SMOKE_LEVEL } from '../data/smokehouse';
 import { onDock } from './env';
 
 /** There is no level cap: from this level on every level costs the same, so the pace never slows. */
@@ -55,7 +56,7 @@ export function applyXp(level: number, xp: number, gained: number): { level: num
   return { level: lvl, xp: total, leveledUp };
 }
 
-/** Free rewards for levels past `FLAT_LEVEL`. Provisions go straight to the Pantry (`stockGifts`); fares wait for the charters. */
+/** Free rewards for levels past `FLAT_LEVEL`, banked until the Smokehouse's dishes (R2) and the charters can use them. */
 export interface Gifts {
   /** Smoked provisions: one per level past 50. */
   provisions: number;
@@ -159,13 +160,7 @@ export const NIGHT_LUCK = 1.8;
 export const NIGHT_FISH_BOOST = 2;
 
 /** Non-common weights are boosted by rod and bait luck. */
-/** Eaten Smokehouse buffs: more luck, and more 🌙 fish at night. */
-export interface FishBuff {
-  luck?: number;
-  nightFish?: number;
-}
-
-export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false, nightBoost = 1, buff: FishBuff = {}): Fish | null {
+export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false, nightBoost = 1): Fish | null {
   const rule = SPOTS[spot];
   const g = Math.max(1, gearTier(rod, bait) - rule.cut);
   const capped = pool.filter((f) => f.tier <= g);
@@ -176,11 +171,11 @@ export function pickFish(pool: Fish[], rod: Rod, bait: Bait, rng: () => number =
     if (high.length > 0) pool = high;
   }
   if (pool.length === 0) return null;
-  const luck = rod.luck * bait.luck * rule.luck * (perfect ? PERFECT_LUCK : 1) * (night ? NIGHT_LUCK * nightBoost : 1) * (buff.luck ?? 1);
+  const luck = rod.luck * bait.luck * rule.luck * (perfect ? PERFECT_LUCK : 1) * (night ? NIGHT_LUCK * nightBoost : 1);
   const weights = pool.map(
     (f) =>
       (f.tier === 1 ? RARITY_WEIGHT.common : RARITY_WEIGHT[f.rarity] * luck) *
-      (night && f.night ? NIGHT_FISH_BOOST * (buff.nightFish ?? 1) : 1) *
+      (night && f.night ? NIGHT_FISH_BOOST : 1) *
       Math.pow(OUTGROWN, Math.max(0, g - f.tier)),
   );
   let r = rng() * weights.reduce((a, b) => a + b, 0);
@@ -221,6 +216,7 @@ export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = f
 /** Next unlock, for the "next goal" HUD hint: the next rod, then the next rank and its reward. */
 export function nextGoal(level: number, dex: Record<string, unknown> = {}): string {
   const rod = RODS.find((r) => r.unlockLevel > level);
+  if (level < SMOKE_LEVEL) return `Level ${SMOKE_LEVEL}: Mags's Smokehouse opens${rod?.unlockLevel === SMOKE_LEVEL ? ` and the ${rod.name} becomes available` : ''}`;
   if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
   const rank = nextRank(level);
   if (rank) return `Level ${rank.level}: ${rankReward(rank)}`;

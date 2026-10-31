@@ -63,12 +63,12 @@ import {
 } from './progression';
 import { NIGHT_BITE } from './daynight';
 import * as smoke from './smoke';
-import { BUFF_MINUTES, MAX_BUFFS, RACK3_LEVEL, RECIPES, WELL_SMOKED, needLabel, rackCount, recipeById, type Recipe, type RecipeId } from '../data/smokehouse';
+import { BUFF_ICON, FREE_FISH, SELL_TIER, SMOKED_SELL, SMOKER_SPOTS, SMOKE_LEVEL, SNACKS, SNACK_MAX_MINUTES, SNACK_MINUTES, STAGES, smokeSeconds, stageById, type StageId } from '../data/smokehouse';
 import { GOOD_MAX, GOOD_MIN, Reel, SWEET_MAX, SWEET_MIN } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
-import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type FishItem, type Rack, type SaveData } from './state';
+import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
@@ -184,8 +184,14 @@ export class Game {
   private shopTab: 'cosmetics' | 'gear' = 'gear';
   /** The item selected in each menu's tile grid, shown in its details panel. */
   private pick: Partial<Record<'bag' | 'gear' | 'cos' | 'ccos' | 'perk' | 'smoke', string>> = {};
-  /** Smokehouse tab: recipes and racks, or the Pantry. */
-  private smokeTab: 'recipes' | 'pantry' = 'recipes';
+  /** Smokehouse tab. */
+  private smokeTab: 'smoker' | 'kitchen' | 'pantry' = 'smoker';
+  /** Eating this would replace a snack with time left: the menu asks first. */
+  private confirmEat: { id: string; all: boolean } | null = null;
+  /** What the smoker and snack looked like at the last redraw, to redraw when a fish finishes. */
+  private smokeKey = '';
+  /** Stages opened by a catch, announced once its card is put away. */
+  private stagesWaiting: StageId[] = [];
   /** The second the countdowns were last redrawn. */
   private clockSec = -1;
   private buffsShown = '';
@@ -270,6 +276,8 @@ export class Game {
       onRoulette: (r) => this.startRoulette(r),
       onBlackjack: (v) => this.dealt(v),
       onNotice: (msg) => this.toast(msg),
+      // On joining, after the welcome banner has had its moment.
+      onStages: (ids, intro) => window.setTimeout(() => this.stageBanner(ids, intro), 4600),
       onChat: (m) => {
         const self = m.room === this.net.room && m.id === this.net.id;
         this.chat.add({ name: m.name, map: m.map, text: m.text, self, sup: this.net.isSupporter(m.name) });
@@ -928,8 +936,7 @@ export class Game {
   }
 
   private onMenuClick(el: HTMLElement): void {
-    // Fish already on a rack sit inside an ingredient row that may itself be a button, so they come first.
-    const btn = (el.closest('[data-take]') ?? el.closest('button')) as HTMLButtonElement | null;
+    const btn = el.closest('button') as HTMLButtonElement | null;
     if (!btn || btn.disabled) return;
     const { tab, shop, prize, smoke: smokeTab, pick, act, id } = btn.dataset;
     if (act === 'close') return this.closeMenu();
@@ -937,12 +944,17 @@ export class Game {
     if (tab) this.tab = tab;
     else if (shop) this.shopTab = shop as 'cosmetics' | 'gear';
     else if (prize) this.prizeTab = prize as 'perks' | 'cosmetics';
-    else if (smokeTab) this.smokeTab = smokeTab as 'recipes' | 'pantry';
+    else if (smokeTab) {
+      this.smokeTab = smokeTab as 'smoker' | 'kitchen' | 'pantry';
+      this.confirmEat = null;
+    }
     else if (pick) this.pick[pick as keyof typeof this.pick] = id;
     else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
-    else if (act === 'smoke') this.smokeSlot(Number(btn.dataset.i));
-    else if (act === 'unsmoke') this.smokeSend({ t: 'unsmoke', rack: Number(btn.dataset.rack), j: Number(btn.dataset.j) });
-    else if (act === 'eat') this.eat(id!);
+    else if (act === 'smokeall') return this.smokeAll();
+    else if (act === 'sellsmoked' || act === 'sellsmokedall') return this.sellSmoked(id!, act === 'sellsmokedall');
+    else if (act === 'eat' || act === 'eatall') return this.eat(id!, act === 'eatall');
+    else if (act === 'eatsure') return this.eat(id!, !!this.confirmEat?.all, true);
+    else if (act === 'eatkeep') this.confirmEat = null;
     else if (act === 'music') audio.toggleMusic();
     else if (act === 'graphics') this.toggleGraphics();
     else if (act === 'sellall') return this.sellAll();
@@ -1729,7 +1741,7 @@ export class Game {
     const sh = this.map.smokehouse;
     if (sh) {
       const dc = Math.hypot(sh.x - x, sh.z - z);
-      if (dc < 2.8) spots.push({ d: dc - 2, label: "Mags Cinder's Smokehouse · smoke fish into buffs", act: () => this.openSmokehouse() });
+      if (dc < 2.8) spots.push({ d: dc - 2, label: smoke.smokerOpen(this.s) ? "Mags Cinder's Smokehouse · smoke fish to sell or snack on" : `Mags Cinder's Smokehouse · opens at level ${SMOKE_LEVEL}`, act: () => this.openSmokehouse() });
     }
 
     const c = this.map.casino;
@@ -1896,7 +1908,7 @@ export class Game {
       w.fx.ripple(b, 6, 0.5);
     }
 
-    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId, Math.random, this.perfect, this.castSpot, smoke.nightBite(this.s, w.night));
+    const roll = this.roll ?? eco.rollCast(this.s, this.map.locationId, Math.random, this.perfect, this.castSpot, w.night >= NIGHT_BITE);
     this.roll = null;
     this.hooked = roll.fishId ? byId(FISH, roll.fishId) : null;
     this.hookedSize = roll.size;
@@ -2075,9 +2087,10 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks } = eco.applyCatch(this.s, fish, size, this.hookedShiny);
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpSnack, coinSnack } = eco.applyCatch(this.s, fish, size, this.hookedShiny);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch' });
+    this.stagesWaiting.push(...stages);
     this.caughtTier = fish.tier;
     this.world.hub?.setLeaders(this.anglers());
     const sc = this.heldScale();
@@ -2095,9 +2108,9 @@ export class Game {
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
-      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * (1 + eco.charmBonus(this.s))).toLocaleString()}</div>
+      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinSnack ? `<small class="credit">💰 Smoked ${byId(FISH, coinSnack).name}</small>` : ''}</div>
       <div>${this.tierBadge(fish.tier)} ${TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
-      <div>+${gained} XP${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
+      <div>+${gained} XP${xpSnack ? ` <span class="credit">⭐ Smoked ${byId(FISH, xpSnack).name}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
     // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
@@ -2230,8 +2243,10 @@ export class Game {
     this.setIdlePose();
     // Tips wait for the catch card to be put away, so they don't land on top of it.
     let tipped = false;
+    if (this.stagesWaiting.length) this.stageBanner(this.stagesWaiting.splice(0), false);
     if (this.caughtTier >= 2) tipped = this.guide('tier');
     else if (this.caughtTier && !this.s.tips.includes('sold') && this.s.slots.some((sl) => sl?.k === 'fish')) tipped = this.guide('catch');
+    else if (this.caughtTier === 1 && smoke.smokerOpen(this.s)) tipped = this.guide('smoker');
     if (this.toughCatch && !tipped) this.rodHint('tough');
     this.caughtTier = 0;
     this.toughCatch = false;
@@ -2309,11 +2324,7 @@ export class Game {
 
   /** Night bites, and a reminder while the dev console's /time freezes this player's sky. */
   private updateNight(): void {
-    const dark = this.world.night;
-    const night =
-      dark >= NIGHT_BITE ? '🌙 Night - rare & night-only fish are biting!'
-      : smoke.nightBite(this.s, dark) ? '🍯 Dusk - Lantern Glaze has the night fish biting early!'
-      : '';
+    const night = this.world.night >= NIGHT_BITE ? '🌙 Night - rare & night-only fish are biting!' : '';
     const text = !this.devTime ? night : [night, '🕒 /time is on (only you) · /time auto to undo'].filter(Boolean).join(' · ');
     if (text === this.nightShown) return;
     this.nightShown = text;
@@ -2916,10 +2927,10 @@ export class Game {
       }
       body += tag;
       if (i === BAIT_SLOT && eco.lureOn(s)) body += `<b class="lure">✨${s.lure}</b>`;
-      const smokable = sl?.k === 'fish' && this.menuOpen && this.tab === 'smoke' && this.smokeFits(sl.fishId);
+      const smokable = sl?.k === 'fish' && this.menuOpen && this.tab === 'smoke' && this.smokeTab === 'smoker' && smoke.freeSpot(this.s) >= 0;
       const sellable = smokable || (sl?.k === 'fish' && this.menuOpen && ((this.tab === 'shop' && this.atVendor) || this.tab === 'casino'));
       if (sellable) cls += ' sellable';
-      const sell = smokable ? `🔥 Put on the ${recipeById(this.smokePick())!.name} rack` : sellable ? `Sell · ${eco.sellPrice(this.s, sl)} ${COIN}` : '';
+      const sell = smokable ? `🔥 Smoke · ${smokeSeconds(byId(FISH, sl.fishId).tier)} s` : sellable ? `Sell · ${eco.sellPrice(this.s, sl)} ${COIN}` : '';
       const name = sl?.k === 'fish' ? byId(FISH, sl.fishId).name + (i >= size ? ' · extra slot until it is sold' : '')
         : i === ROD_SLOT ? 'Rod slot: swap rods in your Bag (Tab)'
         : i === BAIT_SLOT ? `Bait slot: swap bait in your Bag (Tab)${eco.lureOn(s) ? ` · Shiny Lure on: the next ${s.lure} fish hooked will be shiny` : ''}` : '';
@@ -2984,8 +2995,8 @@ export class Game {
       return `<img src="${faceIcon(v.face ?? 'smile')}" alt=""><div><b>${v.name}'s Stall</b><span><span class="coin sm"></span> ${this.s.coins.toLocaleString()} to spend</span></div>`;
     }
     if (this.tab === 'smoke') {
-      const busy = this.s.smoke.racks.filter((r) => r?.doneAt).length;
-      return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags Cinder's Smokehouse</b><span>${busy ? `${busy} rack${busy === 1 ? '' : 's'} smoking` : 'Racks ready for fish'}</span></div>`;
+      const busy = this.s.smoke.spots.filter(Boolean).length;
+      return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags's Smokehouse</b><span>${busy ? `${busy} fish smoking` : 'Smoker ready for fish'}</span></div>`;
     }
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
@@ -3000,8 +3011,12 @@ export class Game {
     if (this.tab === 'casino')
       return tab('perks', '🍀', 'Unlocks', this.prizeTab === 'perks', 'data-prize') + tab('cosmetics', '🎩', 'High Roller', this.prizeTab === 'cosmetics', 'data-prize');
     if (this.tab === 'smoke') {
-      const n = RECIPES.reduce((a, r) => a + smoke.pantryCount(this.s, r.id), 0);
-      return tab('recipes', '🔥', 'Racks', this.smokeTab === 'recipes', 'data-smoke') + tab('pantry', '🧺', `Pantry${n ? ` (${n})` : ''}`, this.smokeTab === 'pantry', 'data-smoke');
+      const n = smoke.pantryTotal(this.s);
+      return (
+        tab('smoker', '🔥', 'Smoker', this.smokeTab === 'smoker', 'data-smoke') +
+        tab('kitchen', smoke.kitchenOpen(this.s) ? '🍲' : '🔒', 'Kitchen', this.smokeTab === 'kitchen', 'data-smoke') +
+        tab('pantry', '🧺', `Pantry${n ? ` (${n})` : ''}`, this.smokeTab === 'pantry', 'data-smoke')
+      );
     }
     if (this.tab === 'peek') return '';
     return [
@@ -3059,7 +3074,9 @@ export class Game {
 
   private openSmokehouse(): void {
     if (!this.net.connected) return this.toast('The Smokehouse needs a server connection.');
-    this.smokeTab = 'recipes';
+    if (!smoke.smokerOpen(this.s)) return this.toast(`Mags: "Come back at level ${SMOKE_LEVEL} and I'll show you what to do with your small fry."`, 3.5);
+    this.smokeTab = 'smoker';
+    this.confirmEat = null;
     this.openMenu('smoke');
   }
 
@@ -3072,51 +3089,120 @@ export class Game {
     return true;
   }
 
-  /** The recipe shown at the Smokehouse: the one picked, else the one a rack is being loaded with. */
-  private smokePick(): RecipeId {
-    const p = recipeById(this.pick.smoke);
-    if (p) return p.id;
-    return this.s.smoke.racks.find((r) => r && !r.doneAt)?.r ?? RECIPES[0].id;
-  }
-
-  /** Whether a fish would go on the picked recipe's rack. */
-  private smokeFits(fishId: string): boolean {
-    const r = recipeById(this.smokePick())!;
-    const at = smoke.rackFor(this.s, r);
-    return smoke.unlocked(this.s, r) && at >= 0 && smoke.spotFor(this.s.smoke.racks[at], r, byId(FISH, fishId)) >= 0;
-  }
-
-  /** Puts the fish in hotbar slot i on the picked recipe's rack. */
-  private smokeSlot(i: number): void {
-    const r = this.smokePick();
-    if (!this.net.connected) return this.toast('The Smokehouse needs a server connection.');
-    const why = smoke.loadFish(this.s, r, i, this.net.now());
-    if (why) return this.toast(why);
-    this.smokeSend({ t: 'smoke', r, i });
+  /** After a local Smokehouse change: save, HUD and menu. */
+  private smokeChanged(): void {
+    this.persist();
     this.refreshHud();
+    this.updateBuffs();
     this.renderMenu();
   }
 
-  private eat(id: string): void {
-    if (this.map.casino) return this.toast('Save it for the pond.');
+  /** Puts the fish in hotbar slot i on the smoker. */
+  private smokeSlot(i: number): void {
     if (!this.net.connected) return this.toast('The Smokehouse needs a server connection.');
-    const why = smoke.eat(this.s, id);
+    const it = this.s.slots[i];
+    const why = smoke.smokeFish(this.s, i, this.net.now());
     if (why) return this.toast(why);
-    const r = recipeById(id)!;
-    this.smokeSend({ t: 'eat', id });
-    this.toast(`${r.icon} ${r.name}: ${r.effect}`);
-    this.updateBuffs();
+    this.smokeSend({ t: 'smoke', i });
+    if (it?.k === 'fish') this.toast(`🔥 ${byId(FISH, it.fishId).name} on the smoker · ${smokeSeconds(byId(FISH, it.fishId).tier)} s`);
+    this.smokeChanged();
   }
 
-  /** Runs eaten buffs down between server updates, and redraws the countdowns once a second. */
+  private smokeAll(): void {
+    if (!this.net.connected) return this.toast('The Smokehouse needs a server connection.');
+    const n = smoke.smokeAllSlots(this.s).length;
+    const why = smoke.smokeAll(this.s, this.net.now());
+    if (why) return this.toast(why);
+    this.smokeSend({ t: 'smokeall' });
+    this.toast(`🔥 ${n} fish on the smoker`);
+    this.smokeChanged();
+  }
+
+  private sellSmoked(id: string, all: boolean): void {
+    if (!this.net.connected) return this.toast('The Smokehouse needs a server connection.');
+    const n = all ? smoke.pantryCount(this.s, id) : 1;
+    const value = smoke.smokedPrice(this.s, id, !all);
+    const why = smoke.sellSmoked(this.s, id, all);
+    if (why) return this.toast(why);
+    this.smokeSend({ t: 'sellsmoked', id, ...(all ? { all } : {}) });
+    this.toast(`Sold ${n} smoked ${byId(FISH, id).name} for ${value.toLocaleString()} 🪙`);
+    audio.jingle('common');
+    this.smokeChanged();
+  }
+
+  /** Minutes, rounded, for snack lengths. */
+  private mins(ms: number): string {
+    return `${Math.round(ms / 60_000)} min`;
+  }
+
+  /**
+   * Eat buttons that say what they'll do: one fish adds 5 minutes, Eat all says how many it eats
+   * and how long that lasts. A snack never gets stronger, only longer.
+   */
+  private eatBtns(id: string): string {
+    const one = smoke.eatPlan(this.s, id);
+    if (typeof one === 'string') return this.btn(`${SNACK_MAX_MINUTES} min max`, 'data-act="locked"', 'plain', true);
+    const all = smoke.eatPlan(this.s, id, true);
+    const fx = this.snackEffect(id);
+    const oneLabel = `Eat · ${one.from ? '+' : ''}${SNACK_MINUTES} min`;
+    const oneTip = `${fx} for ${one.from ? `${clock(one.from)} → ${clock(one.ms)}` : this.mins(one.ms)}`;
+    let out = this.btn(oneLabel, `data-act="eat" data-id="${id}" data-tip="${this.esc(oneTip)}"`);
+    if (typeof all !== 'string' && all.n > 1)
+      out += this.btn(`Eat ${all.n} → ${this.mins(all.ms)}`, `data-act="eatall" data-id="${id}" data-tip="${this.esc(`Eats ${all.n}: still ${fx}, for ${this.mins(all.ms)} (the most is ${SNACK_MAX_MINUTES})`)}"`, 'ok');
+    return out;
+  }
+
+  /** Sell 1 (the most valuable) and, with more than one, Sell all. */
+  private sellBtns(id: string): string {
+    if (!smoke.sellable(id)) return '';
+    const n = smoke.pantryCount(this.s, id);
+    return (
+      this.btn(`Sell 1 · ${smoke.smokedPrice(this.s, id, true).toLocaleString()} ${COIN}`, `data-act="sellsmoked" data-id="${id}"`, 'plain') +
+      (n > 1 ? this.btn(`Sell all · ${smoke.smokedPrice(this.s, id).toLocaleString()} ${COIN}`, `data-act="sellsmokedall" data-id="${id}"`, 'plain') : '')
+    );
+  }
+
+  /** Eats a smoked fish (or as many as fit, with `all`). Replacing a different snack with over a minute left asks first. */
+  private eat(id: string, all: boolean, sure = false): void {
+    if (this.map.casino) return this.toast('Save it for the pond.');
+    if (!this.net.connected) return this.toast('The Smokehouse needs a server connection.');
+    if (!sure && smoke.wouldReplace(this.s, id)) {
+      this.confirmEat = { id, all };
+      this.pick.smoke = id;
+      return this.renderMenu();
+    }
+    this.confirmEat = null;
+    const why = smoke.eat(this.s, id, all);
+    if (why) return this.toast(why);
+    this.smokeSend({ t: 'eat', id, ...(all ? { all } : {}) });
+    const sn = smoke.snack(this.s)!;
+    this.toast(`${BUFF_ICON[sn.kind]} ${this.snackEffect(id)} · ${clock(sn.ms)} left (Smoked ${byId(FISH, id).name})`);
+    this.smokeChanged();
+  }
+
+  /** "+25% XP" or "+15% coins", or how a tier 4-5 fish is used. */
+  private snackEffect(fishId: string): string {
+    const d = smoke.snackFor(fishId);
+    return d ? `+${Math.round(d.bonus * 100)}% ${d.kind === 'xp' ? 'XP' : 'coins'}` : 'For dishes';
+  }
+
+  /** Runs the snack down between server updates, and redraws the countdowns once a second. */
   private tickSmoke(dt: number): void {
-    smoke.tickBuffs(this.s, dt * 1000);
+    smoke.tickSnack(this.s, dt * 1000);
     const now = this.net.now();
     const sec = Math.floor(now / 1000);
     if (sec === this.clockSec) return;
     this.clockSec = sec;
     this.updateBuffs();
+    // The first smoked fish to eat: point at the Bag, once the catch card and menus are out of the way.
+    if (!this.menuOpen && this.phase === 'idle' && !this.s.tips.includes('snack') && smoke.smokerOpen(this.s) && Object.keys(this.s.smoke.pantry).some((id) => smoke.snackFor(id))) this.guide('snack');
     if (!this.menuOpen) return;
+    // A fish finishing (or the snack running out) changes the layout, not just a number.
+    const key = `${this.s.smoke.spots.map((x) => (x && x.doneAt <= now ? 'd' : x ? 's' : '-')).join('')}${this.s.smoke.snack ? 1 : 0}`;
+    if (key !== this.smokeKey) {
+      this.smokeKey = key;
+      if (this.tab === 'smoke' || this.tab === 'inventory') return this.renderMenu();
+    }
     for (const el of document.querySelectorAll<HTMLElement>('#tab [data-until]')) el.textContent = clock(Number(el.dataset.until) - now);
     for (const el of document.querySelectorAll<HTMLElement>('#tab [data-to]')) {
       const from = Number(el.dataset.from);
@@ -3124,152 +3210,179 @@ export class Game {
     }
   }
 
-  /** HUD chips for the buffs being eaten, with the time each has left. */
+  /** The HUD chip for the snack being eaten, with its time left. */
   private updateBuffs(): void {
-    const html = this.s.smoke.buffs.map((b) => `<span>${recipeById(b.id)!.icon} ${recipeById(b.id)!.name} · ${clock(b.ms)}</span>`).join('');
+    const sn = smoke.snack(this.s);
+    const html = sn ? `<span data-tip="${this.esc(`Smoked ${byId(FISH, sn.fishId).name}`)}">${BUFF_ICON[sn.kind]} ${this.snackEffect(sn.fishId)} · ${clock(sn.ms)}</span>` : '';
     if (html === this.buffsShown) return;
     this.buffsShown = html;
     $('buffs').innerHTML = html;
   }
 
-  /** A recipe's colour: the highest tier of fish it takes. */
-  private recipeTier(r: Recipe): number {
-    return Math.max(...r.needs.map((n) => n.tier ?? (n.fish ? byId(FISH, n.fish).tier : 3)));
+  /** A stage's opening: one "New in town" banner for an existing player's first visit, else the newest stage. */
+  private stageBanner(ids: StageId[], intro: boolean): void {
+    const st = stageById(ids.at(-1));
+    if (!st) return;
+    const el = $('banner');
+    el.classList.remove('welcome');
+    el.classList.add('rank');
+    el.style.color = '';
+    el.innerHTML = intro
+      ? `🔥 New in town: Mags's Smokehouse<small>Smoke your spare fish beside the Lucky Wheel: sell them or snack on them</small>`
+      : `🔥 Smokehouse: ${st.name}<small>${st.id === 'smallfry' ? `Mags left you ${FREE_FISH} smoked fish to try. ` : ''}${st.line}</small>`;
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), 5200);
+    audio.jingle('rare');
   }
 
-  /** What the Smokehouse is for, at the top of both its tabs. */
+  /** What the Smokehouse is for, at the top of every tab. */
   private smokeIntroHtml(): string {
-    return `<div class="smoke-intro"><b>🔥 Smoke your spare fish into treats that buff your fishing.</b> Eat one for ${BUFF_MINUTES} minutes of quicker bites, better luck, easier fights, an early night bite or more shinies.<span><i class="soon">Coming soon</i> Combine smoked goods into advanced recipes that help on deep-sea charters with Captain Reed.</span></div>`;
+    return `<div class="smoke-intro"><b>🔥 Smoke fish to sell or snack on, cook them into dishes.</b> A snack gives ${SNACK_MINUTES} minutes of ⭐ more XP or 💰 more coins on every catch.<span><i class="soon">Coming soon</i> Dishes from the Kitchen, and spices for Captain Reed's deep-sea charters.</span></div>`;
   }
 
   private smokeHtml(): string {
+    const intro = this.smokeIntroHtml();
+    if (this.smokeTab === 'pantry') return `<div class="cols"><div class="main">${intro}${this.pantryHtml(true)}</div>${this.pantryDetail()}</div>`;
+    if (this.smokeTab === 'kitchen') return `<div class="cols"><div class="main">${intro}${this.kitchenHtml()}</div>${this.kitchenDetail()}</div>`;
     const s = this.s;
-    if (this.smokeTab === 'pantry') {
-      return `<div class="cols"><div class="main">${this.smokeIntroHtml()}${this.pantryHtml()}</div>${this.detail({
-        icon: '🧺',
-        name: 'Your Pantry',
-        tier: 3,
-        badge: `<span class="badge" style="--c:var(--t3)">Kept in your save</span>`,
-        body: `<div class="have">Eaten, each one lasts <b>${BUFF_MINUTES} min</b> of play: the clock stops while you're away.</div>`,
-        note: `Different kinds stack, up to ${MAX_BUFFS} at once; eating the same kind again tops it up. Trophy-size fish 🏆 make a batch last up to half again as long. Eat from here or from your Bag.`,
-        actions: '',
-      })}</div>`;
-    }
     const now = this.net.now();
-    const sel = recipeById(this.smokePick())!;
-    const racks = s.smoke.racks.map((r, i) => this.rackCard(r, i, now)).join('');
-    const tiles = RECIPES.map((r) => {
-      const open = smoke.unlocked(s, r);
-      const n = smoke.pantryCount(s, r.id);
-      const sub = !open ? `🔒 Lv ${r.level}` : `${r.minutes} min${smoke.wellSmoked(s, r.id) ? ' · ★' : ''}`;
-      return this.itemTile({ icon: r.icon, name: r.name, sub, price: n ? `×${n} in Pantry` : '', tier: this.recipeTier(r), on: sel.id === r.id, ghost: !open, attrs: `data-pick="smoke" data-id="${r.id}"` });
-    }).join('');
+    const busy = s.smoke.spots.filter(Boolean).length;
+    const n = smoke.smokeAllSlots(s).length;
+    const all = this.btn(n ? `🔥 Smoke all · ${n} fish` : 'Smoke all', 'data-act="smokeall"', n ? 'gold' : 'plain', !n);
     return `<div class="cols"><div class="main">
-        ${this.smokeIntroHtml()}
-        <h4>Racks</h4><div class="racks">${racks}</div>
-        <h4>Recipes</h4><div class="tiles">${tiles}</div>
-        <p class="foot">Pick a recipe, then click fish in your hotbar to put them on its rack. Bring them a few at a time if you like: the rack keeps them and starts smoking once it's full, even while you're away.</p>
-      </div>${this.recipeDetail(sel, now)}</div>`;
+        ${intro}
+        <div class="smoker-h"><h4>Smoker · ${busy} of ${SMOKER_SPOTS} in use</h4>${all}</div>
+        <div class="spots">${s.smoke.spots.map((sp) => this.spotCard(sp, now)).join('')}</div>
+        <p class="foot">Click a fish in your hotbar to put it on the smoker, or Smoke all (it skips shinies). Smoked fish go to your Pantry, even while you're away.</p>
+      </div>${this.smokerDetail()}</div>`;
   }
 
-  private rackCard(rack: Rack | null, i: number, now: number): string {
-    const name = `Rack ${i + 1}`;
-    if (i >= rackCount(this.s.level)) return `<div class="rack locked"><span class="ic">🔒</span><div><b>${name}</b><span>Opens at level ${RACK3_LEVEL}</span></div></div>`;
-    if (!rack) return `<div class="rack"><span class="ic">🪵</span><div><b>${name}</b><span>Empty</span></div></div>`;
-    const r = recipeById(rack.r)!;
-    const have = rack.fish.filter(Boolean).length;
-    const pct = (f: number) => Math.round(Math.min(1, Math.max(0.06, f)) * 100);
-    let line: string;
-    let bar: string;
-    if (rack.doneAt) {
-      const from = rack.doneAt - r.minutes * 60_000;
-      line = rack.doneAt <= now ? 'Done! Off to your Pantry' : `Smoking · <span data-until="${rack.doneAt}">${clock(rack.doneAt - now)}</span> left`;
-      bar = `<i data-from="${from}" data-to="${rack.doneAt}" style="width:${pct((now - from) / (rack.doneAt - from))}%"></i>`;
-    } else {
-      line = `Loading · ${have} of ${r.needs.length} fish`;
-      bar = `<i class="load" style="width:${pct(have / r.needs.length)}%"></i>`;
-    }
-    return `<button class="rack${rack.doneAt ? ' on' : ''}" style="--c:var(--t${this.recipeTier(r)})" data-pick="smoke" data-id="${r.id}"><span class="ic">${r.icon}</span><div><b>${name} · ${r.name}</b><span>${line}</span><div class="meter">${bar}</div></div></button>`;
+  private spotCard(sp: SaveData['smoke']['spots'][number], now: number): string {
+    if (!sp) return `<div class="spot"><span class="ic">🪵</span><b>Empty</b><span>Click a hotbar fish</span></div>`;
+    const f = byId(FISH, sp.fish.fishId);
+    const from = sp.doneAt - smokeSeconds(f.tier) * 1000;
+    const done = sp.doneAt <= now;
+    const left = done ? 'Done!' : `<span data-until="${sp.doneAt}">${clock(sp.doneAt - now)}</span>`;
+    const bar = `<div class="meter"><i ${done ? '' : `data-from="${from}" data-to="${sp.doneAt}" `}style="width:${Math.round(Math.min(1, Math.max(0.06, (now - from) / (sp.doneAt - from))) * 100)}%"></i></div>`;
+    return `<div class="spot on" style="--c:var(--t${f.tier})"><span class="ic">${fishIcon(f.id, { shiny: sp.fish.shiny })}</span><b>${sp.fish.shiny ? '✨ ' : ''}${f.name}</b><span>${left}</span>${bar}</div>`;
   }
 
-  private recipeDetail(r: Recipe, now: number): string {
+  /** The smoker's detail pane: times and what each tier's smoked fish does, with locked stages showing their goal. */
+  private smokerDetail(): string {
     const s = this.s;
-    const t = this.recipeTier(r);
-    const open = smoke.unlocked(s, r);
-    const at = open ? smoke.rackFor(s, r) : -1;
-    const rack = at >= 0 ? s.smoke.racks[at] : null;
-    const ingredients = this.ingredientsHtml(r, at, rack);
-    const smoking = s.smoke.racks.map((x, i) => (x?.r === r.id && x.doneAt && x.doneAt > now ? `<div class="have">Rack ${i + 1}: ready in <b data-until="${x.doneAt}">${clock(x.doneAt - now)}</b></div>` : '')).join('');
-    const made = smoke.madeCount(s, r.id);
-    const star = made >= WELL_SMOKED ? this.meter('★ Well-smoked', 'Two per batch', 1, t) : this.meter('Toward Well-smoked ★', `${made} / ${WELL_SMOKED}`, made / WELL_SMOKED, t);
-    const note = !open ? `Mags teaches this one at level ${r.level}.`
-      : at < 0 ? 'Every rack is busy. Come back when one is done: finished batches go to your Pantry on their own.'
-      : `Click a highlighted ingredient to put your fish on the rack. It starts smoking once all ${r.needs.length} are in, and takes ${r.minutes} min. Trophy-size fish 🏆 make the buff last longer.`;
-    const n = smoke.pantryCount(s, r.id);
+    const rows = [1, 2, 3, 4, 5].map((t) => {
+      const st = STAGES.find((x) => x.tiers.includes(t))!;
+      // Jewels & Spirits opens with tier 4; a tier 5 row still waits for its own first catch.
+      const caught = t < 5 || Object.keys(s.dex).some((id) => FISH.find((f) => f.id === id)?.tier === 5);
+      const open = smoke.stageOpen(s, st) && caught;
+      const d = SNACKS[t];
+      const does = !open ? `🔒 ${caught ? st.goal : 'Catch a tier 5 fish'}` : d ? `${BUFF_ICON[d.kind]} +${Math.round(d.bonus * 100)}% ${d.kind === 'xp' ? 'XP' : 'coins'}${t <= SELL_TIER ? ` · sells ${SMOKED_SELL}×` : ''}` : '✨ For dishes';
+      return `<div class="trow${open ? '' : ' locked'}"><span class="tierico" style="--c:var(--t${t})">T${t}</span><span class="tm">${smokeSeconds(t) < 60 ? `${smokeSeconds(t)} s` : `${smokeSeconds(t) / 60} min`}</span><span class="dz">${does}</span></div>`;
+    }).join('');
+    const n = smoke.smokeAllSlots(s).length;
     return this.detail({
-      icon: r.icon,
-      name: r.name,
-      tier: t,
-      badge: `<span class="badge" style="--c:var(--t${t})">${r.asks}</span>`,
-      body: `<div class="have">Eaten: <b>${r.effect}</b> for ${BUFF_MINUTES} min of play</div>${star}<div class="lbl">Ingredients</div><div class="ings">${ingredients}</div>${smoking}`,
-      note,
-      actions: n ? this.btn(`Eat one · ${n} in Pantry`, `data-act="eat" data-id="${r.id}"`) : this.btn('None in your Pantry yet', '', 'plain', true),
+      icon: '🔥',
+      name: "Mags's smoker",
+      tier: 3,
+      color: '#c96a2b',
+      badge: `<span class="badge" style="--c:#c96a2b">${SMOKER_SPOTS} spots · one fish each</span>`,
+      body: `<div class="lbl">Smoking time and snack, by tier</div><div class="trows">${rows}</div>`,
+      note: `Each snack lasts ${SNACK_MINUTES} min of play; more of the same adds time, up to ${SNACK_MAX_MINUTES}. Smoke all skips shinies: they sell for 5×.`,
+      actions: this.btn(n ? `🔥 Smoke all · ${n} fish` : 'No fish to smoke', 'data-act="smokeall"', n ? 'gold' : 'plain', !n),
     });
   }
 
-  /**
-   * One row per kind of fish the recipe takes ("Tier 2 fish 2/3"). A row lights up when a fish in
-   * the hotbar would fill it, and a click puts that fish on the rack; fish already on the rack show
-   * in the row and are clicked to take them back.
-   */
-  private ingredientsHtml(r: Recipe, at: number, rack: Rack | null): string {
-    const s = this.s;
-    const name = (id: string) => byId(FISH, id).name;
-    const groups: { need: Recipe['needs'][number]; js: number[] }[] = [];
-    r.needs.forEach((need, j) => {
-      const g = groups.find((x) => x.need === need);
-      if (g) g.js.push(j);
-      else groups.push({ need, js: [j] });
-    });
-    return groups.map(({ need, js }) => {
-      const on = js.filter((j) => rack?.fish[j]);
-      // Hotbar fish that would land in this row: shinies last (they're worth more sold), trophies first.
-      const mine = at < 0 ? [] : s.slots
-        .map((sl, i) => ({ sl, i }))
-        .filter((x): x is { sl: FishItem; i: number } => x.sl?.k === 'fish' && js.includes(smoke.spotFor(rack, r, byId(FISH, x.sl.fishId))))
-        .sort((a, b) => Number(!!a.sl.shiny) - Number(!!b.sl.shiny) || Number(smoke.isTrophy(b.sl)) - Number(smoke.isTrophy(a.sl)));
-      const done = on.length === js.length;
-      const label = need.fish ? name(need.fish) : need.tier ? `Tier ${need.tier} fish` : '🌙 Night fish';
-      const ico = need.fish ? fishIcon(need.fish) : need.tier ? `<span class="tierico" style="--c:var(--t${need.tier})">T${need.tier}</span>` : '<span class="tierico night">🌙</span>';
-      const pick = mine[0];
-      const sub = done ? 'On the rack ✓'
-        : pick ? `Click to add your ${pick.sl.shiny ? '✨ ' : ''}${name(pick.sl.fishId)}${smoke.isTrophy(pick.sl) ? ' 🏆' : ''}${mine.length > 1 ? ` (${mine.length} fit)` : ''}`
-        : need.fish ? `Catch a ${name(need.fish)}` : need.tier ? `Any ${tierName(need.tier)} fish` : 'Any fish that bites only at night';
-      const took = on.map((j) => {
-        const f = rack!.fish[j]!;
-        return `<span class="took" data-take data-act="unsmoke" data-rack="${at}" data-j="${j}" data-tip="${this.esc(`${f.shiny ? '✨ ' : ''}${name(f.fishId)}${smoke.isTrophy(f) ? ' 🏆' : ''} · click to take it back`)}">${fishIcon(f.fishId, { shiny: f.shiny })}</span>`;
-      }).join('');
-      const inner = `<span class="ico">${ico}</span><span class="txt"><b>${label}</b><small>${sub}</small></span>${took ? `<span class="tooks">${took}</span>` : ''}<span class="n">${on.length}/${js.length}</span>`;
-      return pick && !done
-        ? `<button class="ing ready" data-act="smoke" data-i="${pick.i}">${inner}</button>`
-        : `<div class="ing${done ? ' done' : ''}">${inner}</div>`;
-    }).join('');
+  private kitchenHtml(): string {
+    if (!smoke.kitchenOpen(this.s)) return `<div class="spot-note">🔒 <b>The Kitchen opens when you catch a tier 3 fish.</b> Mags cooks smoked fish into dishes that give several buffs at once.</div>`;
+    return `<div class="spot-note">🍲 <b>Dishes coming soon.</b> Mags is still writing her recipes. Keep smoking: every dish will need your small fry, and your tier 3 fish.</div>`;
   }
 
-  /** The buffs being eaten, and the Pantry's smoked goods to eat. Shown in the Bag and at the Smokehouse. */
-  private pantryHtml(): string {
+  private kitchenDetail(): string {
+    const open = smoke.kitchenOpen(this.s);
+    return this.detail({
+      icon: open ? '🍲' : '🔒',
+      name: 'Kitchen',
+      tier: 3,
+      badge: `<span class="badge" style="--c:var(--t3)">${open ? 'Coming soon' : 'Catch a tier 3 fish'}</span>`,
+      body: '<div class="have">A dish combines its fish\'s buffs, stronger and longer than a snack.</div>',
+      note: 'Dishes cook instantly from smoked fish in your Pantry.',
+      actions: '',
+    });
+  }
+
+  /** The Pantry pick: the fish picked, else the first one in the Pantry. */
+  private pantryPick(): string | null {
+    const ids = this.pantryIds();
+    return ids.includes(this.pick.smoke ?? '') ? this.pick.smoke! : ids[0] ?? null;
+  }
+
+  /** Species in the Pantry, lowest tier first. */
+  private pantryIds(): string[] {
+    return Object.keys(this.s.smoke.pantry).filter((id) => smoke.pantryCount(this.s, id) > 0).sort((a, b) => byId(FISH, a).tier - byId(FISH, b).tier);
+  }
+
+  /** The snack rule in plain words, with what eating one now would do to the clock. */
+  private snackRule(id: string): string {
+    const fx = this.snackEffect(id);
+    const plan = smoke.eatPlan(this.s, id);
+    const now = typeof plan === 'string' ? plan
+      : plan.from ? `Now: <b>${clock(plan.from)}</b> left → <b>${clock(plan.ms)}</b> after eating one.`
+      : smoke.snack(this.s) ? `Eating one replaces your current snack.` : '';
+    return `<div class="rule">Eating more doesn't make it stronger: each one adds <b>${SNACK_MINUTES} min</b> of ${fx}, up to <b>${SNACK_MAX_MINUTES} min</b>. ${now}</div>`;
+  }
+
+  private pantryDetail(): string {
     const s = this.s;
+    const id = this.pantryPick();
+    if (!id) return this.detail({ icon: '🧺', name: 'Your Pantry', tier: 3, badge: `<span class="badge" style="--c:var(--t3)">Kept in your save</span>`, body: '', note: 'Smoked fish wait here. Put fish on the smoker from your hotbar.', actions: '' });
+    const f = byId(FISH, id);
+    const n = smoke.pantryCount(s, id);
+    const snackable = !!smoke.snackFor(id);
+    const c = this.confirmEat?.id === id ? smoke.snack(s) : null;
+    const confirm = c
+      ? `<div class="confirm">Replace your Smoked ${byId(FISH, c.fishId).name} (<b data-until="${this.net.now() + c.ms}">${clock(c.ms)}</b> left)?</div>`
+      : '';
+    const actions = c
+      ? this.btn('Replace', `data-act="eatsure" data-id="${id}"`, 'bad') + this.btn('Keep', 'data-act="eatkeep"', 'plain')
+      : (snackable ? `<div class="btnrow">${this.eatBtns(id)}</div>` : '') + (smoke.sellable(id) ? `<div class="btnrow">${this.sellBtns(id)}</div>` : '');
+    return this.detail({
+      icon: fishIcon(id),
+      name: `Smoked ${f.name}`,
+      tier: f.tier,
+      body: `<div class="have">You have <b>${n}</b> · eaten: <b>${this.snackEffect(id)}</b>${snackable ? ` on every catch for ${SNACK_MINUTES} min of play` : ''}</div>${snackable ? this.snackRule(id) : ''}${confirm}`,
+      note: snackable
+        ? `One snack at a time: a different one replaces it.${smoke.sellable(id) ? ` Mags pays ${SMOKED_SELL}× the raw price; Sell 1 sells your best one.` : ''}`
+        : 'Smoked jewels and spirits are too good for a snack. Keep them for the Kitchen.',
+      actions,
+    });
+  }
+
+  /** The snack being eaten and the Pantry's smoked fish. Shown at the Smokehouse (`counter`, which can sell) and in the Bag. */
+  private pantryHtml(counter = false): string {
+    const s = this.s;
+    const sn = smoke.snack(s);
     const now = this.net.now();
-    const buffs = s.smoke.buffs.map((b) => {
-      const r = recipeById(b.id)!;
-      return `<div class="perk" data-tip="${this.esc(r.name)}"><span class="ic">${r.icon}</span><b>${r.effect}</b><span class="left" data-until="${now + b.ms}">${clock(b.ms)}</span></div>`;
+    const eating = sn
+      ? `<div class="perks"><div class="perk"><span class="ic">${BUFF_ICON[sn.kind]}</span><b>Smoked ${byId(FISH, sn.fishId).name} · ${this.snackEffect(sn.fishId)}</b><span class="left" data-until="${now + sn.ms}">${clock(sn.ms)}</span></div></div>`
+      : '';
+    const pick = counter ? this.pantryPick() : null;
+    const rows = this.pantryIds().map((id) => {
+      const f = byId(FISH, id);
+      const n = smoke.pantryCount(s, id);
+      const snackable = !!smoke.snackFor(id);
+      const ask = !counter && this.confirmEat?.id === id && sn;
+      const btns = ask
+        ? `<span class="ask">Replace ${byId(FISH, sn.fishId).name}?</span>${this.btn('Replace', `data-act="eatsure" data-id="${id}"`, 'bad')}${this.btn('Keep', 'data-act="eatkeep"', 'plain')}`
+        : (snackable ? this.eatBtns(id) : '') + (counter ? this.sellBtns(id) : '');
+      const tag = `<button class="pk" ${counter ? `data-pick="smoke" data-id="${id}"` : 'data-act="locked"'}><span class="ico">${fishIcon(id)}</span><span class="txt"><b>Smoked ${f.name} ×${n}</b><small>${snackable ? `${this.snackEffect(id)} · each adds ${SNACK_MINUTES} min, up to ${SNACK_MAX_MINUTES}` : '✨ For dishes (the Kitchen, coming soon)'}</small></span></button>`;
+      return `<div class="prow${pick === id ? ' sel' : ''}" style="--c:var(--t${f.tier})">${tag}<span class="pbtns">${btns}</span></div>`;
     }).join('');
-    const items = RECIPES.filter((r) => smoke.pantryCount(s, r.id) > 0).map((r) => {
-      const list = s.smoke.pantry[r.id]!;
-      return `<button class="perk eat" data-act="eat" data-id="${r.id}" data-tip="${this.esc(`Eat: ${r.effect} for ${Math.round(list[0] / 60)} min`)}"><span class="ic">${r.icon}</span><b>${r.name} ×${list.length}</b><span class="go">Eat</span></button>`;
-    }).join('');
-    const none = `<p class="empty">${buffs ? 'Your Pantry is empty.' : 'Nothing smoked yet.'} Mags Cinder smokes fish into buffs at the Smokehouse, across from Marlow's stall.</p>`;
-    return `<h4 class="perks-h">Smoked goods · eating ${s.smoke.buffs.length} of ${MAX_BUFFS}</h4>${buffs ? `<div class="perks">${buffs}</div>` : ''}${items ? `<h4 class="perks-h">Pantry · click to eat</h4><div class="perks">${items}</div>` : none}`;
+    const none = `<p class="empty">Nothing smoked yet. Mags Cinder smokes fish at the Smokehouse, beside the Lucky Wheel${smoke.smokerOpen(s) ? '' : ` (from level ${SMOKE_LEVEL})`}.</p>`;
+    return `<h4 class="perks-h">Snack · ${sn ? 'eating one' : 'none right now'}</h4>${eating}<h4 class="perks-h">Pantry${counter ? '' : ' · smoked fish'}</h4>${rows ? `<div class="prows">${rows}</div>` : none}`;
   }
 
   // ---------- Bag ----------

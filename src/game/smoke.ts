@@ -1,154 +1,208 @@
-import { FISH, byId, type Fish } from '../data/content';
+import { FISH, byId } from '../data/content';
 import {
-  BITE_WAIT, BUFF_MINUTES, CONTROL_BUFF, DUSK_BITE, GLAZE_NIGHT_FISH, LUCK_BUFF, MAX_BUFFS, RECIPES, SHINY_BUFF, TROPHY_BONUS, TROPHY_TOP, WELL_SMOKED,
-  fits, needLabel, rackCount, recipeById, type Recipe, type RecipeId,
+  FREE_FISH, REPLACE_ASK_MS, SELL_TIER, SMOKED_SELL, SMOKER_SPOTS, SMOKE_LEVEL, SNACKS, SNACK_MAX_MINUTES, SNACK_MINUTES, STAGES,
+  smokeSeconds, type BuffKind, type Stage, type StageId,
 } from '../data/smokehouse';
-import { NIGHT_BITE } from './daynight';
-import { clearSlot, freeFishSlot, type FishItem, type Rack, type SaveData } from './state';
+import { sellValue } from './progression';
+import { FISH_SLOT, clearSlot, type FishItem, type SaveData } from './state';
 
 /**
- * The Smokehouse (GAME_DESIGN.md §38.2): fish go onto Mags's racks a few at a time, smoke in real
- * time (offline too) into the Pantry, and are eaten for buffs that tick down in online time only.
- * Pure save mutations, like economy.ts: the server runs them and the client mirrors them.
+ * The Smokehouse (GAME_DESIGN.md §38.2): fish go on Mags's smoker one per spot, smoke for seconds
+ * (offline too) into the Pantry, and are sold or eaten as snacks whose buff ticks down in online
+ * time only. Pure save mutations, like economy.ts: the server runs them and the client mirrors them.
  */
 
-type S = Pick<SaveData, 'level' | 'smoke'>;
+type S = Pick<SaveData, 'smoke'>;
 
-export const unlocked = (s: Pick<SaveData, 'level'>, r: Recipe): boolean => s.level >= r.level;
+const SNACK_MS = SNACK_MINUTES * 60_000;
+const SNACK_MAX_MS = SNACK_MAX_MINUTES * 60_000;
 
-/** Trophy size: the top fifth of the species' size range. */
-export function isTrophy(f: { fishId: string; size: number }): boolean {
-  const d = byId(FISH, f.fishId);
-  return f.size >= d.maxSize - TROPHY_TOP * (d.maxSize - d.minSize);
+export const smokerOpen = (s: Pick<SaveData, 'level'>): boolean => s.level >= SMOKE_LEVEL;
+
+/** Whether a stage is open: Small Fry by level, the others by a first catch of their lowest tier, read from the Fishdex. */
+export function stageOpen(s: Pick<SaveData, 'level' | 'dex'>, st: Stage): boolean {
+  if (!smokerOpen(s)) return false;
+  if (st.id === 'smallfry') return true;
+  return Object.keys(s.dex).some((id) => FISH.find((f) => f.id === id)?.tier === st.tiers[0]);
+}
+export const kitchenOpen = (s: Pick<SaveData, 'level' | 'dex'>): boolean => stageOpen(s, STAGES[1]);
+
+/** The snack a smoked fish makes, or null for tiers 4-5. */
+export const snackFor = (fishId: string): { kind: BuffKind; bonus: number } | null => SNACKS[byId(FISH, fishId).tier] ?? null;
+
+/**
+ * Marks newly opened stages as seen and returns them. Opening the smoker hands over the free smoked
+ * fish. `intro` is set when nothing was seen before but several stages open at once: an existing
+ * player meeting the Smokehouse for the first time, who gets one "New in town" banner.
+ */
+export function openStages(s: Pick<SaveData, 'level' | 'dex' | 'smoke'>): { ids: StageId[]; intro: boolean } {
+  const fresh = s.smoke.seen.length === 0;
+  const ids = STAGES.filter((st) => !s.smoke.seen.includes(st.id) && stageOpen(s, st)).map((st) => st.id);
+  if (!ids.length) return { ids, intro: false };
+  s.smoke.seen.push(...ids);
+  if (ids.includes('smallfry')) {
+    const t1 = FISH.filter((f) => f.tier === 1);
+    const fav = t1.reduce((a, b) => ((s.dex[b.id]?.count ?? 0) > (s.dex[a.id]?.count ?? 0) ? b : a), t1[0]);
+    stock(s, fav.id, sellValue(fav, fav.minSize), FREE_FISH);
+  }
+  return { ids, intro: fresh && ids.length > 1 };
 }
 
-/** A batch's buff length in seconds: trophy-size fish add up to half again, by their share of the batch. */
-export function batchSeconds(fish: FishItem[]): number {
-  const share = fish.filter(isTrophy).length / Math.max(1, fish.length);
-  return Math.round(BUFF_MINUTES * 60 * (1 + TROPHY_BONUS * share));
-}
+// ---------- The smoker ----------
 
-export const madeCount = (s: S, id: RecipeId): number => s.smoke.made[id] ?? 0;
-/** Smoked `WELL_SMOKED` times: every batch from then on yields two. */
-export const wellSmoked = (s: S, id: RecipeId): boolean => madeCount(s, id) >= WELL_SMOKED;
+/** The first free spot on the smoker, or -1. */
+export const freeSpot = (s: S): number => s.smoke.spots.findIndex((x) => !x);
 
-/** The rack a fish for this recipe goes on: the one already being loaded with it, else the first free one. */
-export function rackFor(s: S, r: Recipe): number {
-  const racks = s.smoke.racks.slice(0, rackCount(s.level));
-  const loading = racks.findIndex((x) => x?.r === r.id && !x.doneAt);
-  return loading >= 0 ? loading : racks.indexOf(null);
-}
-
-/** The spot on the rack this fish would fill, or -1. */
-export const spotFor = (rack: Rack | null, r: Recipe, fish: Fish): number => r.needs.findIndex((n, j) => !rack?.fish[j] && fits(n, fish));
-
-/** The spots still empty on the rack being loaded with this recipe, in words. */
-export function stillNeeds(s: S, r: Recipe): string[] {
-  const at = rackFor(s, r);
-  const rack = at >= 0 ? s.smoke.racks[at] : null;
-  return r.needs.filter((_, j) => !rack?.fish[j]).map((n) => needLabel(n, (id) => byId(FISH, id).name));
-}
-
-/** Puts a hotbar fish on a rack for this recipe; the rack starts smoking once full. Returns why it can't, or null. */
-export function loadFish(s: SaveData, id: unknown, slot: number, now: number): string | null {
-  const r = recipeById(id);
-  if (!r) return 'Pick a recipe first.';
-  if (!unlocked(s, r)) return `${r.name} unlocks at level ${r.level}.`;
+/** Puts the fish in hotbar slot `slot` on the smoker. Returns why it can't, or null. */
+export function smokeFish(s: SaveData, slot: number, now: number): string | null {
+  if (!smokerOpen(s)) return `Mags opens up at level ${SMOKE_LEVEL}.`;
   const item = Number.isInteger(slot) ? s.slots[slot] : null;
   if (item?.k !== 'fish') return 'Pick a fish from your hotbar.';
-  const at = rackFor(s, r);
-  if (at < 0) return 'Every rack is busy. Come back when one is done.';
-  const rack: Rack = s.smoke.racks[at] ?? { r: r.id, fish: r.needs.map(() => null) };
-  const fish = byId(FISH, item.fishId);
-  const j = spotFor(rack, r, fish);
-  if (j < 0) return `${r.name} doesn't take a ${fish.name}. It still needs: ${stillNeeds(s, r).join(', ')}.`;
-  rack.fish[j] = item;
-  s.smoke.racks[at] = rack;
+  const at = freeSpot(s);
+  if (at < 0) return 'The smoker is full. A spot frees up when a fish is done.';
+  s.smoke.spots[at] = { fish: item, doneAt: now + smokeSeconds(byId(FISH, item.fishId).tier) * 1000 };
   clearSlot(s, slot);
-  if (rack.fish.every(Boolean)) rack.doneAt = now + r.minutes * 60_000;
   return null;
 }
 
-/** Takes a fish back off a rack that hasn't started smoking. Returns why it can't, or null. */
-export function takeFish(s: SaveData, at: number, j: number): string | null {
-  const rack = Number.isInteger(at) ? s.smoke.racks[at] : null;
-  const item = rack && Number.isInteger(j) ? rack.fish[j] : null;
-  if (!rack || !item) return 'Nothing there to take.';
-  if (rack.doneAt) return "It's already smoking.";
-  const free = freeFishSlot(s);
-  if (free < 0) return 'Your fish slots are full.';
-  s.slots[free] = item;
-  rack.fish[j] = null;
-  if (rack.fish.every((f) => !f)) s.smoke.racks[at] = null;
+/** Hotbar slots Smoke all would load, in order: every fish but the shinies, which sell for 5×. */
+export function smokeAllSlots(s: SaveData): number[] {
+  const out: number[] = [];
+  for (let i = FISH_SLOT; i < s.slots.length; i++) {
+    const it = s.slots[i];
+    if (it?.k === 'fish' && !it.shiny) out.push(i);
+  }
+  return out.slice(0, s.smoke.spots.filter((x) => !x).length);
+}
+
+/** Puts every non-shiny hotbar fish on the smoker, as many as fit. Returns why none went on, or null. */
+export function smokeAll(s: SaveData, now: number): string | null {
+  if (!smokerOpen(s)) return `Mags opens up at level ${SMOKE_LEVEL}.`;
+  if (freeSpot(s) < 0) return 'The smoker is full. A spot frees up when a fish is done.';
+  const slots = smokeAllSlots(s);
+  if (!slots.length) return s.slots.some((x) => x?.k === 'fish') ? 'Smoke all skips shinies: click one to smoke it anyway.' : 'No fish in your hotbar.';
+  for (const i of slots) {
+    const item = s.slots[i] as FishItem;
+    s.smoke.spots[freeSpot(s)] = { fish: item, doneAt: now + smokeSeconds(byId(FISH, item.fishId).tier) * 1000 };
+  }
+  // From the end, so clearing an extra slot past the hotbar doesn't shift the ones still to clear.
+  for (const i of [...slots].reverse()) clearSlot(s, i);
   return null;
 }
 
-/** Adds `n` items to the Pantry, keeping each recipe's list longest first. */
-export function stock(s: S, id: RecipeId, seconds: number, n = 1): void {
-  const list = (s.smoke.pantry[id] ??= []);
-  for (let i = 0; i < n; i++) list.push(seconds);
+/** Adds `n` smoked fish of a species to the Pantry; each keeps its raw sale value, highest first. */
+export function stock(s: S, fishId: string, value: number, n = 1): void {
+  const list = listOf(s, fishId) ?? (s.smoke.pantry[fishId] = []);
+  for (let i = 0; i < n; i++) list.push(Math.round(value));
   list.sort((a, b) => b - a);
 }
 
-export const pantryCount = (s: S, id: RecipeId): number => s.smoke.pantry[id]?.length ?? 0;
+/** A species' smoked fish, or undefined; client-sent ids like `constructor` never reach the object's prototype. */
+const listOf = (s: S, fishId: unknown): number[] | undefined =>
+  typeof fishId === 'string' && Object.hasOwn(s.smoke.pantry, fishId) && FISH.some((f) => f.id === fishId) ? s.smoke.pantry[fishId] : undefined;
 
-/** Moves every finished rack into the Pantry; returns what was smoked. */
-export function collectRacks(s: S, now: number): { id: RecipeId; n: number }[] {
-  const out: { id: RecipeId; n: number }[] = [];
-  s.smoke.racks.forEach((rack, i) => {
-    if (!rack?.doneAt || rack.doneAt > now) return;
-    const n = wellSmoked(s, rack.r) ? 2 : 1;
-    stock(s, rack.r, batchSeconds(rack.fish.filter((f): f is FishItem => !!f)), n);
-    s.smoke.made[rack.r] = madeCount(s, rack.r) + 1;
-    s.smoke.racks[i] = null;
-    out.push({ id: rack.r, n });
+export const pantryCount = (s: S, fishId: string): number => listOf(s, fishId)?.length ?? 0;
+export const pantryTotal = (s: S): number => Object.values(s.smoke.pantry).reduce((a, l) => a + (l?.length ?? 0), 0);
+
+/** Moves every finished fish into the Pantry; returns how many of each species. */
+export function collect(s: S, now: number): { fishId: string; n: number }[] {
+  const out: { fishId: string; n: number }[] = [];
+  s.smoke.spots.forEach((sp, i) => {
+    if (!sp || sp.doneAt > now) return;
+    stock(s, sp.fish.fishId, sellValue(byId(FISH, sp.fish.fishId), sp.fish.size, sp.fish.shiny) * (sp.fish.mult ?? 1));
+    s.smoke.spots[i] = null;
+    const d = out.find((x) => x.fishId === sp.fish.fishId);
+    if (d) d.n++;
+    else out.push({ fishId: sp.fish.fishId, n: 1 });
   });
   return out;
 }
 
-/** The best recipe this player has unlocked: what a level-up gift comes as. */
-export const bestRecipe = (s: Pick<SaveData, 'level'>): Recipe => RECIPES.filter((r) => unlocked(s, r)).at(-1)!;
+// ---------- Selling ----------
 
-/** Puts banked provision gifts (levels past 50) in the Pantry as the best recipe unlocked; returns how many. */
-export function stockGifts(s: Pick<SaveData, 'level' | 'smoke' | 'gifts'>): number {
-  const n = s.gifts.provisions;
-  if (n <= 0) return 0;
-  stock(s, bestRecipe(s).id, BUFF_MINUTES * 60, n);
-  s.gifts.provisions = 0;
-  return n;
+export const sellable = (fishId: string): boolean => byId(FISH, fishId).tier <= SELL_TIER;
+/** What Mags pays for every smoked fish of a species, or (`one`) for the most valuable one. */
+export function smokedPrice(s: S, fishId: string, one = false): number {
+  const list = listOf(s, fishId) ?? [];
+  return Math.round((one ? (list[0] ?? 0) : list.reduce((a, v) => a + v, 0)) * SMOKED_SELL);
 }
 
-/** Eats the longest-lasting item of a recipe. Different kinds stack, the same kind refreshes. Returns why it can't, or null. */
-export function eat(s: S, id: unknown): string | null {
-  const r = recipeById(id);
-  const list = r && s.smoke.pantry[r.id];
-  if (!r || !list?.length) return 'There are none in your Pantry.';
-  const cur = s.smoke.buffs.find((b) => b.id === r.id);
-  if (!cur && s.smoke.buffs.length >= MAX_BUFFS) return `You're full! At most ${MAX_BUFFS} kinds at once.`;
-  const ms = list.shift()! * 1000;
-  if (!list.length) delete s.smoke.pantry[r.id];
-  if (cur) cur.ms = Math.max(cur.ms, ms);
-  else s.smoke.buffs.push({ id: r.id, ms });
+/**
+ * Sells smoked fish of a species to Mags: every one with `all`, else the most valuable one (eating
+ * takes the cheapest first, so the two leave each other the right fish). Returns why it can't, or null.
+ */
+export function sellSmoked(s: Pick<SaveData, 'smoke' | 'coins'>, fishId: unknown, all = false): string | null {
+  const list = listOf(s, fishId);
+  if (!list?.length) return 'There are none in your Pantry.';
+  const id = fishId as string;
+  if (!sellable(id)) return 'Mags only buys smoked tier 1 and 2 fish. Save these for her kitchen.';
+  s.coins += smokedPrice(s, id, !all);
+  if (all) list.length = 0;
+  else list.shift();
+  if (!list.length) delete s.smoke.pantry[id];
   return null;
 }
 
-/** Runs the buffs down by `ms` of online time; true if one wore off. */
-export function tickBuffs(s: S, ms: number): boolean {
-  if (!s.smoke.buffs.length || !(ms > 0)) return false;
-  for (const b of s.smoke.buffs) b.ms -= ms;
-  const before = s.smoke.buffs.length;
-  s.smoke.buffs = s.smoke.buffs.filter((b) => b.ms > 0);
-  return s.smoke.buffs.length < before;
+// ---------- Snacks ----------
+
+/** The snack being eaten, with what it does, or null. */
+export function snack(s: S): { fishId: string; ms: number; kind: BuffKind; bonus: number } | null {
+  const sn = s.smoke.snack;
+  const d = sn && sn.ms > 0 ? snackFor(sn.fishId) : null;
+  return sn && d ? { ...sn, ...d } : null;
 }
 
-export const buffOn = (s: Pick<SaveData, 'smoke'>, id: RecipeId): boolean => s.smoke.buffs.some((b) => b.id === id && b.ms > 0);
+/** Same buff, same strength: eating it adds time instead of replacing. */
+const sameSnack = (a: string, b: string): boolean => byId(FISH, a).tier === byId(FISH, b).tier;
 
-/** What eaten buffs do. Each one multiplies with the rod, bait and casino perks. */
-export const biteWait = (s: Pick<SaveData, 'smoke'>): number => (buffOn(s, 'minnowbites') ? BITE_WAIT : 1);
-export const buffLuck = (s: Pick<SaveData, 'smoke'>): number => (buffOn(s, 'kippers') ? LUCK_BUFF : 1);
-export const buffControl = (s: Pick<SaveData, 'smoke'>): number => (buffOn(s, 'pikejerky') ? CONTROL_BUFF : 1);
-export const buffNightFish = (s: Pick<SaveData, 'smoke'>): number => (buffOn(s, 'lanternglaze') ? GLAZE_NIGHT_FISH : 1);
-export const buffShiny = (s: Pick<SaveData, 'smoke'>): number => (buffOn(s, 'jewelplatter') ? SHINY_BUFF : 1);
+/** Whether eating this would replace a different snack with more than a minute left, so the game asks first. */
+export function wouldReplace(s: S, fishId: string): boolean {
+  const cur = snack(s);
+  return !!cur && !sameSnack(cur.fishId, fishId) && cur.ms > REPLACE_ASK_MS;
+}
 
-/** Whether night fish bite at this darkness (`nightness`): from dusk with Lantern Glaze, else once it's properly dark. */
-export const nightBite = (s: Pick<SaveData, 'smoke'>, dark: number): boolean => dark >= (buffOn(s, 'lanternglaze') ? DUSK_BITE : NIGHT_BITE);
+/**
+ * What eating would do: how many fish it takes, the snack time before (`from`, 0 when it starts or
+ * replaces one) and after (`ms`). Eating more never makes a snack stronger, only longer: each fish
+ * adds 5 minutes, up to 30, and Eat all eats only as many as fit. Null with the reason it can't.
+ */
+export function eatPlan(s: S, fishId: unknown, all = false): { n: number; from: number; ms: number } | string {
+  const list = listOf(s, fishId);
+  if (!list?.length) return 'There are none in your Pantry.';
+  const id = fishId as string;
+  if (!snackFor(id)) return 'Smoked jewels and spirits are for dishes, not snacks.';
+  const cur = snack(s);
+  const from = cur && sameSnack(cur.fishId, id) ? cur.ms : 0;
+  if (from >= SNACK_MAX_MS - 1000) return `That's already ${SNACK_MAX_MINUTES} minutes' worth.`;
+  const n = all ? Math.min(list.length, Math.ceil((SNACK_MAX_MS - from) / SNACK_MS)) : 1;
+  return { n, from, ms: Math.min(SNACK_MAX_MS, from + n * SNACK_MS) };
+}
+
+/** Eats one smoked fish (or, with `all`, as many as fit under the cap) for its snack buff. Returns why it can't, or null. */
+export function eat(s: S, fishId: unknown, all = false): string | null {
+  const plan = eatPlan(s, fishId, all);
+  if (typeof plan === 'string') return plan;
+  const id = fishId as string;
+  const list = listOf(s, id)!;
+  // The cheapest ones go first; the best are kept for selling.
+  list.splice(list.length - plan.n, plan.n);
+  if (!list.length) delete s.smoke.pantry[id];
+  s.smoke.snack = { fishId: id, ms: plan.ms };
+  return null;
+}
+
+/** Runs the snack down by `ms` of online time; true if it wore off. */
+export function tickSnack(s: S, ms: number): boolean {
+  const sn = s.smoke.snack;
+  if (!sn || !(ms > 0)) return false;
+  sn.ms -= ms;
+  if (sn.ms > 0) return false;
+  s.smoke.snack = null;
+  return true;
+}
+
+/** The snack's bonus of this kind at catch (0.25 for +25%), with the species to credit. */
+export function buff(s: S, kind: BuffKind): { bonus: number; fishId: string } | null {
+  const sn = snack(s);
+  return sn && sn.kind === kind ? { bonus: sn.bonus, fishId: sn.fishId } : null;
+}

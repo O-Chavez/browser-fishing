@@ -3,7 +3,8 @@ import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/
 import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
-import { biteWait, buffControl, buffLuck, buffNightFish, buffShiny, stockGifts } from './smoke';
+import type { StageId } from '../data/smokehouse';
+import { buff, openStages } from './smoke';
 import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
@@ -138,6 +139,9 @@ export const WHEEL_RANGE = 4;
 export const fishValue = (item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
   sellValue(byId(FISH, item.fishId), item.size, item.shiny) * (item.mult ?? 1);
 
+/** A fresh catch's value multiplier: the best Lucky Charm times a 💰 snack. */
+export const catchMult = (s: Pick<SaveData, 'perks' | 'smoke'>): number => (1 + charmBonus(s)) * (1 + (buff(s, 'coins')?.bonus ?? 0));
+
 /** Sell-value bonus from the best Lucky Charm owned. */
 export function charmBonus(s: Pick<SaveData, 'perks'>): number {
   for (const id of ['charm3', 'charm2', 'charm1'] as const) if (s.perks.includes(id)) return CHARM_BONUS[id];
@@ -175,8 +179,8 @@ export function setLure(s: SaveData, on: unknown): boolean {
   return true;
 }
 
-/** Rod control with the Quick-Reel Gloves and Pike Jerky. */
-export const reelControl = (s: Pick<SaveData, 'perks' | 'smoke'>, base: number): number => base * (s.perks.includes('gloves') ? GLOVES_CONTROL : 1) * buffControl(s);
+/** Rod control with the Quick-Reel Gloves on. */
+export const reelControl = (s: Pick<SaveData, 'perks'>, base: number): number => (s.perks.includes('gloves') ? base * GLOVES_CONTROL : base);
 
 /** Resolves a spin for the fish in hand: a win doubles its value, a loss destroys it. */
 export function applyWheel(s: SaveData, win: boolean): number {
@@ -367,8 +371,7 @@ export interface Roll {
 export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Roll {
   const rod = byId(RODS, s.rod);
   const bait = byId(BAITS, s.bait);
-  const buff = { luck: buffLuck(s), nightFish: buffNightFish(s) };
-  const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1, buff);
+  const fish = pickFish(eligibleFish(locationId, rod, bait, night), rod, bait, rng, perfect, spot, night, s.perks.includes('lantern') ? LANTERN_NIGHT_LUCK : 1);
   const lure = !!fish && lureOn(s);
   if (lure) s.lure--;
   return {
@@ -376,8 +379,8 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
     spot,
     fishId: fish?.id ?? null,
     size: fish ? rollSize(fish, rng) : 0,
-    wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait * biteWait(s),
-    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE) * buffShiny(s)),
+    wait: ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait,
+    shiny: lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE)),
   };
 }
 
@@ -391,24 +394,35 @@ export interface CatchResult {
   level: number;
   /** Ranks reached with this catch (their titles and outfits are already given). */
   ranks: Rank[];
+  /** The snack that added XP or coins to this catch, for the catch card's credit. */
+  xpSnack?: string;
+  coinSnack?: string;
+  /** Smokehouse stages this catch opened. */
+  stages: StageId[];
+  /** The fish's value multiplier: Lucky Charm and 💰 snack. */
+  mult: number;
 }
 
 export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false): CatchResult {
   const slot = freeFishSlot(s);
-  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [] };
+  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
   const first = !entry;
-  const gained = catchXp(fish, size, first, shiny);
+  // Smokehouse snacks apply at catch, like the Lucky Charms: ⭐ into the XP, 💰 into the fish's value.
+  const xp = buff(s, 'xp');
+  const coin = buff(s, 'coins');
+  const gained = Math.round(catchXp(fish, size, first, shiny) * (1 + (xp?.bonus ?? 0)));
   const record = !!entry && size > entry.best;
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
-  const bonus = charmBonus(s);
-  s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(bonus > 0 ? { mult: 1 + bonus } : {}) };
-  const value = Math.round(sellValue(fish, size, shiny) * (1 + bonus));
+  const mult = catchMult(s);
+  s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
+  const value = Math.round(sellValue(fish, size, shiny) * mult);
   if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
   const before = s.level;
   const ranks = gainXp(s, gained);
-  return { stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks };
+  const stages = openStages(s).ids;
+  return { stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult, ...(xp ? { xpSnack: xp.fishId } : {}), ...(coin ? { coinSnack: coin.fishId } : {}) };
 }
 
 /** Adds XP: levels up, gives the gifts for levels past 50 and any ranks reached, and returns those ranks. */
@@ -420,7 +434,6 @@ export function gainXp(s: SaveData, xp: number): Rank[] {
   const g = levelGifts(before, s.level);
   s.gifts.provisions += g.provisions;
   s.gifts.fares += g.fares;
-  stockGifts(s);
   return grantRanks(s);
 }
 
@@ -437,7 +450,6 @@ export function payBack(s: SaveData): { levels: number; ranks: Rank[] } {
   const g = levelGifts(before, s.level);
   s.gifts.provisions += Math.min(g.provisions, BACKPAY_GIFTS.provisions);
   s.gifts.fares += Math.min(g.fares, BACKPAY_GIFTS.fares);
-  stockGifts(s);
   s.backPay.paid = true;
   return { levels: s.level - before, ranks: grantRanks(s) };
 }

@@ -1,10 +1,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { BAITS, FISH, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
-import { BUFF_MINUTES, RECIPES, recipeById } from '../src/data/smokehouse';
 import * as eco from '../src/game/economy';
 import * as smoke from '../src/game/smoke';
-import { grantRanks } from '../src/game/progression';
+import { grantRanks, sellValue } from '../src/game/progression';
 import type { SaveData } from '../src/game/state';
 import { Lockout } from './lockout';
 
@@ -62,7 +61,7 @@ export const HELP = [
   '/coins N · /chips N · /level N',
   '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /time day|dusk|night|dawn|auto',
-  '/dig (reset worm cooldown) · /smoke (finish your racks) · /smoke <recipe> [N]',
+  '/dig (reset worm cooldown) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/resetpass <name> <new password>',
   '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
 ];
@@ -126,15 +125,15 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
     }
     case 'smoke': {
       if (!args[0]) {
-        const racks = s.smoke.racks.filter((r) => r?.doneAt);
-        for (const r of racks) r!.doneAt = 1;
-        return racks.length ? ok(`Finished ${racks.length} rack${racks.length === 1 ? '' : 's'}.`) : say('No racks are smoking.');
+        const busy = s.smoke.spots.filter((x) => x);
+        for (const x of busy) x!.doneAt = 1;
+        return busy.length ? ok(`Finished ${busy.length} fish on the smoker.`) : say('Nothing is on the smoker.');
       }
-      const r = recipeById(args[0]);
-      if (!r) return say(`Recipe ids: ${ids(RECIPES)}`);
+      const f = FISH.find((x) => x.id === args[0]);
+      if (!f) return say(`Fish ids: ${ids(FISH)}`);
       const n = int(args[1] ?? '1', 1, 50)!;
-      smoke.stock(s, r.id, BUFF_MINUTES * 60, n);
-      return ok(`Added ${n} ${r.name} to your Pantry.`);
+      smoke.stock(s, f.id, sellValue(f, (f.minSize + f.maxSize) / 2), n);
+      return ok(`Added ${n} smoked ${f.name} to your Pantry.`);
     }
     case 'tp': {
       const m = t.maps[args[0]];

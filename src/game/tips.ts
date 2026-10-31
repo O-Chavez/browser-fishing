@@ -8,7 +8,7 @@ import type { SaveData } from './state';
  * One-time tips that walk a new player through the core loop: cast, reel, sell, buy better bait,
  * catch better fish. Each shows once per account; the ids seen are kept in the save.
  */
-export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier'] as const;
+export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier', 'smoker', 'snack'] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export const isTip = (id: unknown): id is TipId => TIP_IDS.includes(id as TipId);
@@ -51,6 +51,10 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
       return 'New bait on your line! Better bait draws bigger fish that sell for more.';
     case 'tier':
       return `A new tier of fish! Keep upgrading your bait and rod to reach rarer ones. Casino Cove opens at <b>Lv ${CASINO_LEVEL}</b>.`;
+    case 'smoker':
+      return 'Small fry? Smoke it instead of selling it: <b>Mags Cinder</b> at the Smokehouse, beside the Lucky Wheel, smokes it in seconds.';
+    case 'snack':
+      return `Smoked fish ready! Eat one from your <b>Bag</b> (${touch ? 'the 🎒 button' : '<kbd>Tab</kbd>'}) for ⭐ more XP on every catch.`;
   }
 }
 

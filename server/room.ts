@@ -2,12 +2,12 @@ import { FISH, byId } from '../src/data/content';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
-import { dayFraction, nightness } from '../src/game/daynight';
+import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
 import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
-import { SMOKE_RANGE, recipeById } from '../src/data/smokehouse';
+import { SMOKE_RANGE } from '../src/data/smokehouse';
 import * as smoke from '../src/game/smoke';
 import { newSave, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
@@ -132,10 +132,10 @@ export class Room {
     const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
     const m: Member = { info, conn, acct, pending: null, spin: null, bj: null, smokeAt: this.now() };
     acct.online = true;
-    // Racks kept smoking while they were away; level gifts banked before the Smokehouse go to the Pantry.
-    const smoked = smoke.collectRacks(acct.save, this.now());
-    const gifts = smoke.stockGifts(acct.save);
-    if (smoked.length || gifts) this.onChange();
+    // The smoker kept going while they were away, and stages they reached before the Smokehouse open now.
+    const smoked = smoke.collect(acct.save, this.now());
+    const stages = smoke.openStages(acct.save);
+    if (smoked.length || stages.ids.length) this.onChange();
     const it = acct.save.slots[acct.save.held];
     if (it?.k === 'fish') info.act = { a: 'carry', fish: it.fishId, size: it.size, shiny: it.shiny };
     conn.send({
@@ -156,7 +156,7 @@ export class Room {
     this.say({ t: 'sys', text: `${acct.name} has joined` });
     this.members.set(id, m);
     if (smoked.length) conn.send({ t: 'notice', msg: `🔥 While you were away, Mags smoked your ${smokedText(smoked)}. It's in your Pantry.` });
-    if (gifts) conn.send({ t: 'notice', msg: `🎁 Your levels past 50 put ${smokedText([{ id: smoke.bestRecipe(acct.save).id, n: gifts }])} in your Pantry.` });
+    if (stages.ids.length) conn.send({ t: 'stages', ...stages });
     return id;
   }
 
@@ -245,13 +245,16 @@ export class Room {
         changed = markTip(s, msg.id);
         break;
       case 'smoke':
-        changed = this.atSmoker(m) && this.ok(m, smoke.loadFish(s, msg.r, int(msg.i), this.now()));
+        changed = this.atSmoker(m) && this.ok(m, smoke.smokeFish(s, int(msg.i), this.now()));
         break;
-      case 'unsmoke':
-        changed = this.atSmoker(m) && this.ok(m, smoke.takeFish(s, int(msg.rack), int(msg.j)));
+      case 'smokeall':
+        changed = this.atSmoker(m) && this.ok(m, smoke.smokeAll(s, this.now()));
+        break;
+      case 'sellsmoked':
+        changed = this.atSmoker(m) && this.ok(m, smoke.sellSmoked(s, str(msg.id), msg.all === true));
         break;
       case 'eat':
-        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eat(s, str(msg.id)));
+        changed = !this.maps[m.info.map]?.casino && this.ok(m, smoke.eat(s, str(msg.id), msg.all === true));
         break;
       case 'lure':
         changed = eco.setLure(s, msg.on);
@@ -303,7 +306,7 @@ export class Room {
         this.syncCarry(m);
         return;
     }
-    if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell' || msg.t === 'smoke' || msg.t === 'unsmoke')) this.syncCarry(m);
+    if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell' || msg.t === 'smoke' || msg.t === 'smokeall')) this.syncCarry(m);
     if (changed && (msg.t === 'equip' || msg.t === 'color' || msg.t === 'face')) this.broadcast({ t: 'look', id, look: s.look });
     if (changed) {
       this.onChange();
@@ -571,15 +574,16 @@ export class Room {
     return !why;
   }
 
-  /** Runs buffs down by the online time since the last tick and moves finished racks to the Pantry. */
+  /** Runs the snack down by the online time since the last tick and moves finished fish to the Pantry. */
   private tickSmoke(m: Member): void {
     const now = this.now();
     const s = m.acct.save;
-    const worn = smoke.tickBuffs(s, now - m.smokeAt);
+    const worn = smoke.tickSnack(s, now - m.smokeAt);
     m.smokeAt = now;
-    const done = smoke.collectRacks(s, now);
-    if (done.length) m.conn.send({ t: 'notice', msg: `🔥 Mags smoked your ${smokedText(done)}. It's in your Pantry.` });
-    // Buffs running down only reach the save file when they run out, or with the next real change.
+    const done = smoke.collect(s, now);
+    if (done.length) m.conn.send({ t: 'notice', msg: `🔥 Smoked ${smokedText(done)}: it's in your Pantry.` });
+    if (worn) m.conn.send({ t: 'notice', msg: 'Your snack wore off. Mags has more at the Smokehouse.' });
+    // A snack running down only reaches the save file when it runs out, or with the next real change.
     if (!worn && !done.length) return;
     this.onChange();
     m.conn.send({ t: 'state', save: s });
@@ -601,8 +605,7 @@ export class Room {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });
       return false;
     }
-    const dark = nightness(m.dayFrac ?? dayFraction(this.now() / 1000));
-    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), smoke.nightBite(m.acct.save, dark));
+    const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
     m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, readyAt: this.now() + roll.wait * 1000 + MIN_FIGHT_MS } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
@@ -623,8 +626,7 @@ export class Room {
       return false;
     }
     for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
-    const bonus = eco.charmBonus(m.acct.save);
-    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(bonus > 0 ? { mult: 1 + bonus } : {}) });
+    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(res.mult > 1 ? { mult: res.mult } : {}) });
     return true;
   }
 
@@ -747,9 +749,9 @@ export class Room {
   }
 }
 
-/** "Kippers ×2 and Pike Jerky". */
-const smokedText = (list: { id: string; n: number }[]): string => {
-  const parts = list.map((d) => `${recipeById(d.id)?.name ?? d.id}${d.n > 1 ? ` ×${d.n}` : ''}`);
+/** "Yellow Perch ×2 and Northern Pike". */
+const smokedText = (list: { fishId: string; n: number }[]): string => {
+  const parts = list.map((d) => `${byId(FISH, d.fishId).name}${d.n > 1 ? ` ×${d.n}` : ''}`);
   return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
 };
 

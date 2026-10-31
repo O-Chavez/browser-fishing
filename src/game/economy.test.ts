@@ -487,14 +487,13 @@ describe('ranks, titles and back pay', () => {
     eco.applyCatch(s, eel, 250, true);
     expect(s.dex[eel.id]).toMatchObject({ count: 3, shiny: 2 });
   });
-  it('keeps levelling past 50: the provision goes to the Pantry and the fare is banked', () => {
+  it('keeps levelling past 50, banking the provision and the fare', () => {
     const s = newSave();
     s.level = FLAT_LEVEL + 4;
     s.xp = xpForNextLevel(FLAT_LEVEL) - 1;
     eco.applyCatch(s, eel, 250);
     expect(s.level).toBe(FLAT_LEVEL + 5);
-    expect(s.gifts).toEqual({ provisions: 0, fares: 1 });
-    expect(s.smoke.pantry).toEqual({ jewelplatter: [600] });
+    expect(s.gifts).toEqual({ provisions: 1, fares: 1 });
   });
   it('wears only an earned title', () => {
     const s = newSave();
@@ -528,8 +527,7 @@ describe('ranks, titles and back pay', () => {
     const { levels } = eco.payBack(s);
     expect(levels).toBeGreaterThan(10);
     expect(s.level).toBe(FLAT_LEVEL + levels);
-    expect(s.gifts).toEqual({ provisions: 0, fares: eco.BACKPAY_GIFTS.fares });
-    expect(s.smoke.pantry.jewelplatter).toHaveLength(eco.BACKPAY_GIFTS.provisions);
+    expect(s.gifts).toEqual(eco.BACKPAY_GIFTS);
     expect(s.titles).toContain('fleetadmiral');
     expect(eco.payBack(s).levels).toBe(0);
   });

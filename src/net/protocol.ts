@@ -1,6 +1,7 @@
 import type { CosSlot, Look } from '../data/cosmetics';
 import type { Drop } from '../game/drops';
 import type { RouletteBet } from '../data/casino';
+import type { StageId } from '../data/smokehouse';
 import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 
@@ -70,12 +71,14 @@ export type ClientMsg =
   | { t: 'buyperk'; id: string }
   /** Switch the Shiny Lure on or off (off saves its charges). */
   | { t: 'lure'; on: boolean }
-  /** Smokehouse: put the fish in hotbar slot i on a rack for recipe r. */
-  | { t: 'smoke'; r: string; i: number }
-  /** Smokehouse: take fish j back off a rack that hasn't started smoking. */
-  | { t: 'unsmoke'; rack: number; j: number }
-  /** Eat a smoked item from the Pantry for its buff. */
-  | { t: 'eat'; id: string }
+  /** Smokehouse: put the fish in hotbar slot i on the smoker. */
+  | { t: 'smoke'; i: number }
+  /** Smokehouse: put every non-shiny hotbar fish on the smoker. */
+  | { t: 'smokeall' }
+  /** Smokehouse: sell the best smoked fish of a species to Mags, or every one with `all`. */
+  | { t: 'sellsmoked'; id: string; all?: boolean }
+  /** Eat a smoked fish from the Pantry as a snack; `all` eats as many as fit under the cap. */
+  | { t: 'eat'; id: string; all?: boolean }
   /** A new-player tip was shown, so it isn't shown again. */
   | { t: 'tip'; id: string }
   /** A global chat line. */
@@ -98,6 +101,8 @@ export type ServerMsg =
   | { t: 'account'; hasPass: boolean; msg?: string }
   /** A plain message for the player (a refused bet, a locked gate). */
   | { t: 'notice'; msg: string }
+  /** Smokehouse stages just opened; `intro` is an existing player's first look at the Smokehouse. */
+  | { t: 'stages'; ids: StageId[]; intro: boolean }
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
   | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string }

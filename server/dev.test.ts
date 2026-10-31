@@ -86,18 +86,18 @@ describe('dev commands in a room', () => {
     expect(devLines(a.log).at(-1)).toMatch(/Fish ids:/);
   });
 
-  it('stocks the Pantry and finishes smoking racks', () => {
+  it('stocks the Pantry and finishes the smoker', () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');
     room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
-    room.handle(a.id, { t: 'cmd', text: '/smoke kippers 2' });
-    expect(a.save.smoke.pantry.kippers).toEqual([600, 600]);
+    room.handle(a.id, { t: 'cmd', text: '/smoke perch 2' });
+    expect(a.save.smoke.pantry.perch).toHaveLength(2);
     room.handle(a.id, { t: 'cmd', text: '/smoke' });
-    expect(devLines(a.log).at(-1)).toBe('No racks are smoking.');
-    a.save.smoke.racks[1] = { r: 'minnowbites', fish: [], doneAt: Date.now() + 3_600_000 };
+    expect(devLines(a.log).at(-1)).toBe('Nothing is on the smoker.');
+    a.save.smoke.spots[1] = { fish: { k: 'fish', fishId: 'pike', size: 60 }, doneAt: Date.now() + 3_600_000 };
     room.handle(a.id, { t: 'cmd', text: '/smoke' });
     room.snapshot();
-    expect(a.save.smoke.racks[1]).toBeNull();
-    expect(a.save.smoke.pantry.minnowbites).toHaveLength(1);
+    expect(a.save.smoke.spots[1]).toBeNull();
+    expect(a.save.smoke.pantry.pike).toHaveLength(1);
   });
 });
