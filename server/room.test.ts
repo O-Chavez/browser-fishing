@@ -1025,12 +1025,12 @@ describe('dives', () => {
     return f;
   };
 
-  it("starts only at Captain Reed's stand, with the Aurora Rod, from the harbour or a charted ledge", () => {
+  it("starts only at Captain Reed's seaplane, with the Aurora Rod, from the harbour or a charted ledge", () => {
     const t = setup();
     const a = t.join('Ann');
     const b = t.join('Bob');
     t.room.handle(a.id, { t: 'dive', from: 0 });
-    expect(last(a.c, 'notice').msg).toMatch(/Reed's stand/);
+    expect(last(a.c, 'notice').msg).toMatch(/Reed's seaplane/);
     t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
     t.room.handle(a.id, { t: 'dive', from: 0 });
     expect(last(a.c, 'notice').msg).toBe('Charters need the Aurora Rod.');
@@ -1077,7 +1077,7 @@ describe('dives', () => {
     for (let i = 0; i < 5; i++) fight(t, a);
     expect(lastDive(a)).toMatchObject({ depth: 10, pearls: 10, state: 'ledge', ledges: 2 });
     t.room.handle(a.id, { t: 'ledge', a: 'surface' });
-    // Banked with two ledges' growth, charted, a new record, and back at the pier head.
+    // Banked with two ledges' growth, charted, a new record, and back by the seaplane.
     expect(s.pearls).toBe(Math.round(10 * haulBonus(2)));
     expect(s.sea).toEqual({ ledges: [10], record: 10 });
     expect(last(a.c, 'diveend').end).toEqual({ result: 'surfaced', ledge: 10, pearls: 12, record: true, fish: 10, coins: s.coins - coins });

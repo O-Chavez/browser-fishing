@@ -100,7 +100,7 @@ export type ClientMsg =
   | { t: 'catch'; h: string }
   /** A fish got away (or the cast ended). On a dive `h` is the lost fight's button log, which the line pays for. */
   | { t: 'lost'; h?: string }
-  /** Start a dive at Captain Reed's stand, from the harbour (0) or a charted ledge. */
+  /** Start a dive at Captain Reed's seaplane, from the harbour (0) or a charted ledge. */
   | { t: 'dive'; from: number }
   /** At a ledge: dive on, or surface with the haul. */
   | { t: 'ledge'; a: 'on' | 'surface' }
