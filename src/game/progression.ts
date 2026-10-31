@@ -1,5 +1,5 @@
 import {
-  FISH, RARITY_VALUE, RARITY_WEIGHT, RARITY_XP, RODS,
+  FISH, POND_FISH, RARITY_VALUE, SEA_VALUE, RARITY_WEIGHT, RARITY_XP, RODS,
   type Fish, type Rod, type Bait,
 } from '../data/content';
 
@@ -211,7 +211,7 @@ export const SHINY_VALUE = 5;
 export const SHINY_DIFFICULTY = 1.4;
 
 export function sellValue(fish: Fish, size: number, shiny = false): number {
-  return Math.max(1, Math.round(fish.baseValue * RARITY_VALUE[fish.rarity] * (0.5 + weightRatio(fish, size)) * (shiny ? SHINY_VALUE : 1)));
+  return Math.max(1, Math.round(fish.baseValue * (fish.sea ? SEA_VALUE : RARITY_VALUE[fish.rarity]) * (0.5 + weightRatio(fish, size)) * (shiny ? SHINY_VALUE : 1)));
 }
 
 export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = false): number {
@@ -225,7 +225,7 @@ export function nextGoal(level: number, dex: Record<string, unknown> = {}): stri
   if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
   const rank = nextRank(level);
   if (rank) return `Level ${rank.level}: ${rankReward(rank)}`;
-  const missing = FISH.filter((f) => !dex[f.id]).length;
+  const missing = POND_FISH.filter((f) => !dex[f.id]).length;
   return missing ? `Complete your Fishdex! (${missing} to go)` : 'Fishdex complete! Chase shinies and casino perks';
 }
 
@@ -240,7 +240,7 @@ export function welcomeText(
   s: { level: number; xp: number; coins: number; dex: Record<string, unknown> },
 ): { title: string; line: string } {
   if (isFreshSave(s)) return { title: 'Welcome to Lakeside', line: 'First goal: catch a fish, then sell it at the stall' };
-  const missing = FISH.filter((f) => !s.dex[f.id]).length;
+  const missing = POND_FISH.filter((f) => !s.dex[f.id]).length;
   const rank = nextRank(s.level);
   const goal =
     s.level < CASINO_LEVEL ? `next goal: Lv ${CASINO_LEVEL} casino`

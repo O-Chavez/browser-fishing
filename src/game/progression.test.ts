@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAITS, FISH, RODS, byId } from '../data/content';
+import { BAITS, FISH, POND_FISH, RODS, SEA_FISH, byId } from '../data/content';
 import { FLAT_LEVEL, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, earnedXp, xpPastFlat, eligibleFish, grantRanks, levelGifts, nextGoal, pickFish, reelDifficulty, rollSize, sellValue, welcomeText, xpForNextLevel } from './progression';
 
 const twig = byId(RODS, 'twig');
@@ -85,8 +85,8 @@ describe('tier progression', () => {
   const avg = (f: (typeof FISH)[number]) => sellValue(f, (f.minSize + f.maxSize) / 2);
   it('every tier is worth strictly more than the one below, even at extreme sizes', () => {
     for (let t = 1; t < 5; t++) {
-      const lo = Math.min(...FISH.filter((f) => f.tier === t + 1).map((f) => sellValue(f, f.minSize)));
-      const hi = Math.max(...FISH.filter((f) => f.tier === t).map((f) => sellValue(f, f.maxSize)));
+      const lo = Math.min(...POND_FISH.filter((f) => f.tier === t + 1).map((f) => sellValue(f, f.minSize)));
+      const hi = Math.max(...POND_FISH.filter((f) => f.tier === t).map((f) => sellValue(f, f.maxSize)));
       expect(lo).toBeGreaterThan(hi);
     }
     expect(avg(FISH[0])).toBeGreaterThan(0);
@@ -203,8 +203,9 @@ describe('welcome banner', () => {
   });
   it('counts the missing Fishdex species past the last rank', () => {
     const t = welcomeText('Ana', { level: 200, xp: 0, coins: 5, dex: { [FISH[0].id]: {} } });
-    expect(t.line).toBe(`Lv 200 · 5 coins · next goal: ${FISH.length - 1} more Fishdex species`);
-    const all = Object.fromEntries(FISH.map((f) => [f.id, {}]));
+    expect(t.line).toBe(`Lv 200 · 5 coins · next goal: ${POND_FISH.length - 1} more Fishdex species`);
+    // Sea fish are a separate page: a complete pond Fishdex stays complete.
+    const all = Object.fromEntries(POND_FISH.map((f) => [f.id, {}]));
     expect(welcomeText('Ana', { level: 200, xp: 0, coins: 5, dex: all }).line).toContain('Fishdex complete');
   });
 });
@@ -249,5 +250,56 @@ describe('levels past 50 and ranks', () => {
     expect(xpPastFlat({ level: 49, xp: 900 })).toBe(0);
     expect(xpPastFlat({ level: 50, xp: 900 })).toBe(900);
     expect(xpPastFlat({ level: 52, xp: 10 })).toBe(2 * xpForNextLevel(50) + 10);
+  });
+});
+
+describe('sea fish', () => {
+  const shelf = SEA_FISH.filter((f) => f.locations.includes('shelf'));
+  const dropoff = SEA_FISH.filter((f) => f.locations.includes('dropoff'));
+  const mid = (f: (typeof FISH)[number]) => sellValue(f, (f.minSize + f.maxSize) / 2);
+  const commons = (list: typeof FISH) => list.filter((f) => f.baseValue < 300);
+
+  it('has three species at the Shelf and three at the Drop-off, each tier 5', () => {
+    expect(shelf.map((f) => f.id)).toEqual(['pewtercod', 'snapper', 'grouper']);
+    expect(dropoff.map((f) => f.id)).toEqual(['galemackerel', 'irontuna', 'marlin']);
+    expect(SEA_FISH.every((f) => f.tier === 5 && f.sea)).toBe(true);
+  });
+  it('sells at base value x10 (not the tier 5 x50) with the usual size factor', () => {
+    const cod = byId(FISH, 'pewtercod');
+    expect(sellValue(cod, cod.minSize)).toBe(Math.round(140 * 10 * 0.5));
+    expect(sellValue(cod, cod.maxSize)).toBe(Math.round(140 * 10 * 1.5));
+    expect(sellValue(cod, cod.maxSize, true)).toBeGreaterThan(sellValue(cod, cod.maxSize));
+  });
+  it('a typical catch is about 1,500 at the Shelf and 2,000 at the Drop-off', () => {
+    // Mean sale value over rolled sizes (seeded), per species. A random mix with the legend about one catch in ten lands near the targets.
+    let seed = 7;
+    const rng = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const mean = (f: (typeof FISH)[number]) => { let t = 0; for (let i = 0; i < 4000; i++) t += sellValue(f, rollSize(f, rng)); return t / 4000; };
+    const common = (list: typeof FISH) => commons(list).reduce((a, f) => a + mean(f), 0) / commons(list).length;
+    const mixed = (list: typeof FISH) => 0.9 * common(list) + 0.1 * mean(list.find((f) => f.baseValue >= 300)!);
+    expect(mixed(shelf)).toBeGreaterThan(1400);
+    expect(mixed(shelf)).toBeLessThan(1800);
+    expect(mixed(dropoff)).toBeGreaterThan(1850);
+    expect(mixed(dropoff)).toBeLessThan(2300);
+    // The legends are the jackpot.
+    expect(mean(byId(FISH, 'grouper'))).toBeGreaterThan(2.5 * common(shelf));
+    expect(mean(byId(FISH, 'marlin'))).toBeGreaterThan(2.5 * common(dropoff));
+    expect(mid(byId(FISH, 'marlin'))).toBeGreaterThan(mid(byId(FISH, 'grouper')));
+  });
+  it('are never rolled in the pond or lake, whatever the gear', () => {
+    const rod = RODS[RODS.length - 1];
+    const bait = BAITS[BAITS.length - 1];
+    for (const night of [false, true]) for (const loc of ['pond', 'lake']) {
+      const pool = eligibleFish(loc, rod, bait, night);
+      expect(pool.some((f) => f.sea)).toBe(false);
+      for (let i = 0; i < 500; i++) expect(pickFish(pool, rod, bait, Math.random, i % 2 === 0)!.sea).toBeFalsy();
+    }
+  });
+  it('can be rolled by their own location with top gear', () => {
+    const rod = RODS[RODS.length - 1];
+    const bait = BAITS[BAITS.length - 1];
+    expect(eligibleFish('shelf', rod, bait).map((f) => f.id).sort()).toEqual(shelf.map((f) => f.id).sort());
+    expect(eligibleFish('dropoff', rod, bait).map((f) => f.id).sort()).toEqual(dropoff.map((f) => f.id).sort());
+    expect(pickFish(eligibleFish('dropoff', rod, bait), rod, bait)!.locations).toContain('dropoff');
   });
 });

@@ -4,7 +4,7 @@ import { fishIcon } from './fishicon';
 
 describe('fish icon tier finish', () => {
   it('gets fancier with each tier', () => {
-    for (const f of FISH) {
+    for (const f of FISH.filter((x) => !x.sea)) {
       const svg = fishIcon(f.id);
       expect(svg.includes('<filter'), `${f.id} glow`).toBe(f.tier >= 4);
       expect(svg.includes('class="fishico t5"'), `${f.id} spirit`).toBe(f.tier === 5);
@@ -12,7 +12,16 @@ describe('fish icon tier finish', () => {
     }
   });
 
+  it('gives sea fish the plain lake-giant finish, with no glow or spirit crown', () => {
+    for (const f of FISH.filter((x) => x.sea)) {
+      const svg = fishIcon(f.id);
+      expect(svg, f.id).not.toContain('<filter');
+      expect(svg, f.id).not.toContain('fishico t');
+      expect(svg, f.id).not.toContain('#ffe27a');
+    }
+  });
+
   it('keeps undiscovered fish a plain silhouette', () => {
-    for (const f of FISH.filter((x) => x.tier >= 4)) expect(fishIcon(f.id, { hidden: true })).not.toContain('<filter');
+    for (const f of FISH.filter((x) => x.tier >= 4 && !x.sea)) expect(fishIcon(f.id, { hidden: true })).not.toContain('<filter');
   });
 });

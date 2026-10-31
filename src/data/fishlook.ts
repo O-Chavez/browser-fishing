@@ -91,9 +91,19 @@ export const FISH_LOOK: Record<string, FishLook> = {
   sunfire: { shape: 'torpedo', tail: 'fork', dorsal: 'sail', back: 0xd8380f, belly: 0xffd25a, fin: 0xff7a1a, marks: [{ k: 'stripe', color: 0xffe066, width: 0.12 }], accent: 0xffb02e, spirit: 'flame' },
   aurorapike: { shape: 'long', tail: 'fork', dorsal: 'sail', back: 0x137a74, belly: 0xb8fff0, fin: 0x2fe0c0, marks: [{ k: 'stripe', color: 0x8affd9, width: 0.08 }], extras: ['bigmouth'], accent: 0x7af0d8, spirit: 'aurora' },
   constellation: { shape: 'eel', tail: 'eel', dorsal: 'long', back: 0x1a1250, belly: 0x3a2f8a, fin: 0x6b5bd8, marks: [{ k: 'stars', color: 0xffffff }], accent: 0xb9a8ff, spirit: 'stars' },
+
+  // Sea · Shelf and Drop-off: plain tier-5 gear, no spirit (the finish is the lake-giant one)
+  pewtercod: { shape: 'torpedo', tail: 'round', dorsal: 'soft', back: 0x6f8294, belly: 0xe4e8e6, fin: 0x8296a6, marks: [{ k: 'speckle', color: 0x3a4a58 }], extras: ['barbels'] },
+  snapper: { shape: 'deep', tail: 'fork', dorsal: 'spiny', back: 0xc4552e, belly: 0xf6c9a0, fin: 0xe0703a, marks: [{ k: 'scales', color: 0xf0a070 }] },
+  grouper: { shape: 'deep', tail: 'round', dorsal: 'spiny', back: 0x5e6b48, belly: 0xcbbf8e, fin: 0x7a6a3a, marks: [{ k: 'patches', color: 0xa8a06a }, { k: 'spots', color: 0xe8e4d0, n: 12, size: 0.03 }], extras: ['bigmouth'] },
+  galemackerel: { shape: 'slim', tail: 'lunate', dorsal: 'small', back: 0x1f6f8f, belly: 0xe8f4f6, fin: 0x4a8fa8, marks: [{ k: 'bars', color: 0x143f58, n: 9 }] },
+  irontuna: { shape: 'torpedo', tail: 'lunate', dorsal: 'soft', back: 0x1b3a6e, belly: 0xdfe8f2, fin: 0xe8c548, marks: [{ k: 'stripe', color: 0xc9d6e6, width: 0.05 }] },
+  marlin: { shape: 'torpedo', tail: 'lunate', dorsal: 'sail', back: 0x153f8a, belly: 0xe6f0fa, fin: 0x3a7fd0, marks: [{ k: 'bars', color: 0x6fb4ff, n: 10 }], extras: ['snout'], accent: 0x7fd0ff },
 };
 
 /** Tier themes, shown as Fishdex section headers and on the catch card. */
+/** The Fishdex Sea page's theme, for the sea fish (which are tier 5 for gear but not part of the pond ladder). */
+export const SEA_THEME = 'Sea fish';
 export const TIER_THEME = ['Shallows', 'Sport fish', 'Lake giants', 'Jewel fish', 'Spirit fish'];
 
 /** One-line Fishdex and catch-card descriptions. */
@@ -117,4 +127,10 @@ export const FISH_BLURB: Record<string, string> = {
   sunfire: 'Flames dance along its back. Hot to the touch!',
   aurorapike: 'Ribbons of the northern lights trail in its wake.',
   constellation: 'A slice of the night sky that learned to swim.',
+  pewtercod: 'Dull as a pewter plate, with a chin whisker and a hunger to match.',
+  snapper: 'Scales like beaten copper. It snaps at the bait before you see it.',
+  grouper: 'The Shelf’s grandmother. Slow, ancient and far bigger than you.',
+  galemackerel: 'Barred like the sea in a storm. It runs in a blur at the edge of the drop.',
+  irontuna: 'A blue-steel torpedo with a golden fin. Built to pull a boat.',
+  marlin: 'A sail on its back, a spear on its nose. The storm itself, on a line.',
 };

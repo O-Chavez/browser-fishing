@@ -22,6 +22,8 @@ export interface Fish {
   color: number;
   /** Only bites after dark. */
   night?: boolean;
+  /** Caught on the sea dive (locations `shelf`, `dropoff`...), not in the pond. Tier 5 for gear, but no spirit glow and sold at `SEA_VALUE`. */
+  sea?: boolean;
 }
 
 export interface Rod {
@@ -122,9 +124,24 @@ const FISH_DEFS: FishDef[] = [
   { id: 'sunfire', name: 'Phoenix Trout', tier: 5, locations: ['pond'], minSize: 160, maxSize: 220, maxWeight: 80, baseValue: 80, stamina: 2.4, color: 0xff7a1a },
   { id: 'aurorapike', name: 'Aurora Pike', tier: 5, locations: ['pond', 'lake'], minSize: 200, maxSize: 270, maxWeight: 90, baseValue: 100, stamina: 2.5, color: 0x2fe0c0 },
   { id: 'constellation', name: 'Starweaver Eel', tier: 5, night: true, locations: ['pond', 'lake'], minSize: 220, maxSize: 320, maxWeight: 70, baseValue: 120, stamina: 2.5, color: 0x2a1b6e },
+
+  // Sea · Shelf (depths 1-15) and Drop-off (16-40). Tier 5 for rods and bait, but plain-looking, worth `SEA_VALUE`
+  // times their base value, and never rolled in the pond. The dive (D1/D3) catches them by location.
+  { id: 'pewtercod', name: 'Pewter Cod', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 190, maxWeight: 60, baseValue: 140, stamina: 2.55, color: 0x8a9ba8 },
+  { id: 'snapper', name: 'Copper Snapper', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 180, maxWeight: 45, baseValue: 155, stamina: 2.6, color: 0xd9763c },
+  { id: 'grouper', name: 'Grandmother Grouper', tier: 5, sea: true, locations: ['shelf'], minSize: 200, maxSize: 300, maxWeight: 180, baseValue: 420, stamina: 2.7, color: 0x6b7a4a },
+  { id: 'galemackerel', name: 'Gale Mackerel', tier: 5, sea: true, locations: ['dropoff'], minSize: 150, maxSize: 210, maxWeight: 40, baseValue: 175, stamina: 2.6, color: 0x2f7f9a },
+  { id: 'irontuna', name: 'Ironside Tuna', tier: 5, sea: true, locations: ['dropoff'], minSize: 190, maxSize: 280, maxWeight: 200, baseValue: 195, stamina: 2.7, color: 0x2a4f8a },
+  { id: 'marlin', name: 'Squall Marlin', tier: 5, sea: true, locations: ['dropoff'], minSize: 260, maxSize: 320, maxWeight: 300, baseValue: 560, stamina: 2.8, color: 0x1d5fb0 },
 ];
 
 export const FISH: Fish[] = FISH_DEFS.map((f) => ({ ...f, rarity: TIERS[f.tier - 1] }));
+/** The pond and lake species: what the Fishdex tiers, completion and the Smokehouse count. Sea fish are listed apart. */
+export const POND_FISH: Fish[] = FISH.filter((f) => !f.sea);
+export const SEA_FISH: Fish[] = FISH.filter((f) => !!f.sea);
+export const isSeaFish = (f: Pick<Fish, 'sea'> | undefined): boolean => !!f?.sea;
+/** Sea fish sell for base value times this, instead of their rarity's multiplier (tier 5 is ×50). */
+export const SEA_VALUE = 10;
 
 export const byId = <T extends { id: string }>(list: T[], id: string): T => {
   const item = list.find((x) => x.id === id);

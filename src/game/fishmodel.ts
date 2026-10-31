@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FISH_LOOK, SHAPES, envelope, type DorsalKind, type FishLook, type Shape, type TailKind } from '../data/fishlook';
+import { FISH, isSeaFish } from '../data/content';
 import { WATER_ORDER } from './env';
 
 /** A glow material whose colour cycles through the rainbow (the aurora pike). */
@@ -267,6 +268,8 @@ const TAILS: Record<TailKind, [number, number][]> = {
 
 /** Model for a species, nose toward -Z, length 1 unit. `shadow` makes a dark underwater silhouette. */
 export function buildFish(baseColor: number, shadow = false, shiny = false, tier = 1, id = ''): FishModel {
+  // Sea fish are tier 5 for gear but get the satin lake-giant finish: no jewel sheen, spirit glow or crown.
+  if (isSeaFish(FISH.find((f) => f.id === id))) tier = Math.min(tier, 3);
   const look: FishLook = FISH_LOOK[id] ?? { shape: 'torpedo', tail: 'fork', dorsal: 'soft', back: baseColor, belly: new THREE.Color(baseColor).lerp(new THREE.Color(0xffffff), 0.5).getHex(), fin: baseColor };
   const L = shiny ? goldify(look) : look;
   const sh = SHAPES[look.shape];
