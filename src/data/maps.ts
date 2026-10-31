@@ -20,7 +20,7 @@ const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOU
 /**
  * The East Landing, a placeholder harbour for the dives (a map rework may move it): a second pier east of
  * the main one (`DOCK_RECTS` in env.ts), Captain Reed's dive stand on its deck, and the dive's start at the
- * pier head. The dive start is data only until the dive is wired to travel. The Deepest Dive board (D6) is
+ * pier head, where players come back from a dive. The Deepest Dive board (D6) is
  * reserved a spot on the shore at the pier foot, (12.2, 12.8), facing the walkway; nothing stands there yet.
  */
 export const HARBOUR = {
@@ -283,9 +283,11 @@ export const MAPS: MapDef[] = [
 
 const pond = MAPS[0];
 
-/** Where a player lands on `dest` when coming from map `from`: back through the gate, or at the spawn. */
+/** Where a player lands on `dest` when coming from map `from`: back through the gate, at the pier head from a dive, or at the spawn. */
 export const arrivalSpot = (dest: MapDef, from?: string): { x: number; z: number; yaw: number } =>
-  (from && dest.next?.id === from && dest.gateArrival) || dest.spawn;
+  (from && dest.next?.id === from && dest.gateArrival)
+  || (from && dest.harbour && MAPS.find((m) => m.id === from)?.sea && { ...dest.harbour.diveStart, yaw: Math.PI })
+  || dest.spawn;
 
 /** The endgame: an indoor casino with its own floor plan; the front door leads back to the pond. */
 const toward = (x: number, z: number): number => faceToward(x, z, x, 30);
@@ -345,8 +347,8 @@ MAPS.push({
 
 /**
  * The open sea of the dives: the charter boat alone on open water, where players fish off the rails.
- * The look follows the dive's depth (`seaMood`). For now only the dev console's `/sea` comes here;
- * the trip from Captain Reed's stand (D3) and a sea per dive (D2) come later.
+ * The look follows the dive's depth (`seaMood`). Each dive is its own instance of this map (`placeOf`, protocol.ts),
+ * started at Captain Reed's stand or with the dev console's `/sea`.
  */
 MAPS.push({
   ...pond,

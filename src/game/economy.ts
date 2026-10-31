@@ -5,6 +5,8 @@ import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
+import { rollSeaFish } from './dive';
+import { DIVE, type Behaviour } from '../data/dive';
 import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
 /** Pure save mutations. The server runs these authoritatively; the client mirrors them optimistically. */
@@ -351,6 +353,12 @@ export function canCast(s: SaveData): CastCheck {
   return freeSlots(s) > 0 ? 'ok' : 'full';
 }
 
+/** Whether the player can cast here. At sea no bait is spent and the catch is sold as it's landed, so only the rod matters. */
+export function canCastAt(s: SaveData, sea: boolean): CastCheck {
+  const c = canCast(s);
+  return sea && (c === 'nobait' || c === 'full') ? 'ok' : c;
+}
+
 export const CAST_MESSAGES: Record<Exclude<CastCheck, 'ok'>, string> = {
   norod: 'No rod equipped - open your inventory (Tab) to equip one.',
   nobait: 'Out of bait! Buy more at the shop, then equip it in your inventory (Tab).',
@@ -369,6 +377,8 @@ export interface Roll {
   /** The fight, with a fish: its reel seed and difficulty. The server replays the catch from these. */
   seed?: number;
   d?: number;
+  /** How a sea fish fights (`BEHAVIOUR_TUNE`); pond fish have none. */
+  b?: Behaviour;
 }
 
 /** A hooked fish's fight difficulty on the save's rod, Quick-Reel Gloves included. */
@@ -395,6 +405,25 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
   return roll;
 }
 
+/** The rod level a sea fight uses: 3% easier a level. D4 defines it (the Aurora Rod's level while in use); 0 until then. */
+export const seaRodLevel = (_s: SaveData): number => 0;
+
+/**
+ * A cast on a dive: the fish comes from the depth's zone (`rollSeaFish`) and fights at the depth's difficulty, whatever
+ * the rod and bait. No bait is spent. Shinies roll as in the daytime pond, Shiny Lure included.
+ */
+export function rollSeaCast(s: SaveData, depth: number, rng: () => number = Math.random): Roll {
+  const bite = rollSeaFish(depth, seaRodLevel(s), rng);
+  const lure = lureOn(s);
+  if (lure) s.lure--;
+  const size = rollSize(bite.fish, rng);
+  const wait = DIVE.biteMin + rng() * DIVE.biteSpread;
+  const shiny = lure || rng() < SHINY_CHANCE * shinyMult(s);
+  const roll: Roll = { fishId: bite.fish.id, size, wait, shiny, seed: Math.floor(rng() * 4294967296), d: bite.difficulty };
+  if (bite.behaviour) roll.b = bite.behaviour;
+  return roll;
+}
+
 export interface CatchResult {
   /** False when there was no free fish slot, so the fish got away. */
   stored: boolean;
@@ -415,14 +444,17 @@ export interface CatchResult {
   gift?: { id: DishId; n: number };
   /** The fish's value multiplier: Lucky Charm, 💰 snack or dish, and the clean catch bonus. */
   mult: number;
+  /** Coins for a fish sold as it was landed (on a dive), instead of going in a slot. */
+  sold?: number;
 }
 
 /** A clean catch (landed without fraying the line) is worth this much more. */
 export const CLEAN_BONUS = 0.1;
 
-export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false): CatchResult {
-  const slot = freeFishSlot(s);
-  if (slot < 0) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
+/** Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins (dives). */
+export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false): CatchResult {
+  const slot = sell ? -1 : freeFishSlot(s);
+  if (slot < 0 && !sell) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
   const first = !entry;
   // Smokehouse snacks and dishes apply at catch, like the Lucky Charms: ⭐ into the XP, 💰 into the fish's value.
@@ -434,7 +466,10 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
   const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1);
-  s.slots[slot] = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
+  const item: Slot = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
+  const sold = sell ? sellPrice(s, item) : 0;
+  if (sell) s.coins += sold;
+  else s.slots[slot] = item;
   const value = Math.round(sellValue(fish, size, shiny) * mult);
   if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
   const before = s.level;
@@ -442,7 +477,7 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const stages = openStages(s).ids;
   const gift = serveGifts(s);
   return {
-    stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult,
+    stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult, ...(sell ? { sold } : {}),
     ...(xp ? { xpFrom: xp.from } : {}), ...(coin ? { coinFrom: coin.from } : {}), ...(sh ? { shinyFrom: sh.from } : {}), ...(gift ? { gift } : {}),
   };
 }

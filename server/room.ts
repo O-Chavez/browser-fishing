@@ -1,11 +1,13 @@
-import { FISH, byId } from '../src/data/content';
+import { FISH, RODS, byId } from '../src/data/content';
+import { DIVE, type Behaviour } from '../src/data/dive';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot } from '../src/game/progression';
-import { replayFight } from '../src/game/reel';
-import type { CasinoGame, CasinoRecords, ClientMsg, Gamble, HallRow, PlayerInfo, ServerMsg } from '../src/net/protocol';
+import { BEHAVIOUR_TUNE, afterFight, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
+import { replayFight, type LossReason, type ReelWear } from '../src/game/reel';
+import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
 import { SMOKE_RANGE, dishById } from '../src/data/smokehouse';
@@ -15,6 +17,7 @@ import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
+import { diveView, expired, newRun, type DiveRun } from './dive';
 import type { SmokeStats } from './smokestats';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
@@ -34,6 +37,8 @@ interface Pending {
   d: number;
   /** When the fish bites: a catch must come at least a whole fight after this. */
   biteAt: number;
+  /** A sea fish's behaviour, whose reel levers the replay uses. */
+  b?: Behaviour;
 }
 
 interface Member {
@@ -55,6 +60,11 @@ interface Member {
   jumpAt?: number;
   /** When their buffs last ticked down: buffs only run while the player is online. */
   smokeAt: number;
+  /** Metres the player may still move (`MAX_SPEED`, `MOVE_BUDGET`), as of `posAt`. */
+  budget: number;
+  posAt: number;
+  /** Until then, moves too far to make are a stale `pos` from before a teleport, and are dropped without a correction. */
+  settleAt: number;
 }
 
 const VENDOR_RANGE = 5;
@@ -62,6 +72,16 @@ const VENDOR_RANGE = 5;
 const JUMP_GAP_MS = 450;
 /** Leeway on the fight's length against the real time since the bite (clock steps, frame timing). */
 const FIGHT_SLACK_MS = 500;
+/** Sprint speed with leeway: a player can't move faster than this. */
+const MAX_SPEED = 7 * 1.25;
+/** Metres of movement that can build up while `pos` messages are delayed and then arrive bunched together. */
+const MOVE_BUDGET = 20;
+/** How long `pos` messages sent before a teleport may still arrive. */
+const SETTLE_MS = 1500;
+/** After the bite, a cast dropped with no fight log was the player missing the strike (about 1.4 s), plus the network. */
+const MISS_MS = 3000;
+/** A fish dropped without a fight to show for it costs the line as a snap. */
+const GONE: ReelWear = { lineOut: 0, frays: 0, snapped: true };
 export const SPIN_MS = 3800;
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
 export const BOARD_MS = 1000;
@@ -114,6 +134,8 @@ export class Room {
   smokeStats: SmokeStats | null = null;
   /** Dev console `/smokestats`; the server reports across every room. */
   smokeReport: () => string[] = () => ['No Smokehouse stats on this server.'];
+  /** Scripted runs (smoke, screenshots, trailer): the test hook's teleports may use `/goto` without the dev login. Never on in production. */
+  testHooks = false;
   /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -144,12 +166,24 @@ export class Room {
   join(conn: Conn, acct: Account, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
     const id = this.nextId++;
+    // A dive waits a while for a player who dropped out; after that its haul has sunk.
+    let run = acct.dive ?? null;
+    let sunk: DiveEnd | null = null;
+    if (run && expired(run, this.now())) {
+      sunk = { result: 'sunk', why: 'away', depth: run.dive.depth, pearls: run.dive.pearls, fish: run.dive.fish.length };
+      acct.dive = undefined;
+      run = null;
+    }
     const saved = this.maps[acct.save.location];
-    // The sea is only for a dive, which doesn't outlast a session yet: come back at the pond.
-    const map = (saved && !saved.sea ? saved : null) ?? Object.values(this.maps)[0];
+    // The sea is only for a dive: without one, come back at the pond.
+    const map = (run && this.seaMap()) || (saved && !saved.sea ? saved : null) || Object.values(this.maps)[0];
     acct.save.location = map.id;
     const info: PlayerInfo = { id, name: acct.name, map: map.id, x: map.spawn.x, z: map.spawn.z, yaw: 0, look: acct.save.look, coins: acct.save.coins, level: acct.save.level, best: acct.save.best ?? null, title: acct.save.title };
-    const m: Member = { info, conn, acct, pending: null, spin: null, bj: null, smokeAt: this.now() };
+    if (run) {
+      run.heldAt = null;
+      info.dive = run.id;
+    }
+    const m: Member = { info, conn, acct, pending: null, spin: null, bj: null, smokeAt: this.now(), budget: MOVE_BUDGET, posAt: this.now(), settleAt: 0 };
     acct.online = true;
     // The smoker kept going while they were away, stages they reached before the Smokehouse open now,
     // and level gifts banked before the Kitchen opened become dishes.
@@ -169,6 +203,7 @@ export class Room {
       hasPass: !!acct.pw,
       renameIn: this.renameWait(acct),
       now: this.now(),
+      ...(run ? { dive: diveView(run) } : {}),
     });
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
@@ -181,6 +216,7 @@ export class Room {
     if (smoked.length) conn.send({ t: 'notice', msg: `🔥 While you were away, Mags smoked your ${smokedText(smoked)}. It's in your Pantry.` });
     if (stages.ids.length) conn.send({ t: 'stages', ...stages });
     if (gift) conn.send({ t: 'notice', msg: smoke.giftText(gift) });
+    if (sunk) conn.send({ t: 'diveend', end: sunk });
     return id;
   }
 
@@ -191,6 +227,10 @@ export class Room {
     if (m.bj) this.bjAct(m, 'stand');
     this.settle(m);
     this.tickSmoke(m);
+    // A fish on the line is lost; the dive itself waits for them to come back.
+    this.abandon(m);
+    const run = this.runOf(m);
+    if (run) run.heldAt = this.now();
     this.onChange();
     m.acct.online = false;
     this.members.delete(id);
@@ -212,10 +252,7 @@ export class Room {
     if (m.bj && msg.t !== 'pos' && msg.t !== 'bj') return;
     switch (msg.t) {
       case 'pos':
-        if (finite(msg.x, msg.z, msg.yaw)) {
-          Object.assign(m.info, { x: msg.x, z: msg.z, yaw: msg.yaw });
-          m.moved = true;
-        }
+        if (finite(msg.x, msg.z, msg.yaw)) this.move(m, msg.x, msg.z, msg.yaw);
         return;
       case 'slot':
         changed = eco.selectSlot(s, Math.floor(Number(msg.i)));
@@ -315,6 +352,7 @@ export class Room {
         break;
       case 'reset':
         m.pending = null;
+        if (this.runOf(m)) this.endDive(m, { result: 'sunk', why: 'quit', depth: m.acct.dive!.dive.depth, pearls: m.acct.dive!.dive.pearls, fish: m.acct.dive!.dive.fish.length });
         this.resetAccount(m);
         changed = true;
         break;
@@ -346,11 +384,22 @@ export class Room {
       case 'catch':
         changed = this.land(m, msg.h);
         break;
-      case 'lost':
-        if (m.pending || m.info.act) this.setAct(m, null);
+      case 'lost': {
+        const p = m.pending;
+        if (p || m.info.act) this.setAct(m, null);
         m.pending = null;
         this.syncCarry(m);
-        return;
+        // On a dive, the line pays for the fight; at the pond nothing else changes.
+        if (!p || !this.runOf(m) || !this.seaLost(m, p, msg.h)) return;
+        changed = true;
+        break;
+      }
+      case 'dive':
+        changed = this.startDive(m, msg.from);
+        break;
+      case 'ledge':
+        changed = this.ledge(m, msg.a);
+        break;
     }
     if (changed && (msg.t === 'slot' || msg.t === 'drop' || msg.t === 'pickup' || msg.t === 'sell' || msg.t === 'smoke' || msg.t === 'smokeall')) this.syncCarry(m);
     if (changed && (msg.t === 'equip' || msg.t === 'color' || msg.t === 'face')) this.broadcast({ t: 'look', id, look: s.look });
@@ -460,7 +509,8 @@ export class Room {
       m.dev = true;
       return reply(['Dev console unlocked. /help lists the commands.']);
     }
-    if (!m.dev) return reply(['Unknown command. Send feedback with /bug <what went wrong> or /idea <your idea>.']);
+    const hook = this.testHooks && cmd === 'goto';
+    if (!m.dev && !hook) return reply(['Unknown command. Send feedback with /bug <what went wrong> or /idea <your idea>.']);
     if (cmd === 'logout') {
       m.dev = false;
       return reply(['Logged out of the dev console.']);
@@ -485,7 +535,7 @@ export class Room {
       void this.resetPass(who, args[args.length - 1]).then((line) => reply([line]));
       return;
     }
-    console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
+    if (!hook) console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
     if (m.spin || m.bj) return reply(['Finish the spin or hand first.']);
     let time: number | null | undefined;
     let depth: number | undefined;
@@ -495,7 +545,14 @@ export class Room {
       teleport: (map) => this.teleport(m, map),
       setTime: (f) => { m.dayFrac = time = f; },
       setDepth: (d) => { depth = d; },
+      dive: (d) => {
+        m.acct.dive = undefined;
+        m.pending = null;
+        this.launch(m, d);
+      },
+      ledge: (a) => (this.runOf(m)?.dive.state === 'ledge' ? this.ledge(m, a) : null),
       clearDig: () => this.dugAt.delete(m.acct),
+      place: (x, z) => this.place(m.info.id, x, z),
     }, cmd.toLowerCase(), args);
     // Before the new save: the client builds the sea for this depth when the save moves it there.
     reply(res.lines, { ...(time === undefined ? {} : { time }), ...(depth === undefined ? {} : { depth }) });
@@ -514,19 +571,161 @@ export class Room {
     }
   }
 
+  /** Moves a player to another map (or a dive's sea, with `info.dive` set first). A dive ends before it leaves the sea. */
   private teleport(m: Member, map: string): void {
     const dest = this.maps[map];
     const at = arrivalSpot(dest, m.info.map);
     m.pending = null;
     m.acct.save.location = dest.id;
     m.info.map = dest.id;
+    // Leaving the sea leaves the dive (the dev console's /tp; a dive's own end has already cleared it).
+    if (!dest.sea) {
+      delete m.info.dive;
+      m.acct.dive = undefined;
+    }
     m.info.x = at.x;
     m.info.z = at.z;
     m.moved = true;
-    this.broadcast({ t: 'moved', id: m.info.id, map: dest.id });
+    m.budget = 0;
+    m.posAt = this.now();
+    m.settleAt = this.now() + SETTLE_MS;
+    this.broadcast({ t: 'moved', id: m.info.id, map: dest.id, ...(m.info.dive ? { dive: m.info.dive } : {}) });
     // Snaps only carry players who moved, so the arrival gets everyone already standing on the new map.
-    const here = [...this.members.values()].filter((o) => o !== m && o.info.map === dest.id);
+    const place = placeOf(m.info);
+    const here = [...this.members.values()].filter((o) => o !== m && placeOf(o.info) === place);
     if (here.length) m.conn.send({ t: 'snap', p: here.map(snapEntry) });
+  }
+
+  /**
+   * Takes a move on trust only as far as the player could have walked: the distance budget refills at sprint speed
+   * (with leeway, and up to `MOVE_BUDGET` for messages that arrive bunched up), and the map's edge bounds it. A move
+   * past the budget stops short, and the player is sent back there.
+   */
+  private move(m: Member, x: number, z: number, yaw: number): void {
+    const now = this.now();
+    m.budget = Math.min(MOVE_BUDGET, m.budget + ((now - m.posAt) / 1000) * MAX_SPEED);
+    m.posAt = now;
+    const edge = (this.maps[m.info.map]?.radius ?? Infinity) + 1;
+    const r = Math.hypot(x, z);
+    let fixed = r > edge;
+    if (fixed) {
+      x *= edge / r;
+      z *= edge / r;
+    }
+    const dx = x - m.info.x;
+    const dz = z - m.info.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > m.budget) {
+      if (now < m.settleAt) return;
+      x = m.info.x + (dx * m.budget) / dist;
+      z = m.info.z + (dz * m.budget) / dist;
+      fixed = true;
+    }
+    m.budget = Math.max(0, m.budget - dist);
+    Object.assign(m.info, { x, z, yaw });
+    m.moved = true;
+    if (fixed) m.conn.send({ t: 'pos', x: round(x), z: round(z) });
+  }
+
+  /** Moves a player without the speed check, for tests and server-side placement. */
+  place(id: number, x: number, z: number, yaw?: number): void {
+    const m = this.members.get(id);
+    if (!m) return;
+    Object.assign(m.info, { x, z, yaw: yaw ?? m.info.yaw });
+    m.moved = true;
+  }
+
+  private seaMap(): MapDef | undefined {
+    return Object.values(this.maps).find((x) => x.sea);
+  }
+
+  /** The dive this member is on, if any. */
+  private runOf(m: Member): DiveRun | null {
+    const run = m.acct.dive;
+    return run && m.info.dive === run.id ? run : null;
+  }
+
+  /** Starts a dive at Captain Reed's stand, from the harbour or a charted ledge, for a player who owns the rod for it. */
+  private startDive(m: Member, from: unknown): boolean {
+    const s = m.acct.save;
+    const h = this.maps[m.info.map]?.harbour;
+    if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Dives start at Captain Reed's stand on the harbour pier.");
+    if (m.acct.dive || m.pending) return false;
+    if (!eco.ownsRod(s, DIVE.rod)) return this.deny(m, `Dives need the ${byId(RODS, DIVE.rod).name}.`);
+    const start = int(from);
+    if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, 'A dive starts from the harbour or a ledge you have charted.');
+    return this.launch(m, start);
+  }
+
+  /** Puts the player on a new dive's sea at `start`. The dive's state goes first, so the sea is built at its depth. */
+  private launch(m: Member, start: number): boolean {
+    const sea = this.seaMap();
+    if (!sea) return false;
+    const run = newRun(start, m.acct.name);
+    m.acct.dive = run;
+    m.info.dive = run.id;
+    this.setAct(m, null);
+    m.conn.send({ t: 'divestate', dive: diveView(run) });
+    this.teleport(m, sea.id);
+    return true;
+  }
+
+  /** At a ledge: dive on, or surface, banking the haul, charting the ledge and taking the player back to the harbour. */
+  private ledge(m: Member, a: unknown): boolean {
+    const run = this.runOf(m);
+    if (!run || run.dive.state !== 'ledge' || m.pending) return false;
+    if (a === 'on') {
+      diveOn(run.dive);
+      run.worn = run.lost = undefined;
+      m.conn.send({ t: 'divestate', dive: diveView(run) });
+      return false;
+    }
+    if (a !== 'surface') return false;
+    const res = surface(run.dive, m.acct.save.sea)!;
+    m.acct.save.pearls += res.pearls;
+    this.endDive(m, { result: 'surfaced', ledge: res.ledge, pearls: res.pearls, record: res.record, fish: res.fish.length });
+    return true;
+  }
+
+  /** Ends the dive and brings the player back to the harbour; the new save follows from the caller. */
+  private endDive(m: Member, end: DiveEnd): void {
+    m.acct.dive = undefined;
+    delete m.info.dive;
+    m.conn.send({ t: 'diveend', end });
+    const home = Object.values(this.maps).find((x) => x.harbour) ?? Object.values(this.maps)[0];
+    this.teleport(m, home.id);
+    this.onChange();
+  }
+
+  /** Applies a finished fight to the dive: the line it wore, the fish and its pearls; sinks the dive if the line ran out. */
+  private fightOver(m: Member, run: DiveRun, p: Pending, landed: boolean, wear: ReelWear, lost?: LossReason | 'gone'): void {
+    const pearls = run.dive.pearls;
+    afterFight(run.dive, p.fishId, landed, wear);
+    run.worn = lineWorn(wear, landed);
+    run.lost = lost;
+    m.conn.send({ t: 'divestate', dive: diveView(run) });
+    if (run.dive.state === 'sunk') this.endDive(m, { result: 'sunk', why: 'line', depth: run.dive.depth, pearls, fish: run.dive.fish.length, ...(lost ? { lost } : {}) });
+  }
+
+  /**
+   * A fish lost on a dive. The replayed button log says what the fight cost the line; with no log, a cast dropped soon
+   * after the bite missed the strike and costs nothing, and anything later counts as a snap. True if the dive changed.
+   */
+  private seaLost(m: Member, p: Pending, h: unknown): boolean {
+    const run = this.runOf(m)!;
+    const fight = typeof h === 'string' && h ? replayFight(p.d, p.seed, h, p.b && BEHAVIOUR_TUNE[p.b]) : null;
+    if (!fight && this.now() < p.biteAt + MISS_MS) return false;
+    const ended = fight && (fight.status === 'snapped' || fight.status === 'escaped');
+    this.fightOver(m, run, p, false, ended ? fight.wear : { ...GONE, lineOut: fight?.wear.lineOut ?? 0 }, ended ? fight.reason ?? 'gone' : 'gone');
+    return true;
+  }
+
+  /** Drops the fish on the line: on a dive, one that had bitten costs a snap (leaving or recasting mid-fight). */
+  private abandon(m: Member): void {
+    const p = m.pending;
+    m.pending = null;
+    const run = this.runOf(m);
+    if (p && run && this.now() >= p.biteAt + MISS_MS) this.fightOver(m, run, p, false, GONE, 'gone');
   }
 
   private deny(m: Member, msg: string): false {
@@ -651,6 +850,7 @@ export class Room {
       m.conn.send({ t: 'castfail', msg: 'No fishing in the casino.' });
       return false;
     }
+    if (map.sea) return this.seaCast(m, x, z);
     const can = finite(x, z) ? eco.canCast(m.acct.save) : 'nobait';
     if (can !== 'ok' || !eco.spendBait(m.acct.save)) {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });
@@ -658,6 +858,27 @@ export class Room {
     }
     const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
     m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000 } : null;
+    m.conn.send({ t: 'castok', ...roll });
+    this.setAct(m, { a: 'cast', x, z });
+    return true;
+  }
+
+  /** A cast on a dive: no bait, and the fish and its fight come from the dive's depth. */
+  private seaCast(m: Member, x: number, z: number): boolean {
+    const s = m.acct.save;
+    const fail = (msg: string) => {
+      m.conn.send({ t: 'castfail', msg });
+      return false;
+    };
+    const run = this.runOf(m);
+    if (!run) return fail("You're not on a dive. Start one at Captain Reed's stand.");
+    if (run.dive.state !== 'fishing') return fail('Choose at the ledge first: dive on, or surface with the haul.');
+    const can = finite(x, z) ? eco.canCastAt(s, true) : 'hands';
+    if (can !== 'ok') return fail(eco.CAST_MESSAGES[can]);
+    this.abandon(m);
+    if (!this.runOf(m)) return true;
+    const roll = eco.rollSeaCast(s, run.dive.depth, this.rng);
+    m.pending = { fishId: roll.fishId!, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.b ? { b: roll.b } : {}) };
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
     return true;
@@ -674,26 +895,32 @@ export class Room {
       this.setAct(m, null);
       return false;
     }
-    const fight = typeof h === 'string' ? replayFight(p.d, p.seed, h) : null;
+    const run = this.runOf(m);
+    const fight = typeof h === 'string' ? replayFight(p.d, p.seed, h, p.b && BEHAVIOUR_TUNE[p.b]) : null;
     const why = !fight ? 'bad log' : fight.status !== 'caught' ? `replay ${fight.status}`
       : this.now() < p.biteAt + fight.elapsed * 1000 - FIGHT_SLACK_MS ? 'too fast' : null;
     if (!fight || why) {
       console.warn(`catch refused (${why}): ${m.acct.name}, ${p.fishId} at difficulty ${p.d}`);
       this.setAct(m, null);
-      return false;
+      // On a dive, a fish that wasn't really landed still cost the line.
+      if (run) this.fightOver(m, run, p, false, fight && fight.status !== 'reeling' && fight.status !== 'caught' ? fight.wear : { ...GONE, lineOut: fight?.wear.lineOut ?? 0 }, fight?.reason ?? 'gone');
+      return !!run;
     }
-    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean);
+    // On a dive the fish is sold as it's landed: the hotbar couldn't hold a dive's catch.
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean, !!run);
     if (!res.stored) {
       this.setAct(m, null);
       return false;
     }
     for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
     this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(res.mult > 1 ? { mult: res.mult } : {}) });
+    if (run) this.fightOver(m, run, p, true, fight.wear);
     return true;
   }
 
   private drop(m: Member): boolean {
-    if (m.pending || (m.info.act && m.info.act.a !== 'carry')) return false;
+    // Anything dropped at sea would go over the side (and into other dives' sea).
+    if (m.pending || (m.info.act && m.info.act.a !== 'carry') || this.maps[m.info.map]?.sea) return false;
     const item = eco.dropHeld(m.acct.save);
     if (!item) return false;
     const at = dropSpot(m.info.x, m.info.z, m.info.yaw);
@@ -790,17 +1017,19 @@ export class Room {
     const now = this.now();
     if (m.jumpAt !== undefined && now - m.jumpAt < JUMP_GAP_MS) return;
     m.jumpAt = now;
-    const here = [...this.members.values()].filter((o) => o !== m && o.info.map === m.info.map);
+    const place = placeOf(m.info);
+    const here = [...this.members.values()].filter((o) => o !== m && placeOf(o.info) === place);
     if (here.length) this.sendAll(here, { t: 'jump', id: m.info.id });
   }
 
-  /** Sends the players who moved since the last tick to everyone on their map. */
+  /** Sends the players who moved since the last tick to everyone on their map (or dive). */
   private positions(): void {
     const byMap = new Map<string, Member[]>();
     for (const m of this.members.values()) {
-      const list = byMap.get(m.info.map);
+      const place = placeOf(m.info);
+      const list = byMap.get(place);
       if (list) list.push(m);
-      else byMap.set(m.info.map, [m]);
+      else byMap.set(place, [m]);
     }
     for (const list of byMap.values()) {
       const moved = list.filter((m) => m.moved);

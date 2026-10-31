@@ -62,4 +62,13 @@ export const DIVE = {
   haulCap: 0.5,
   /** Chance a bite is the zone's legend. */
   legendChance: 0.05,
+  /** Seconds until a bite at sea: `biteMin` plus up to `biteSpread`. Casts at sea use no bait (Reed's boat has it). */
+  biteMin: 2.5,
+  biteSpread: 4,
+  /** The rod a player must own to start a dive; D4's rod levels build on it. */
+  rod: 'aurora',
+  /** How close to Captain Reed a dive can start, in metres. */
+  standRange: 5,
+  /** A dive waits this long for a player who disconnected mid-dive; after that the haul sinks. */
+  holdMs: 120_000,
 };

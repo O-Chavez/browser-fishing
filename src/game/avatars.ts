@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FISH } from '../data/content';
 import { defaultLook } from '../data/cosmetics';
 import { titleName } from '../data/ranks';
-import type { Activity, PlayerInfo } from '../net/protocol';
+import { placeOf, type Activity, type PlayerInfo } from '../net/protocol';
 import { Character } from './character';
 import { standHeight } from './env';
 import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
@@ -293,7 +293,8 @@ export class Avatars {
     new Avatar({ id: -1, name: '', map: '', x: 0, z: 0, yaw: 0, look: defaultLook(), coins: 0 }, scene, surface);
   }
 
-  sync(players: Map<number, PlayerInfo>, selfId: number, map: string): void {
+  /** `place` is where the viewer is (`placeOf`): only players on the same map and dive show. */
+  sync(players: Map<number, PlayerInfo>, selfId: number, place: string): void {
     for (const [id, a] of this.list) {
       if (!players.has(id)) {
         a.dispose();
@@ -309,7 +310,7 @@ export class Avatars {
       }
       a.setLook(p.look);
       a.setPlate(p.name, this.supporter(p.name), p.title);
-      a.setVisible(p.map === map);
+      a.setVisible(placeOf(p) === place);
     }
   }
 

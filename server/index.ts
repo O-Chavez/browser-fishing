@@ -139,6 +139,7 @@ function room(name: string): Room {
     r.smokeStats = smokeStats;
     r.smokeReport = () => smokeStats.report([...rooms.values()].flatMap((x) => x.onlineSaves()));
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
+    r.testHooks = process.env.TEST_HOOKS === '1';
     rooms.set(name, r);
   }
   return r;
