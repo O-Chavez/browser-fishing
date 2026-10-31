@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { MapDef, NpcDef, Spot } from '../data/maps';
-import { groundHeight, standHeight } from './env';
-import { DARK, WOOD, ball, cyl, mat, rbox, textPlane, woodSign } from './hub';
+import { groundHeight, standHeight, waveHeight } from './env';
+import { DARK, WOOD, ball, cyl, limb, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
 import { NpcWalker, type Bystander } from './npcwalk';
 import { glowTag } from './nightglow';
@@ -92,7 +92,7 @@ export class Town {
     this.buildSquare(t.square);
     t.houses.forEach((h, i) => this.buildHouse(h, i));
     if (map.smokehouse) this.buildSmokehouse(map.smokehouse);
-    if (map.harbour) this.buildDiveStand(map.harbour.stand);
+    if (map.harbour) this.buildHarbour(map.harbour);
     t.npcs.forEach((n) => this.buildNpc(n));
     t.racks.forEach((r) => this.buildRack(r));
     t.boats.forEach((b) => this.buildBoat(b));
@@ -100,7 +100,7 @@ export class Town {
     this.buildFences();
     this.buildBottles();
     this.buildCozy();
-    mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.bottleMeshes.values()]);
+    mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.bottleMeshes.values(), ...(this.plane ? [this.plane] : [])]);
     if (map.worms) this.buildWormPatch(map.worms.x, map.worms.z);
   }
 
@@ -559,53 +559,147 @@ export class Town {
   }
 
   /**
-   * Captain Reed's dive stand on the East Landing: two posts holding up a sea-green awning over where he
-   * stands, a CHARTERS sign on its front edge, a crate and a lifebuoy by the posts, and a lantern.
-   * `s` is where Reed stands; the stand opens toward `s.facing`. Decoration only (the deck is narrow).
+   * Captain Reed's charters on the west beach (`HARBOUR` in maps.ts): his seaplane in the shallows and
+   * a CHARTERS signpost on the sand. The plane is cream with sea-green wings, tail and cowling, and a red
+   * band lettered CHARTERS down each side; it sits on two floats with its nose toward the beach and bobs
+   * on the swell (`update`). The signpost carries a lantern lit at night, a lifebuoy and a crate at its foot.
    */
-  private buildDiveStand(s: Spot): void {
+  private buildHarbour(h: { plane: Spot; sign: Spot }): void {
+    this.buildSeaplane(h.plane);
+    const s = h.sign;
     const g = new THREE.Group();
-    const deck = standHeight(s.x, s.z);
-    const W = 2.6;
-    const H = 2.5;
-    for (const sx of [-1, 1]) {
-      const post = cyl(0.07, 0.08, H, DARK, 8);
-      post.position.set(sx * (W / 2 - 0.1), H / 2, -0.6);
-      g.add(post);
-    }
-    // The awning slopes down toward the back so rain would run off behind him.
-    const awning = rbox(W, 0.08, 1.7, 0x6f9e96, 0.03);
-    awning.position.set(0, H + 0.05, -0.1);
-    awning.rotation.x = 0.1;
-    g.add(awning);
-    const sign = textPlane(1.9, 0.45, 512);
+    const post = cyl(0.07, 0.08, 2.4, DARK, 8);
+    post.position.y = 1.2;
+    g.add(post);
+    const sign = textPlane(1.5, 0.38, 512);
     woodSign(sign.ctx, 'CHARTERS');
     sign.tex.needsUpdate = true;
-    sign.mesh.position.set(0, H - 0.3, 0.78);
-    g.add(sign.mesh);
-    // A crate and a lifebuoy (a cream ring with red bands) by the posts.
-    const crate = rbox(0.6, 0.5, 0.6, WOOD, 0.04);
-    crate.position.set(-W / 2 + 0.25, 0.25, 0.1);
-    crate.rotation.y = 0.3;
-    g.add(crate);
+    for (const [ry, oz] of [[0, 0.09], [Math.PI, -0.09]]) {
+      const face = sign.mesh.clone();
+      face.rotation.y = ry;
+      face.position.set(0, 1.95, oz);
+      g.add(face);
+    }
+    const board = rbox(1.56, 0.44, 0.16, DARK, 0.03);
+    board.position.y = 1.95;
+    g.add(board);
+    const lamp = ball(0.11, 0xffd27a);
+    (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
+    lamp.position.y = 2.5;
+    glowTag(lamp, 0.7);
+    this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
+    const cap = cyl(0.14, 0.1, 0.06, DARK, 8);
+    cap.position.y = 2.64;
+    g.add(lamp, cap);
+    // A lifebuoy (a cream ring with red bands) hung on the post, facing up the beach.
     const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.09, 8, 16), mat(0xe8e0d0));
-    buoy.position.set(W / 2 - 0.1, 1.2, -0.5);
-    buoy.rotation.y = Math.PI / 2;
+    buoy.position.set(0, 1.1, 0.16);
     buoy.castShadow = true;
     g.add(buoy);
     for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
-      const band = rbox(0.12, 0.2, 0.2, 0xc0392b, 0.02);
-      band.position.set(W / 2 - 0.1, 1.2 + Math.sin(a) * 0.28, -0.5 + Math.cos(a) * 0.28);
-      band.rotation.x = -a;
+      const band = rbox(0.2, 0.2, 0.12, 0xc0453a, 0.02);
+      band.position.set(Math.sin(a) * 0.28, 1.1 + Math.cos(a) * 0.28, 0.16);
+      band.rotation.z = -a;
       g.add(band);
     }
-    const lamp = ball(0.11, 0xffd27a);
-    (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
-    lamp.position.set(-W / 2 + 0.1, H - 0.2, 0.2);
-    glowTag(lamp, 0.7);
-    this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
-    g.add(lamp);
-    this.at(g, s.x, s.z, s.facing, deck);
+    const crate = rbox(0.6, 0.5, 0.6, WOOD, 0.04);
+    crate.position.set(0.65, 0.25, 0.1);
+    crate.rotation.y = 0.3;
+    g.add(crate);
+    this.at(g, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.05);
+    this.solid(s.x, s.z, 0.3);
+    this.solid(s.x + 0.65 * Math.cos(s.facing), s.z - 0.65 * Math.sin(s.facing), 0.45);
+  }
+
+  /** The seaplane bobbing in the shallows, kept out of the town's merge so it can move; `update` rocks it. */
+  plane: THREE.Group | null = null;
+
+  private buildSeaplane(s: Spot): void {
+    const CREAM = 0xf3ead8, GREEN = 0x6f9e96, RED = 0xc0453a, GLASS = 0x34465e, METAL = 0x3a3532;
+    const g = new THREE.Group();
+    // Local frame: the nose points to +z, the waterline is y = 0, and +x is the plane's left (port).
+    for (const sx of [-0.95, 0.95]) {
+      const float = rbox(0.38, 0.34, 4.2, CREAM, 0.1);
+      float.position.set(sx, 0.08, -0.1);
+      const tip = rbox(0.36, 0.3, 0.7, CREAM, 0.1);
+      tip.position.set(sx, 0.17, 2.15);
+      tip.rotation.x = -0.35;
+      const stripe = rbox(0.4, 0.05, 4.0, GREEN, 0.02);
+      stripe.position.set(sx, 0.25, -0.1);
+      g.add(float, tip, stripe);
+      for (const z of [1.0, -0.8]) g.add(limb(new THREE.Vector3(sx, 0.2, z), new THREE.Vector3(sx * 0.45, 1.0, z), 0.04, METAL));
+    }
+    const cabin = rbox(1.0, 1.05, 2.4, CREAM, 0.12);
+    cabin.position.set(0, 1.45, 0.35);
+    const cowl = cyl(0.36, 0.48, 0.8, GREEN, 12);
+    cowl.rotation.x = Math.PI / 2;
+    cowl.position.set(0, 1.42, 1.95);
+    const spinner = cyl(0.03, 0.15, 0.28, RED, 10);
+    spinner.rotation.x = Math.PI / 2;
+    spinner.position.set(0, 1.42, 2.48);
+    const blade = rbox(0.14, 1.6, 0.05, METAL, 0.02);
+    blade.position.set(0, 1.42, 2.4);
+    blade.rotation.z = 0.5;
+    // The tail boom tapers from the cabin's back to the tail, along its top edge.
+    const boom = cyl(0.42, 0.14, 2.3, CREAM, 8);
+    boom.rotation.x = Math.PI / 2;
+    boom.position.set(0, 1.6, -2.0);
+    const wing = rbox(7.6, 0.12, 1.3, GREEN, 0.05);
+    wing.position.set(0, 2.04, 0.6);
+    const stab = rbox(2.4, 0.08, 0.7, GREEN, 0.03);
+    stab.position.set(0, 1.68, -2.9);
+    const fin = rbox(0.08, 1.0, 0.85, GREEN, 0.03);
+    fin.position.set(0, 2.15, -2.95);
+    fin.rotation.x = -0.25;
+    const finBand = rbox(0.1, 0.16, 0.8, RED, 0.02);
+    finBand.position.set(0, 2.42, -3.02);
+    finBand.rotation.x = -0.25;
+    const shield = rbox(0.82, 0.34, 0.04, GLASS, 0.02);
+    shield.position.set(0, 1.74, 1.56);
+    g.add(cabin, cowl, spinner, blade, boom, wing, stab, fin, finBand, shield);
+    for (const sx of [-1, 1]) {
+      for (const z of [1.0, 0.25]) {
+        const pane = rbox(0.04, 0.34, 0.55, GLASS, 0.02);
+        pane.position.set(sx * 0.505, 1.72, z);
+        g.add(pane);
+      }
+      g.add(limb(new THREE.Vector3(sx * 0.5, 1.05, 0.6), new THREE.Vector3(sx * 2.4, 1.98, 0.6), 0.035, METAL));
+    }
+    // Wingtip lights, port red and starboard green, glowing at night like the lamps.
+    for (const [sx, c] of [[3.8, 0xe0503a], [-3.8, 0x4ac06a]] as const) {
+      const light = ball(0.08, c);
+      (light.material as THREE.MeshLambertMaterial).emissive.set(c);
+      light.position.set(sx, 2.04, 0.6);
+      this.lamps.push(light.material as THREE.MeshLambertMaterial);
+      g.add(light);
+    }
+    mergeStatic(g, []);
+    // A red band lettered CHARTERS down each side of the cabin, under the windows.
+    const band = textPlane(2.2, 0.3, 512);
+    band.ctx.fillStyle = '#c0453a';
+    band.ctx.fillRect(0, 0, 512, band.ctx.canvas.height);
+    band.ctx.fillStyle = '#fff3d6';
+    band.ctx.font = `800 ${Math.round(band.ctx.canvas.height * 0.62)}px system-ui, sans-serif`;
+    band.ctx.textAlign = 'center';
+    band.ctx.textBaseline = 'middle';
+    band.ctx.fillText('CHARTERS', 256, band.ctx.canvas.height / 2 + 2);
+    band.tex.needsUpdate = true;
+    band.mesh.material = mat(0xffffff, { map: band.tex });
+    for (const sx of [-1, 1]) {
+      const side = band.mesh.clone();
+      side.position.set(sx * 0.508, 1.22, 0.35);
+      side.rotation.y = (sx * Math.PI) / 2;
+      g.add(side);
+    }
+    g.rotation.order = 'YXZ';
+    this.at(g, s.x, s.z, s.facing, 0);
+    this.plane = g;
+    // The floats' tips and the nose reach the edge of the sand.
+    const sin = Math.sin(s.facing);
+    const cos = Math.cos(s.facing);
+    for (const [lx, lz, r] of [[-0.95, 2.1, 0.45], [0.95, 2.1, 0.45], [0, 2.3, 0.55], [-0.95, 0.8, 0.45], [0.95, 0.8, 0.45]] as const) {
+      this.solid(s.x + lx * cos + lz * sin, s.z - lx * sin + lz * cos, r);
+    }
   }
 
   private buildRack(s: Spot): void {
@@ -947,6 +1041,12 @@ export class Town {
 
   /** `you` is the local player; `others` are the other players on this map, whom walking townsfolk keep clear of too. */
   update(t: number, dt: number, you: Bystander, others: readonly Bystander[]): void {
+    if (this.plane) {
+      const p = this.plane;
+      p.position.y = waveHeight(p.position.x, p.position.z, t) * 0.6;
+      p.rotation.x = 0.015 * Math.sin(t * 1.1);
+      p.rotation.z = 0.02 * Math.sin(t * 0.8 + 1);
+    }
     for (const f of this.fires) {
       f.light.intensity = (4 + 8 * this.night) * (0.85 + 0.15 * Math.sin(t * 9 + f.ph) + 0.08 * Math.sin(t * 23 + f.ph));
       f.flames.forEach((c, i) => c.scale.set(1, 0.85 + 0.25 * Math.sin(t * 8 + i * 2 + f.ph), 1));

@@ -17,18 +17,30 @@ const SMOKEHOUSE: Spot = { x: -5.8, z: 21.9, facing: Math.PI / 2 };
 /** Where Mags stands: inside the shack, behind her counter. */
 const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOUSE.z - 0.75 * Math.cos(SMOKEHOUSE.facing) };
 
+/** Along the west beach, toward the town end, and straight out from it into the lake (unit vectors in x, z). */
+const SHORE = { x: -0.83, z: 0.55 };
+const OUT = { x: -0.55, z: -0.83 };
+const fromReed = (along: number, out: number, x = -15.1, z = 13.9) => ({ x: x + SHORE.x * along + OUT.x * out, z: z + SHORE.z * along + OUT.z * out });
+/** Facing from the lake toward the beach. */
+const INLAND = Math.atan2(-OUT.x, -OUT.z);
+
 /**
- * The East Landing, a placeholder harbour for the dives (a map rework may move it): a second pier east of
- * the main one (`DOCK_RECTS` in env.ts), Captain Reed's dive stand on its deck, and the dive's start at the
- * pier head, where players come back from a dive. The Deepest Dive board (D6) is
- * reserved a spot on the shore at the pier foot, (12.2, 12.8), facing the walkway; nothing stands there yet.
+ * The harbour for the dives, on the west beach between the rowboat and the bottle at (-15, 18), away from
+ * the east beach's racks (a placeholder; a map rework may move it): Captain Reed's seaplane floats in the
+ * shallows with its nose toward the sand, Reed stands on the beach beside it by a CHARTERS signpost, and
+ * players come back from a dive on the sand between them. The Furthest Out board (D6) has no spot yet.
  */
 export const HARBOUR = {
-  /** Reed stands in the middle of his stand, facing the shore end of the pier. */
-  stand: { x: 16.1, z: 5.5, facing: 0 } as Spot,
-  /** Where a dive starts: the pier head. */
-  diveStart: { x: 16.1, z: -0.4 },
+  /** Reed stands on the sand facing up the beach, the plane behind his right shoulder. */
+  stand: { ...fromReed(0, 0), facing: INLAND } as Spot,
+  /** The middle of the seaplane, between its floats; it faces the beach, its nose at the water's edge. */
+  plane: { ...fromReed(2.4, 4.3), facing: INLAND } as Spot,
+  /** The CHARTERS signpost, on Reed's other side, toward the pier. */
+  sign: { ...fromReed(-1.3, -0.2), facing: INLAND } as Spot,
+  /** Where players land back from a dive: on the sand between Reed and the plane, looking at it. */
+  diveStart: { ...fromReed(1.4, -0.6), yaw: 0 },
 };
+HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.plane.x - HARBOUR.diveStart.x), -(HARBOUR.plane.z - HARBOUR.diveStart.z));
 
 export interface HouseDef extends Spot {
   /** Wall and roof colours. */
@@ -121,8 +133,8 @@ export interface MapDef {
   town: TownDef;
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
-  /** The East Landing's dive stand (Captain Reed). */
-  harbour?: { stand: Spot; diveStart: { x: number; z: number } };
+  /** Captain Reed's seaplane charters (`HARBOUR`): where he stands, the plane, his signpost and where dives come back to. */
+  harbour?: { stand: Spot; plane: Spot; sign: Spot; diveStart: { x: number; z: number; yaw: number } };
   /** The open sea: players stand on the charter boat's deck (`BOAT` in sea.ts) instead of the shore. */
   sea?: boolean;
   /** Casino maps: where the tables and prize counter stand. */
@@ -157,7 +169,7 @@ export const MAPS: MapDef[] = [
     campfire: { x: -15, z: 24, facing: 0 },
     worms: { x: -8.5, z: 10.5 },
     smokehouse: SMOKEHOUSE,
-    harbour: { stand: HARBOUR.stand, diveStart: HARBOUR.diveStart },
+    harbour: HARBOUR,
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
@@ -253,7 +265,7 @@ export const MAPS: MapDef[] = [
           lines: [
             'Every fish you land takes us a league further out. Every five, a marker: head home with the haul, or sail on.',
             'One spool of line a charter. Run it out and the haul goes over the side.',
-            "Chart a marker and I'll sail you straight back to it next time.",
+            "Chart a marker and I'll fly you straight back out to it next time.",
           ],
         },
       ],
@@ -284,10 +296,10 @@ export const MAPS: MapDef[] = [
 
 const pond = MAPS[0];
 
-/** Where a player lands on `dest` when coming from map `from`: back through the gate, at the pier head from a dive, or at the spawn. */
+/** Where a player lands on `dest` when coming from map `from`: back through the gate, by the seaplane from a dive, or at the spawn. */
 export const arrivalSpot = (dest: MapDef, from?: string): { x: number; z: number; yaw: number } =>
   (from && dest.next?.id === from && dest.gateArrival)
-  || (from && dest.harbour && MAPS.find((m) => m.id === from)?.sea && { ...dest.harbour.diveStart, yaw: Math.PI })
+  || (from && dest.harbour && MAPS.find((m) => m.id === from)?.sea && dest.harbour.diveStart)
   || dest.spawn;
 
 /** The endgame: an indoor casino with its own floor plan; the front door leads back to the pond. */

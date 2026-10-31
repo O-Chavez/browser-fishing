@@ -34,13 +34,8 @@ export const SPOTS: Record<SpotId, SpotRule> = {
 /** Z of the line that separates the outer pier (prime) from the inner pier. */
 export const PRIME_Z = 5.4;
 
-/** East of this x the docks belong to the East Landing harbour (`DOCK_RECTS`). */
-const HARBOUR_X0 = 9;
-
 export function fishingSpot(x: number, z: number): SpotId {
   if (!onDock(x, z)) return 'shore';
-  // The East Landing harbour is for the dives, not a second prime spot: it counts as the inner pier.
-  if (x > HARBOUR_X0) return 'pier';
   return z <= PRIME_Z ? 'prime' : 'pier';
 }
 

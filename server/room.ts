@@ -651,11 +651,11 @@ export class Room {
     return run && m.info.dive === run.id ? run : null;
   }
 
-  /** Starts a dive at Captain Reed's stand, from the harbour or a charted ledge, for a player who owns the rod for it. */
+  /** Starts a dive at Captain Reed's seaplane, from the harbour or a charted ledge, for a player who owns the rod for it. */
   private startDive(m: Member, from: unknown): boolean {
     const s = m.acct.save;
     const h = this.maps[m.info.map]?.harbour;
-    if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Charters start at Captain Reed's stand on the harbour pier.");
+    if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Charters start at Captain Reed's seaplane on the west beach.");
     if (m.acct.dive || m.pending) return false;
     if (!eco.ownsRod(s, DIVE.rod)) return this.deny(m, `Charters need the ${byId(RODS, DIVE.rod).name}.`);
     const start = int(from);

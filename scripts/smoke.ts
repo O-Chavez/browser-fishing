@@ -49,7 +49,7 @@ const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, s
 const save = { ...newSave(), level: 20, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
 // Smokehouse stages already seen, so their banner and jingle don't land in the middle of the casino checks.
 save.smoke.seen = STAGES.map((st) => st.id);
-// The Aurora Rod in the locker, for a trip out to sea from Captain Reed's stand.
+// The Aurora Rod in the locker, for a trip out to sea on Captain Reed's seaplane.
 save.locker.rods.push('aurora');
 fs.writeFileSync(
   path.join(dataDir, 'accounts.json'),
@@ -147,10 +147,10 @@ async function pondChecks(): Promise<void> {
   const blocked = await page.evaluate(() => {
     const cs = (window.__game.world as any).colliders as { x: number; z: number; r: number }[];
     const hit = (x: number, z: number) => cs.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.05);
-    return { bucket: hit(-0.8, 1.6), barrel: hit(7.8, 4.5), reed: hit(16.1, 5.5), stallBarrel: hit(8.4, 19.2) };
+    return { bucket: hit(-0.8, 1.6), barrel: hit(7.8, 4.5), reed: hit(-15.1, 13.9), plane: hit(-18.19, 13.56), stallBarrel: hit(8.4, 19.2) };
   });
   check('pond: dock props and NPCs can be walked through', !blocked.bucket && !blocked.barrel && !blocked.reed, JSON.stringify(blocked));
-  check('pond: shore props still block', blocked.stallBarrel, JSON.stringify(blocked));
+  check('pond: shore props still block, and so does the seaplane at the water\'s edge', blocked.stallBarrel && blocked.plane, JSON.stringify(blocked));
 
   // Townsfolk walk straight legs between stops; every leg must stay clear of solid props.
   const walks = await page.evaluate(() => {
@@ -800,7 +800,7 @@ async function tripChecks(): Promise<void> {
     return [...seen];
   });
 
-  await page.evaluate(() => { window.__game.teleport(16.1, 7.2); window.__game.look(0, -0.05); });
+  await page.evaluate(() => { window.__game.teleport(-15.93, 15.17); window.__game.look(-0.58, -0.05); });
   await sleep(600);
   await page.evaluate(() => window.__game.interact());
   await sleep(300);
@@ -1087,7 +1087,7 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
           ...[...t.bottleMeshes.entries()].map(([id, o]: [string, any]) => [`bottle ${id}`, o]),
           ...t.smoke.map((s: any, i: number) => [`smoke ${i}`, s.m]),
           ...t.fires.flatMap((f: any, i: number) => [[`fire ${i} light`, f.light], ...f.flames.map((o: any, k: number) => [`fire ${i} flame ${k}`, o])]),
-          ...t.lights.map((o: any, i: number) => [`lamp light ${i}`, o])];
+          ...t.lights.map((o: any, i: number) => [`lamp light ${i}`, o]), ['seaplane', t.plane]];
       },
       hall: () => {
         const h = w.hall;

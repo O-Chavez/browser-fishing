@@ -68,16 +68,13 @@ function rawGroundHeight(x: number, z: number): number {
   return base + hills + noise * Math.min(1, dd / 10) * 2.5;
 }
 
-/** Walkable timber over the water: the main pier, the T-shaped end platform, two side piers and the East Landing. */
+/** Walkable timber over the water: the main pier, the T-shaped end platform and two side piers. */
 export interface DockRect { x0: number; x1: number; z0: number; z1: number }
 export const DOCK_RECTS: DockRect[] = [
   { x0: -1.5, x1: 1.5, z0: -3.2, z1: 17 },
   { x0: -5, x1: 5, z0: -6.4, z1: -3.2 },
   { x0: 1.5, x1: 8.5, z0: 3.6, z1: 5.4 },
   { x0: -8.5, x1: -1.5, z0: 3.6, z1: 5.4 },
-  // The East Landing harbour (HARBOUR in maps.ts): a pier and its T-shaped head, east of the main pier.
-  { x0: 14.6, x1: 17.6, z0: 1, z1: 12.6 },
-  { x0: 12.6, x1: 19.6, z0: -1.8, z1: 1 },
 ];
 
 export const onDock = (x: number, z: number, pad = 0): boolean =>
