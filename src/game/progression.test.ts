@@ -127,6 +127,10 @@ describe('fishing spots', () => {
     expect(_spot(0, -4)).toBe('prime');
     expect(_spot(0, 9)).toBe('pier');
     expect(_spot(5.5, 20)).toBe('shore');
+    // The East Landing harbour is never prime, even on its T-head at z < 5.4.
+    expect(_spot(16.1, -0.4)).toBe('pier');
+    expect(_spot(13, -1)).toBe('pier');
+    expect(_spot(16.1, 5.5)).toBe('pier');
     expect(_SPOTS.shore.wait).toBeGreaterThan(_SPOTS.pier.wait);
     expect(_SPOTS.pier.luck).toBeLessThan(_SPOTS.prime.luck);
   });

@@ -3283,7 +3283,7 @@ export class Game {
 
   /** What the Smokehouse is for, at the top of every tab. */
   private smokeIntroHtml(): string {
-    return `<div class="smoke-intro"><b>🔥 Smoke fish to sell or snack on, cook them into dishes.</b> A snack gives ${SNACK_MINUTES} minutes of ⭐ more XP or 💰 more coins on every catch; a dish gives several at once, stronger and longer.<span><i class="soon">Coming soon</i> Spices for Captain Reed's deep-sea charters.</span></div>`;
+    return `<div class="smoke-intro"><b>🔥 Smoke fish to sell or snack on, cook them into dishes.</b> A snack gives ${SNACK_MINUTES} minutes of ⭐ more XP or 💰 more coins on every catch; a dish gives several at once, stronger and longer.<span><i class="soon">Coming soon</i> Spices for Captain Reed's deep-sea dives.</span></div>`;
   }
 
   private smokeHtml(): string {

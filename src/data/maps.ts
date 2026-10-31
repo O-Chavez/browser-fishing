@@ -16,6 +16,19 @@ const SMOKEHOUSE: Spot = { x: -5.8, z: 21.9, facing: Math.PI / 2 };
 /** Where Mags stands: inside the shack, behind her counter. */
 const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOUSE.z - 0.75 * Math.cos(SMOKEHOUSE.facing) };
 
+/**
+ * The East Landing, a placeholder harbour for the dives (a map rework may move it): a second pier east of
+ * the main one (`DOCK_RECTS` in env.ts), Captain Reed's dive stand on its deck, and the dive's start at the
+ * pier head. The dive start is data only until the dive is wired to travel. The Deepest Dive board (D6) is
+ * reserved a spot on the shore at the pier foot, (12.2, 12.8), facing the walkway; nothing stands there yet.
+ */
+export const HARBOUR = {
+  /** Reed stands in the middle of his stand, facing the shore end of the pier. */
+  stand: { x: 16.1, z: 5.5, facing: 0 } as Spot,
+  /** Where a dive starts: the pier head. */
+  diveStart: { x: 16.1, z: -0.4 },
+};
+
 export interface HouseDef extends Spot {
   /** Wall and roof colours. */
   wall: number;
@@ -107,6 +120,8 @@ export interface MapDef {
   town: TownDef;
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
+  /** The East Landing's dive stand (Captain Reed). */
+  harbour?: { stand: Spot; diveStart: { x: number; z: number } };
   /** Casino maps: where the tables and prize counter stand. */
   casino?: { roulette: Spot; blackjack: Spot; prizes: Spot; mirror: Spot; records: Spot; hall: { x: number; z: number; w: number; d: number } };
   /** Player level needed to travel here. */
@@ -139,6 +154,7 @@ export const MAPS: MapDef[] = [
     campfire: { x: -15, z: 24, facing: 0 },
     worms: { x: -8.5, z: 10.5 },
     smokehouse: SMOKEHOUSE,
+    harbour: { stand: HARBOUR.stand, diveStart: HARBOUR.diveStart },
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
@@ -229,12 +245,11 @@ export const MAPS: MapDef[] = [
           nightLines: ["Lantern Glaze, that's the night angler's secret. The eels bite from dusk with a bit of that in you."],
         },
         {
-          name: 'Captain Reed', face: 'grin', x: 4, z: 53.5, facing: faceToward(4, 53.5, 0, 56), coat: 0x2f4f4f, hat: 0x2b2b2b,
-          // Paces in front of the gate he keeps.
-          walk: { speed: 1.1, wait: 5, stops: [{ x: -4, z: 53.5, wait: 5, face: faceToward(-4, 53.5, 0, 56) }] },
+          name: 'Captain Reed', face: 'grin', ...HARBOUR.stand, coat: 0x2f4f4f, hat: 0x2b2b2b,
           lines: [
-            `Beyond the gate lies Casino Cove. They only let in seasoned anglers: level ${CASINO_LEVEL} and up.`,
-            'Keep fishing and keep levelling. The gate opens for anyone who has earned it.',
+            "She's a good boat, but she's not fit for deep water yet. I'm still fitting her out.",
+            'Dives will open soon. Keep your rod mended and your line strong.',
+            'Come back when the hull is ready, angler. The deep water will keep.',
           ],
         },
       ],
