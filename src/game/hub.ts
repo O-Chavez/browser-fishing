@@ -9,6 +9,7 @@ import { buildFish } from './fishmodel';
 import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
 import casinoPreview from '../assets/images/casino-preview.jpg';
+import charterPreview from '../assets/images/charter-preview.jpg';
 
 export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
   new THREE.MeshLambertMaterial({ color, ...extra });
@@ -33,6 +34,25 @@ export const ball = (r: number, color: number, sx = 1, sy = 1, sz = 1): THREE.Me
   m.castShadow = true;
   return m;
 };
+
+/** A poster beside the pond gate: which side (metres along the gate), its picture, title sign and frame. */
+interface Poster {
+  side: number;
+  image: string;
+  title: string;
+  ink: string;
+  frame: number;
+}
+
+/**
+ * The posters beside the pond gate, showing newer players what's waiting: Casino Cove on one side, and on the other
+ * a charter out to the deep sea (the Kraken, from the "What's new" photo), so players have charters to look forward
+ * to while they level up toward the Aurora Rod (Oscar, 2026-11-01).
+ */
+const POSTERS = {
+  casino: { side: 5.2, image: casinoPreview, title: 'CASINO COVE', ink: '#ffd76a', frame: 0xb8862f },
+  charters: { side: -5.2, image: charterPreview, title: 'CHARTERS', ink: '#9fe8ff', frame: 0x6f9e96 },
+} satisfies Record<string, Poster>;
 
 /** Capsule limb between two points. */
 export function limb(a: THREE.Vector3, b: THREE.Vector3, r: number, color: number): THREE.Mesh {
@@ -121,6 +141,8 @@ export class Hub {
   readonly gateSpot = new THREE.Vector3();
   /** The casino poster beside the pond gate (unset on maps without one). */
   readonly peekSpot: THREE.Vector3 | null = null;
+  /** The charter poster on the gate's other side, on maps with Reed's harbour (unset elsewhere). */
+  readonly charterSpot: THREE.Vector3 | null = null;
   readonly leaderSpot = new THREE.Vector3();
   readonly mirrorSpot = new THREE.Vector3();
   readonly campSpot = new THREE.Vector3();
@@ -151,7 +173,8 @@ export class Hub {
   constructor(private map: MapDef) {
     this.buildStall(map.vendor.shop, map.vendor.npc);
     this.buildGate(map.gate);
-    if (map.next?.id === 'casino') (this as { peekSpot: THREE.Vector3 | null }).peekSpot = this.buildPoster(map.gate);
+    if (map.next?.id === 'casino') (this as { peekSpot: THREE.Vector3 | null }).peekSpot = this.buildPoster(map.gate, POSTERS.casino);
+    if (map.harbour) (this as { charterSpot: THREE.Vector3 | null }).charterSpot = this.buildPoster(map.gate, POSTERS.charters);
     this.buildProps();
     this.buildLeaderboard(map.leaderboard);
     this.buildThanks(map.leaderboard);
@@ -290,23 +313,23 @@ export class Hub {
     this.fixed.push({ x: nc.x, z: nc.z, r: 0.5 });
   }
 
-  /** A framed poster of the casino floor beside the gate, so newer players can see what's waiting. */
-  private buildPoster(gate: Spot): THREE.Vector3 {
-    const spot: Spot = { ...this.world(gate, 5.2, 0.6), facing: gate.facing } as Spot;
+  /** A framed poster beside the gate, so newer players can see what's waiting (`POSTERS`). */
+  private buildPoster(gate: Spot, p: Poster): THREE.Vector3 {
+    const spot: Spot = { ...this.world(gate, p.side, 0.6), facing: gate.facing } as Spot;
     const g = new THREE.Group();
     for (const lx of [-0.95, 0.95]) {
       const post = cyl(0.07, 0.09, 2.6, DARK, 8);
       post.position.set(lx, 1.3, 0);
       g.add(post);
     }
-    const frame = rbox(2.2, 1.55, 0.1, 0xb8862f, 0.04);
+    const frame = rbox(2.2, 1.55, 0.1, p.frame, 0.04);
     frame.position.set(0, 1.85, 0);
-    const tex = new THREE.TextureLoader().load(casinoPreview);
+    const tex = new THREE.TextureLoader().load(p.image);
     tex.colorSpace = THREE.SRGBColorSpace;
     const pic = new THREE.Mesh(new THREE.PlaneGeometry(1.96, 1.1), new THREE.MeshBasicMaterial({ map: tex }));
     pic.position.set(0, 1.78, 0.06);
     const title = textPlane(2.0, 0.32, 512);
-    woodSign(title.ctx, 'CASINO COVE', '#ffd76a');
+    woodSign(title.ctx, p.title, p.ink);
     title.tex.needsUpdate = true;
     title.mesh.position.set(0, 2.47, 0.06);
     g.add(frame, pic, title.mesh);

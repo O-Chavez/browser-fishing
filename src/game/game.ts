@@ -35,6 +35,7 @@ import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, SEA_THEME, TIER_THEME } from '../data/fishlook';
 import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
+import charterPreview from '../assets/images/charter-preview.jpg';
 import { NEWS, type NewsEntry } from '../data/news';
 import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
 import { charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
@@ -91,7 +92,7 @@ import { ScreenSpray } from './screenspray';
 import { zoneAt } from '../data/sea';
 import { CAST_OFF_CARD, cardColours } from './castoffcard';
 import { dayFraction } from './daynight';
-import { DIVES_OPEN, DIVE, ROD_LEVEL, glowColor, glowStep } from '../data/dive';
+import { DIVES_OPEN, DIVE, ROD_LEVEL, ZONES, glowColor, glowStep } from '../data/dive';
 
 type Phase =
   | 'idle'
@@ -2117,6 +2118,7 @@ export class Game {
         { d: near(hub.mirrorSpot), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         ...(hub.peekSpot ? [{ d: near(hub.peekSpot), label: 'Casino Cove poster · take a look inside', act: () => this.openMenu('peek') }] : []),
+        ...(hub.charterSpot ? [{ d: near(hub.charterSpot), label: 'Charters poster · take a look', act: () => this.openMenu('charters') }] : []),
         {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
           label: this.gateOpen
@@ -3322,7 +3324,7 @@ export class Game {
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
     $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
     const card = DIVE_TABS.includes(this.tab);
-    $('menu').classList.toggle('fit', this.tab === 'peek' || this.tab === 'news' || card);
+    $('menu').classList.toggle('fit', this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || card);
     $('menu').classList.toggle('news', this.tab === 'news');
     $('menu').classList.toggle('dive', card);
     $('menu-who').innerHTML = this.menuWhoHtml();
@@ -3377,6 +3379,9 @@ export class Game {
         break;
       case 'peek':
         el.innerHTML = this.peekHtml();
+        break;
+      case 'charters':
+        el.innerHTML = this.chartersPosterHtml();
         break;
       case 'news':
         el.innerHTML = newsHtml(this.newsGlance ?? NEWS, !!this.newsGlance);
@@ -3516,6 +3521,7 @@ export class Game {
     if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? `${zoneAt(this.diveHud.view.depth).name}` : 'Back at the harbour'}</span></div>`;
     if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
+    if (this.tab === 'charters') return `<span class="who-ic">⚓</span><div><b>Charters</b><span>Captain Reed · the west beach · with the ${byId(RODS, DIVE.rod).name}</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
     return `<img src="${this.faceSrc(this.s.look.face as FaceId)}" alt=""><div><b>${escapeHtml(this.net.name || 'You')}</b><span>Level ${this.s.level} · ${this.s.coins.toLocaleString()} coins</span></div>`;
   }
@@ -3535,7 +3541,7 @@ export class Game {
         tab('pantry', '🧺', `Pantry${n ? ` (${n})` : ''}`, this.smokeTab === 'pantry', 'data-smoke')
       );
     }
-    if (this.tab === 'peek' || this.tab === 'news' || DIVE_TABS.includes(this.tab)) return '';
+    if (this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || DIVE_TABS.includes(this.tab)) return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
@@ -4236,6 +4242,29 @@ export class Game {
         ${status}</div></div>`;
   }
 
+  /**
+   * The charter poster by the pond gate: what a charter is, with the Kraken, so players have charters to look forward
+   * to while they level up toward the Aurora Rod; the last line says how far off theirs is.
+   */
+  private chartersPosterHtml(): string {
+    const s = this.s;
+    const rod = byId(RODS, DIVE.rod);
+    const left = rod.unlockLevel - s.level;
+    const status = !DIVES_OPEN
+      ? `<p class="peek-lock">⚓ Charters open soon</p>`
+      : eco.ownsRod(s, rod.id)
+        ? `<p class="peek-open">✔ You're ready! Find Captain Reed on the west beach.</p>`
+        : left > 0
+          ? `<p class="peek-lock">🔒 Needs the ${rod.name} · Marlow sells it from level ${rod.unlockLevel} · <b>${left}</b> level${left === 1 ? '' : 's'} to go</p>`
+          : `<p class="peek-lock">🎣 Get the ${rod.name} at Marlow's stall (${rod.price.toLocaleString()} ${COIN}), then find Captain Reed on the west beach</p>`;
+    return `<div class="peek"><img src="${charterPreview}" alt="The Kraken rearing out of the storm waves far out at sea">
+      <div class="peek-text"><h3>Sail out to the deep sea</h3>
+        <p>Captain Reed flies you out to sea from the west beach. Every ${DIVE.ledgeEvery} fish you land, you reach a marker: <b>Head home</b> to bank your haul of Black Pearls, or <b>Sail on</b> for a bigger one, if your one spool of line holds out.</p>
+        <p>The further out you sail, the stranger the fish: Kelp Deep, the Twilight and the Abyss each have their own, and legends you'll never see in the pond.</p>
+        <p>Black Pearls level up your ${rod.name} and Deep Sea Line, so every charter can take you further out.</p>
+        ${status}</div></div>`;
+  }
+
   // ---------- Fishdex ----------
 
   private dexHtml(): string {
@@ -4246,7 +4275,7 @@ export class Game {
       const moon = f.night ? '<span class="moon" title="Only bites at night">🌙</span>' : '';
       const size = `${f.minSize}-${f.maxSize} cm`;
       if (e) return `<div class="fish" style="--c:var(--t${f.sea ? 3 : f.tier})">${moon}${fishIcon(f.id)}<b>${f.name}</b><p>${FISH_BLURB[f.id] ?? ''}</p><span>Caught ${e.count} · best ${e.best} cm</span></div>`;
-      if (f.sea) return `<div class="fish unknown" style="--c:var(--t3)">${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}</p><span>Out at sea, off the ${f.locations[0] === 'shelf' ? 'Shelf' : 'Drop-off'}</span></div>`;
+      if (f.sea) return `<div class="fish unknown" style="--c:var(--t3)">${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}</p><span>Out at sea, in ${(ZONES.find((z) => z.id === f.locations[0])?.name ?? 'the deep').replace(/^The /, 'the ')}</span></div>`;
       if (this.s.seen.includes(f.id)) {
         const need = eco.gearNeeds(this.s, f);
         const parts = [need.line ? `the ${need.line.name} to hold it` : '', need.rod ? `a ${need.rod.name} to land it` : ''].filter(Boolean);
