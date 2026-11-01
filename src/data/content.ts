@@ -39,6 +39,21 @@ export interface Rod {
   color: number;
 }
 
+/**
+ * Fishing line: a permanent spool upgrade on the rod (REELING.md, "Where line lives"). Its tier against a fish's
+ * sets the strength side of the fight: a fish over the line pulls into the red and snaps it. One spool at a time,
+ * never carried or swapped; buying a higher tier replaces it.
+ */
+export interface Line {
+  id: string;
+  name: string;
+  tier: number;
+  unlockLevel: number;
+  price: number;
+  /** Tier colour, the same as the rod of that tier. */
+  color: number;
+}
+
 export interface Bait {
   id: BaitType;
   name: string;
@@ -89,6 +104,15 @@ export const RODS: Rod[] = [
   { id: 'graphite', name: 'Graphite Rod', tier: 3, unlockLevel: 6, price: 1200, castDistance: 26, luck: 1.5, control: 1.5, color: 0x4a90e2 },
   { id: 'carbon', name: 'Carbon Elite Rod', tier: 4, unlockLevel: 10, price: 5000, castDistance: 30, luck: 1.9, control: 1.8, color: 0xb05ce6 },
   { id: 'aurora', name: 'Aurora Rod', tier: 5, unlockLevel: 15, price: 20000, castDistance: 34, luck: 2.5, control: 2.2, color: 0xffc933 },
+];
+
+/** Same five tiers as the rods; each unlocks just after the bait of its tier and before its rod, and costs about 40% of the rod. */
+export const LINES: Line[] = [
+  { id: 'twine', name: 'Twine', tier: 1, unlockLevel: 1, price: 0, color: 0xb98a52 },
+  { id: 'mono', name: 'Mono Line', tier: 2, unlockLevel: 2, price: 100, color: 0x4cd964 },
+  { id: 'fluoro', name: 'Fluoro Line', tier: 3, unlockLevel: 5, price: 500, color: 0x4a90e2 },
+  { id: 'braid', name: 'Braid Line', tier: 4, unlockLevel: 9, price: 2000, color: 0xb05ce6 },
+  { id: 'moonsilk', name: 'Moonsilk Line', tier: 5, unlockLevel: 13, price: 8000, color: 0xffc933 },
 ];
 
 export const BAITS: Bait[] = [

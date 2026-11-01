@@ -1,9 +1,10 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
-import { BAITS, FISH, RODS, byId, type BaitType, type Fish } from '../data/content';
+import { BAITS, FISH, LINES, RODS, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { ROD_LEVEL } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
-import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type SpotId } from './progression';
+import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, rollTag, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
+import type { Difficulty, FightDifficulty } from './reel';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
 import { rollSeaFish } from './dive';
@@ -74,6 +75,40 @@ export function buyRod(s: SaveData, id: string): boolean {
   s.locker.rods.push(id);
   const cur = RODS.find((x) => x.id === s.rod);
   if (!hasRod(s, s.rod) || !cur || r.tier > cur.tier) equipRod(s, id);
+  return true;
+}
+
+/** The line on the rod (Twine if the save's is unknown). */
+export const lineOf = (s: Pick<SaveData, 'line'>): Line => LINES.find((l) => l.id === s.line) ?? LINES[0];
+
+/** What stands between this player's gear and a species: the line to hold it, the rod to land it in good time, the bait to hook it. */
+export function gearNeeds(s: Pick<SaveData, 'rod' | 'line' | 'bait'>, fish: Fish): { line: Line | null; rod: Rod | null; bait: Bait | null } {
+  const rod = byId(RODS, s.rod);
+  const bait = byId(BAITS, s.bait);
+  return {
+    line: fish.tier > lineOf(s).tier ? LINES.find((l) => l.tier === fish.tier) ?? null : null,
+    rod: fish.tier > rod.tier ? RODS.find((r) => r.tier === fish.tier) ?? null : null,
+    bait: fish.tier > bait.tier ? BAITS.find((b) => b.tier === fish.tier) ?? null : null,
+  };
+}
+
+/**
+ * A fish lost to a gear wall (over the rod or the line) goes into the Fishdex as *seen*, so the loss pays out as a
+ * shopping list (REELING.md, "A wall loss pays out as information"). Fish the gear handles, or already caught, don't.
+ */
+export function recordSighting(s: SaveData, fish: Fish): boolean {
+  const need = gearNeeds(s, fish);
+  if ((!need.line && !need.rod) || s.dex[fish.id] || s.seen.includes(fish.id)) return false;
+  s.seen.push(fish.id);
+  return true;
+}
+
+/** Spools a better line onto the rod: a step up from the current one, unlocked and paid for. There is nothing to carry. */
+export function buyLine(s: SaveData, id: string): boolean {
+  const l = LINES.find((x) => x.id === id);
+  if (!l || s.level < l.unlockLevel || s.coins < l.price || l.tier <= lineOf(s).tier) return false;
+  s.coins -= l.price;
+  s.line = id;
   return true;
 }
 
@@ -389,15 +424,17 @@ export interface Roll {
   spot?: string;
   /** The fight, with a fish: its reel seed and difficulty. The server replays the catch from these. */
   seed?: number;
-  d?: number;
+  d?: Difficulty;
   /** How a sea fish fights (`BEHAVIOUR_TUNE`); pond fish have none. */
   b?: Behaviour;
+  /** A Feisty or Brutish pond fish (`rollTag`). */
+  tag?: FishTag;
 }
 
-/** A hooked fish's fight difficulty on the save's rod, Quick-Reel Gloves included. */
-export function fightDifficulty(s: SaveData, fish: Fish, shiny: boolean, size: number): number {
+/** A hooked fish's fight difficulty on the save's rod and line, Quick-Reel Gloves included. */
+export function fightDifficulty(s: SaveData, fish: Fish, shiny: boolean, size: number, tag: FishTag | null = null): FightDifficulty {
   const rod = byId(RODS, s.rod);
-  return reelDifficulty(fish, { ...rod, control: reelControl(s, rod.control) }, shiny, size);
+  return reelDifficulty(fish, { ...rod, control: reelControl(s, rod.control) }, lineOf(s), shiny, size, tag);
 }
 
 export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Roll {
@@ -413,7 +450,9 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
   const roll: Roll = { perfect, spot, fishId: fish?.id ?? null, size, wait, shiny };
   if (fish) {
     roll.seed = Math.floor(rng() * 4294967296);
-    roll.d = fightDifficulty(s, fish, shiny, size);
+    const tag = rollTag(fish, rod, lineOf(s), rng);
+    if (tag) roll.tag = tag;
+    roll.d = fightDifficulty(s, fish, shiny, size, tag);
   }
   return roll;
 }
@@ -460,9 +499,11 @@ export interface CatchResult {
 
 /** A clean catch (landed without fraying the line) is worth this much more. */
 export const CLEAN_BONUS = 0.1;
+/** A Feisty or Brutish fish landed is worth this much more, on top of a clean catch (REELING.md, "Temperament"). */
+export const TAG_BONUS = 0.15;
 
 /** Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins (dives). */
-export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false): CatchResult {
+export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false, tag: FishTag | null = null): CatchResult {
   const slot = sell ? -1 : freeFishSlot(s);
   if (slot < 0 && !sell) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
@@ -475,7 +516,8 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const record = !!entry && size > entry.best;
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
-  const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1);
+  s.seen = s.seen.filter((id) => id !== fish.id);
+  const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1) * (tag ? 1 + TAG_BONUS : 1);
   const item: Slot = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
   const sold = sell ? sellPrice(s, item) : 0;
   if (sell) s.coins += sold;

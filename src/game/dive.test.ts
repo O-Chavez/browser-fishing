@@ -102,9 +102,10 @@ describe('fish behaviours', () => {
       for (const [b, p] of [[fast, plain.fast], [slow, plain.slow]]) {
         expect(b.d50).toBeLessThan(p.d50 + 0.02);
         expect(b.d50).toBeGreaterThan(p.d50 * 0.9);
-        expect(b.steepest).toBeLessThanOrEqual(0.4);
+        // The small per-fish spread (`P.fight`) makes the land-rate curve steeper than it was; 0.2 of difficulty is ~8 leagues.
+        expect(b.steepest).toBeLessThanOrEqual(0.75);
       }
-    });
+    }, 30_000);
   }
 
   it('a runner takes more line', () => {

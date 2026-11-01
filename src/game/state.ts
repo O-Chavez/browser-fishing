@@ -1,4 +1,4 @@
-import { BAITS, FISH, RODS, type BaitType } from '../data/content';
+import { BAITS, FISH, LINES, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { TITLES } from '../data/ranks';
@@ -73,6 +73,8 @@ export interface SaveData {
   coins: number;
   /** The rod used for casting: the one in the rod slot. */
   rod: string;
+  /** The line spooled on the rod (`LINES`): one at a time, upgraded at the stall, never carried. */
+  line: string;
   /** The bait used for casting: the one in the bait slot (kept when the slot runs empty). */
   bait: BaitType;
   slots: (Slot | null)[];
@@ -80,6 +82,8 @@ export interface SaveData {
   held: number;
   location: string;
   dex: Record<string, DexEntry>;
+  /** Species hooked and lost to a gear wall but never caught (REELING.md): the Fishdex shows them with what they need. */
+  seen: string[];
   /** Character appearance and the cosmetics bought so far. */
   look: Look;
   owned: string[];
@@ -133,11 +137,13 @@ export const newSave = (): SaveData => ({
   xp: 0,
   coins: 20,
   rod: 'twig',
+  line: 'twine',
   bait: 'worm',
   slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, null, null, null],
   held: 0,
   location: 'pond',
   dex: {},
+  seen: [],
   look: { ...defaultLook(), face: randomFace() },
   owned: [],
   locker: { rods: [], bait: {} },
@@ -316,8 +322,15 @@ export function migrate(raw: object): SaveData {
   const bait: Record<string, number> = {};
   for (const [id, n] of Object.entries(lk.bait ?? {})) if (BAITS.some((b) => b.id === id) && n > 0) bait[id] = Math.floor(n);
   out.locker = { rods: (lk.rods ?? []).filter((id) => RODS.some((r) => r.id === id)), bait };
+  // Saves from before line existed get the line of their best rod, so nothing they could land is walled off.
+  if (!LINES.some((l) => l.id === data.line)) {
+    const owned = [...out.locker.rods, ...out.slots.flatMap((sl) => (sl?.k === 'rod' ? [sl.id] : []))];
+    const best = Math.max(1, ...RODS.filter((r) => owned.includes(r.id)).map((r) => r.tier));
+    out.line = (LINES.find((l) => l.tier === best) ?? LINES[0]).id;
+  }
   layoutSlots(out, slotCount(out));
   if (!Array.isArray(out.owned)) out.owned = [];
+  out.seen = Array.isArray(data.seen) ? [...new Set(data.seen.filter((id): id is string => typeof id === 'string' && FISH.some((f) => f.id === id) && !out.dex[id]))] : [];
   out.titles = Array.isArray(data.titles) ? data.titles.filter((id) => TITLES.some((t) => t.id === id)) : [];
   grantRanks(out);
   if (!out.titles.includes(out.title as string)) out.title = null;

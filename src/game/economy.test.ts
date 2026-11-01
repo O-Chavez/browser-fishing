@@ -350,6 +350,124 @@ describe('carry slots', () => {
   });
 });
 
+describe('line', () => {
+  it('spools a better line onto the rod: a step up, unlocked and paid for, nothing to carry', () => {
+    const s = newSave();
+    s.coins = 10_000;
+    expect(eco.lineOf(s).id).toBe('twine');
+    expect(eco.buyLine(s, 'mono')).toBe(false); // level 1
+    s.level = 5;
+    expect(eco.buyLine(s, 'mono')).toBe(true);
+    expect(s.line).toBe('mono');
+    expect(s.coins).toBe(9_900);
+    expect(eco.buyLine(s, 'mono')).toBe(false); // already spooled
+    expect(eco.buyLine(s, 'twine')).toBe(false); // lighter
+    expect(eco.buyLine(s, 'braid')).toBe(false); // level 9
+    expect(eco.buyLine(s, 'fluoro')).toBe(true);
+    expect(s.coins).toBe(9_400);
+    s.coins = 10;
+    s.level = 20;
+    expect(eco.buyLine(s, 'braid')).toBe(false); // broke
+    expect(s.slots.filter((x) => x && x.k !== 'rod' && x.k !== 'bait')).toEqual([]);
+  });
+
+  it('a save from before line gets the line of its best rod, so nothing it could land is walled off', () => {
+    const { line: _drop, ...old } = { ...newSave(), rod: 'graphite', locker: { rods: ['carbon'], bait: {} }, slots: [rod('graphite'), bait('worm', 5), null, null, null] };
+    expect(migrate(old as object).line).toBe('braid');
+    expect(migrate({ ...old, locker: { rods: [], bait: {} } } as object).line).toBe('fluoro');
+    expect(migrate({ ...newSave(), line: 'bogus' }).line).toBe('twine');
+    expect(migrate({ ...newSave(), line: 'mono' }).line).toBe('mono');
+  });
+
+  it('the cast roll carries the two-axis difficulty and, now and then, a tag', () => {
+    const s = newSave();
+    s.level = 20;
+    s.line = 'fluoro';
+    eco.buyRod(Object.assign(s, { coins: 100_000 }), 'graphite');
+    let tags = 0, fish = 0;
+    const rng = (() => { let x = 1; return () => ((x = (x * 48271) % 2147483647) / 2147483647); })();
+    for (let i = 0; i < 400; i++) {
+      s.slots[1] = bait('minnow', 50);
+      s.bait = 'minnow';
+      const roll = eco.rollCast(s, 'pond', rng);
+      if (!roll.fishId) continue;
+      fish++;
+      expect(typeof roll.d).toBe('object');
+      const d = roll.d as { weight: number; strength: number; pace: number };
+      expect(d.weight).toBeGreaterThan(0);
+      expect(d.strength).toBeGreaterThan(0);
+      const f = byId(FISH, roll.fishId);
+      expect(roll.d).toEqual(eco.fightDifficulty(s, f, !!roll.shiny, roll.size, roll.tag ?? null));
+      if (roll.tag) {
+        tags++;
+        // A tag only lands on an axis the gear handles (rod and line are both tier 3 here).
+        expect(f.tier).toBeLessThanOrEqual(3);
+        const plain = eco.fightDifficulty(s, f, !!roll.shiny, roll.size);
+        expect(roll.tag === 'feisty' ? d.strength : d.weight).toBeGreaterThan(roll.tag === 'feisty' ? plain.strength : plain.weight);
+      }
+    }
+    expect(fish).toBeGreaterThan(300);
+    expect(tags).toBeGreaterThan(fish / 8 * 0.5);
+    expect(tags).toBeLessThan(fish / 8 * 1.5);
+  });
+});
+
+describe('tag bonus', () => {
+  it('a Feisty or Brutish fish is worth more, on top of a clean catch', () => {
+    const pike = byId(FISH, 'pike');
+    const plain = eco.applyCatch(newSave(), pike, 80, false, false, true);
+    const feisty = eco.applyCatch(newSave(), pike, 80, false, false, true, 'feisty');
+    const both = eco.applyCatch(newSave(), pike, 80, false, true, true, 'brutish');
+    expect(feisty.mult).toBeCloseTo((1 + eco.TAG_BONUS) * plain.mult, 9);
+    expect(both.mult).toBeCloseTo((1 + eco.TAG_BONUS) * (1 + eco.CLEAN_BONUS) * plain.mult, 9);
+    expect(feisty.sold!).toBeGreaterThan(plain.sold!);
+    // The bonus rides on the fish, so it still counts when the fish is sold later.
+    const s = newSave();
+    eco.applyCatch(s, pike, 80, false, false, false, 'feisty');
+    const item = s.slots.find((x) => x?.k === 'fish')!;
+    expect(item.k === 'fish' && item.mult).toBeCloseTo(1 + eco.TAG_BONUS, 9);
+  });
+});
+
+describe('sightings', () => {
+  it('names what stands between the gear and a species: line to hold it, rod to land it, bait to hook it', () => {
+    const s = newSave(); // Twig, Twine, Worm
+    const pike = byId(FISH, 'pike'); // tier 3
+    expect(eco.gearNeeds(s, pike)).toMatchObject({ line: { id: 'fluoro' }, rod: { id: 'graphite' }, bait: { id: 'minnow' } });
+    s.line = 'fluoro';
+    expect(eco.gearNeeds(s, pike).line).toBeNull();
+    s.rod = 'aurora';
+    s.bait = 'pearl';
+    expect(eco.gearNeeds(s, pike)).toEqual({ line: null, rod: null, bait: null });
+    expect(eco.gearNeeds(s, byId(FISH, 'bluegill'))).toEqual({ line: null, rod: null, bait: null });
+  });
+
+  it('a fish lost to a gear wall is seen once, a fish the gear handles is not, and a catch clears it', () => {
+    const s = newSave();
+    const pike = byId(FISH, 'pike');
+    expect(eco.recordSighting(s, byId(FISH, 'bluegill'))).toBe(false);
+    expect(eco.recordSighting(s, pike)).toBe(true);
+    expect(eco.recordSighting(s, pike)).toBe(false);
+    expect(s.seen).toEqual(['pike']);
+    // Over the line only still counts; over nothing does not.
+    const t = { ...newSave(), rod: 'graphite', seen: [] as string[] };
+    expect(eco.recordSighting(t, pike)).toBe(true);
+    const u = { ...newSave(), rod: 'graphite', line: 'fluoro', seen: [] as string[] };
+    expect(eco.recordSighting(u, pike)).toBe(false);
+    // Catching it moves it from seen to the dex.
+    s.slots[2] = null;
+    eco.applyCatch(s, pike, 80, false, false, false);
+    expect(s.seen).toEqual([]);
+    expect(s.dex.pike?.count).toBe(1);
+  });
+
+  it('migration keeps only real, uncaught species in the seen list', () => {
+    expect(migrate({ ...newSave(), seen: ['pike', 'nope', 'pike', 'bluegill'], dex: { bluegill: { count: 1, best: 12 } } }).seen).toEqual(['pike']);
+    const { seen: _s, ...old } = newSave();
+    expect(migrate(old as object).seen).toEqual([]);
+  });
+});
+
 describe('drops', () => {
   it('expire after 30 seconds', () => {
     let t = 0;

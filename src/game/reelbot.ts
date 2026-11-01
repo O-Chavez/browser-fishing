@@ -1,7 +1,7 @@
 // Reel bots for the fight tests (and later the dive's): simulated players with a reaction time, playing by what
 // the HUD shows. Test-only; the game never imports this.
 import { mulberry } from './env';
-import { FIGHT_DT, GOOD_MAX, Reel, type HoldLog, type ReelStatus, type ReelTune } from './reel';
+import { FIGHT_DT, GOOD_MAX, Reel, axes, type Difficulty, type HoldLog, type ReelStatus, type ReelTune } from './reel';
 
 /**
  * How a bot plays: it eases off once tension is within `hi` of the red, and takes up the line again once it's
@@ -41,7 +41,7 @@ export interface BotFight {
  * `rng` drives the fish, `brng` the bot, `tune` the fish's behaviour. Fixed 1/60 s steps, recorded into `log` if
  * given (as the game does).
  */
-export function botFight(d: number, react: number, style: BotStyle, rng: () => number, brng: () => number, tune?: ReelTune, maxT = 600, log?: HoldLog): BotFight {
+export function botFight(d: Difficulty, react: number, style: BotStyle, rng: () => number, brng: () => number, tune?: ReelTune, maxT = 600, log?: HoldLog): BotFight {
   const r = new Reel(d, rng, tune);
   const dt = FIGHT_DT;
   let holding = true;
@@ -85,10 +85,11 @@ export interface BotCell {
 }
 
 /** `n` fights per style at difficulty `d`; returns the best style's results (most landed, then fastest). */
-export function botCell(d: number, react: number, n = 300, seed = 1, styles = STYLES, tune?: ReelTune): BotCell {
+export function botCell(d: Difficulty, react: number, n = 300, seed = 1, styles = STYLES, tune?: ReelTune): BotCell {
+  const key = typeof d === 'number' ? d : axes(d).weight + 7.3 * axes(d).strength + 31 * axes(d).pace;
   let best: BotCell | null = null;
   styles.forEach((st, si) => {
-    const rng = mulberry(seed * 7919 + Math.round(d * 1000));
+    const rng = mulberry(seed * 7919 + Math.round(key * 1000));
     const brng = mulberry(seed * 104729 + Math.round(react * 1000) + 17);
     let land = 0, snaps = 0, released = 0, t = 0, clean = 0, line = 0;
     for (let i = 0; i < n; i++) {

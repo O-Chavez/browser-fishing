@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { FISH, RODS, byId } from '../data/content';
+import { FISH, LINES, RODS, byId } from '../data/content';
 import { mulberry } from './env';
 import { reelDifficulty } from './progression';
-import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, SWEET_MIN, decodeHolds, expArith, lnArith, powArith, replayFight } from './reel';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, SWEET_MIN, axes, decodeHolds, expArith, lnArith, powArith, replayFight, type Difficulty } from './reel';
 import { NAIVE, STYLES, botCell, botFight, botSweep } from './reelbot';
 
 /**
@@ -14,6 +14,9 @@ const FAN_HALF: [number, number][] = [[0.15, 2.82], [0.25, 2.67], [0.4, 2.31], [
 
 /** Plays a fight with a simple policy until it ends or `secs` pass. */
 function play(d: number, seed: number, hold: (r: Reel) => boolean, secs = 120): Reel {
+  return play2(d, seed, hold, secs);
+}
+function play2(d: Difficulty, seed: number, hold: (r: Reel) => boolean, secs = 120): Reel {
   const r = new Reel(d, mulberry(seed));
   for (let k = 0; k < 60 * secs && r.status === 'reeling'; k++) r.update(1 / 60, hold(r));
   return r;
@@ -32,8 +35,10 @@ describe('tension reel fight', () => {
     expect(gap).toBeLessThan(1.5);
   });
 
-  it('the landing rate falls smoothly, with no cliff', () => {
-    for (const s of sweeps) expect(s.steepest).toBeLessThanOrEqual(0.35);
+  it('the landing rate falls over several steps, not one', () => {
+    // With the per-fish spread small (`P.fight`), the curve is steeper than it was: the spread used to smear it.
+    // 0.2 of difficulty is about 8 leagues at sea, so this is still no cliff in play.
+    for (const s of sweeps) expect(s.steepest).toBeLessThanOrEqual(0.65);
   });
 
   it('a strong fish drags line out even with the gauge kept green; a matched one does not', () => {
@@ -105,15 +110,16 @@ describe('tension reel fight', () => {
   });
 
   it('a player who just follows the words lands top fish on matched gear, and fish a tier above the rod', () => {
-    expect(botCell(reelDifficulty(byId(FISH, 'aurorapike'), byId(RODS, 'aurora')), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
-    expect(botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'fiberglass')), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.6);
+    const line = (t: number) => LINES[t - 1];
+    expect(botCell(reelDifficulty(byId(FISH, 'aurorapike'), byId(RODS, 'aurora'), line(5)), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
+    expect(botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'fiberglass'), line(3)), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
   });
 
   it('everyday pond fish stay easy for everyone, trophies included', () => {
     const twig = byId(RODS, 'twig');
     for (const id of ['bluegill', 'carp']) {
       const f = byId(FISH, id);
-      const d = reelDifficulty(f, twig, false, f.maxSize);
+      const d = reelDifficulty(f, twig, LINES[0], false, f.maxSize);
       for (const react of [0.25, 0.7]) {
         expect(botCell(d, react, 200).land).toBeGreaterThanOrEqual(0.95);
         expect(botCell(d, react, 200, 1, [NAIVE]).land).toBeGreaterThanOrEqual(0.95);
@@ -121,14 +127,32 @@ describe('tension reel fight', () => {
     }
   });
 
-  it('a tier ladder: matched fish are a light challenge, each tier above the rod a clear step harder', () => {
-    const land = (fish: string, rod: string, react: number) => botCell(reelDifficulty(byId(FISH, fish), byId(RODS, rod)), react, 200).land;
-    // Northern Pike (tier 3) on the Graphite (3), Fiberglass (2) and Twig (1) rods.
-    expect(land('pike', 'graphite', 0.7)).toBeGreaterThan(0.85);
-    expect(land('pike', 'fiberglass', 0.7)).toBeGreaterThan(0.3);
-    expect(land('pike', 'fiberglass', 0.7)).toBeLessThan(0.85);
-    expect(land('pike', 'twig', 0.25)).toBeGreaterThan(0.5);
-    expect(land('pike', 'twig', 0.7)).toBeLessThan(0.4);
+  it('the rod ladder: a fish a tier above the rod is a long fight, two tiers above runs off (REELING.md)', () => {
+    const cell = (fish: string, rod: string, react: number, size?: number) => botCell(reelDifficulty(byId(FISH, fish), byId(RODS, rod), LINES[2], false, size), react, 200);
+    // Northern Pike (tier 3) on Fluoro Line (3) with the Graphite (3), Fiberglass (2) and Twig (1) rods.
+    const matched = cell('pike', 'graphite', 0.7);
+    const over = cell('pike', 'fiberglass', 0.7);
+    expect(matched.land).toBeGreaterThan(0.95);
+    expect(over.land).toBeGreaterThan(0.9);
+    expect(over.t / matched.t).toBeGreaterThan(1.3);
+    expect(over.t / matched.t).toBeLessThan(2.5);
+    for (const react of [0.25, 0.7]) {
+      const wall = cell('pike', 'twig', react);
+      expect(wall.land).toBeLessThan(0.05);
+      expect(wall.snaps).toBeLessThan(0.05);
+    }
+    // The smallest pike on the Twig Rod (two tiers over) is still past the cliff, and walks off within the time budget.
+    const small = botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'twig'), LINES[2], false, byId(FISH, 'pike').minSize), 0.25, 200);
+    expect(small.land).toBeLessThan(0.05);
+    expect(small.t).toBeLessThan(over.t);
+  });
+
+  it('the line ladder: a fish a tier above the line snaps it for a slow player, two tiers above for everyone', () => {
+    const cell = (line: number, react: number) => botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'graphite'), LINES[line - 1]), react, 200);
+    expect(cell(3, 0.7).snaps).toBeLessThan(0.05);
+    expect(cell(2, 0.7).snaps).toBeGreaterThan(0.9);
+    expect(cell(2, 0.25).land).toBeLessThan(0.7);
+    expect(cell(1, 0.25).land).toBeLessThan(0.05);
   });
 
   it('holding the gauge truly green in a surge reels in fish the gear can handle; stronger ones drag line out', () => {
@@ -199,6 +223,93 @@ describe('tension reel fight', () => {
     expect(powArith(1.7, 1)).toBe(1.7);
     expect(powArith(5, 0)).toBe(1);
     expect(powArith(2, 0.5)).toBeCloseTo(Math.SQRT2, 11);
+  });
+});
+
+describe('two-axis difficulty (REELING.md)', () => {
+  const M = 1.6; // a tier 3 fish on its own rod and line
+  const trace = (d: Difficulty, seed: number) => {
+    const out: number[] = [];
+    const r = new Reel(d, mulberry(seed));
+    for (let k = 0; k < 60 * 40 && r.status === 'reeling'; k++) {
+      r.update(1 / 60, r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6);
+      out.push(r.tension, r.progress, r.need, r.drag, r.strain);
+    }
+    return out;
+  };
+
+  it('a plain number is the same fight as all three axes alike, step for step', () => {
+    for (const [d, seed] of [[1.2, 3], [2.3, 77], [3.1, 9]]) {
+      expect(trace({ weight: d, strength: d, pace: d }, seed)).toEqual(trace(d, seed));
+      expect(axes(d)).toEqual({ weight: d, strength: d, pace: d });
+    }
+    expect(axes({ weight: 1, strength: 3 }).pace).toBe(2);
+  });
+
+  it('the skill levers follow the pace, not the gear: the sweet spot is as wide as the pace says', () => {
+    const width = (d: Difficulty) => { const r = new Reel(d); return r.sweetMax - r.sweetMin; };
+    expect(width({ weight: M, strength: 3.2, pace: M })).toBe(width(M));
+    expect(width({ weight: 3.2, strength: M, pace: M })).toBe(width(M));
+    expect(width({ weight: M, strength: M, pace: 3.2 })).toBe(width(3.2));
+  });
+
+  it('strength against the line is the hard wall: a strong fish pulls into the red and is lost to snaps', () => {
+    const strong = { weight: M, strength: 4.0, pace: M };
+    // Holding through: all but the laziest rolls of this fish pull past the red before the line goes.
+    let red = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      let out = false;
+      const r = play2(strong, seed, (x) => { if (x.outmatched) out = true; return true; }, 30);
+      expect(r.status).toBe('snapped');
+      if (out) red++;
+    }
+    expect(red).toBeGreaterThanOrEqual(6);
+    const slow = botCell(strong, 0.7, 100);
+    expect(slow.snaps).toBeGreaterThan(0.9);
+    const fast = botCell(strong, 0.25, 100);
+    expect(fast.land).toBeLessThan(0.6);
+    expect(fast.t).toBeLessThan(25);
+  });
+
+  it('weight against the rod is the soft wall: a heavy fish never reaches the red, takes longer, then runs off', () => {
+    const land = (dw: number, react: number) => botCell({ weight: dw, strength: M, pace: M }, react, 100);
+    for (const react of [0.25, 0.7]) {
+      const base = land(M, react);
+      const heavy = land(3.0, react);
+      const wall = land(12.0, react);
+      expect(base.land).toBeGreaterThan(0.95);
+      // One step heavier: still landed, about twice as long.
+      expect(heavy.land).toBeGreaterThan(0.85);
+      expect(heavy.t / base.t).toBeGreaterThan(1.5);
+      expect(heavy.t / base.t).toBeLessThan(3.5);
+      // Far heavier: the fish takes the line fast and with no snaps. The fight ends on its own, sooner than a landed one.
+      expect(wall.land).toBeLessThan(0.05);
+      expect(wall.snaps).toBeLessThan(0.03);
+      expect(wall.t).toBeLessThan(heavy.t);
+    }
+    const r = play2({ weight: 12.0, strength: M, pace: M }, 5, (x) => {
+      expect(x.outmatched).toBe(false);
+      return x.surging ? x.tension < Math.min(GOOD_MAX - 0.05, x.need + 0.1) : x.tension < 0.6;
+    }, 60);
+    expect(r.status).toBe('escaped');
+    expect(r.reason).toBe('ran');
+    expect(r.wear.frays).toBe(0);
+  });
+
+  it('prints the outcome matrix the bots play, for the ladder in slice 2', () => {
+    const steps: [string, number][] = [['match', M], ['x1.9', 3.0], ['x2.5', 4.0], ['x7.5', 12.0]];
+    const lines: string[] = [];
+    for (const react of [0.25, 0.7]) {
+      lines.push(`react ${react}s, pace ${M}: land/snap/ran %, mean s · strength down, weight across ${steps.map(([l]) => l).join(' ')}`);
+      for (const [sl, ds] of steps) {
+        lines.push(sl.padEnd(6) + steps.map(([, dw]) => {
+          const c = botCell({ weight: dw, strength: ds, pace: M }, react, 60);
+          return `${Math.round(c.land * 100)}/${Math.round(c.snaps * 100)}/${Math.round(Math.max(0, 1 - c.land - c.snaps) * 100)} ${c.t.toFixed(0)}s`.padStart(16);
+        }).join(''));
+      }
+    }
+    console.log(lines.join('\n'));
+    expect(lines.length).toBe(10);
   });
 });
 

@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { BAITS, FISH, RODS } from '../src/data/content';
+import { BAITS, FISH, LINES, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
 import { zoneAt } from '../src/data/sea';
 import * as eco from '../src/game/economy';
@@ -69,7 +69,7 @@ export const TIMES: Record<string, number> = { day: 0.2, dusk: 0.5, night: 0.7, 
 
 export const HELP = [
   '/coins N · /chips N · /pearls N · /level N · /rodlevel N',
-  '/bait <id> [N] · /rod <id> · /fish <id> [cm] [shiny]',
+  '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
   '/sea [depth] (start a dive there; 0 is the harbour) · /ledge on|up (at a ledge)',
   '/dig (reset worm cooldown) · /smoke (finish the smoker) · /smoke <fish> [N]',
@@ -137,6 +137,12 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       s.locker.rods.push(r.id);
       eco.equipRod(s, r.id);
       return ok(`Added the ${r.name}.`);
+    }
+    case 'line': {
+      const l = LINES.find((x) => x.id === args[0]);
+      if (!l) return say(`Line ids: ${ids(LINES)}`);
+      s.line = l.id;
+      return ok(`Spooled the ${l.name}.`);
     }
     case 'fish': {
       const f = FISH.find((x) => x.id === args[0]);

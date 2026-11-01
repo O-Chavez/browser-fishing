@@ -1,7 +1,8 @@
 import {
   FISH, POND_FISH, RARITY_VALUE, SEA_VALUE, RARITY_WEIGHT, RARITY_XP, RODS,
-  type Fish, type Rod, type Bait,
+  type Fish, type Rod, type Bait, type Line,
 } from '../data/content';
+import type { Difficulty, FightDifficulty } from './reel';
 
 import { CASINO_LEVEL } from '../data/casino';
 import { cosById } from '../data/cosmetics';
@@ -120,12 +121,41 @@ export function backPayXp(dex: Record<string, { count: number }>, since = 0): nu
 /** The best tier of fish you can hook is set by the bait; the rod only decides how hard the fight is. */
 export const gearTier = (_rod: Rod, bait: Bait): number => bait.tier;
 
-/** Fight difficulty of a typical fish of each tier on a rod of the same tier: a light challenge that grows with the tiers. */
+/** Fight difficulty of a typical fish of each tier on gear of the same tier: a light challenge that grows with the tiers. */
 export const MATCHED_DIFFICULTY = [1.2, 1.5, 1.6, 1.7, 1.8];
 
-/** Each tier a fish is above the rod multiplies its fight's difficulty by `TIER_UP`; each tier below, by `TIER_DOWN`. */
-export const TIER_UP = 1.2;
+/**
+ * The weight axis for each tier a fish is above the rod (REELING.md, "Engine findings"): one tier over makes the
+ * fight about twice as long and still landed (×1.5, up to 3.1 with a trophy of tier 5); two tiers over puts even
+ * the smallest tier 3 fish past 14, where the run-off is quick at every pace, so the fish takes the line on its own
+ * within the time a one-tier fight would have been landed. The numbers are big because drag follows the surge's
+ * build-up, which is slow on low-pace fish.
+ */
+export const WEIGHT_STEP = [1, 1.5, 12, 24, 48];
+/**
+ * The strength axis for each tier a fish is above the line: one tier over puts the surges in the red for everyone
+ * (a fast player still lands about half by giving line); two tiers over, nobody holds it.
+ */
+export const STRENGTH_STEP = [1, 2.5, 4, 6, 8];
+/** Each tier a fish is below the gear on an axis multiplies that axis by this. */
 export const TIER_DOWN = 0.85;
+
+/** A fish that rolled far from its species on one axis, named so the player can read it (REELING.md, "Temperament"). */
+export type FishTag = 'feisty' | 'brutish';
+/** How often a pond fish carries a tag, and how much it adds to that axis. */
+export const TAG_CHANCE = 1 / 8;
+export const TAG_BOOST = 1.3;
+
+/**
+ * Rolls a Feisty (strength) or Brutish (weight) tag, one fish in `TAG_CHANCE`, and only on an axis the gear already
+ * handles: a tag never crosses a wall, so a Feisty fish on matched line still can't reach the red.
+ */
+export function rollTag(fish: Fish, rod: Rod, line: Line, rng: () => number): FishTag | null {
+  if (rng() >= TAG_CHANCE) return null;
+  const tag: FishTag = rng() < 0.5 ? 'feisty' : 'brutish';
+  const over = tag === 'feisty' ? fish.tier > line.tier : fish.tier > rod.tier;
+  return over ? null : tag;
+}
 
 /** How much a species' stamina sets it apart within its tier: difficulty ×(stamina / the tier's mean)^this. */
 export const STAMINA_SPREAD = 0.5;
@@ -140,23 +170,33 @@ const TIER_STAMINA = [1, 2, 3, 4, 5].map((t) => {
 });
 
 /**
- * How hard a hooked fish fights, set by its tier against the rod's: a light challenge on matched gear, easier for
- * each tier the rod is above the fish and harder for each tier below. Species stamina, size, a shiny and a rod
- * boost (the gloves raise `control`) adjust it. Without a size it's a mid-size fish.
+ * How hard a hooked fish fights, on two axes (REELING.md). The base is its tier on matched gear, spread a little by
+ * species stamina. **Weight** against the rod steps up by `WEIGHT_STEP` for each tier the fish is above the rod,
+ * and carries size, a shiny, a Brutish tag and the rod boost (the gloves raise `control`), so these make a fight
+ * longer, never a snap. **Strength** against the line steps up by `STRENGTH_STEP` for each tier above the line and
+ * carries a Feisty tag. Each tier below the gear eases that axis by `TIER_DOWN`. The pace is the base, so the
+ * fish's twitchiness follows its tier, not the gear. Without a size it's a mid-size fish.
  */
-export function reelDifficulty(fish: Fish, rod: Rod, shiny = false, size?: number): number {
-  const gap = fish.tier - rod.tier;
+export function reelDifficulty(fish: Fish, rod: Rod, line: Line, shiny = false, size?: number, tag: FishTag | null = null): FightDifficulty {
   const tier = Math.min(5, Math.max(1, fish.tier)) - 1;
   const species = Math.pow(fish.stamina / TIER_STAMINA[tier], STAMINA_SPREAD);
+  const base = MATCHED_DIFFICULTY[tier] * species;
   const big = size === undefined ? 1 : SIZE_DIFFICULTY + 2 * (1 - SIZE_DIFFICULTY) * Math.min(1, Math.max(0, sizeRatio(fish, size)));
   const boost = Math.pow((RODS.find((r) => r.id === rod.id)?.control ?? rod.control) / rod.control, 0.45);
-  const step = gap > 0 ? Math.pow(TIER_UP, gap) : Math.pow(TIER_DOWN, -gap);
-  const d = MATCHED_DIFFICULTY[tier] * species * step * big * boost * (shiny ? SHINY_DIFFICULTY : 1);
-  return Math.round(Math.min(3.2, Math.max(0.4, d)) * 100) / 100;
+  const step = (gap: number, up: number[]) => (gap > 0 ? up[Math.min(gap, up.length - 1)] : Math.pow(TIER_DOWN, -gap));
+  const r = (x: number) => Math.round(Math.max(0.4, x) * 100) / 100;
+  return {
+    // A shiny fights heavier only on gear that handles it, like a tag: it lengthens a fight, never pushes one over the wall.
+    weight: r(base * step(fish.tier - rod.tier, WEIGHT_STEP) * big * boost * (shiny && fish.tier <= rod.tier ? SHINY_DIFFICULTY : 1) * (tag === 'brutish' ? TAG_BOOST : 1)),
+    strength: r(base * step(fish.tier - line.tier, STRENGTH_STEP) * (tag === 'feisty' ? TAG_BOOST : 1)),
+    pace: r(base),
+  };
 }
 
-export function difficultyLabel(d: number): string {
-  return d < 1.0 ? 'Easy' : d < 1.4 ? 'Gentle' : d < 1.9 ? 'Medium' : d < 2.4 ? 'Hard' : 'Brutal';
+/** The word for a fight on the "Hooked!" toast, from its hardest axis. */
+export function difficultyLabel(d: Difficulty): string {
+  const x = typeof d === 'number' ? d : Math.max(d.weight, d.strength);
+  return x < 1.0 ? 'Easy' : x < 1.4 ? 'Gentle' : x < 1.9 ? 'Medium' : x < 2.4 ? 'Hard' : 'Brutal';
 }
 
 export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: Bait, night = false): boolean {

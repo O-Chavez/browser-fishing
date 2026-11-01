@@ -10,7 +10,7 @@ import { BOARD_MS, CLOCK_MS, Room } from './room';
 import * as smoke from '../src/game/smoke';
 import { SmokeStats } from './smokestats';
 import { mulberry } from '../src/game/env';
-import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type ReelTune } from '../src/game/reel';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, axes, type Difficulty, type ReelTune } from '../src/game/reel';
 import { BEHAVIOUR_TUNE, haulBonus } from '../src/game/dive';
 import { DIVE } from '../src/data/dive';
 import { HARBOUR } from '../src/data/maps';
@@ -23,7 +23,7 @@ const last = <T extends ServerMsg['t']>(c: { log: ServerMsg[] }, t: T) =>
   [...c.log].reverse().find((m) => m.t === t) as Extract<ServerMsg, { t: T }>;
 
 /** Plays a fight with perfect reactions, staying in the green: the reel and the button log it wrote. */
-const playFight = (d: number, seed: number, hold = (r: Reel) => (r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6), tune?: ReelTune) => {
+const playFight = (d: Difficulty, seed: number, hold = (r: Reel) => (r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6), tune?: ReelTune) => {
   const log = new HoldLog();
   const r = new Reel(d, mulberry(seed), tune);
   while (r.status === 'reeling' && log.steps < MAX_FIGHT_STEPS) {
@@ -136,6 +136,29 @@ describe('Room economy', () => {
     expect(a.acct.save.coins).toBeLessThan(500);
   });
 
+  it('spools line only at the vendor, from its stock, unlocked, paid for and a step up', () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    Object.assign(s, { level: 6, coins: 1_000 });
+    room.handle(a.id, { t: 'buyline', id: 'mono' });
+    expect(s.line).toBe('twine'); // not at the vendor
+    atShop(a);
+    room.handle(a.id, { t: 'buyline', id: 'nope' });
+    room.handle(a.id, { t: 'buyline', id: 'braid' }); // level 9
+    expect(s.line).toBe('twine');
+    room.handle(a.id, { t: 'buyline', id: 'fluoro' });
+    expect(s.line).toBe('fluoro');
+    expect(s.coins).toBe(500);
+    room.handle(a.id, { t: 'buyline', id: 'mono' }); // lighter
+    room.handle(a.id, { t: 'buyline', id: 'fluoro' }); // the same
+    expect(s.line).toBe('fluoro');
+    expect(s.coins).toBe(500);
+    s.level = 20;
+    room.handle(a.id, { t: 'buyline', id: 'moonsilk' }); // 8 000 coins
+    expect(s.line).toBe('fluoro');
+  });
+
   it('levels the Aurora Rod only at the vendor', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
@@ -150,6 +173,37 @@ describe('Room economy', () => {
     expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 88 });
     room.handle(a.id, { t: 'levelrod' });
     expect(s.rodLevel).toBe(1);
+  });
+
+  it('a pond fish lost to a gear wall is noted in the Fishdex as seen', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    // Minnow bait on the Twig Rod and Twine: tier 2 and 3 fish bite, and both are over the gear.
+    s.level = 10;
+    s.bait = 'minnow';
+    s.slots[1] = { k: 'bait', id: 'minnow', n: 50 };
+    // Reeling in before the fight, or a log cut short, sees nothing: the fish was never on the line.
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    room.handle(a.id, { t: 'lost' });
+    expect(s.seen).toEqual([]);
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    const half = new HoldLog();
+    for (let i = 0; i < 30; i++) half.push(true);
+    room.handle(a.id, { t: 'lost', h: half.encode() });
+    expect(s.seen).toEqual([]);
+    // A fight held straight through: a fish over the gear is lost (snap or run-off) and seen; a tier 1 fish is simply landed.
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    const ok = last(a.c, 'castok');
+    const fish = FISH.find((f) => f.id === ok.fishId)!;
+    const held = playFight(ok.d!, ok.seed!, () => true);
+    expect(fish.tier > 1 ? ['snapped', 'escaped'] : ['caught']).toContain(held.reel.status);
+    room.handle(a.id, { t: 'lost', h: held.h });
+    expect(s.seen).toEqual(fish.tier > 1 ? [fish.id] : []);
+    if (fish.tier > 1) expect(last(a.c, 'state').save.seen).toEqual([fish.id]);
+    // Saying it twice changes nothing.
+    room.handle(a.id, { t: 'lost', h: held.h });
+    expect(s.seen.length).toBeLessThanOrEqual(1);
   });
 
   it('rolls fish on the server and rejects instant catches', () => {
@@ -183,7 +237,7 @@ describe('Room economy', () => {
     };
     let ok = cast();
     expect(ok.seed).toBeTypeOf('number');
-    expect(ok.d).toBeGreaterThan(0);
+    expect(axes(ok.d!).weight).toBeGreaterThan(0);
     // Letting go the whole fight: the fish takes all the line.
     const lost = playFight(ok.d!, ok.seed!, () => false);
     expect(lost.reel.status).toBe('escaped');
@@ -417,8 +471,8 @@ describe('shinies & fishing spots', () => {
     const fish = a.acct.save.slots.find((s) => s?.k === 'fish') as { fishId: string; size: number; shiny?: boolean };
     expect(fish.shiny).toBe(true);
     const plain = sellValue(FISH.find((f) => f.id === fish.fishId)!, fish.size);
-    // Fought clean, so the clean bonus rides on top.
-    expect(eco.fishValue(fish)).toBeCloseTo(plain * 5 * (1 + eco.CLEAN_BONUS), 9);
+    // Fought clean, so the clean bonus rides on top, and a Feisty or Brutish roll pays its own bonus.
+    expect(eco.fishValue(fish)).toBeCloseTo(plain * 5 * (1 + eco.CLEAN_BONUS) * (roll.tag ? 1 + eco.TAG_BONUS : 1), 9);
   });
 });
 

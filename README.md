@@ -24,7 +24,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![The town square at night, lit by street lamps and string lights](docs/images/night.jpg)
 
-**📈 Level up from Worm to Moon Pearl.** Sell your catch, buy better bait and rods, and reach new tiers of fish. There are 50 levels to climb, and none of it is pay-to-win: everything is earned on the water.
+**📈 Level up from Worm to Moon Pearl.** Sell your catch, buy better bait, line and rods, and reach new tiers of fish. There are 50 levels to climb, and none of it is pay-to-win: everything is earned on the water.
 
 **🎰 Welcome to Casino Cove.** Reach level 15 and the gate to the casino opens. Put a fish on the line at **roulette** or **blackjack** and push its value as high as 16×, or lose it all. Trade your winnings for chips and spend them on perks like Lucky Charms, Quick-Reel Gloves and Shiny Lures.
 
@@ -48,7 +48,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 - Free to play, right in your browser, on any desktop (early touch controls for phones and tablets)
 - Online multiplayer with global chat
 - 20 fish species across 5 tiers, plus rare shiny variants
-- 5 rods, 5 baits and 50 levels of progression
+- 5 rods, 5 lines, 5 baits and 50 levels of progression
 - Day/night cycle with night-only fish
 - Casino Cove with roulette, blackjack and a perk shop
 - A Smokehouse that turns spare fish into snacks and dishes that buff your catches

@@ -168,6 +168,12 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #tableresult.win { color: #7dff9b; }
 #tableresult.lose { color: #ff6b6b; }
 #tableresult.push { color: #ffd35a; }
+/* the card after a lost fight: SNAP! or RAN OFF!, the cause, the fix */
+#verdict { position: fixed; left: 50%; top: 28%; transform: translateX(-50%); z-index: 30; font-size: 64px; font-weight: 900; letter-spacing: 2px; text-align: center; pointer-events: none; white-space: nowrap; color: #ff6b6b; text-shadow: 0 4px 14px #000; animation: verdictIn 5s ease-out forwards; }
+#verdict.hidden { display: none; }
+#verdict small { display: block; font-size: 22px; letter-spacing: 0; font-weight: 700; color: #fff; }
+#verdict small.fix { font-size: 18px; color: #ffd35a; margin-top: 4px; }
+@keyframes verdictIn { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 8% { opacity: 1; transform: translateX(-50%) scale(1.15); } 15% { transform: translateX(-50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes resultIn { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 12% { opacity: 1; transform: translateX(-50%) scale(1.15); } 22% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 #tablehud.hidden { display: none; }
 #tablehud .win { color: #7dff9b; }
@@ -404,6 +410,10 @@ button.perk:hover { background: var(--paper-2); }
 .perk .left { font-size: 12px; font-weight: 900; color: var(--ink-muted); }
 #catch .credit { margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 900; color: #fff; background: #c96a2b; }
 #catch .clean { display: inline-block; margin: -4px 0 8px; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 900; color: #fff; background: #3fa65a; }
+#catch .clean + .clean { margin-left: 6px; }
+/* the tag bonus in its badge's colour, so what feeds the multiplier reads at a glance */
+#catch .clean.feisty { background: #e0552b; }
+#catch .clean.brutish { background: #3f6f9e; }
 /* details panel */
 .detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: var(--paper-2); }
 .detail .hero { display: flex; align-items: center; gap: 12px; }
@@ -454,6 +464,8 @@ canvas.preview.dragging { cursor: grabbing; }
 .fish b { font-size: 14px; font-weight: 900; }
 .fish > span:last-child { font-size: 12px; font-weight: 800; color: var(--ink-muted); }
 .fish.unknown { background: var(--paper-2); }
+.fish.seen { background: var(--paper-2); }
+.fish.seen b { color: var(--ink); }
 .fish .moon { position: absolute; top: 6px; right: 8px; font-size: 14px; }
 .fish p { margin: 0; font-size: 12px; font-weight: 700; line-height: 1.3; color: var(--ink-muted); }
 .dex { margin-bottom: 16px; }
@@ -655,6 +667,15 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 #divehud .dfish { font-size: 15px; color: var(--cream-muted); margin-left: 4px; }
 #divetag { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; background: #c96a2b; color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
 #divetag span { font-weight: 700; opacity: .9; }
+/* a Feisty (strength, the red zone's orange) or Brutish (weight, steel blue) pond fish: a sticker in the lower left, where the catch card lands, for the whole fight */
+#fishtag { --a: #ff7a3d; --b: #e0552b; --d: #a83a17; position: fixed; left: 3%; bottom: 12%; display: flex; align-items: center; gap: 12px; padding: 8px 18px 9px 8px; border-radius: 16px; color: #fff; background: linear-gradient(170deg, var(--a), var(--b)); border: 3px solid var(--wood-900); box-shadow: 0 4px 0 var(--d), 0 10px 18px rgba(0,0,0,.35), inset 0 2px 0 rgba(255,255,255,.35); white-space: nowrap; animation: tag-in .45s cubic-bezier(.2,1.4,.4,1); }
+#fishtag.hidden { display: none; }
+#fishtag i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; font-style: normal; font-size: 24px; background: var(--d); box-shadow: inset 0 3px 6px rgba(0,0,0,.35), 0 0 0 2px rgba(255,255,255,.25); }
+#fishtag b { display: flex; flex-direction: column; font-size: 20px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; line-height: 1; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
+#fishtag b small { margin-top: 4px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: none; opacity: .92; text-shadow: none; }
+#fishtag.brutish { --a: #5b8fc4; --b: #3f6f9e; --d: #2a4d72; }
+@keyframes tag-in { 0% { opacity: 0; transform: scale(.4); } 100% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { #fishtag { animation: none; } }
 #divehud:not(.hidden) ~ #chat { top: 112px; }
 
 #menu.dive .win { width: min(560px, 94vw); }
