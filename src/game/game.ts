@@ -1117,6 +1117,7 @@ export class Game {
     else if (act === 'eatdish' || act === 'eatdishsure') return this.eatDish(id!, act === 'eatdishsure');
     else if (act === 'eatdishkeep') this.confirmDish = null;
     else if (act === 'music') audio.toggleMusic();
+    else if (act === 'sound') audio.toggleSound();
     else if (act === 'graphics') this.toggleGraphics();
     else if (act === 'sellall') return this.sellAll();
     else if (act === 'equiprod') this.equipRod(id!);
@@ -4253,7 +4254,7 @@ export class Game {
       ? `<p>Erase coins, level, gear, fish, Fishdex and cosmetics? Your name, colour and face stay. This can't be undone.</p>${this.btn('Yes, reset my account', 'data-act="resetyes"', 'bad')}${this.btn('Cancel', 'data-act="resetno"', 'plain')}`
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
-      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}
+      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4><div class="btnrow">${this.btn(audio.sound ? '🔊 Sound on' : '🔇 Sound off', 'data-act="sound"', 'plain')}${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}</div>
       <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.newsLinkHtml()}${this.feedbackHtml()}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
   }
 
