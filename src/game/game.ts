@@ -3242,6 +3242,8 @@ export class Game {
     // Chips only matter inside the casino.
     $('chips').textContent = this.chipsText(s.chips);
     $('chipbox').classList.toggle('hidden', !this.map.casino);
+    $('pearls').textContent = s.pearls.toLocaleString();
+    $('pearlbox').classList.toggle('hidden', !eco.showPearlBox(s));
     this.setGateSign();
     this.renderHotbar();
   }

@@ -17,8 +17,6 @@ Finished items move to [DONE.md](DONE.md).
   - Each new zone should read as a step: the map changes and a new element affects the reel (today each zone's behaviour, `BEHAVIOURS`: runner, thrasher, sounder), on top of harder fish. The difficulty curve and fish per zone are in the deep sea fishing idea under Ideas
 - 🎨 Much darker night skies further out (Oscar, 2026-10-31), a follow-up to S1 (DONE.md). At night the sea's sky only dims a little more with distance: the night term (`1 - 0.75 * n` / `1 - 0.8 * n`) and the gloom past the Drop-off (`gloomAt`, up to 40-45%) in `World` (`src/game/world.ts`, the sky block around `uSkyH` / `uSkyT`). Make the night darken steeply with the league, so the far zones at night are close to black
   - Keep the fog colour, sea (`uShallow` / `uDeep` in `src/game/sea.ts`), lightning flash and the player's view of the boat still readable; check with headless screenshots at a few leagues by night
-- 🎨 Show the player's Black Pearls (Oscar, 2026-10-31): the total (`SaveData.pearls`, `src/game/state.ts`) is easy to miss. It's only in the corner of Reed's charter panel (`reedHtml`, `src/game/divehud.ts`), on the card after a charter ("N Black Pearls in all", `endHtml`) and in Marlow's rod level cost. Show it somewhere always to hand, e.g. a 🦪 box by the coin purse like the casino's chip box (`#purse` / `#chipbox` in `index.html`, updated in `game.ts` next to `chipsText`) and/or a line in the Bag
-  - Decide when it shows: always once the player owns the Aurora Rod or has any pearls, or only at sea and at the harbour
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
