@@ -10,6 +10,16 @@ Planned work lives in `TODO.md`: **Up next** is what's been decided on, **Ideas*
 - For taste-driven items (visual cleanup, menu polish, player faces), ask questions or propose options before writing code. "Polish the menu systems" has no details yet, so always ask first.
 - For larger items (performance, global chat), propose a plan before making edits.
 
+## What's new board
+
+Players read about notable releases on the "What's new" board, `NEWS` in `src/data/news.ts`: a card opens after joining with the entries this browser hasn't shown yet, and ⚙️ Settings re-opens the whole board. The data file's header comment has the format.
+
+- When the item you're finishing **adds a feature players will notice** (a new place, activity, system, vendor, gear path or kind of reward), add an entry at the top of `NEWS` in the same commit. Leave out balance tweaks, bug fixes, polish and small adjustments; if unsure, ask Oscar.
+- Give it an `id` one higher than the top entry (never renumber) and the date it merges to `main`. A feature that spans sessions (🚧 on its own branch) gets its entry in the merge, not before.
+- Write for players: a short title and two or three short paragraphs saying what's new and where to find it (who, where, what level), in the words the game uses on screen. No code names.
+- Big releases get a photo: a 16:9 JPEG of about 1280x720 and under 200 KB in `src/assets/images/news/`, imported in `news.ts`, with `alt` text. Stage it headlessly like `scripts/screenshots.ts` does (or crop a README shot) and look at it before committing.
+- Mention the entry when reporting the item done, so Oscar can check the wording.
+
 ## Commands
 
 - `npm run dev:all` — run the game server and the Vite client together

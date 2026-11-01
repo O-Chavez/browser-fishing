@@ -1088,6 +1088,8 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
   await page.evaluateOnNewDocument('globalThis.__name = (f) => f');
   await page.evaluateOnNewDocument((token) => {
     if (token) localStorage.setItem('fishing-token', token);
+    // Every "What's new" entry read, so no card opens over the run on joining.
+    localStorage.setItem('fishing-news', String(Number.MAX_SAFE_INTEGER));
     const raf = window.requestAnimationFrame.bind(window);
     (window as any).__rafSeen = new Set();
     window.requestAnimationFrame = (cb) => raf((t) => { (window as any).__rafSeen.add(cb); cb(t); });
