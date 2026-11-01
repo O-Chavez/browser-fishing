@@ -125,6 +125,8 @@ function room(name: string): Room {
     r = new Room(name, MAPS, persist);
     r.hall = () => accounts.hall();
     r.hallStale = () => accounts.hallStale();
+    r.furthest = () => accounts.furthest();
+    r.furthestStale = () => accounts.furthestStale();
     r.chatGate = chatGate;
     r.devGate = devGate;
     r.feedbackGate = feedbackGate;

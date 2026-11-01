@@ -1,4 +1,4 @@
-import type { Activity, CasinoRecords, ClientMsg, DiveEnd, DiveView, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
+import type { Activity, CasinoRecords, ClientMsg, DiveEnd, DiveView, FurthestRow, HallRow, PlayerInfo, ServerMsg } from '../net/protocol';
 import { RENAME_COOLDOWN_MS, SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Roll } from './economy';
@@ -18,6 +18,8 @@ export interface NetEvents {
   onSupporters(): void;
   /** The casino's biggest win or loss changed. */
   onRecords(): void;
+  /** The Furthest Out board at the harbour changed. */
+  onFurthest(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
   onJump(id: number): void;
   onCast(roll: Roll): void;
@@ -59,6 +61,8 @@ export class NetClient {
   /** Everyone's coins by player id (self included), for the leaderboard. */
   coins = new Map<number, number>();
   hall: HallRow[] = [];
+  /** The Furthest Out board: everyone's furthest marker headed home from. */
+  furthest: FurthestRow[] = [];
   /** Supporter names, newest first; `isSupporter` checks a name. */
   supporters: string[] = [];
   private supporterKeys = new Set<string>();
@@ -278,6 +282,10 @@ export class NetClient {
       case 'records':
         this.records = m.records;
         this.events.onRecords();
+        break;
+      case 'furthest':
+        this.furthest = m.rows;
+        this.events.onFurthest();
         break;
       case 'board':
         this.coins = new Map(Object.entries(m.coins).map(([k, v]) => [Number(k), v]));
