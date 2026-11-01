@@ -46,7 +46,7 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
       return `Your first fish! Sell it to <b>${vendor}</b> at the striped stall by the pier: walk up and ${touch ? 'tap the prompt' : 'press <kbd>E</kbd>'}.`;
     case 'sold': {
       const b = nextBait(s);
-      if (!b) return 'Coins earned! Spend them on better rods and bait at the stall.';
+      if (!b) return 'Coins earned! Spend them on better rods, line and bait at the stall.';
       const pack = `${BAIT_PACK} for ${b.price * BAIT_PACK} ${COIN}`;
       return s.level >= b.unlockLevel
         ? `Coins earned! Better bait brings better fish: <b>${b.name}</b> is for sale at the stall (${pack}).`
@@ -55,7 +55,7 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
     case 'bait':
       return 'New bait on your line! Better bait draws bigger fish that sell for more.';
     case 'tier':
-      return `A new tier of fish! Keep upgrading your bait and rod to reach rarer ones. Casino Cove opens at <b>Lv ${CASINO_LEVEL}</b>.`;
+      return `A new tier of fish! Keep upgrading your bait, line and rod to reach rarer ones. Casino Cove opens at <b>Lv ${CASINO_LEVEL}</b>.`;
     case 'smoker':
       return 'Small fry? Smoke it instead of selling it: <b>Mags Cinder</b> at the Smokehouse, across the path from Marlow\'s stall, smokes it in seconds.';
     case 'snack':

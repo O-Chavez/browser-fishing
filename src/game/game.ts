@@ -196,8 +196,9 @@ export class Game {
   private fightB: Behaviour | undefined;
   /** A Feisty or Brutish pond fish, said at hook time. */
   private fightTag: FishTag | undefined;
-  /** The hooked pond fish is above the rod's tier: the gauge's drag caption names the rod (REELING.md). */
+  /** The hooked pond fish is above the rod's or the line's tier: the hook toast and the gauge's drag caption say so (REELING.md). */
   private overRod = false;
+  private overLine = false;
   /** The dive on screen: the strip at sea, and the cards waiting for a quiet moment (`showDiveDue`). */
   private diveHud = new DiveHud($('divehud'), $('divetag'));
   private diveDue: 'marker' | 'diveend' | null = null;
@@ -2183,6 +2184,7 @@ export class Game {
     this.fightB = roll.b;
     this.fightTag = roll.tag;
     this.overRod = !this.map.sea && !!this.hooked && this.hooked.tier > byId(RODS, this.s.rod).tier;
+    this.overLine = !this.map.sea && !!this.hooked && this.hooked.tier > eco.lineOf(this.s).tier;
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2302,8 +2304,10 @@ export class Game {
     w.addShake(0.8);
     w.fx.splash(w.bobber.position, 36, 1.4);
     audio.splash(1);
+    // The word comes from the fish's pace; the gear gap is said outright, since that is what decides the fight.
     const tag = this.fightTag === 'feisty' ? 'A feisty one! ' : this.fightTag === 'brutish' ? 'A brutish one! ' : '';
-    this.toast(`Hooked! ${tag}${difficultyLabel(hard)} fight.`);
+    const over = this.overRod && this.overLine ? ' Over your rod and line!' : this.overRod ? ' Heavy for your rod.' : this.overLine ? ' Too strong for your line!' : '';
+    this.toast(`Hooked! ${tag}${difficultyLabel(typeof hard === 'number' ? hard : hard.pace ?? hard.weight)} fight.${over}`, over ? 3 : 2);
     this.showFishTag(this.fightTag);
   }
 
@@ -4315,7 +4319,7 @@ export class Game {
       return this.itemTile({ icon: BAIT_ICON[id] ?? '🪱', name: `${b.name} ×${eco.BAIT_PACK}`, sub: lvl ? `🔒 Lv ${b.unlockLevel}` : '', price: this.baitPackPrice(b), tier: b.tier, on: this.pick.gear === `bait:${id}`, ghost: lvl || s.coins < cost, attrs: `data-pick="gear" data-id="bait:${id}"` });
     }).join('');
     return `<div class="cols"><div class="main"><h4>Rods</h4><div class="tiles">${rods}</div><h4>Line</h4><div class="tiles">${lines}</div><h4>Bait · packs of ${eco.BAIT_PACK}</h4><div class="tiles">${baits}</div>
-      <p class="foot">New gear goes to your tackle locker. Equip it from your Bag (<kbd>Tab</kbd>).</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
+      <p class="foot">Rods and bait go to your tackle locker; equip them from your Bag (<kbd>Tab</kbd>). Line spools straight onto your rod.</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
   }
 
   private gearDetail(): string {
