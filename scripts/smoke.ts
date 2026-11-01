@@ -335,22 +335,6 @@ async function pondChecks(): Promise<void> {
   await page.keyboard.up('ShiftLeft');
   check('hotbar: number keys switch slots while sprinting', sprintSlot === 1, `held slot ${sprintSlot + 1}`);
 
-  // Lucky Wheel with a fish in hand (offline, rolled locally).
-  await page.evaluate((f) => { (window.__game.s as any).slots[2] = f; }, fish(3));
-  await page.keyboard.press('3');
-  await page.evaluate(() => { const s = (window.__game.world as any).hub.wheelSpot; window.__game.teleport(s.x + 1.2, s.z + 1.2); });
-  await sleep(500);
-  const wheel = await page.evaluate(async () => {
-    const hub = (window.__game.world as any).hub;
-    const label = window.__game.player().near;
-    const r0 = hub.disc.rotation.z;
-    window.__game.interact();
-    await new Promise((r) => setTimeout(r, 1200));
-    return { label, spun: hub.disc.rotation.z !== r0 };
-  });
-  check('pond: Lucky Wheel spins with a fish in hand', wheel.spun, `prompt "${wheel.label}"`);
-  await sleep(4000);
-
   // Scroll wheel: each notch moves exactly one slot, and the new slot pops.
   const heldNow = () => page.evaluate(() => (window.__game.s as any).held as number);
   await page.keyboard.press('1');
@@ -602,6 +586,37 @@ async function casinoChecks(): Promise<void> {
     return { before: c0, after: read() };
   });
   check('casino: turning a fish in at the tray gives chips', chips.after > chips.before, `${chips.before} -> ${chips.after}`);
+
+  // Lucky Wheel (moved from the pond): a fish from the dev console, aim at the wheel, click.
+  for (const line of ['/login smoke smoke-dev-pass', '/fish perch']) {
+    await page.keyboard.press('Enter');
+    await page.keyboard.type(line);
+    await page.keyboard.press('Enter');
+    await sleep(300);
+  }
+  const wheelSlot = await page.evaluate(() => (window.__game.s as any).slots.findIndex((x: any) => x?.k === 'fish') as number);
+  await page.keyboard.press(String(wheelSlot + 1) as Parameters<typeof page.keyboard.press>[0]);
+  await aimAt(page, 'wheel', 'spin');
+  const lucky = await page.evaluate(async (i) => {
+    const g = window.__game;
+    const h = (g.world as any).hall;
+    const w = window as any;
+    w.__ticks.peg = [];
+    w.__ticks.result = [];
+    const label = document.getElementById('tablehud')!.textContent ?? '';
+    const r0 = h.lucky.rotation.z;
+    g.press();
+    g.release();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 3000 && !h.luckyAnim) await new Promise((r) => setTimeout(r, 50));
+    const spun = !!h.luckyAnim;
+    const before = JSON.stringify((g.s as any).slots[i]);
+    await new Promise((r) => setTimeout(r, 5500));
+    return { label, spun, moved: h.lucky.rotation.z !== r0, pegs: w.__ticks.peg.length, result: w.__ticks.result.length, before, after: JSON.stringify((g.s as any).slots[i]) };
+  }, wheelSlot);
+  await page.screenshot({ path: `${SHOTS}/casino-wheel.png` });
+  check('casino: the Lucky Wheel spins with a fish in hand', wheelSlot >= 2 && lucky.label.includes('spin the wheel') && lucky.spun && lucky.moved, JSON.stringify(lucky));
+  check('casino: the Lucky Wheel ticks, then settles the fish (multiplied or gone)', lucky.pegs > 20 && lucky.result === 1 && lucky.after !== lucky.before, JSON.stringify(lucky));
 
   // Casino-only cosmetics: bought with chips at the prize counter, then worn.
   const casinoMap = MAPS.find((x) => x.id === 'casino')!;
@@ -1082,7 +1097,7 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
     const parts: Record<string, () => [string, any][]> = {
       hub: () => {
         const h = w.hub;
-        return [['npc', h.npc], ['npc head', h.head], ['wheel disc', h.disc], ['gate barrier', h.barrier], ['campfire light', h.fireLight],
+        return [['npc', h.npc], ['npc head', h.head], ['gate barrier', h.barrier], ['campfire light', h.fireLight],
           ...h.hanging.map((o: any, i: number) => [`hanging fish ${i}`, o]), ...h.flames.map((o: any, i: number) => [`flame ${i}`, o]),
           ...h.torches.map((o: any, i: number) => [`torch ${i}`, o]), ...h.lampLights.map((o: any, i: number) => [`lamp light ${i}`, o])];
       },
@@ -1096,7 +1111,7 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
       },
       hall: () => {
         const h = w.hall;
-        return [['roulette wheel', h.wheel], ['cards', h.cards], ['chip board', h.chipBoard?.mesh], ['record board', h.records?.face.mesh],
+        return [['roulette wheel', h.wheel], ['lucky wheel', h.lucky], ['cards', h.cards], ['chip board', h.chipBoard?.mesh], ['record board', h.records?.face.mesh],
           ...h.picks.map((o: any) => [`clickable ${o.userData.tag.k}:${o.userData.tag.id}`, o])];
       },
     };

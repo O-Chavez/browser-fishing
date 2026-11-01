@@ -12,7 +12,7 @@ export interface Spot {
 /** Facing that points an object at a world position. */
 export const faceToward = (x: number, z: number, tx: number, tz: number): number => Math.atan2(tx - x, tz - z);
 
-/** Right beside the Lucky Wheel, facing Marlow's stall across the main path. */
+/** Across the main path from Marlow's stall, facing it. */
 const SMOKEHOUSE: Spot = { x: -5.8, z: 21.9, facing: Math.PI / 2 };
 /** Where Mags stands: inside the shack, behind her counter. */
 const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOUSE.z - 0.75 * Math.cos(SMOKEHOUSE.facing) };
@@ -117,7 +117,6 @@ export interface MapDef {
   pad: { x: number; z: number; r: number; h: number };
   vendor: { name: string; shop: Spot; npc: Spot; face?: FaceId };
   gate: Spot;
-  wheel: Spot;
   /** Live "Top Anglers" board; E opens the player list. */
   leaderboard: Spot;
   /** Dressing mirror; E opens the wardrobe. */
@@ -138,7 +137,7 @@ export interface MapDef {
   /** The open sea: players stand on the charter boat's deck (`BOAT` in sea.ts) instead of the shore. */
   sea?: boolean;
   /** Casino maps: where the tables and prize counter stand. */
-  casino?: { roulette: Spot; blackjack: Spot; prizes: Spot; mirror: Spot; records: Spot; hall: { x: number; z: number; w: number; d: number } };
+  casino?: { roulette: Spot; blackjack: Spot; wheel: Spot; prizes: Spot; mirror: Spot; records: Spot; hall: { x: number; z: number; w: number; d: number } };
   /** Player level needed to travel here. */
   minLevel?: number;
 }
@@ -163,7 +162,6 @@ export const MAPS: MapDef[] = [
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
     gateArrival: { x: 0, z: 50.5, yaw: 0 },
-    wheel: { x: -6, z: 18.5, facing: Math.PI / 2 },
     leaderboard: { x: 10.5, z: 30, facing: faceToward(10.5, 30, 2, 27) },
     mirror: { x: -8.5, z: 40, facing: faceToward(-8.5, 40, 0, 32) },
     campfire: { x: -15, z: 24, facing: 0 },
@@ -322,6 +320,8 @@ MAPS.push({
     hall: { x: 0, z: 43, w: 34, d: 34 },
     roulette: { x: -9, z: 43, facing: toward(-9, 43) },
     blackjack: { x: 9, z: 43, facing: toward(9, 43) },
+    // The Lucky Wheel stands in the back corner on the roulette side, across the hall from the record board, turned to the room.
+    wheel: { x: -11.5, z: 56.6, facing: faceToward(-11.5, 56.6, -5, 45) },
     prizes: { x: 0, z: 56.4, facing: toward(0, 56.4) },
     mirror: { x: -15.4, z: 31, facing: Math.PI / 2 },
     // The record board hangs on the back wall between the blackjack-side painting and the corner.

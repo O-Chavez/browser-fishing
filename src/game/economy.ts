@@ -160,10 +160,7 @@ export function refillBait(s: SaveData): void {
   addLocker(s, sl.id, -add);
 }
 
-export const WHEEL_WIN = 0.45;
-export const WHEEL_RANGE = 4;
-
-/** What a carried fish sells for, including any wheel winnings. */
+/** What a carried fish sells for, including any casino winnings. */
 export const fishValue = (item: { fishId: string; size: number; mult?: number; shiny?: boolean }): number =>
   sellValue(byId(FISH, item.fishId), item.size, item.shiny) * (item.mult ?? 1);
 
@@ -209,16 +206,6 @@ export function setLure(s: SaveData, on: unknown): boolean {
 
 /** Rod control with the Quick-Reel Gloves on. */
 export const reelControl = (s: Pick<SaveData, 'perks'>, base: number): number => (s.perks.includes('gloves') ? base * GLOVES_CONTROL : base);
-
-/** Resolves a spin for the fish in hand: a win doubles its value, a loss destroys it. */
-export function applyWheel(s: SaveData, win: boolean): number {
-  const item = s.slots[s.held];
-  if (item?.k !== 'fish') return 0;
-  const before = fishValue(item);
-  if (win) item.mult = (item.mult ?? 1) * 2;
-  else clearSlot(s, s.held);
-  return win ? before : -before;
-}
 
 /** Sells the fish in hand. */
 export function sellHeld(s: SaveData): boolean {

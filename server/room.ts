@@ -8,7 +8,7 @@ import { fishingSpot } from '../src/game/progression';
 import { BEHAVIOUR_TUNE, afterFight, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
 import { replayFight, type LossReason, type ReelWear } from '../src/game/reel';
 import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
-import { CASINO_RANGE, ROULETTE_MS, type RouletteBet } from '../src/data/casino';
+import { CASINO_RANGE, ROULETTE_MS, WHEEL_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
 import { SMOKE_RANGE, dishById } from '../src/data/smokehouse';
 import * as smoke from '../src/game/smoke';
@@ -82,7 +82,6 @@ const SETTLE_MS = 1500;
 const MISS_MS = 3000;
 /** A fish dropped without a fight to show for it costs the line as a snap. */
 const GONE: ReelWear = { lineOut: 0, frays: 0, snapped: true };
-export const SPIN_MS = 3800;
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
 export const BOARD_MS = 1000;
 /** How often the server's clock goes out again, so day and night stay in step if a device's clock changes. */
@@ -361,8 +360,8 @@ export class Room {
         this.resetAccount(m);
         changed = true;
         break;
-      case 'gamble':
-        this.gamble(m);
+      case 'wheel':
+        this.wheel(m, Math.floor(Number(msg.i)));
         return;
       case 'travel':
         changed = this.travel(m, str(msg.to));
@@ -435,25 +434,6 @@ export class Room {
     return this.maps[m.info.map]?.stock ?? { rods: [], bait: [] };
   }
 
-  private gamble(m: Member): void {
-    const w = this.maps[m.info.map]?.wheel;
-    const held = m.acct.save.slots[m.acct.save.held];
-    if (!w || held?.k !== 'fish' || Math.hypot(m.info.x - w.x, m.info.z - w.z) > eco.WHEEL_RANGE) return;
-    const win = this.rng() < eco.WHEEL_WIN;
-    m.spin = {
-      at: this.now() + SPIN_MS,
-      run: () => {
-        const s = m.acct.save;
-        const fish = s.slots[s.held];
-        if (fish?.k !== 'fish') return;
-        const before = eco.fishValue(fish);
-        eco.applyWheel(s, win);
-        this.gambled(m, 'wheel', fish, cas.netWin(before, win ? eco.fishValue(fish) : 0));
-      },
-    };
-    m.conn.send({ t: 'wheel', win, ms: SPIN_MS });
-  }
-
   /** Applies a finished spin. */
   private settle(m: Member): void {
     if (!m.spin || this.now() < m.spin.at) return;
@@ -465,7 +445,7 @@ export class Room {
     m.conn.send({ t: 'state', save: m.acct.save });
   }
 
-  private atCasino(m: Member, what: 'roulette' | 'blackjack' | 'prizes'): boolean {
+  private atCasino(m: Member, what: 'roulette' | 'blackjack' | 'wheel' | 'prizes'): boolean {
     const spot = this.maps[m.info.map]?.casino?.[what];
     return !!spot && Math.hypot(m.info.x - spot.x, m.info.z - spot.z) <= CASINO_RANGE;
   }
@@ -765,6 +745,23 @@ export class Room {
       },
     };
     m.conn.send({ t: 'roulette', ...r, ms: ROULETTE_MS });
+  }
+
+  private wheel(m: Member, i: number): void {
+    if (!this.atCasino(m, 'wheel')) return;
+    const bad = cas.betError(m.acct.save, i);
+    if (bad) return m.conn.send({ t: 'notice', msg: bad });
+    const r = cas.spinWheel(this.rng);
+    m.spin = {
+      at: this.now() + WHEEL_MS,
+      run: () => {
+        const fish = m.acct.save.slots[i];
+        const { before, after } = cas.settleBet(m.acct.save, i, r.factor);
+        if (fish?.k === 'fish') this.gambled(m, 'wheel', fish, cas.netWin(before, after));
+        this.syncCarry(m);
+      },
+    };
+    m.conn.send({ t: 'wheel', ...r, ms: WHEEL_MS });
   }
 
   private bj(m: Member, a: 'deal' | 'hit' | 'stand' | 'double', i?: number): void {

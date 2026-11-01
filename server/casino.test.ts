@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MAPS, arrivalSpot } from '../src/data/maps';
 import { FISH } from '../src/data/content';
-import { CASINO_LEVEL, ROULETTE_MS } from '../src/data/casino';
+import { CASINO_LEVEL, ROULETTE_MS, WHEEL_MS } from '../src/data/casino';
 import { cosById } from '../src/data/cosmetics';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { fishValue } from '../src/game/economy';
-import { Room, SPIN_MS } from './room';
+import { Room } from './room';
 
 const conn = () => {
   const log: ServerMsg[] = [];
@@ -160,6 +160,40 @@ describe('casino tables', () => {
     expect(p.acct.save.slots[2]).toBeNull();
   });
 
+  it('the Lucky Wheel needs the wheel, locks actions, then multiplies or destroys', () => {
+    const { room, p, advance, setRoll } = seat('Dee');
+    const base = fishValue(p.acct.save.slots[2] as never);
+    goTo(room, p.id, casino.casino!.roulette);
+    room.handle(p.id, { t: 'wheel', i: 2 });
+    expect(p.c.log.some((m) => m.t === 'wheel')).toBe(false);
+    goTo(room, p.id, casino.casino!.wheel);
+    setRoll(3 / 12 + 0.01); // wedge 3, the ×4
+    room.handle(p.id, { t: 'wheel', i: 2 });
+    expect(p.c.log.findLast((m) => m.t === 'wheel')).toMatchObject({ wedge: 3, factor: 4, ms: WHEEL_MS });
+    room.handle(p.id, { t: 'drop' });
+    room.handle(p.id, { t: 'slot', i: 0 });
+    expect(p.acct.save.held).toBe(2);
+    expect((p.acct.save.slots[2] as { mult?: number }).mult).toBeUndefined();
+    advance(WHEEL_MS);
+    room.snapshot();
+    expect(fishValue(p.acct.save.slots[2] as never)).toBe(base * 4);
+    setRoll(1 / 12 + 0.01); // wedge 1, a LOSE
+    room.handle(p.id, { t: 'wheel', i: 2 });
+    advance(WHEEL_MS);
+    room.snapshot();
+    expect(p.acct.save.slots[2]).toBeNull();
+  });
+
+  it('has no Lucky Wheel at the pond any more', () => {
+    const { room, join } = setup();
+    const p = join('Eve');
+    p.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
+    goTo(room, p.id, { x: -6, z: 18.5 }); // where the wheel used to stand
+    room.handle(p.id, { t: 'wheel', i: 2 });
+    expect(p.c.log.some((m) => m.t === 'wheel')).toBe(false);
+    expect(pond.casino).toBeUndefined();
+  });
+
   it('blackjack blocks other actions and pays out on stand', () => {
     const { room, p } = seat('Cy');
     goTo(room, p.id, casino.casino!.blackjack);
@@ -298,19 +332,18 @@ describe('casino records', () => {
 
   it('records the Lucky Wheel', () => {
     const ctx = setup();
-    const w = MAPS[0].wheel;
     const a = seat(ctx, 'Ann', 300);
-    goTo(ctx.room, a.id, w);
-    ctx.setRoll(0.1);
-    ctx.room.handle(a.id, { t: 'gamble' });
-    ctx.advance(SPIN_MS);
+    goTo(ctx.room, a.id, casino.casino!.wheel);
+    ctx.setRoll(9 / 12 + 0.01); // wedge 9, the ×3
+    ctx.room.handle(a.id, { t: 'wheel', i: 2 });
+    ctx.advance(WHEEL_MS);
     ctx.room.snapshot();
-    expect(ctx.store.records().win).toMatchObject({ amount: 300, game: 'wheel', fishId: dear.id });
-    ctx.setRoll(0.9);
-    ctx.room.handle(a.id, { t: 'gamble' });
-    ctx.advance(SPIN_MS);
+    expect(ctx.store.records().win).toMatchObject({ amount: 600, game: 'wheel', fishId: dear.id });
+    ctx.setRoll(0.99); // wedge 11, a LOSE
+    ctx.room.handle(a.id, { t: 'wheel', i: 2 });
+    ctx.advance(WHEEL_MS);
     ctx.room.snapshot();
-    expect(ctx.store.records().loss).toMatchObject({ amount: 600, game: 'wheel' });
+    expect(ctx.store.records().loss).toMatchObject({ amount: 900, game: 'wheel' });
   });
 
   it('counts blackjack, with a double down net of the coins it cost', () => {

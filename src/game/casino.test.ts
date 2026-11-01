@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHIP_COINS } from '../data/casino';
+import { CHIP_COINS, WHEEL_WEDGES } from '../data/casino';
 import { FISH } from '../data/content';
 import * as cas from './casino';
 import * as eco from './economy';
@@ -122,6 +122,20 @@ describe('roulette', () => {
     expect(cas.spinRoulette('red', () => 1 / 38 + 0.001)).toMatchObject({ color: 'red', factor: 2 });
     expect(cas.spinRoulette('black', () => 1 / 38 + 0.001).factor).toBe(0);
     expect(cas.spinRoulette('green', () => 0)).toMatchObject({ color: 'green', factor: 16 });
+  });
+});
+
+describe('lucky wheel', () => {
+  it('has 12 wedges: ×2, ×2, ×3, ×4 and 8 losses, returning 11/12 on average', () => {
+    expect(WHEEL_WEDGES).toHaveLength(12);
+    expect([...WHEEL_WEDGES].filter((f) => f > 0).sort()).toEqual([2, 2, 3, 4]);
+    expect(WHEEL_WEDGES.reduce((a, f) => a + f, 0) / WHEEL_WEDGES.length).toBeCloseTo(11 / 12);
+  });
+
+  it('lands each wedge equally often and pays what it shows', () => {
+    expect(cas.spinWheel(() => 0)).toEqual({ wedge: 0, factor: 2 });
+    expect(cas.spinWheel(() => 3 / 12 + 0.001)).toEqual({ wedge: 3, factor: 4 });
+    expect(cas.spinWheel(() => 0.999)).toEqual({ wedge: 11, factor: 0 });
   });
 });
 

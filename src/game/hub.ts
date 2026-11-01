@@ -5,7 +5,6 @@ import type { MapDef, Spot } from '../data/maps';
 import { groundHeight } from './env';
 import { mergeStatic } from './merge';
 import { glowTag } from './nightglow';
-import { pegTicks, spinEase } from './tablepace';
 import { buildFish } from './fishmodel';
 import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
@@ -103,8 +102,6 @@ export function fillCoinAmount(ctx: CanvasRenderingContext2D, text: string, righ
   return ctx.measureText(text).width + gap + d;
 }
 
-const WHEEL_WEDGES = 8;
-
 export interface LeaderRow {
   name: string;
   level: number;
@@ -124,7 +121,6 @@ export class Hub {
   readonly gateSpot = new THREE.Vector3();
   /** The casino poster beside the pond gate (unset on maps without one). */
   readonly peekSpot: THREE.Vector3 | null = null;
-  readonly wheelSpot = new THREE.Vector3();
   readonly leaderSpot = new THREE.Vector3();
   readonly mirrorSpot = new THREE.Vector3();
   readonly campSpot = new THREE.Vector3();
@@ -136,10 +132,6 @@ export class Hub {
   private lampMats: THREE.MeshLambertMaterial[] = [];
   private lampLights: THREE.PointLight[] = [];
   private fireLight = new THREE.PointLight(0xff8a3c, 14, 11, 2);
-  private disc = new THREE.Mesh();
-  private spinAnim: { from: number; to: number; t0: number; ms: number; last: number } | null = null;
-  /** Ticks as pegs pass the pointer while spinning: delays (s) spread across the frame, and their gain. */
-  onWheelTick: (at: number[], gain: number) => void = () => {};
   /** Colliders that never change; the gate's are kept apart because they open. */
   private fixed: Circle[] = [];
   private gateBlock: Circle[] = [];
@@ -160,7 +152,6 @@ export class Hub {
     this.buildStall(map.vendor.shop, map.vendor.npc);
     this.buildGate(map.gate);
     if (map.next?.id === 'casino') (this as { peekSpot: THREE.Vector3 | null }).peekSpot = this.buildPoster(map.gate);
-    this.buildWheel(map.wheel);
     this.buildProps();
     this.buildLeaderboard(map.leaderboard);
     this.buildThanks(map.leaderboard);
@@ -632,85 +623,6 @@ export class Hub {
     this.campSpot.set(spot.x + 1.8, groundHeight(spot.x, spot.z), spot.z);
   }
 
-  private buildWheel(spot: Spot): void {
-    this.wheelSpot.set(spot.x, groundHeight(spot.x, spot.z), spot.z);
-    const wood = new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.9 });
-    const gold = new THREE.MeshStandardMaterial({ color: 0xe3b341, roughness: 0.35, metalness: 0.6 });
-    const g = new THREE.Group();
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.1, 10), wood);
-    post.position.y = 0.55;
-    post.position.z = 0;
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 0.15, 14), wood);
-    base.position.y = 0.075;
-    g.add(post, base);
-
-    const px = 512;
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = px;
-    const c = canvas.getContext('2d')!;
-    const n = WHEEL_WEDGES;
-    const w = (Math.PI * 2) / n;
-    for (let i = 0; i < n; i++) {
-      c.beginPath();
-      c.moveTo(px / 2, px / 2);
-      c.arc(px / 2, px / 2, px / 2, i * w, (i + 1) * w);
-      c.fillStyle = i % 2 === 0 ? '#2e9e4f' : '#b32d2d';
-      c.fill();
-      c.save();
-      c.translate(px / 2, px / 2);
-      c.rotate((i + 0.5) * w);
-      c.fillStyle = '#fff';
-      c.font = '800 54px system-ui, sans-serif';
-      c.textAlign = 'right';
-      c.textBaseline = 'middle';
-      c.fillText(i % 2 === 0 ? '×2' : 'LOSE', px / 2 - 28, 0);
-      c.restore();
-    }
-    // A gold peg on each wedge edge: these are what tick past the pointer
-    c.fillStyle = '#ffd35a';
-    for (let i = 0; i < n; i++) {
-      c.beginPath();
-      c.arc(px / 2 + Math.cos(i * w) * (px / 2 - 12), px / 2 + Math.sin(i * w) * (px / 2 - 12), 8, 0, Math.PI * 2);
-      c.fill();
-    }
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    this.disc = new THREE.Mesh(
-      new THREE.CircleGeometry(0.95, 64),
-      new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, toneMapped: false }),
-    );
-    const hubY = 1.95;
-    this.disc.position.set(0, hubY, 0.1);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.97, 0.05, 8, 48), gold);
-    rim.position.copy(this.disc.position);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 12), gold);
-    cap.rotation.x = Math.PI / 2;
-    cap.position.set(0, hubY, 0.16);
-    const pointer = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.3, 3), gold);
-    pointer.rotation.z = Math.PI;
-    pointer.position.set(0, hubY + 1.0, 0.18);
-    g.add(this.disc, rim, cap, pointer);
-
-    const sign = textPlane(1.5, 0.4, 384);
-    woodSign(sign.ctx, 'LUCKY WHEEL', '#ffe9a8');
-    sign.tex.needsUpdate = true;
-    sign.mesh.position.set(0, 0.6, 0.2);
-    g.add(sign.mesh);
-    this.place(g, spot);
-    this.fixed.push({ x: spot.x, z: spot.z, r: 0.7 });
-  }
-
-  /** Spins the disc and lands it on a winning (green) or losing (red) wedge. */
-  spinWheel(win: boolean, ms: number): void {
-    const w = (Math.PI * 2) / WHEEL_WEDGES;
-    const wedges = Array.from({ length: WHEEL_WEDGES }, (_, i) => i).filter((i) => (i % 2 === 0) === win);
-    const i = wedges[Math.floor(Math.random() * wedges.length)];
-    const base = Math.PI / 2 + (i + 0.5 + (Math.random() - 0.5) * 0.6) * w;
-    const from = this.disc.rotation.z;
-    const spins = Math.ceil((from + Math.PI * 2 * 6 - base) / (Math.PI * 2));
-    this.spinAnim = { from, to: base + spins * Math.PI * 2, t0: performance.now(), ms, last: performance.now() };
-  }
-
   /** Opens or seals the gate for the local player; redraws only when something changed. */
   setGate(open: boolean): void {
     const nextName = this.map.next?.name ?? null;
@@ -735,18 +647,6 @@ export class Hub {
   }
 
   update(t: number, px: number, pz: number): void {
-    const a = this.spinAnim;
-    if (a) {
-      const now = performance.now();
-      const k = Math.min(1, (now - a.t0) / a.ms);
-      const prev = this.disc.rotation.z;
-      this.disc.rotation.z = a.from + (a.to - a.from) * spinEase(k);
-      // The pointer is a quarter turn round (two wedges), so an edge passes it at each multiple of the wedge angle
-      const tick = pegTicks(prev, this.disc.rotation.z, WHEEL_WEDGES, (now - a.last) / 1000);
-      a.last = now;
-      if (tick.at.length) this.onWheelTick(tick.at, tick.gain);
-      if (k >= 1) this.spinAnim = null;
-    }
     this.hanging.forEach((h, i) => {
       h.rotation.z = Math.sin(t * 1.2 + i * 1.7) * 0.06;
       h.rotation.x = Math.cos(t * 0.9 + i) * 0.04;
