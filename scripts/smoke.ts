@@ -840,11 +840,12 @@ async function tripChecks(): Promise<void> {
   await dev('/sea 0');
   await arrived(true);
   const hud = await page.evaluate(() => ({ shown: !document.getElementById('divehud')!.classList.contains('hidden'), text: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') }));
-  check('charter: /sea 0 sails out from the harbour, with the strip showing the league, the line and the haul', hud.shown && hud.text.includes('league0') && hud.text.includes('300 m') && hud.text.includes('Marker 5'), hud.text);
+  check('charter: /sea 0 sails out from the harbour, with the strip showing the zone, the line and the haul', hud.shown && hud.text.includes('The Shelf') && hud.text.includes('300 m') && hud.text.includes('Head home at marker 5') && hud.text.includes('Markers to The Drop-off'.replace('The ', 'the ')), hud.text);
 
   const seen = await landOne();
   const after = await page.evaluate(() => document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' '));
-  check('charter: a landed fish moves the strip a league out', seen.includes('reeling') && after.includes('league1') && after.includes('🐟 1'), `${seen.join(',')} · ${after}`);
+  const lit = await page.evaluate(() => document.querySelectorAll('#divehud .trail i.on').length);
+  check('charter: a landed fish lights a fish on the strip', seen.includes('reeling') && lit === 1 && after.includes('🐟 1'), `${seen.join(',')} · ${after}`);
 
   // Head home between markers, from the Bag: the haul sinks and the card says so.
   await page.evaluate(() => window.__game.openMenu('inventory'));
