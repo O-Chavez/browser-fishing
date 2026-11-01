@@ -102,6 +102,8 @@ async function join(name: string, room: string, camera = false): Promise<Page> {
   // tsx keeps function names by wrapping them in __name(); functions sent to the page need it too.
   await page.evaluateOnNewDocument('globalThis.__name = (f) => f');
   await page.evaluateOnNewDocument((t) => localStorage.setItem('fishing-token', t), token(name));
+  // Every "What's new" entry read, so no card opens over the scene on joining.
+  await page.evaluateOnNewDocument(() => localStorage.setItem('fishing-news', String(Number.MAX_SAFE_INTEGER)));
   await page.goto(`http://localhost:${VITE_PORT}/?name=${name}&room=${room}`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__game?.online(), { timeout: 30000 });
   await page.evaluate(() => window.__game.activate());

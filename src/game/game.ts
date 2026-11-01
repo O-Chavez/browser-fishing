@@ -34,6 +34,8 @@ import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, SEA_THEME, TIER_THEME } from '../data/fishlook';
 import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
+import { NEWS, type NewsEntry } from '../data/news';
+import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
 import { gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
@@ -244,6 +246,10 @@ export class Game {
   private keys = new Set<string>();
   private menuOpen = false;
   private keepTab = false;
+  /** The unread entries while the "What's new" card from joining is open; null on the full board. */
+  private newsGlance: NewsEntry[] | null = null;
+  /** A banner that came up while that card was open, shown once it's put away. */
+  private afterNews: (() => void) | null = null;
   /** When Esc last closed a menu; see the pointerlockchange handler. */
   private escClosedAt = -Infinity;
   private atVendor = false;
@@ -645,6 +651,18 @@ export class Game {
     this.welcome();
   }
 
+  /** After joining online: unread "What's new" entries open in a card, and this browser has then read up to the newest. */
+  private showNews(): void {
+    const seen = readSeen(localStorage.getItem(NEWS_KEY));
+    const unread = unreadNews(seen, isFreshSave(this.s));
+    localStorage.setItem(NEWS_KEY, String(Math.max(seen ?? 0, latestNews())));
+    if (!unread.length) return;
+    this.newsGlance = unread;
+    // The card greets the player instead of the banner, which would sit on top of it.
+    this.dismissWelcome();
+    this.openMenu('news');
+  }
+
   /**
    * After joining: no window, just the scene with a welcome banner and a "click to start" overlay.
    * The click that captures the mouse dismisses the banner; otherwise it fades by itself.
@@ -673,6 +691,7 @@ export class Game {
     const pass = needPass ? '<button class="btn plain" data-acct="pass" title="Play on other devices with your name and password">🔒 Set a password</button>' : '';
     const other = returning ? `<button class="switch" data-acct="logout">Not ${escapeHtml(this.net.name)}? Switch account</button>` : '';
     if (!this.locked && !this.forceActive) this.showResume('', 'to start fishing', pass, other);
+    if (this.net.connected) this.showNews();
   }
 
   private dismissWelcome(): void {
@@ -751,6 +770,8 @@ export class Game {
       splash: (k = 1) => this.screenSpray.burst(k),
       interact: () => this.interact(),
       openMenu: (tab: string) => this.openMenu(tab),
+      /** The "What's new" check that runs on joining. */
+      showNews: () => this.showNews(),
       closeMenu: () => this.setMenu(false),
       player: () => ({ x: this.player.x, z: this.player.z, y: this.player.eyeY, near: this.near?.label ?? null }),
       /** The held item is drawn in the player's hand. */
@@ -1074,8 +1095,10 @@ export class Game {
     const { tab, shop, prize, smoke: smokeTab, pick, act, id } = btn.dataset;
     if (act === 'close') return this.closeMenu();
     if (act === 'locked') return;
-    if (tab) this.tab = tab;
-    else if (shop) this.shopTab = shop as 'cosmetics' | 'gear';
+    if (tab) {
+      this.tab = tab;
+      this.newsGlance = null;
+    } else if (shop) this.shopTab = shop as 'cosmetics' | 'gear';
     else if (prize) this.prizeTab = prize as 'perks' | 'cosmetics';
     else if (smokeTab) {
       this.smokeTab = smokeTab as 'smoker' | 'kitchen' | 'pantry';
@@ -1455,6 +1478,10 @@ export class Game {
    */
   private closeMenu(): void {
     this.tab = 'inventory';
+    this.newsGlance = null;
+    const after = this.afterNews;
+    this.afterNews = null;
+    after?.();
     this.setMenu(false);
     if (this.forceActive) return;
     this.showResume();
@@ -3224,7 +3251,8 @@ export class Game {
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
     $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
     const card = DIVE_TABS.includes(this.tab);
-    $('menu').classList.toggle('fit', this.tab === 'peek' || card);
+    $('menu').classList.toggle('fit', this.tab === 'peek' || this.tab === 'news' || card);
+    $('menu').classList.toggle('news', this.tab === 'news');
     $('menu').classList.toggle('dive', card);
     $('menu-who').innerHTML = this.menuWhoHtml();
     $('menu-tabs').innerHTML = this.menuTabsHtml();
@@ -3278,6 +3306,9 @@ export class Game {
         break;
       case 'peek':
         el.innerHTML = this.peekHtml();
+        break;
+      case 'news':
+        el.innerHTML = newsHtml(this.newsGlance ?? NEWS, !!this.newsGlance);
         break;
       case 'reed':
         el.innerHTML = reedHtml({ say: this.reedSay, chart: this.s.sea, pearls: this.s.pearls, ownsRod: eco.ownsRod(this.s, DIVE.rod), pick: this.reedPick(), open: DIVES_OPEN });
@@ -3412,6 +3443,7 @@ export class Game {
     }
     if (this.tab === 'reed') return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>Charters</span></div>`;
     if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? `${zoneAt(this.diveHud.view.depth).name} · league ${this.diveHud.view.depth}` : 'Back at the harbour'}</span></div>`;
+    if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
     return `<img src="${this.faceSrc(this.s.look.face as FaceId)}" alt=""><div><b>${escapeHtml(this.net.name || 'You')}</b><span>Level ${this.s.level} · ${this.s.coins.toLocaleString()} coins</span></div>`;
@@ -3432,7 +3464,7 @@ export class Game {
         tab('pantry', '🧺', `Pantry${n ? ` (${n})` : ''}`, this.smokeTab === 'pantry', 'data-smoke')
       );
     }
-    if (this.tab === 'peek' || DIVE_TABS.includes(this.tab)) return '';
+    if (this.tab === 'peek' || this.tab === 'news' || DIVE_TABS.includes(this.tab)) return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
@@ -3640,6 +3672,7 @@ export class Game {
   private stageBanner(ids: StageId[], intro: boolean): void {
     const st = stageById(ids.at(-1));
     if (!st) return;
+    if (this.menuOpen && this.newsGlance) return void (this.afterNews = () => this.stageBanner(ids, intro));
     const el = $('banner');
     el.classList.remove('welcome');
     el.classList.add('rank');
@@ -4205,7 +4238,12 @@ export class Game {
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
       <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}
-      <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.feedbackHtml()}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+      <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.newsLinkHtml()}${this.feedbackHtml()}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+  }
+
+  /** Settings' way back to the "What's new" board, once it has entries. */
+  private newsLinkHtml(): string {
+    return NEWS.length ? `<h4>What's new</h4><p>Notes from the latest big updates.</p>${this.btn("📰 What's new", 'data-tab="news"', 'plain')}` : '';
   }
 
   /** Bug / Idea reports, sent like `/bug` and `/idea` in chat. Collapsed to a button until opened. */
