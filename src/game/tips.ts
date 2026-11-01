@@ -1,6 +1,7 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS, FISH, LINES, RODS, type Fish, type Line, type Rod } from '../data/content';
-import { BAIT_PACK, CLEAN_BONUS } from './economy';
+import { BAITS, FISH, LINES, RODS, byId, type Fish, type Line, type Rod } from '../data/content';
+import { ROD_LEVEL } from '../data/dive';
+import { BAIT_PACK, CLEAN_BONUS, lineName, rodLevelCost, seaLineCost } from './economy';
 import { COIN } from './format';
 import type { SaveData } from './state';
 
@@ -129,4 +130,23 @@ export function lossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'le
   return need
     ? { title: 'RAN OFF!', cause: `Too heavy for your ${rod.name}`, fix: `The ${need.name} lands it · ${where(need)}` }
     : { title: 'RAN OFF!', cause: 'The fish took all your line', fix: 'Tighten when the needle drops below the marker' };
+}
+
+/**
+ * The card after a lost sea fight. The tracks are levels, so a fish over the line (its surges reach the red) names
+ * the Deep Sea Line's next level, and one over the rod (as heavy as sea fish get) the Aurora Rod's; each names one
+ * piece of gear. Anything else gets the pond's reel tip.
+ */
+export function seaLossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'level' | 'rodLevel' | 'seaLine'>, over: { rod: boolean; line: boolean }, vendor: string): Verdict {
+  const price = (c: { coins: number; pearls: number }) => `${c.coins.toLocaleString('en-US')} ${COIN} + ${c.pearls.toLocaleString('en-US')} Black Pearls`;
+  if (end === 'snapped' && over.line) {
+    const n = s.seaLine + 1;
+    return { title: 'SNAP!', cause: `Too strong for your ${lineName(s)}`, fix: `Deep Sea Line +${n} at ${vendor}'s · ${price(seaLineCost(n))}` };
+  }
+  if (end === 'escaped' && over.rod) {
+    const rod = byId(RODS, ROD_LEVEL.rod).name;
+    const n = s.rodLevel + 1;
+    return { title: 'RAN OFF!', cause: `Too heavy for your ${rod}${s.rodLevel > 0 ? ` +${s.rodLevel}` : ''}`, fix: `${rod} +${n} at ${vendor}'s · ${price(rodLevelCost(n))}` };
+  }
+  return lossVerdict(end, s, null, vendor);
 }

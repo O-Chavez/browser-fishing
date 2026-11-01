@@ -3,7 +3,7 @@
 // Pure logic for the server (D2) and the dive HUD (D3); no Math.pow, so the server and the client agree.
 import { byId, FISH, type Fish } from '../data/content';
 import { DIVE, SEA_FIGHT, ZONES, type Behaviour, type Zone } from '../data/dive';
-import { P, expArith, lnArith, type FightDifficulty, type ReelTune, type ReelWear } from './reel';
+import { GOOD_MAX, P, axes, expArith, lnArith, type Difficulty, type FightDifficulty, type ReelTune, type ReelWear } from './reel';
 
 const scale = (a: number[], ...m: number[]) => a.map((x, i) => x * (m[i] ?? 1));
 
@@ -99,8 +99,24 @@ export function seaDifficulty(depth: number, gear: SeaGear, fish?: Pick<Fish, 's
   return { weight: round(Math.min(cap, weight * species * big)), strength: round(strength * species * pull), pace: round(pace) };
 }
 
-/** How much lighter this many Aurora Rod levels make sea fish, as a share (0.37 is 37% lighter). */
+/** How much lighter this many Aurora Rod levels make sea fish, as a share (0.37 is 37% lighter). A Deep Sea Line level makes them pull as much weaker. */
 export const rodLevelEase = (level: number): number => 1 - expArith(-SEA_FIGHT.ease * level * LN_LEAGUE);
+
+/** The strength where a typical surge pulls into the red (`P.need` past `GOOD_MAX`): the sea line's wall. */
+export const STRENGTH_RED = Math.sqrt((GOOD_MAX - P.need[0]) / P.need[1]);
+
+/** Weight within this share of its cap counts as too heavy for the rod: it takes the most spool a fish can. */
+const NEAR_CAP = 0.95;
+
+/**
+ * Which sea track a fight is over, for the hook toast, the gauge's captions and the loss card (REELING.md, "The sea"):
+ * the line when its surges reach the red, the rod when its weight is at or near the cap (`SEA_FIGHT.weightCap`).
+ */
+export function seaOverGear(d: Difficulty): { rod: boolean; line: boolean } {
+  const a = axes(d);
+  const cap = SEA_FIGHT.weightCap[0] - SEA_FIGHT.weightCap[1] * (a.pace - 2);
+  return { rod: a.weight >= NEAR_CAP * cap, line: a.strength > STRENGTH_RED };
+}
 
 /** A fish's pull roll: ×spread^±1, log-uniform. */
 export const rollPull = (rng: () => number): number => expArith((2 * rng() - 1) * lnArith(SEA_FIGHT.spread));

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
 import { DIVE, SEA_FIGHT, ZONES, type Behaviour } from '../data/dive';
 import {
-  BEHAVIOUR_TUNE, afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, pearlsAt, powInt, pullWord, rodLevelEase, rollPull,
+  BEHAVIOUR_TUNE, afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, pearlsAt, powInt, pullWord, rodLevelEase, rollPull, seaOverGear, STRENGTH_RED,
   rollSeaFish, seaDifficulty, startDive, surface, zoneAt, type Chart, type SeaGear,
 } from './dive';
 import { rollSeaCast } from './economy';
@@ -270,6 +270,27 @@ function crossing(rows: ReturnType<typeof seaRow>, share: number): number {
   }
   return Infinity;
 }
+
+describe('sea gear messages', () => {
+  it('a fish is over the line once its surges reach the red, and over the rod at its heaviest', () => {
+    expect(STRENGTH_RED).toBeCloseTo(3.16, 2);
+    expect(seaOverGear({ weight: 2, strength: 3.1, pace: 2 })).toEqual({ rod: false, line: false });
+    expect(seaOverGear({ weight: 2, strength: 3.2, pace: 2 })).toEqual({ rod: false, line: true });
+    expect(seaOverGear({ weight: SEA_FIGHT.weightCap[0], strength: 2, pace: 2 })).toEqual({ rod: true, line: false });
+    // Twitchier fish cap lower, so they're too heavy sooner.
+    expect(seaOverGear({ weight: 3, strength: 2, pace: 2 }).rod).toBe(false);
+    expect(seaOverGear({ weight: 3, strength: 2, pace: 2.2 }).rod).toBe(true);
+  });
+
+  it('come with depth and go with levels on the matching track', () => {
+    const over = (depth: number, gear: SeaGear, pull = 1) => seaOverGear(seaDifficulty(depth, gear, undefined, pull));
+    expect(over(10, none)).toEqual({ rod: false, line: false });
+    expect(over(60, none).line).toBe(true);
+    expect(over(60, { rod: 0, line: 10 }).line).toBe(false);
+    expect(over(45, none).rod).toBe(true);
+    expect(over(45, { rod: 10, line: 0 }).rod).toBe(false);
+  });
+});
 
 describe('the frontier', () => {
   const fast = { none: seaRow(none, 0.25), five: seaRow({ rod: 5, line: 5 }, 0.25) };

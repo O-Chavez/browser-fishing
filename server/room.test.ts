@@ -169,10 +169,26 @@ describe('Room economy', () => {
     expect(s.rodLevel).toBe(0);
     atShop(a);
     room.handle(a.id, { t: 'levelrod' });
-    expect(s).toMatchObject({ rodLevel: 1, pearls: 88, coins: 46_000 });
-    expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 88 });
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 76, coins: 42_000 });
+    expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 76 });
     room.handle(a.id, { t: 'levelrod' });
     expect(s.rodLevel).toBe(1);
+  });
+
+  it('levels the Deep Sea Line only at the vendor', () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    Object.assign(s, { level: 20, coins: 100_000, pearls: 200 });
+    s.locker.rods.push('aurora');
+    room.handle(a.id, { t: 'levelline' });
+    expect(s.seaLine).toBe(0);
+    atShop(a);
+    room.handle(a.id, { t: 'levelline' });
+    expect(s).toMatchObject({ seaLine: 1, pearls: 76, coins: 71_000 });
+    expect(last(a.c, 'state').save).toMatchObject({ seaLine: 1, pearls: 76 });
+    room.handle(a.id, { t: 'levelline' });
+    expect(s.seaLine).toBe(1);
   });
 
   it('a pond fish lost to a gear wall is noted in the Fishdex as seen', () => {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   BAITS,
   FISH,
+  DEEP_SEA_LINE,
   LINES,
   POND_FISH,
   SEA_FISH,
@@ -34,12 +35,12 @@ import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, SEA_THEME, TIER_THEME } from '../data/fishlook';
 import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
-import { gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
+import { gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { BEHAVIOUR_TUNE, rodLevelEase } from './dive';
+import { BEHAVIOUR_TUNE, rodLevelEase, seaOverGear } from './dive';
 import { Player } from './player';
 import {
   animateFish,
@@ -1130,6 +1131,7 @@ export class Game {
     }
     else if (act === 'buyrod' || act === 'buybait' || act === 'buyline') this.buy(act === 'buyrod' ? 'rod' : act === 'buyline' ? 'line' : 'bait', id!);
     else if (act === 'levelrod') this.levelRod();
+    else if (act === 'levelline') this.levelLine();
     this.persist();
     this.refreshHud();
     this.renderMenu();
@@ -1187,7 +1189,7 @@ export class Game {
     const s = this.s;
     if (kind === 'line') {
       const l = byId(LINES, id);
-      if (l.tier <= eco.lineOf(s).tier) return this.toast('You already have better line.');
+      if (eco.lineBeaten(s, l)) return this.toast('You already have better line.');
       if (s.level < l.unlockLevel) return this.toast(`${l.name} unlocks at level ${l.unlockLevel}.`);
       if (s.coins < l.price) return this.toast(`Not enough coins (${l.price} 🪙).`);
       if (!eco.buyLine(s, id)) return;
@@ -1228,6 +1230,18 @@ export class Game {
     const glow = s.rodLevel % ROD_LEVEL.glowEvery === 0 ? ' · a new glow!' : '';
     this.toast(`Aurora Rod +${s.rodLevel}: sea fish ${PER_LEVEL}% lighter${glow}`, 3);
     audio.jingle(glow ? 'legendary' : 'rare');
+  }
+
+  /** The Deep Sea Line's next level, bought at the stall with coins and Black Pearls; +1 spools it onto the rod. */
+  private levelLine(): void {
+    if (this.spin) return;
+    const s = this.s;
+    const cost = eco.seaLineCost(s.seaLine + 1);
+    if (s.coins < cost.coins || s.pearls < cost.pearls) return this.toast(`+${s.seaLine + 1} needs ${cost.coins.toLocaleString()} 🪙 and ${cost.pearls} Black Pearls.`);
+    if (!eco.levelSeaLine(s)) return;
+    this.net.send({ t: 'levelline' });
+    this.toast(`${s.seaLine === 1 ? 'Spooled the ' : ''}Deep Sea Line +${s.seaLine}: sea fish pull ${PER_LEVEL}% weaker`, 3);
+    audio.jingle('rare');
   }
 
   private equipRod(id: string): void {
@@ -2193,8 +2207,10 @@ export class Game {
     this.fightB = roll.b;
     this.fightTag = roll.tag;
     this.fightPull = roll.pull;
-    this.overRod = !this.map.sea && !!this.hooked && this.hooked.tier > byId(RODS, this.s.rod).tier;
-    this.overLine = !this.map.sea && !!this.hooked && this.hooked.tier > eco.lineOf(this.s).tier;
+    // At sea the tracks are levels, not tiers: over the line when its surges reach the red, the rod when it's as heavy as fish get.
+    const sea = this.map.sea ? seaOverGear(this.fightD) : null;
+    this.overRod = !!this.hooked && (sea ? sea.rod : this.hooked.tier > byId(RODS, this.s.rod).tier);
+    this.overLine = !!this.hooked && (sea ? sea.line : this.hooked.tier > eco.lineOf(this.s).tier);
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2317,9 +2333,11 @@ export class Game {
     // The word comes from the fish's pace; the gear gap is said outright, since that is what decides the fight.
     const tag = this.fightTag === 'feisty' ? 'A feisty one! ' : this.fightTag === 'brutish' ? 'A brutish one! ' : '';
     const over = this.overRod && this.overLine ? ' Over your rod and line!' : this.overRod ? ' Heavy for your rod.' : this.overLine ? ' Too strong for your line!' : '';
-    // At sea the pace levels off with depth, so the word is the fish's own pull instead.
+    // At sea the pace levels off with depth, so the word is the fish's own pull instead. Only the line is named here:
+    // sea fish reach their heaviest well short of the frontier, so the rod is named where it bites, on the drag caption.
     const sea = this.fightPull === 'strong' ? 'A strong one!' : this.fightPull === 'light' ? 'A light one.' : 'A typical one.';
-    this.toast(this.map.sea ? `Hooked! ${sea}` : `Hooked! ${tag}${difficultyLabel(typeof hard === 'number' ? hard : hard.pace ?? hard.weight)} fight.${over}`, over ? 3 : 2);
+    const seaOver = this.overLine ? ' Too strong for your line!' : '';
+    this.toast(this.map.sea ? `Hooked! ${sea}${seaOver}` : `Hooked! ${tag}${difficultyLabel(typeof hard === 'number' ? hard : hard.pace ?? hard.weight)} fight.${over}`, (this.map.sea ? seaOver : over) ? 3 : 2);
     this.showFishTag(this.fightTag);
   }
 
@@ -2997,7 +3015,7 @@ export class Game {
    */
   private lose(end: LossEnd): void {
     const fish = this.map.sea ? null : this.hooked;
-    const v = lossVerdict(end, this.s, fish, this.map.vendor.name);
+    const v = this.map.sea ? seaLossVerdict(end, this.s, { rod: this.overRod, line: this.overLine }, this.map.vendor.name) : lossVerdict(end, this.s, fish, this.map.vendor.name);
     const seen = !!fish && eco.recordSighting(this.s, fish);
     this.showVerdict(v.title, v.cause, seen ? `${v.fix} · noted in your Fishdex` : v.fix);
     this.castLockUntil = performance.now() + LOSS_CAST_DELAY_MS;
@@ -3972,9 +3990,9 @@ export class Game {
     const cur = eco.lineOf(s);
     const lines = LINES.map((l) => {
       const here = l.id === cur.id;
-      const sub = here ? 'Spooled' : s.level < l.unlockLevel ? `🔒 Lv ${l.unlockLevel}` : l.tier < cur.tier ? 'Lighter than yours' : `At ${vendor}'s`;
+      const sub = here ? 'Spooled' : s.level < l.unlockLevel ? `🔒 Lv ${l.unlockLevel}` : eco.lineBeaten(s, l) ? 'Lighter than yours' : `At ${vendor}'s`;
       return this.itemTile({ icon: '🧵', name: l.name, sub, price: this.linePrice(l), tier: l.tier, on: sel === `line:${l.id}`, check: here, ghost: !here, attrs: `data-pick="bag" data-id="line:${l.id}"` });
-    }).join('');
+    }).join('') + this.seaLineTile(sel === `line:${DEEP_SEA_LINE.id}`, 'bag', s.seaLine > 0 ? 'Spooled' : `At ${vendor}'s`);
     const baits = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
       const equipped = s.bait === b.id && eco.activeSlot(s) >= 0;
@@ -3986,7 +4004,7 @@ export class Game {
         <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex)}</p>
         <h4>Your setup</h4>
         <div class="setup"><span class="big">${rodIcon(rod.tier, eco.rodLevelOf(s, rod.id))}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>
-          <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div><div>🧵 ${eco.lineOf(s).name} · holds tier ${eco.lineOf(s).tier}</div></div><div class="pips">${pips}</div></div>
+          <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div><div>🧵 ${eco.lineName(s)} · holds tier ${eco.lineOf(s).tier}</div></div><div class="pips">${pips}</div></div>
         <h4>Rods</h4><div class="tiles">${rods}</div>
         <h4>Line</h4><div class="tiles">${lines}</div>
         <h4>Bait</h4><div class="tiles">${baits}</div>
@@ -4015,12 +4033,13 @@ export class Game {
     const s = this.s;
     const [kind, id] = sel.split(':');
     const vendor = this.map.vendor.name;
+    if (kind === 'line' && id === DEEP_SEA_LINE.id) return this.seaLineDetail(false);
     if (kind === 'line') {
       const l = byId(LINES, id);
       const cur = eco.lineOf(s);
       const action = l.id === cur.id
         ? this.btn('Spooled ✓', '', 'ok', true)
-        : this.btn(`${l.tier < cur.tier ? 'Lighter than your ' + cur.name : s.level < l.unlockLevel ? `Unlocks at level ${l.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.linePrice(l)}`, '', 'plain', true);
+        : this.btn(`${eco.lineBeaten(s, l) ? 'Lighter than your ' + cur.name : s.level < l.unlockLevel ? `Unlocks at level ${l.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.linePrice(l)}`, '', 'plain', true);
       return this.detail({
         icon: '🧵',
         name: l.name,
@@ -4320,10 +4339,10 @@ export class Game {
       const l = byId(LINES, id);
       const lvl = s.level < l.unlockLevel;
       const here = l.id === cur.id;
-      const lighter = l.tier < cur.tier;
+      const lighter = eco.lineBeaten(s, l);
       const sub = here ? 'Spooled' : lvl ? `🔒 Lv ${l.unlockLevel}` : lighter ? 'Lighter than yours' : '';
-      return this.itemTile({ icon: '🧵', name: l.name, sub, price: this.linePrice(l), tier: l.tier, on: this.pick.gear === `line:${id}`, check: here, ghost: !here && (lvl || s.coins < l.price || l.tier <= cur.tier), attrs: `data-pick="gear" data-id="line:${id}"` });
-    }).join('');
+      return this.itemTile({ icon: '🧵', name: l.name, sub, price: this.linePrice(l), tier: l.tier, on: this.pick.gear === `line:${id}`, check: here, ghost: !here && (lvl || s.coins < l.price || lighter || l.tier <= cur.tier), attrs: `data-pick="gear" data-id="line:${id}"` });
+    }).join('') + this.seaLineTile(this.pick.gear === `line:${DEEP_SEA_LINE.id}`, 'gear', s.seaLine > 0 ? 'Spooled' : '');
     const baits = this.map.stock.bait.map((id) => {
       const b = byId(BAITS, id);
       const cost = b.price * eco.BAIT_PACK;
@@ -4337,12 +4356,13 @@ export class Game {
   private gearDetail(): string {
     const s = this.s;
     const [kind, id] = this.pick.gear!.split(':');
+    if (kind === 'line' && id === DEEP_SEA_LINE.id) return this.seaLineDetail(true);
     if (kind === 'line') {
       const l = byId(LINES, id);
       const cur = eco.lineOf(s);
       const action = l.id === cur.id
         ? this.btn('Spooled ✓', '', 'ok', true)
-        : l.tier < cur.tier
+        : eco.lineBeaten(s, l)
           ? this.btn(`Lighter than your ${cur.name}`, '', 'plain', true)
           : s.level < l.unlockLevel
             ? this.btn(`Unlocks at level ${l.unlockLevel} · ${this.linePrice(l)}`, '', 'plain', true)
@@ -4404,7 +4424,7 @@ export class Game {
    */
   private rodLevelPanel(id: string, atStall: boolean): { body: string; note: string; action: string } | null {
     const s = this.s;
-    if (id !== ROD_LEVEL.rod || !eco.ownsRod(s, id) || !(DIVES_OPEN || s.pearls > 0 || s.rodLevel > 0)) return null;
+    if (id !== ROD_LEVEL.rod || !this.seaLevelsShown()) return null;
     const next = s.rodLevel + 1;
     const cost = eco.rodLevelCost(next);
     const easier = Math.round(rodLevelEase(s.rodLevel) * 100);
@@ -4420,6 +4440,54 @@ export class Game {
         ? this.btn(`Need ${short} more`, '', 'plain', true)
         : this.btn(`Level up to +${next}`, 'data-act="levelrod"');
     return { body, note, action };
+  }
+
+  /** Whether the sea's levels (the Aurora Rod's and the Deep Sea Line's) show: once the rod is owned and charters are open, or the player already has pearls or a level. */
+  private seaLevelsShown(): boolean {
+    const s = this.s;
+    return eco.ownsRod(s, ROD_LEVEL.rod) && (DIVES_OPEN || s.pearls > 0 || s.rodLevel > 0 || s.seaLine > 0);
+  }
+
+  /** The Deep Sea Line's tile, after the pond lines, while the sea's levels show. */
+  private seaLineTile(on: boolean, pick: 'bag' | 'gear', sub: string): string {
+    if (!this.seaLevelsShown()) return '';
+    const s = this.s;
+    const cost = eco.seaLineCost(s.seaLine + 1);
+    const ghost = s.seaLine === 0 && (pick === 'bag' || s.coins < cost.coins || s.pearls < cost.pearls);
+    // Short once levelled, like "Aurora +3", so it fits the tile.
+    const name = s.seaLine > 0 ? `Deep Sea +${s.seaLine}` : DEEP_SEA_LINE.name;
+    return this.itemTile({ icon: '🧵', name, sub, price: `${cost.pearls.toLocaleString()} ${PEARL}`, tier: DEEP_SEA_LINE.tier, on, check: s.seaLine > 0, ghost, attrs: `data-pick="${pick}" data-id="line:${DEEP_SEA_LINE.id}"` });
+  }
+
+  /**
+   * The Deep Sea Line's detail, like the Aurora Rod's level panel: how much weaker sea fish pull, the Black Pearls on
+   * hand and the next level's price. The Level up button only shows at the stall.
+   */
+  private seaLineDetail(atStall: boolean): string {
+    const s = this.s;
+    const next = s.seaLine + 1;
+    const cost = eco.seaLineCost(next);
+    const weaker = Math.round(rodLevelEase(s.seaLine) * 100);
+    const price = `${cost.coins.toLocaleString()} ${COIN} + ${cost.pearls.toLocaleString()} ${PEARL}`;
+    const step = s.seaLine > 0
+      ? `+${s.seaLine} → +${next}: sea fish ${PER_LEVEL}% weaker, so they snap it less · ${price}.`
+      : `Line for the open sea: each level makes sea fish pull ${PER_LEVEL}% weaker, so they snap it less. In the pond it holds tier 5, like Moonsilk. +1 spools it · ${price}.`;
+    const coins = Math.max(0, cost.coins - s.coins);
+    const pearls = Math.max(0, cost.pearls - s.pearls);
+    const short = [coins && `${coins.toLocaleString()} ${COIN}`, pearls && `${pearls.toLocaleString()} ${PEARL}`].filter(Boolean).join(' + ');
+    const actions = !atStall
+      ? this.btn(s.seaLine > 0 ? 'Spooled ✓' : `Level up at ${this.map.vendor.name}'s stall`, '', s.seaLine > 0 ? 'ok' : 'plain', true) + (s.seaLine > 0 ? this.btn(`Level up at ${this.map.vendor.name}'s stall`, '', 'plain', true) : '')
+      : short
+        ? this.btn(`Need ${short} more`, '', 'plain', true)
+        : this.btn(`Level up to +${next}`, 'data-act="levelline"');
+    return this.detail({
+      icon: '🧵',
+      name: s.seaLine > 0 ? eco.lineName(s) : DEEP_SEA_LINE.name,
+      tier: DEEP_SEA_LINE.tier,
+      body: this.meter('Holds', 'Tier 5 fish', 1, 5) + this.meter('Sea fish', `${weaker}% weaker pull`, weaker / 100, 5) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`,
+      note: `${step} Black Pearls come up from sea dives.`,
+      actions,
+    });
   }
 
   private rodPrice(r: Rod): string {

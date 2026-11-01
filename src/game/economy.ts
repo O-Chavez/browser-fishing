@@ -1,7 +1,7 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
-import { BAITS, FISH, LINES, RODS, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
-import { ROD_LEVEL } from '../data/dive';
+import { BAITS, DEEP_SEA_LINE, FISH, LINES, RODS, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
+import { ROD_LEVEL, SEA_LINE } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, rollTag, sellValue, sizeDifficulty, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
 import type { Difficulty, FightDifficulty } from './reel';
@@ -78,8 +78,15 @@ export function buyRod(s: SaveData, id: string): boolean {
   return true;
 }
 
-/** The line on the rod (Twine if the save's is unknown). */
-export const lineOf = (s: Pick<SaveData, 'line'>): Line => LINES.find((l) => l.id === s.line) ?? LINES[0];
+/** The line on the rod: the Deep Sea Line once it's levelled, else the pond line bought (Twine if the save's is unknown). */
+export const lineOf = (s: Pick<SaveData, 'line'> & { seaLine?: number }): Line =>
+  (s.seaLine ?? 0) > 0 ? DEEP_SEA_LINE : LINES.find((l) => l.id === s.line) ?? LINES[0];
+
+/** Whether a pond line is below the one on the rod, so it can't be bought: a lower tier, or any once the Deep Sea Line is on. */
+export const lineBeaten = (s: Pick<SaveData, 'line' | 'seaLine'>, l: Line): boolean => s.seaLine > 0 || l.tier < lineOf(s).tier;
+
+/** The line's name as shown: "Deep Sea Line +3" once levelled, else the pond line's. */
+export const lineName = (s: Pick<SaveData, 'line'> & { seaLine?: number }): string => lineOf(s).name + ((s.seaLine ?? 0) > 0 ? ` +${s.seaLine}` : '');
 
 /** What stands between this player's gear and a species: the line to hold it, the rod to land it in good time, the bait to hook it. */
 export function gearNeeds(s: Pick<SaveData, 'rod' | 'line' | 'bait'>, fish: Fish): { line: Line | null; rod: Rod | null; bait: Bait | null } {
@@ -106,7 +113,7 @@ export function recordSighting(s: SaveData, fish: Fish): boolean {
 /** Spools a better line onto the rod: a step up from the current one, unlocked and paid for. There is nothing to carry. */
 export function buyLine(s: SaveData, id: string): boolean {
   const l = LINES.find((x) => x.id === id);
-  if (!l || s.level < l.unlockLevel || s.coins < l.price || l.tier <= lineOf(s).tier) return false;
+  if (!l || s.level < l.unlockLevel || s.coins < l.price || l.tier <= lineOf(s).tier || s.seaLine > 0) return false;
   s.coins -= l.price;
   s.line = id;
   return true;
@@ -158,11 +165,27 @@ export function levelRod(s: SaveData): boolean {
   return true;
 }
 
+/** What taking the Deep Sea Line from +n-1 to +n costs. */
+export function seaLineCost(n: number): { coins: number; pearls: number } {
+  const L = SEA_LINE;
+  return { coins: Math.min(L.coinCap, L.coins + L.coinsPer * n), pearls: L.pearls + L.pearlsPer * n };
+}
+
+/** The next Deep Sea Line level, paid in coins and Black Pearls. Needs the Aurora Rod, as the rod's levels do. */
+export function levelSeaLine(s: SaveData): boolean {
+  const cost = seaLineCost(s.seaLine + 1);
+  if (!ownsRod(s, ROD_LEVEL.rod) || s.coins < cost.coins || s.pearls < cost.pearls) return false;
+  s.coins -= cost.coins;
+  s.pearls -= cost.pearls;
+  s.seaLine++;
+  return true;
+}
+
 /** The rod level a sea fight uses (`seaDifficulty`): the Aurora Rod's while it's the rod in use. */
 export const seaRodLevel = (s: SaveData): number => rodLevelOf(s, s.rod);
 
-/** The levels a sea fight is eased by. The sea line comes in its own step; until then it's +0. */
-export const seaGear = (s: SaveData): SeaGear => ({ rod: seaRodLevel(s), line: 0 });
+/** The levels a sea fight is eased by: the rod's (weight) and the Deep Sea Line's (strength). */
+export const seaGear = (s: SaveData): SeaGear => ({ rod: seaRodLevel(s), line: s.seaLine });
 
 /** This rod's level: the save's rod level for the Aurora Rod, 0 for the others. */
 export const rodLevelOf = (s: SaveData, id: string): number => (id === ROD_LEVEL.rod ? s.rodLevel : 0);

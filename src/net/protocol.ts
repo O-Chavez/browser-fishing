@@ -76,6 +76,7 @@ export type ClientMsg =
   | { t: 'buyline'; id: string }
   /** The Aurora Rod's next level, at the stall (`levelRod`). */
   | { t: 'levelrod' }
+  | { t: 'levelline' }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
   | { t: 'equiprod'; id: string }

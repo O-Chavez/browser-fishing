@@ -238,6 +238,23 @@ What set the numbers:
 | Switching behaviour at a zone border dropped the land rate 25-35 points in one marker, as did an extra step per zone. | No extra zone step; behaviours blend in from the zone above (`behaviourOdds`). |
 | Slow players' frontier grows more slowly with levels than a fast player's. | Kept (Oscar): gear helps land the fish, it doesn't remove the skill. Checked again when tuning (TODO Ideas). |
 
+## Sea economy (slice 2, 2026-11-01)
+
+A scratch sim played whole charters on the bots' fights: per marker 120 rolled fish (zone, behaviour, pull, size), the spool, pearls and haul growth, and the best start marker and head-home rule for pearls an hour. It assumes 4.5 s to a bite, 4 s around each fish and 45 s around each charter. Levels split evenly between the tracks.
+
+| Rod + line levels | Frontier, fast / slow | Pearls an hour, fast / slow | Coins an hour from charter fish |
+|---|---|---|---|
+| +0 / +0 | 56 / 16 | 293 / 168 | 180-220k |
+| +5 / +5 | 82 / 34 | 475 / 310 | ~240k |
+| +10 / +10 | 101 / 51 | 802 / 509 | 255-275k |
+| +20 / +20 | 162 / 113 | 1,298 / 1,033 | 280-295k |
+
+| Finding | Consequence |
+|---|---|
+| Pearls come 1.3-1.6× faster than in P1: the two-axis fights in easy water are quick. Two tracks on the rod's old curve (100 + 12N each) would bring levels ~1.7× faster than P1 (14-23 min for a fast player). | Each track's step doubles to 24 pearls, so even levelling costs what P1's single track did: a level every 24-29 min fast, 29-45 min slow. |
+| At the old coins, charter fish only just pay for the levels, and a fast player past +15 / +15 needs pond coins. | The line costs half the rod's coins (25k + 4k·N, cap 75k). Charters then pay for both tracks with 20-50% to spare, more once Kelp Deep and below get their own, dearer fish. |
+| Sea fish reach their heaviest (the weight cap) 10-20 leagues short of the frontier, so "too heavy" would show on nearly every fish there; strength crosses the red gradually (about 1 fish in 10 a marker short of the frontier, half at it). | The hook toast names only the line. The rod is named on the drag caption and the RAN OFF card, where its weight is what's costing line. |
+
 ## Decisions so far
 
 - Line is a separate upgrade path, presented as a spool on the rod (2026-10-31).
@@ -249,8 +266,8 @@ What set the numbers:
 - Shiny, size and Brutish all sit on weight; shiny only counts on gear that handles the fish (2026-10-31).
 - Gloves act on weight (they are Quick-Reel Gloves) (2026-10-31).
 - Sea fights on the two axes (2026-11-01): the rod decides how long the spool lasts, the line whether it holds; each zone leads on an axis and keeps it; per-fish pull roll named on the hook toast; behaviours are feel only. The frontier keeps P1's pacing table, counting rod and line levels together, and levelling only one track is a soft stall (slower), not a wall.
-- A sea line that levels at Marlow's for Black Pearls, a second track next to the Aurora Rod's levels, "because it gives players more to invest in" (Oscar, 2026-11-01). Its price waits for the pearl-economy rerun.
-- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a sticker in the lower right of the screen for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish, which also says what it pays. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the card with the reel-tip lines only.
+- A sea line that levels at Marlow's for Black Pearls, a second track next to the Aurora Rod's levels, "because it gives players more to invest in" (Oscar, 2026-11-01). It's the **Deep Sea Line +N**, its own tile after Moonsilk, spooled by its first level (Oscar, 2026-11-01). Priced to keep P1's pace and leave charters paying for both tracks with coins to spare ("Sea economy" below).
+- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a sticker in the lower right of the screen for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish, which also says what it pays. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the same card: a snap names the Deep Sea Line's next level when the fish's surges reached the red, a run-off the Aurora Rod's when it was at its heaviest, anything else a reel tip (slice 2, 2026-11-01).
 
 ## Open questions
 

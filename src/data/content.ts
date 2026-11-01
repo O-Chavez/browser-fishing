@@ -115,6 +115,12 @@ export const LINES: Line[] = [
   { id: 'moonsilk', name: 'Moonsilk Line', tier: 5, unlockLevel: 13, price: 8000, color: 0xffc933 },
 ];
 
+/**
+ * The sea's line (`SEA_LINE` in dive.ts): not sold for coins but levelled with Black Pearls, and on the rod once it's
+ * +1. It holds tier 5 in the pond, like Moonsilk.
+ */
+export const DEEP_SEA_LINE: Line = { id: 'deepsea', name: 'Deep Sea Line', tier: 5, unlockLevel: 15, price: 0, color: 0x3fb6e6 };
+
 export const BAITS: Bait[] = [
   { id: 'worm', name: 'Worm', tier: 1, price: 2, unlockLevel: 1, luck: 1, color: 0x9aa3ad },
   { id: 'fly', name: 'Fly', tier: 2, price: 5, unlockLevel: 2, luck: 1.1, color: 0xcc6a3a },

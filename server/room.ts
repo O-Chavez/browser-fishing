@@ -272,6 +272,9 @@ export class Room {
       case 'levelrod':
         changed = this.atVendor(m) && eco.levelRod(s);
         break;
+      case 'levelline':
+        changed = this.atVendor(m) && eco.levelSeaLine(s);
+        break;
       case 'buyline':
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));
         break;

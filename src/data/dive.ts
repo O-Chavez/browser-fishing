@@ -118,19 +118,36 @@ export const DIVES_OPEN = false;
  * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's
  * stall with no cap, each level making sea fish lighter (`SEA_FIGHT.ease`); pond fights don't change. A level
  * costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
+ * The Deep Sea Line (`SEA_LINE`) is the second track. Each track's step is twice P1's single one, so levelling both
+ * evenly keeps P1's pace of a level every 25-45 minutes (REELING.md, "Sea findings").
  */
 export const ROD_LEVEL = {
   /** The rod that levels. */
   rod: 'aurora',
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
   pearls: 100,
-  pearlsPer: 12,
+  pearlsPer: 24,
   /** ... and min(coinCap, coins + coinsPer·N) coins. */
   coins: 50_000,
-  coinsPer: 4_000,
+  coinsPer: 8_000,
   coinCap: 150_000,
   /** The rod's tip glow changes colour every this many levels (`GLOW_STEPS`). */
   glowEvery: 5,
+};
+
+/**
+ * The Deep Sea Line's levels, the sea's second track: bought at Marlow's stall like the rod's, each making sea fish
+ * pull weaker (`SEA_FIGHT.ease` off strength). It needs the Aurora Rod, and its first level spools it in place of the
+ * pond line (it holds tier 5 there). Half the rod's coins, so charters pay for both tracks with coins to spare.
+ */
+export const SEA_LINE = {
+  /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
+  pearls: 100,
+  pearlsPer: 24,
+  /** ... and min(coinCap, coins + coinsPer·N) coins. */
+  coins: 25_000,
+  coinsPer: 4_000,
+  coinCap: 75_000,
 };
 
 /**
