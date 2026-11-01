@@ -72,7 +72,7 @@ export const HELP = [
   '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
   '/sea [depth] (start a dive there; 0 is the harbour) · /ledge on|up (at a ledge)',
-  '/dig (reset worm cooldown) · /smoke (finish the smoker) · /smoke <fish> [N]',
+  '/dig (reset worm cooldown) · /tips (show the new-player tips again) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
   '/resetpass <name> <new password>',
   '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
@@ -214,6 +214,12 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
     case 'dig':
       t.clearDig();
       return say('Worm patch cooldown cleared.');
+    case 'tips': {
+      // Empties the list of new-player tips seen, so they show again (see `markTip`, `src/game/tips.ts`).
+      if (!s.tips.length) return say('No new-player tips are marked as seen.');
+      s.tips = [];
+      return ok('New-player tips reset: they show again.');
+    }
     default:
       return say(`Unknown command /${cmd}. Try /help.`);
   }
