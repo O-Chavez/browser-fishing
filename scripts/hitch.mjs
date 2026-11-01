@@ -185,6 +185,8 @@ try {
     const page = await browser.newPage();
     page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
     await page.evaluateOnNewDocument(probe, NIGHT ? 0.7 : 0.1);
+    // Every "What's new" entry read, so no card opens over the join (--online).
+    await page.evaluateOnNewDocument(() => localStorage.setItem('fishing-news', String(Number.MAX_SAFE_INTEGER)));
     if (!JSON_OUT) page.on('console', (m) => /^pre-frame/.test(m.text()) && console.log(m.text()));
     const LTRACE = opt('--load-trace', '');
     if (LTRACE) await page.tracing.start({ path: LTRACE, categories: ['toplevel', 'gpu', 'viz', 'cc', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-gpu.service', 'disabled-by-default-gpu.decoder', 'disabled-by-default-gpu.angle', 'gpu.angle', 'disabled-by-default-gpu.device'] });
