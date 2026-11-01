@@ -282,8 +282,9 @@ export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = f
   return Math.round(5 * RARITY_XP[fish.rarity] * (1 + sizeRatio(fish, size) * 0.5) * (firstCatch ? 2 : 1) * (shiny ? 3 : 1));
 }
 
-/** Next unlock, for the "next goal" HUD hint: the next rod, then the next rank and its reward. */
-export function nextGoal(level: number, dex: Record<string, unknown> = {}): string {
+/** Next unlock, for the "next goal" HUD hint: a charter once the Aurora Rod is owned (`charters`, see `chartersToTry`), the next rod, then the next rank and its reward. */
+export function nextGoal(level: number, dex: Record<string, unknown> = {}, charters = false): string {
+  if (charters) return 'Take a charter: Captain Reed\'s seaplane, west beach';
   const rod = RODS.find((r) => r.unlockLevel > level);
   if (level < SMOKE_LEVEL) return `Level ${SMOKE_LEVEL}: Mags's Smokehouse opens${rod?.unlockLevel === SMOKE_LEVEL ? ` and the ${rod.name} becomes available` : ''}`;
   if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
@@ -302,12 +303,14 @@ export function isFreshSave(s: { level: number; xp: number; dex: Record<string, 
 export function welcomeText(
   name: string,
   s: { level: number; xp: number; coins: number; dex: Record<string, unknown> },
+  charters = false,
 ): { title: string; line: string } {
   if (isFreshSave(s)) return { title: 'Welcome to Lakeside', line: 'First goal: catch a fish, then sell it at the stall' };
   const missing = POND_FISH.filter((f) => !s.dex[f.id]).length;
   const rank = nextRank(s.level);
   const goal =
-    s.level < CASINO_LEVEL ? `next goal: Lv ${CASINO_LEVEL} casino`
+    charters ? 'next goal: a charter with Captain Reed'
+    : s.level < CASINO_LEVEL ? `next goal: Lv ${CASINO_LEVEL} casino`
     : rank ? `next goal: Lv ${rank.level} ${rank.title}`
     : missing ? `next goal: ${missing} more Fishdex species`
     : 'Fishdex complete · chase shinies';

@@ -196,6 +196,8 @@ export type ServerMsg =
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
   | { t: 'hall'; rows: HallRow[] }
+  /** The Furthest Out board at the harbour: every account's furthest marker headed home from, including offline players. */
+  | { t: 'furthest'; rows: FurthestRow[] }
   /** Every Ko-fi supporter's name, newest first, for the 💗 by their names and the thank-you board. */
   | { t: 'supporters'; names: string[] }
   /** The casino's all-time biggest single win and loss, sent on join and whenever one is beaten. */
@@ -212,6 +214,11 @@ export type ServerMsg =
   | { t: 'dev'; lines: string[]; time?: number | null; depth?: number; sent?: boolean };
 
 export interface HallRow { name: string; level: number; best: BestCatch; title?: string | null }
+/**
+ * A Furthest Out row: the deepest ledge the player surfaced from (`SaveData.sea.record`), "Marker N" on screen, and
+ * the Black Pearls and fish that charter banked (`sea.haul`; left out for records from before it was kept).
+ */
+export interface FurthestRow { name: string; level: number; ledge: number; pearls?: number; fish?: number }
 
 export type CasinoGame = 'blackjack' | 'roulette' | 'wheel';
 /** One settled hand or spin: the coins it won or lost, and the fish that was bet. */

@@ -24,6 +24,13 @@ export const hasRod = (s: SaveData, id: string): boolean => s.slots.some((sl) =>
 /** Carried in the hotbar or kept in the locker. */
 export const ownsRod = (s: SaveData, id: string): boolean => hasRod(s, id) || s.locker.rods.includes(id);
 
+/**
+ * Whether the HUD's Black Pearl box shows: from the first pearl a player earns, and still after spending them all
+ * (pearls only go on rod levels, so a level means pearls were earned). Hidden before that, so it doesn't sit at 0
+ * through the early game. A new pearl spend (the sea line, say) should count here too.
+ */
+export const showPearlBox = (s: SaveData): boolean => s.pearls > 0 || s.rodLevel > 0;
+
 export const LOCKER_CAP = 200;
 
 /** Bait of this type in the hotbar and the locker. */

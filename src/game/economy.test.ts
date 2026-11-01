@@ -814,3 +814,13 @@ describe('the Deep Sea Line', () => {
     expect(migrate({ ...newSave(), seaLine: 6.5 }).seaLine).toBe(6);
   });
 });
+
+describe('pearl box', () => {
+  it('shows from the first pearl earned, even once they are all spent', () => {
+    const s = newSave();
+    expect(eco.showPearlBox(s)).toBe(false);
+    expect(eco.showPearlBox({ ...s, slots: [rod('aurora'), ...s.slots.slice(1)] })).toBe(false);
+    expect(eco.showPearlBox({ ...s, pearls: 1 })).toBe(true);
+    expect(eco.showPearlBox({ ...s, pearls: 0, rodLevel: 2 })).toBe(true);
+  });
+});

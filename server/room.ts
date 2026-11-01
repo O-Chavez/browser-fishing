@@ -7,12 +7,12 @@ import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot, type FishTag } from '../src/game/progression';
 import { afterFight, fightTune, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
 import { replayFight, type Difficulty, type LossReason, type ReelWear } from '../src/game/reel';
-import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
+import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type FurthestRow, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, WHEEL_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
 import { SMOKE_RANGE, dishById } from '../src/data/smokehouse';
 import * as smoke from '../src/game/smoke';
-import { newSave, type SaveData, type Slot } from '../src/game/state';
+import { keepRecordHaul, newSave, type SaveData, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
@@ -89,6 +89,7 @@ export const BOARD_MS = 1000;
 /** How often the server's clock goes out again, so day and night stay in step if a device's clock changes. */
 export const CLOCK_MS = 60_000;
 const NO_HALL: HallRow[] = [];
+const NO_FURTHEST: FurthestRow[] = [];
 const NO_RECORDS: CasinoRecords = { win: null, loss: null };
 
 /** One lobby: its players and their shared drops. Economy actions are validated here. */
@@ -109,6 +110,13 @@ export class Room {
   hall: () => HallRow[] = () => NO_HALL;
   /** Tells the server's hall cache that an online player's level or best catch changed. */
   hallStale: () => void = () => {};
+  private lastSea = '';
+  private lastFurthest = '';
+  private lastFurthestRows: FurthestRow[] | null = null;
+  /** Supplies the all-accounts Furthest Out board (set by the server). */
+  furthest: () => FurthestRow[] = () => NO_FURTHEST;
+  /** Tells the server's Furthest Out cache that an online player's furthest marker or level changed. */
+  furthestStale: () => void = () => {};
   /** Chat rules; the server shares one gate between rooms so limits follow the account. */
   chatGate: ChatGate;
   /** Dev console login; off unless the server sets credentials. */
@@ -167,7 +175,7 @@ export class Room {
 
   /** The player starts where their save says; only `travel` (behind the level gate) moves them between maps. */
   join(conn: Conn, acct: Account, color?: number): number {
-    if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
+    if (color !== undefined) eco.setBodyColor(acct.save, int(color));
     const id = this.nextId++;
     // A dive waits a while for a player who dropped out; after that its haul has sunk.
     let run = acct.dive ?? null;
@@ -210,6 +218,7 @@ export class Room {
     });
     conn.send({ t: 'drops', list: this.drops.all() });
     conn.send({ t: 'hall', rows: this.hall() });
+    conn.send({ t: 'furthest', rows: this.furthest() });
     conn.send({ t: 'supporters', names: this.supporters() });
     conn.send({ t: 'records', records: this.records() });
     this.broadcast({ t: 'joined', player: info });
@@ -258,13 +267,13 @@ export class Room {
         if (finite(msg.x, msg.z, msg.yaw)) this.move(m, msg.x, msg.z, msg.yaw);
         return;
       case 'slot':
-        changed = eco.selectSlot(s, Math.floor(Number(msg.i)));
+        changed = eco.selectSlot(s, int(msg.i));
         break;
       case 'drop':
         changed = this.drop(m);
         break;
       case 'pickup':
-        changed = this.pickup(m, Number(msg.id));
+        changed = this.pickup(m, int(msg.id));
         break;
       case 'buyrod':
         changed = this.atVendor(m) && this.stocks(m).rods.includes(str(msg.id)) && eco.buyRod(s, str(msg.id));
@@ -297,7 +306,7 @@ export class Room {
         changed = this.dig(m);
         break;
       case 'sell':
-        changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, Math.floor(Number(msg.i))));
+        changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, int(msg.i)));
         break;
       case 'buycos': {
         // The counter decides the currency: coins at the stall, chips at the casino prize counter.
@@ -309,7 +318,7 @@ export class Room {
         changed = eco.equipCosmetic(s, msg.slot, msg.id === null ? null : str(msg.id));
         break;
       case 'color':
-        changed = eco.setBodyColor(s, Math.floor(Number(msg.color)));
+        changed = eco.setBodyColor(s, int(msg.color));
         break;
       case 'face':
         changed = eco.setFace(s, msg.id);
@@ -369,22 +378,22 @@ export class Room {
         changed = true;
         break;
       case 'wheel':
-        this.wheel(m, Math.floor(Number(msg.i)));
+        this.wheel(m, int(msg.i));
         return;
       case 'travel':
         changed = this.travel(m, str(msg.to));
         break;
       case 'roulette':
-        this.roulette(m, msg.bet, Math.floor(Number(msg.i)));
+        this.roulette(m, msg.bet, int(msg.i));
         return;
       case 'bj':
         this.bj(m, msg.a, msg.i);
         return;
       case 'cashout':
         if (this.atCasino(m, 'prizes')) {
-          const bad = cas.cashOutError(s, Math.floor(Number(msg.i)));
+          const bad = cas.cashOutError(s, int(msg.i));
           if (bad) m.conn.send({ t: 'notice', msg: bad });
-          else changed = cas.cashOut(s, Math.floor(Number(msg.i))) > 0;
+          else changed = cas.cashOut(s, int(msg.i)) > 0;
         }
         break;
       case 'buyperk':
@@ -688,6 +697,8 @@ export class Room {
     if (a !== 'surface') return false;
     const res = surface(run.dive, m.acct.save.sea)!;
     m.acct.save.pearls += res.pearls;
+    // The Furthest Out board shows what the record's charter banked: the numbers on its "Home safe!" card.
+    keepRecordHaul(m.acct.save.sea, res.ledge, res.record, { pearls: res.pearls, fish: res.fish.length, coins: run.coins });
     this.endDive(m, { result: 'surfaced', ledge: res.ledge, pearls: res.pearls, record: res.record, fish: res.fish.length, coins: run.coins });
     return true;
   }
@@ -782,7 +793,7 @@ export class Room {
 
   private bj(m: Member, a: 'deal' | 'hit' | 'stand' | 'double', i?: number): void {
     if (a === 'deal') {
-      const slot = Math.floor(Number(i));
+      const slot = int(i);
       if (m.bj || !this.atCasino(m, 'blackjack')) return;
       const bad = cas.betError(m.acct.save, slot);
       if (bad) return m.conn.send({ t: 'notice', msg: bad });
@@ -1018,6 +1029,7 @@ export class Room {
       for (const m of this.members.values()) Object.assign(m.info, { coins: m.acct.save.coins }, stats[m.info.id]);
       this.broadcast({ t: 'board', coins, stats });
     }
+    this.furthestBoard();
     const rows = this.hall();
     // The server hands back the same cached array until something changed.
     if (rows === this.lastHallRows) return;
@@ -1026,6 +1038,23 @@ export class Room {
     if (hk !== this.lastHall) {
       this.lastHall = hk;
       this.broadcast({ t: 'hall', rows });
+    }
+  }
+
+  /** The Furthest Out board, kept like the hall of fame: re-ranked when an online player's furthest marker, its haul or their level moves. */
+  private furthestBoard(): void {
+    const sk = [...this.members.values()].map((m) => `${m.acct.save.sea.record}:${m.acct.save.sea.haul?.pearls}:${m.acct.save.sea.haul?.coins}:${m.acct.save.level}`).join();
+    if (sk !== this.lastSea) {
+      this.lastSea = sk;
+      this.furthestStale();
+    }
+    const rows = this.furthest();
+    if (rows === this.lastFurthestRows) return;
+    this.lastFurthestRows = rows;
+    const fk = JSON.stringify(rows);
+    if (fk !== this.lastFurthest) {
+      this.lastFurthest = fk;
+      this.broadcast({ t: 'furthest', rows });
     }
   }
 

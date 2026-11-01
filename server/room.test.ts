@@ -801,6 +801,37 @@ describe('scaling', () => {
   });
 });
 
+describe('the Furthest Out board', () => {
+  it('sends it on joining, offline players included, and again when an online player heads home from a new furthest marker', () => {
+    const t = setup();
+    t.room.furthest = () => t.store.furthest();
+    t.room.furthestStale = () => t.store.furthestStale();
+    const cy = t.store.auth('Cy', 'token-token-token-Cy');
+    if (!cy.ok) throw new Error(cy.msg);
+    cy.account.save.sea.record = 25;
+    const a = t.join('Ann');
+    expect(last(a.c, 'furthest').rows).toEqual([{ name: 'Cy', level: cy.account.save.level, ledge: 25 }]);
+    const b = t.join('Bob');
+    t.room.snapshot();
+    const sent = () => b.c.log.filter((m) => m.t === 'furthest').length;
+    const n = sent();
+    // Heading home from marker 30 (what `surface` does to the save) moves Ann to the top at the next board tick.
+    a.acct.save.sea.record = 30;
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    expect(last(b.c, 'furthest').rows.map((r) => [r.name, r.ledge])).toEqual([['Ann', 30], ['Cy', 25]]);
+    // Nothing new, nothing sent.
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    expect(sent()).toBe(n + 1);
+    // A bigger haul from the same marker (what `keepRecordHaul` keeps) shows at the next tick too.
+    a.acct.save.sea.haul = { pearls: 40, fish: 30, coins: 50_000 };
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    expect(last(b.c, 'furthest').rows[0]).toEqual({ name: 'Ann', level: a.acct.save.level, ledge: 30, pearls: 40, fish: 30 });
+  });
+});
+
 describe('ranks and titles', () => {
   it('announces a new rank to everyone when a catch reaches it', () => {
     const { room, join, advance } = setup();
@@ -1054,6 +1085,7 @@ describe('dives', () => {
 
   it("refuses charters at Reed's seaplane while they're closed", () => {
     const t = setup();
+    t.room.chartersOpen = false;
     const a = t.join('Ann');
     a.acct.save.locker.rods.push(DIVE.rod);
     t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
@@ -1118,7 +1150,8 @@ describe('dives', () => {
     t.room.handle(a.id, { t: 'ledge', a: 'surface' });
     // Banked with two ledges' growth, charted, a new record, and back by the seaplane.
     expect(s.pearls).toBe(Math.round(10 * haulBonus(2)));
-    expect(s.sea).toEqual({ ledges: [10], record: 10 });
+    // The record keeps what the charter banked, the same numbers as its "Home safe!" card, for the Furthest Out board.
+    expect(s.sea).toEqual({ ledges: [10], record: 10, haul: { pearls: 12, fish: 10, coins: s.coins - coins } });
     expect(last(a.c, 'diveend').end).toEqual({ result: 'surfaced', ledge: 10, pearls: 12, record: true, fish: 10, coins: s.coins - coins });
     expect(s.coins - coins).toBeGreaterThan(10_000);
     expect(s.location).toBe('pond');

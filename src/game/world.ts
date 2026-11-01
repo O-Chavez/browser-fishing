@@ -27,7 +27,7 @@ import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { Boat } from './boat';
 import { Sea } from './sea';
-import { gloomAt, seaMood } from '../data/sea';
+import { gloomAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
 import { FX } from './fx';
 import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
@@ -132,6 +132,8 @@ export class World {
    * on the compile. `Game` sets it while the join screen covers the view.
    */
   holdForShaders = false;
+  /** `performance.now()` until which the last frame stays on screen even once shaders are ready (the cast-off card fading in over it). */
+  holdUntil = 0;
   /** The running `prewarm`, until its shaders are ready and drawn once. */
   private warming: Promise<unknown> | null = null;
   private compiled = false;
@@ -475,8 +477,10 @@ export class World {
     // At sea the mood brings in a warm lilac-grey overcast and closer fog (never cold steel grey).
     const m = this.sea ? Math.min(1, this.mood) : 0;
     if (m > 0) {
-      u.uSkyH.value.lerp(new THREE.Color(0xc8bcc6).multiplyScalar(1 - 0.75 * n), m);
-      u.uSkyT.value.lerp(new THREE.Color(0x8c86a0).multiplyScalar(1 - 0.8 * n), m);
+      // Night out at sea darkens steeply with the league (SEA_NIGHT_DARK).
+      const keep = nightSkyKeep(n, nightDarkAt(this.mood));
+      u.uSkyH.value.lerp(new THREE.Color(0xc8bcc6).multiplyScalar(keep), m);
+      u.uSkyT.value.lerp(new THREE.Color(0x8c86a0).multiplyScalar(keep), m);
     }
     // Past the Drop-off the deep zones darken and the fog closes in.
     const gloom = this.sea ? gloomAt(this.mood) : 0;
@@ -1290,6 +1294,6 @@ export class World {
       this.warming = null;
       this.warmDraw();
     }
-    if (!this.paused && !(this.holdForShaders && this.warming)) this.renderer.render(this.scene, this.camera);
+    if (!this.paused && !(this.holdForShaders && (this.warming || performance.now() < this.holdUntil))) this.renderer.render(this.scene, this.camera);
   }
 }

@@ -37,7 +37,7 @@ import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { NEWS, type NewsEntry } from '../data/news';
 import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
-import { gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
+import { charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
@@ -89,6 +89,8 @@ import { KOFI_URL } from '../data/support';
 import { World } from './world';
 import { ScreenSpray } from './screenspray';
 import { zoneAt } from '../data/sea';
+import { CAST_OFF_CARD, cardColours } from './castoffcard';
+import { dayFraction } from './daynight';
 import { DIVES_OPEN, DIVE, ROD_LEVEL, glowColor, glowStep } from '../data/dive';
 
 type Phase =
@@ -115,8 +117,6 @@ const PER_LEVEL = Math.round(rodLevelEase(1) * 100);
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
 
-/** The "Casting off" card stays up at least this long (ms), so it reads as a moment rather than a flash. */
-const CAST_OFF_MS = 1400;
 /** Captain Reed's words on the card, going out to sea and coming back. */
 const CAST_OFF_LINES = [
   'Feet wide, knees soft. She rolls more the further out we go.',
@@ -402,6 +402,7 @@ export class Game {
         // A record from your own bet arrives as it settles; the board waits for the reveal like the hotbar.
         if (!this.revealTimers.length) this.world.hall?.records.set(this.net.records);
       },
+      onFurthest: () => this.world.town?.setFurthest(this.net.furthest),
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
         else if (this.pendingWelcome) {
@@ -674,7 +675,7 @@ export class Game {
   private welcome(name = this.net.name): void {
     this.pendingWelcome = false;
     this.setMenu(false);
-    const { title, line } = welcomeText(name, this.s);
+    const { title, line } = welcomeText(name, this.s, chartersToTry(this.s));
     const el = $('banner');
     el.classList.remove('rank');
     el.classList.add('welcome');
@@ -1120,6 +1121,7 @@ export class Game {
     else if (act === 'eatdish' || act === 'eatdishsure') return this.eatDish(id!, act === 'eatdishsure');
     else if (act === 'eatdishkeep') this.confirmDish = null;
     else if (act === 'music') audio.toggleMusic();
+    else if (act === 'sound') audio.toggleSound();
     else if (act === 'graphics') this.toggleGraphics();
     else if (act === 'sellall') return this.sellAll();
     else if (act === 'equiprod') this.equipRod(id!);
@@ -1572,6 +1574,7 @@ export class Game {
     this.world.hub?.setLeaders(this.anglers());
     this.world.hub?.setSupporters(this.net.supporters);
     this.world.hall?.records.set(this.net.records);
+    this.world.town?.setFurthest(this.net.furthest);
   }
 
   /** Covers the trip to or from the sea until the new map's shaders are ready; `tick` takes it down. */
@@ -1582,18 +1585,30 @@ export class Game {
     const lines = out ? CAST_OFF_LINES : HEADING_IN_LINES;
     $('castoff-line').textContent = `Captain Reed: "${lines[Math.floor(Math.random() * lines.length)]}"`;
     const el = $('castoff');
-    el.classList.remove('hidden', 'fade');
+    const c = cardColours(byId(LOCATIONS, this.map.locationId), out ? this.seaDepth : null, this.world.dayOverride ?? dayFraction(this.world.clock() / 1000));
+    el.style.setProperty('--co-top', c.top);
+    el.style.setProperty('--co-horizon', c.horizon);
+    el.style.setProperty('--co-sea', c.sea);
+    el.style.setProperty('--co-deep', c.deep);
+    el.style.setProperty('--co-in', `${CAST_OFF_CARD.fadeInMs}ms`);
+    el.style.setProperty('--co-out', `${CAST_OFF_CARD.fadeOutMs}ms`);
+    // Starts see-through and fades in; the scene swap is already done, but the world holds its last frame until the card is solid.
+    el.classList.add('fade');
+    el.classList.remove('hidden');
+    void el.offsetWidth;
+    el.classList.remove('fade');
     this.castOffAt = performance.now();
+    this.world.holdUntil = this.castOffAt + CAST_OFF_CARD.fadeInMs;
   }
 
   private updateCastOff(): void {
-    if (this.castOffAt === null || !this.world.ready || performance.now() - this.castOffAt < CAST_OFF_MS) return;
+    if (this.castOffAt === null || !this.world.ready || performance.now() - this.castOffAt < CAST_OFF_CARD.minMs) return;
     this.castOffAt = null;
     const el = $('castoff');
     el.classList.add('fade');
     window.setTimeout(() => {
       if (this.castOffAt === null) el.classList.add('hidden');
-    }, 500);
+    }, CAST_OFF_CARD.fadeOutMs);
   }
 
   // ---------- sea trips ----------
@@ -1636,7 +1651,7 @@ export class Game {
     const btn = v.state === 'ledge'
       ? `<button class="btn" data-tab="marker">🚩 Marker ${v.depth}: choose</button>`
       : `<button class="btn bad" data-act="askhome"${this.phase === 'idle' ? '' : ' disabled'}>Head home</button>`;
-    return `<div class="seastrip"><span>⛵ Charter · ${zoneAt(v.depth).name}, league ${v.depth}. ${v.state === 'ledge' ? 'At a marker, heading home banks the haul.' : `Heading home before marker ${nextMarker(v.depth)} sinks the haul.`}</span>${btn}</div>`;
+    return `<div class="seastrip"><span>⛵ Charter · ${zoneAt(v.depth).name}. ${v.state === 'ledge' ? 'At a marker, heading home banks the haul.' : `Heading home before marker ${nextMarker(v.depth)} sinks the haul.`}</span>${btn}</div>`;
   }
 
   /** Opens a marker's choice or the end card once nothing else is on screen: no catch card, menu or "Casting off". */
@@ -1843,8 +1858,8 @@ export class Game {
     const tiles = PERKS.map((p) => {
       const owned = !p.consumable && s.perks.includes(p.id);
       const locked = !!p.requires && !s.perks.includes(p.requires);
-      const sub = owned ? 'Owned' : locked ? '🔒 Locked' : `${p.chips} chips`;
-      return this.itemTile({ icon: p.icon, name: p.name, sub, tier: tierOf(p.chips), on: this.pick.perk === p.id, check: owned, ghost: !owned && (locked || s.chips < p.chips), attrs: `data-pick="perk" data-id="${p.id}"` });
+      const sub = owned ? 'Owned' : locked ? '🔒 Locked' : '';
+      return this.itemTile({ icon: p.icon, name: p.name, sub, price: `${p.chips} chips`, tier: tierOf(p.chips), on: this.pick.perk === p.id, check: owned, ghost: !owned && (locked || s.chips < p.chips), attrs: `data-pick="perk" data-id="${p.id}"` });
     }).join('');
     const owned = !p.consumable && s.perks.includes(p.id);
     const locked = !!p.requires && !s.perks.includes(p.requires);
@@ -3296,6 +3311,8 @@ export class Game {
     // Chips only matter inside the casino.
     $('chips').textContent = this.chipsText(s.chips);
     $('chipbox').classList.toggle('hidden', !this.map.casino);
+    $('pearls').textContent = s.pearls.toLocaleString();
+    $('pearlbox').classList.toggle('hidden', !eco.showPearlBox(s));
     this.setGateSign();
     this.renderHotbar();
   }
@@ -3496,7 +3513,7 @@ export class Game {
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags's Smokehouse</b><span>${busy ? `${busy} fish smoking` : 'Smoker ready for fish'}</span></div>`;
     }
     if (this.tab === 'reed') return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>Charters</span></div>`;
-    if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? `${zoneAt(this.diveHud.view.depth).name} · league ${this.diveHud.view.depth}` : 'Back at the harbour'}</span></div>`;
+    if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? `${zoneAt(this.diveHud.view.depth).name}` : 'Back at the harbour'}</span></div>`;
     if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
@@ -3696,6 +3713,8 @@ export class Game {
     this.updateBuffs();
     // The first smoked fish to eat: point at the Bag, once the catch card and menus are out of the way.
     if (!this.menuOpen && this.phase === 'idle' && !this.s.tips.includes('snack') && smoke.smokerOpen(this.s) && Object.keys(this.s.smoke.pantry).some((id) => smoke.snackFor(id))) this.guide('snack');
+    // The Aurora Rod in hand while charters are open: point at Captain Reed, once, never mid-fight.
+    if (!this.menuOpen && this.phase === 'idle' && charterTipDue(this.s)) this.guide('charter');
     if (!this.menuOpen) return;
     // A fish finishing (or a snack or dish running out) changes the layout, not just a number.
     const key = `${this.s.smoke.spots.map((x) => (x && x.doneAt <= now ? 'd' : x ? 's' : '-')).join('')}${this.s.smoke.snack ? 1 : 0}${this.s.smoke.dish ? 1 : 0}`;
@@ -4066,7 +4085,7 @@ export class Game {
     }).join('');
 
     return `${this.seaStrip()}<div class="cols"><div class="main">
-        <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex)}</p>
+        <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex, chartersToTry(s))}</p>
         <h4>Your setup</h4>
         <div class="setup"><span class="big">${rodIcon(rod.tier, eco.rodLevelOf(s, rod.id))}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>
           <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div><div>🧵 ${eco.lineName(s)} · holds tier ${eco.lineOf(s).tier}</div></div><div class="pips">${pips}</div></div>
@@ -4292,7 +4311,7 @@ export class Game {
       ? `<p>Erase coins, level, gear, fish, Fishdex and cosmetics? Your name, colour and face stay. This can't be undone.</p>${this.btn('Yes, reset my account', 'data-act="resetyes"', 'bad')}${this.btn('Cancel', 'data-act="resetno"', 'plain')}`
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
-      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4>${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}
+      <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4><div class="btnrow">${this.btn(audio.sound ? '🔊 Sound on' : '🔇 Sound off', 'data-act="sound"', 'plain')}${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}</div>
       <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.newsLinkHtml()}${this.feedbackHtml()}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
   }
 
@@ -4606,8 +4625,8 @@ export class Game {
         .map((c) => {
           const has = s.owned.includes(c.id);
           const wearing = s.look[slot] === c.id;
-          const sub = has ? (wearing ? 'Wearing' : 'Owned') : this.cosPrice(c);
-          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, on: chosen?.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
+          const sub = has ? (wearing ? 'Wearing' : 'Owned') : '';
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, price: this.cosPrice(c), tier: c.tier + 1, on: chosen?.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
         })
         .join('');
       return cards ? `<h4>${this.slotTitle(slot)}</h4><div class="tiles">${cards}</div>` : '';

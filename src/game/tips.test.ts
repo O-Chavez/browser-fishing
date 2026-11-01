@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COIN } from './format';
 import { migrate, newSave } from './state';
-import { TIP_IDS, lossVerdict, markTip, rodHintText, rodUpgrade, seaLossVerdict, tipText } from './tips';
+import { TIP_IDS, charterTipDue, chartersToTry, lossVerdict, markTip, rodHintText, rodUpgrade, seaLossVerdict, tipText } from './tips';
 import { FISH, byId } from '../data/content';
 
 describe('new-player tips', () => {
@@ -118,5 +118,41 @@ describe('rod upgrade hint', () => {
     expect(tipText('dish', s, 'Marlow')).toContain('3 tier 1 fish and a tier 3 fish');
     s.dex.pike = { count: 2, best: 60 };
     expect(tipText('dish', s, 'Marlow')).toContain('3 tier 1 fish and your Northern Pike');
+  });
+
+  it('points Aurora Rod owners at Captain Reed once charters are open', () => {
+    const s = newSave();
+    expect(chartersToTry(s, true)).toBe(false);
+    expect(charterTipDue(s, true)).toBe(false);
+    s.locker.rods = ['aurora'];
+    expect(chartersToTry(s, true)).toBe(true);
+    expect(charterTipDue(s, true)).toBe(true);
+    const text = tipText('charter', s, 'Marlow');
+    expect(text).toContain('Captain Reed');
+    expect(text).toContain('west beach');
+    expect(text).not.toMatch(/league|dive/i);
+    markTip(s, 'charter');
+    expect(charterTipDue(s, true)).toBe(false);
+  });
+
+  it('also counts an Aurora Rod in the hotbar', () => {
+    const s = newSave();
+    s.slots[2] = { k: 'rod', id: 'aurora' };
+    expect(charterTipDue(s, true)).toBe(true);
+  });
+
+  it('gives way to the usual goals once a marker has been reached', () => {
+    const s = newSave();
+    s.locker.rods = ['aurora'];
+    s.sea.record = 5;
+    expect(chartersToTry(s, true)).toBe(false);
+    expect(charterTipDue(s, true)).toBe(false);
+  });
+
+  it('says nothing about charters while they are closed', () => {
+    const s = newSave();
+    s.locker.rods = ['aurora'];
+    expect(chartersToTry(s, false)).toBe(false);
+    expect(charterTipDue(s, false)).toBe(false);
   });
 });

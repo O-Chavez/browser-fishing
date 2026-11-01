@@ -4,7 +4,7 @@ import { MAPS } from '../src/data/maps';
 import { newSave } from '../src/game/state';
 import type { ServerMsg } from '../src/net/protocol';
 import { RENAME_COOLDOWN_MS } from '../src/net/protocol';
-import { AccountStore, MAX_DEVICES } from './accounts';
+import { AccountStore, FURTHEST_ROWS, MAX_DEVICES } from './accounts';
 import { DevGate } from './dev';
 import { Room } from './room';
 
@@ -179,6 +179,65 @@ describe('accounts', () => {
     const again: ServerMsg[] = [];
     room.join({ send: (m) => again.push(m) }, acct);
     expect(again.find((m) => m.t === 'welcome')).toMatchObject({ hasPass: true });
+  });
+});
+
+describe('the Furthest Out board', () => {
+  const boardStore = () => {
+    const store = new AccountStore();
+    const acct = (name: string, record: number, level = 60) => {
+      const res = store.auth(name, (name + '-token').padEnd(20, 'x'));
+      if (!res.ok) throw new Error(res.msg);
+      res.account.save.sea.record = record;
+      res.account.save.level = level;
+      return res.account;
+    };
+    return { store, acct };
+  };
+
+  it('ranks every account by the furthest marker headed home from, with that charter\'s haul, leaving out anyone who never has', () => {
+    const { store, acct } = boardStore();
+    acct('Ann', 15, 70).save.sea.haul = { pearls: 21, fish: 15, coins: 20_000 };
+    acct('Bob', 0);
+    acct('Cy', 40, 90).save.sea.haul = { pearls: 96, fish: 40, coins: 65_000 };
+    // A record from before hauls were kept: no pearls or fish on its row.
+    acct('Dee', 15, 55);
+    expect(store.furthest()).toEqual([
+      { name: 'Cy', level: 90, ledge: 40, pearls: 96, fish: 40 },
+      { name: 'Ann', level: 70, ledge: 15, pearls: 21, fish: 15 },
+      { name: 'Dee', level: 55, ledge: 15 },
+    ]);
+  });
+
+  it('shows the top FURTHEST_ROWS only', () => {
+    const { store, acct } = boardStore();
+    for (let i = 1; i <= FURTHEST_ROWS + 2; i++) acct(`P${i}`, i * 5);
+    const rows = store.furthest();
+    expect(rows).toHaveLength(FURTHEST_ROWS);
+    expect(rows[0]).toMatchObject({ name: `P${FURTHEST_ROWS + 2}`, ledge: (FURTHEST_ROWS + 2) * 5 });
+  });
+
+  it('is empty with no records', () => {
+    const { store, acct } = boardStore();
+    acct('Ann', 0);
+    expect(store.furthest()).toEqual([]);
+  });
+
+  it('keeps its rows cached until told a record changed, and follows renames and deleted accounts', () => {
+    const { store, acct } = boardStore();
+    const ann = acct('Ann', 10);
+    const bob = acct('Bob', 5);
+    const rows = store.furthest();
+    expect(store.furthest()).toBe(rows);
+    bob.save.sea.record = 20;
+    expect(store.furthest()).toBe(rows);
+    store.furthestStale();
+    expect(store.furthest().map((r) => r.name)).toEqual(['Bob', 'Ann']);
+    expect(store.rename(bob, 'Bea')).toBeNull();
+    expect(store.furthest()[0].name).toBe('Bea');
+    store.forget(bob, ('Bob-token').padEnd(20, 'x'));
+    expect(store.furthest()).toEqual([{ name: 'Ann', level: 60, ledge: 10 }]);
+    expect(ann.save.sea.record).toBe(10);
   });
 });
 

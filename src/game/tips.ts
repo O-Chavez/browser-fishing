@@ -1,6 +1,6 @@
 import { CASINO_LEVEL } from '../data/casino';
 import { BAITS, FISH, LINES, RODS, byId, type Fish, type Line, type Rod } from '../data/content';
-import { ROD_LEVEL } from '../data/dive';
+import { DIVE, DIVES_OPEN, ROD_LEVEL } from '../data/dive';
 import { BAIT_PACK, CLEAN_BONUS, lineName, rodLevelCost, seaLineCost } from './economy';
 import { COIN } from './format';
 import type { SaveData } from './state';
@@ -9,7 +9,7 @@ import type { SaveData } from './state';
  * One-time tips that walk a new player through the core loop: cast, reel, sell, buy better bait,
  * catch better fish. Each shows once per account; the ids seen are kept in the save.
  */
-export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier', 'smoker', 'snack', 'dish', 'fray', 'slack'] as const;
+export const TIP_IDS = ['start', 'reel', 'catch', 'sold', 'bait', 'tier', 'smoker', 'snack', 'dish', 'fray', 'slack', 'charter'] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export const isTip = (id: unknown): id is TipId => TIP_IDS.includes(id as TipId);
@@ -28,6 +28,18 @@ function nextBait(s: Pick<SaveData, 'slots' | 'locker'>) {
   for (const [id, n] of Object.entries(s.locker.bait)) if (n > 0) best = Math.max(best, BAITS.find((b) => b.id === id)?.tier ?? 1);
   return BAITS.find((b) => b.tier === best + 1) ?? null;
 }
+
+/**
+ * Whether charters are worth pointing the player at: they own the Aurora Rod (carried or in the locker), haven't
+ * headed home from a marker yet (`sea.record`), and the seaplane is taking players out (`open`, `DIVES_OPEN`), so
+ * nothing points at closed charters and the usual goals come back after a first charter.
+ */
+export function chartersToTry(s: Pick<SaveData, 'slots' | 'locker' | 'sea'>, open = DIVES_OPEN): boolean {
+  return open && s.sea.record === 0 && (s.locker.rods.includes(DIVE.rod) || s.slots.some((sl) => sl?.k === 'rod' && sl.id === DIVE.rod));
+}
+
+/** True when the one-time charter tip should show now. */
+export const charterTipDue = (s: Pick<SaveData, 'slots' | 'locker' | 'sea' | 'tips'>, open = DIVES_OPEN): boolean => !s.tips.includes('charter') && chartersToTry(s, open);
 
 /** Tip text as HTML. Only game data goes in, so nothing needs escaping. `touch` words controls for the on-screen buttons. */
 export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker' | 'dex'>, vendor: string, touch = false): string {
@@ -61,6 +73,8 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
       return 'Small fry? Smoke it instead of selling it: <b>Mags Cinder</b> at the Smokehouse, across the path from Marlow\'s stall, smokes it in seconds.';
     case 'snack':
       return `Smoked fish ready! Eat one from your <b>Bag</b> (${touch ? 'the 🎒 button' : '<kbd>Tab</kbd>'}) for ⭐ more XP on every catch.`;
+    case 'charter':
+      return 'Your Aurora Rod can fish the open sea! Find <b>Captain Reed</b> and his seaplane on the <b>west beach</b> and book a charter: the further out, the rarer the fish.';
     case 'dish': {
       // Names the player's own tier 3 catch, so the next Fish Cakes is easy to picture.
       const t3 = FISH.filter((f) => f.tier === 3 && s.dex[f.id]).sort((a, b) => s.dex[b.id]!.count - s.dex[a.id]!.count)[0];

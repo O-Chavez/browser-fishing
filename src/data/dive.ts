@@ -105,11 +105,11 @@ export const DIVE = {
 };
 
 /**
- * Whether players can start a charter at Captain Reed's seaplane. Closed while charters are being worked on: Reed's
- * panel says his plane isn't ready, the server refuses `dive`, and only the dev console's `/sea` sails out. While
- * closed, the rod levels only show to players who already have pearls or a level.
+ * Whether players can start a charter at Captain Reed's seaplane. Reopened 2026-11-01 with the deep zones' fish and
+ * the Deep Sea Line (closed 2026-10-31 while they were worked on). Set it to false to close them again: Reed's panel
+ * then says his plane isn't ready, the server refuses `dive`, and only the dev console's `/sea` sails out.
  */
-export const DIVES_OPEN = false;
+export const DIVES_OPEN = true;
 
 /**
  * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's

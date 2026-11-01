@@ -78,11 +78,41 @@ const accounts = Object.fromEntries(
 );
 fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify(accounts));
 
+// The server runs in its own process group (`detached`): npx starts tsx, which starts the server, and
+// stopping only npx would leave the server on the port. stopServer() signals the whole group.
+let serverGroup: number | undefined;
+const serverGroupAlive = (): boolean => {
+  if (serverGroup === undefined) return false;
+  try { process.kill(-serverGroup, 0); return true; } catch { return false; }
+};
+const signalServerGroup = (sig: NodeJS.Signals): void => {
+  if (serverGroup === undefined) return;
+  try { process.kill(-serverGroup, sig); } catch { /* already gone */ }
+};
+let serverStopping: Promise<void> | undefined;
+/** Stops the game server and everything it started: SIGTERM, then SIGKILL if it's still up after 2 s. */
+function stopServer(): Promise<void> {
+  serverStopping ??= (async () => {
+    signalServerGroup('SIGTERM');
+    for (let i = 0; i < 20 && serverGroupAlive(); i++) await new Promise((r) => setTimeout(r, 100));
+    if (serverGroupAlive()) signalServerGroup('SIGKILL');
+  })();
+  return serverStopping;
+}
+// Any other exit (a thrown error, process.exit): kill the group at once, there's no time to wait.
+process.on('exit', () => { if (serverGroupAlive()) signalServerGroup('SIGKILL'); });
+// Ctrl-C and kill don't reach the detached server, so stop it before this script ends.
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.on(sig, () => void stopServer().then(() => process.exit(128 + os.constants.signals[sig])));
+}
+
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
   // TEST_HOOKS: the test hook's teleports get past the server's move check.
   env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '', TEST_HOOKS: '1' },
   stdio: ['ignore', 'pipe', 'inherit'],
+  detached: true,
 });
+serverGroup = server.pid;
 await new Promise<void>((res) => server.stdout!.on('data', (d) => /fishing server on port/.test(String(d)) && res()));
 process.env.VITE_SERVER_URL = `ws://localhost:${SERVER_PORT}`;
 const vite = await createServer({ server: { port: VITE_PORT, strictPort: true }, logLevel: 'error' });
@@ -371,7 +401,7 @@ try {
 } finally {
   await browser.close();
   await vite.close();
-  server.kill();
+  await stopServer();
   fs.rmSync(work, { recursive: true, force: true });
 }
 process.exit(failed ? 1 : 0);

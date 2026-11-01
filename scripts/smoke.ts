@@ -57,12 +57,42 @@ fs.writeFileSync(
 );
 fs.mkdirSync(SHOTS, { recursive: true });
 
+// The server runs in its own process group (`detached`): npx starts tsx, which starts the server, and
+// stopping only npx would leave the server on the port. stopServer() signals the whole group.
+let serverGroup: number | undefined;
+const serverGroupAlive = (): boolean => {
+  if (serverGroup === undefined) return false;
+  try { process.kill(-serverGroup, 0); return true; } catch { return false; }
+};
+const signalServerGroup = (sig: NodeJS.Signals): void => {
+  if (serverGroup === undefined) return;
+  try { process.kill(-serverGroup, sig); } catch { /* already gone */ }
+};
+let serverStopping: Promise<void> | undefined;
+/** Stops the game server and everything it started: SIGTERM, then SIGKILL if it's still up after 2 s. */
+function stopServer(): Promise<void> {
+  serverStopping ??= (async () => {
+    signalServerGroup('SIGTERM');
+    for (let i = 0; i < 20 && serverGroupAlive(); i++) await sleep(100);
+    if (serverGroupAlive()) signalServerGroup('SIGKILL');
+  })();
+  return serverStopping;
+}
+// Any other exit (a thrown error, process.exit): kill the group at once, there's no time to wait.
+process.on('exit', () => { if (serverGroupAlive()) signalServerGroup('SIGKILL'); });
+// Ctrl-C and kill don't reach the detached server, so stop it before this script ends.
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.on(sig, () => void stopServer().then(() => process.exit(128 + os.constants.signals[sig])));
+}
+
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
   // No Discord webhooks: the feedback check below must not post a real report.
   // Dev console on, for `/sea`; TEST_HOOKS lets the test teleports past the server's move check (`/goto`).
   env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '', DEV_USER: 'smoke', DEV_PASS: 'smoke-dev-pass', TEST_HOOKS: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
+  detached: true,
 });
+serverGroup = server.pid;
 await waitForLine(server, /fishing server on port/);
 process.env.VITE_SERVER_URL = `ws://localhost:${SMOKE_SERVER_PORT}`;
 const vite = await createServer({ server: { port: VITE_PORT, strictPort: true }, logLevel: 'error' });
@@ -89,7 +119,7 @@ try {
 } finally {
   await browser.close();
   await vite.close();
-  server.kill();
+  await stopServer();
   fs.rmSync(dataDir, { recursive: true, force: true });
 }
 
@@ -189,11 +219,13 @@ async function pondChecks(): Promise<void> {
   // Night: lamps, windows and torches must still be on meshes that are drawn.
   await page.evaluate(() => { window.__game.day(0.7); window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.15); });
   // Real lights fade in (`LightPool`): one near the plaza waits for a far one to dim before taking its
-  // slot, and slow headless frames stretch that well past a fixed sleep.
+  // slot, and slow headless frames stretch that well past a fixed sleep. The bulbs' glow is set by the frame
+  // that draws the new night, so wait for that too (reading it early made this check flaky).
   const litStart = Date.now();
   await page.waitForFunction(() => {
     const w = window.__game.world as any;
-    return w.hub.lampLights.some((l: any) => l.intensity > 1) && w.town.lights.some((l: any) => l.intensity > 1);
+    return w.hub.lampLights.some((l: any) => l.intensity > 1) && w.town.lights.some((l: any) => l.intensity > 1)
+      && w.hub.lampMats.every((m: any) => m.emissiveIntensity > 1);
   }, { timeout: 5000 }).catch(() => null);
   const litMs = Date.now() - litStart;
   const night = await page.evaluate(() => {
@@ -824,25 +856,23 @@ async function tripChecks(): Promise<void> {
   await page.evaluate(() => window.__game.interact());
   await sleep(300);
   const reed = await tab();
-  // Charters are closed while they're worked on (`DIVES_OPEN`): Reed explains them, and the dev console's /sea 0 sails
-  // from the harbour instead.
-  check("charter: talking to Captain Reed explains charters and that his seaplane isn't ready", reed.includes('tab-reed') && reed.includes('Charters are coming soon') && !reed.includes('Cast off'), reed.slice(0, 160));
-  await page.click('#menu [data-act="close"]');
+  check('charter: Captain Reed offers a charter from the harbour with a Cast off button', reed.includes('tab-reed') && reed.includes('Start at the harbour') && reed.includes('Cast off'), reed.slice(0, 160));
+  await page.click('#menu [data-act="castoff"]');
   const dev = async (line: string) => {
     await page.keyboard.press('Enter');
     await page.keyboard.type(line);
     await page.keyboard.press('Enter');
     await sleep(300);
   };
-  await dev('/login smoke smoke-dev-pass');
-  await dev('/sea 0');
   await arrived(true);
+  await dev('/login smoke smoke-dev-pass');
   const hud = await page.evaluate(() => ({ shown: !document.getElementById('divehud')!.classList.contains('hidden'), text: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') }));
-  check('charter: /sea 0 sails out from the harbour, with the strip showing the league, the line and the haul', hud.shown && hud.text.includes('league0') && hud.text.includes('300 m') && hud.text.includes('Marker 5'), hud.text);
+  check('charter: Cast off sails out from the harbour, with the strip showing the zone, the line and the haul', hud.shown && hud.text.includes('The Shelf') && hud.text.includes('300 m') && hud.text.includes('Head home at marker 5') && hud.text.includes('Markers to The Drop-off'.replace('The ', 'the ')), hud.text);
 
   const seen = await landOne();
   const after = await page.evaluate(() => document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' '));
-  check('charter: a landed fish moves the strip a league out', seen.includes('reeling') && after.includes('league1') && after.includes('🐟 1'), `${seen.join(',')} · ${after}`);
+  const lit = await page.evaluate(() => document.querySelectorAll('#divehud .trail i.on').length);
+  check('charter: a landed fish lights a fish on the strip', seen.includes('reeling') && lit === 1 && after.includes('🐟 1'), `${seen.join(',')} · ${after}`);
 
   // Head home between markers, from the Bag: the haul sinks and the card says so.
   await page.evaluate(() => window.__game.openMenu('inventory'));
@@ -1059,9 +1089,7 @@ async function offlineChecks(): Promise<void> {
     return { text: el.textContent!, clickable: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.id === 'offline-go' };
   });
   check('offline: no disconnected banner while online', (await shown()) === null);
-  const exited = new Promise((r) => server.once('exit', r));
-  server.kill();
-  await exited;
+  await stopServer();
   await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 10000 });
   const drop = await shown();
   await page.screenshot({ path: path.join(SHOTS, 'offline.png') });

@@ -17,6 +17,16 @@ describe('chat text', () => {
     expect(censor('nice class, pass the cocktail, Dickens')).toBe('nice class, pass the cocktail, Dickens');
     expect(censor('caught a bass!')).toBe('caught a bass!');
   });
+
+  it('lets innocent words that contain a root through, but still masks rude words around them', () => {
+    expect(censor('Scunthorpe')).toBe('Scunthorpe');
+    expect(censor('Yoshitaka')).toBe('Yoshitaka');
+    expect(censor('shiitake mushrooms')).toBe('shiitake mushrooms');
+    expect(censor('fishit!')).toBe('fishit!');
+    expect(censor('fishitshit')).toBe('**********');
+    expect(censor('Scunthorpe you fuck')).toBe('Scunthorpe you ****');
+    expect(censor('Yoshit')).toBe('******');
+  });
 });
 
 describe('rudeName', () => {

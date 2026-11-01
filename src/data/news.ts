@@ -16,6 +16,8 @@
  *   { id: 1, date: '2026-11-20', title: 'The Delve', image: delve, alt: 'Diving below the pond',
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
+import deepSea from '../assets/images/news/deep-sea.jpg';
+
 export interface NewsEntry {
   /** Release number: unique, and higher than every entry below it. */
   id: number;
@@ -30,4 +32,17 @@ export interface NewsEntry {
   alt?: string;
 }
 
-export const NEWS: NewsEntry[] = [];
+export const NEWS: NewsEntry[] = [
+  {
+    id: 1,
+    date: '2026-11-01',
+    title: 'Charters to the deep sea',
+    image: deepSea,
+    alt: 'The Leviathan, a horned, armoured sea monster glowing with molten cracks, breaching a dark storm swell beside the charter boat',
+    body: [
+      "<b>Captain Reed</b>'s seaplane is flying again! Bring the <b>Aurora Rod</b> to his stand on the west beach and cast off on a charter to the open sea. Every 5 fish you land, you reach a marker: <b>Head home</b> with your haul of <b>Black Pearls</b>, or <b>Sail on</b> for a bigger one.",
+      'The further out you sail, the stranger the fish: leafy seadragons in <b>Kelp Deep</b>, glowing anglers in <b>the Twilight</b>, and in <b>the Abyss</b>, things with far too many eyes. Every zone has its own legends, long, hard fights that are worth a fortune.',
+      "Spend your Black Pearls at <b>Marlow's stall</b> to level up the Aurora Rod and the new <b>Deep Sea Line</b>. The rod makes your line last, and the line keeps strong fish from snapping it.",
+    ],
+  },
+];

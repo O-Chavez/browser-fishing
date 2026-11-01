@@ -3,6 +3,7 @@ import { MAPS } from '../src/data/maps';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { DevGate, TIMES } from './dev';
+import { markTip } from '../src/game/tips';
 import { Room } from './room';
 
 describe('DevGate', () => {
@@ -158,6 +159,22 @@ describe('dev commands in a room', () => {
     room.snapshot();
     expect(a.save.smoke.spots[1]).toBeNull();
     expect(a.save.smoke.pantry.pike).toHaveLength(1);
+  });
+
+  it('clears the new-player tips so they show again, and says so when there are none', () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(a.id, { t: 'cmd', text: '/tips' });
+    expect(devLines(a.log).at(-1)).toBe('No new-player tips are marked as seen.');
+    markTip(a.save, 'start');
+    markTip(a.save, 'reel');
+    room.handle(a.id, { t: 'cmd', text: '/tips' });
+    expect(a.save.tips).toEqual([]);
+    expect(devLines(a.log).at(-1)).toBe('New-player tips reset: they show again.');
+    // The client gets the cleared list, so it shows the tips again.
+    expect([...a.log].reverse().find((m) => m.t === 'state')).toMatchObject({ save: { tips: [] } });
+    expect(markTip(a.save, 'start')).toBe(true);
   });
 
   it('stocks cooked dishes and reports the Smokehouse stats', () => {
