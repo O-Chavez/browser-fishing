@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Price above the status on the cosmetics stall and Prize Counter tiles (Oscar, 2026-11-01; done 2026-11-01, branch `tile-price-status`)
+  - The same markup the rod and bait tiles use (`itemTile`'s `price` line, then the status): `cosShopHtml` (Marlow's stall and the High Roller tab) and the perk tiles in `casinoHtml` (`src/game/game.ts`) now always show the price, with "Owned" / "Wearing" / "🔒 Locked" under it when it applies (nothing under it otherwise). Buy buttons and picking are unchanged.
+  - Checked: tests, tsc, headless Chrome before/after shots of the stall, the Unlocks tab and the High Roller tab with owned, worn, locked and unaffordable tiles; looked at them. No smoke run in the session (the coordinator runs it).
 - [x] Mute all sound, not just the music (Oscar, 2026-11-01; done 2026-11-01, branch `mute-all-sound`)
   - ⚙️ Settings > Sound now has "🔊 Sound on / 🔇 Sound off" next to the music button, in one row. Sound off fades the master output (`audio.toggleSound`, `MASTER_VOL`) to silence in about 0.3 s, so the lake, sea, casino, reel and music all go quiet. The choice is saved in `fishing-sound` and applied when the audio starts. Music keeps its own on/off setting underneath (M still toggles only music). No key for it, since Shift+M would clash with running.
   - Checked: build, tests, and a headless Chrome run: master gain 0.7 → 0 → 0.7 as it's toggled, music can still be toggled while muted, and a saved "off" starts muted after a reload. Looked at the Settings panel. Smoke not run (a menu button and one gain node).
