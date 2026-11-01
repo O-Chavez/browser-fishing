@@ -27,7 +27,7 @@ import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { Boat } from './boat';
 import { Sea } from './sea';
-import { gloomAt, seaMood } from '../data/sea';
+import { gloomAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
 import { FX } from './fx';
 import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
@@ -475,8 +475,10 @@ export class World {
     // At sea the mood brings in a warm lilac-grey overcast and closer fog (never cold steel grey).
     const m = this.sea ? Math.min(1, this.mood) : 0;
     if (m > 0) {
-      u.uSkyH.value.lerp(new THREE.Color(0xc8bcc6).multiplyScalar(1 - 0.75 * n), m);
-      u.uSkyT.value.lerp(new THREE.Color(0x8c86a0).multiplyScalar(1 - 0.8 * n), m);
+      // Night out at sea darkens steeply with the league (SEA_NIGHT_DARK).
+      const keep = nightSkyKeep(n, nightDarkAt(this.mood));
+      u.uSkyH.value.lerp(new THREE.Color(0xc8bcc6).multiplyScalar(keep), m);
+      u.uSkyT.value.lerp(new THREE.Color(0x8c86a0).multiplyScalar(keep), m);
     }
     // Past the Drop-off the deep zones darken and the fog closes in.
     const gloom = this.sea ? gloomAt(this.mood) : 0;

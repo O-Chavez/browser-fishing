@@ -69,6 +69,36 @@ const smooth = (a: number, b: number, x: number): number => {
 export const gloomAt = (mood: number): number => Math.min(1, Math.max(0, mood - 1));
 
 /**
+ * How dark the sky gets at night out at sea (Oscar, 2026-10-31: much darker the further out). One knob
+ * block to tweak: `points` are [league, darkness 0..1] (eased between), and `floor` is the share of the
+ * sky's light that is left at the darkest (full night, darkness 1): 0 is pitch black, 0.05 a faint
+ * indigo. Darkness 0 is the old look (75% dimmed at night); the Twilight (81) and the Abyss (151) sit
+ * near black. Days are untouched: it only scales with how night it is.
+ */
+export const SEA_NIGHT_DARK = {
+  points: [[1, 0], [16, 0.3], [41, 0.7], [81, 0.92], [151, 1]] as [league: number, dark: number][],
+  floor: 0.04,
+};
+
+/** The night-sky darkness (0..1) for a sea mood, following `SEA_NIGHT_DARK.points` by league. */
+export function nightDarkAt(mood: number): number {
+  const p = SEA_NIGHT_DARK.points.map(([d, k]) => [seaMood(d), k] as const);
+  if (mood <= p[0][0]) return p[0][1];
+  for (let i = 1; i < p.length; i++) {
+    if (mood <= p[i][0]) {
+      const [m0, k0] = p[i - 1];
+      const [m1, k1] = p[i];
+      return k0 + ((mood - m0) / (m1 - m0)) * (k1 - k0);
+    }
+  }
+  return p[p.length - 1][1];
+}
+
+/** The share of light the sea's night sky keeps: 0.25 at darkness 0 (the old look), `floor` at 1. */
+export const nightSkyKeep = (n: number, dark: number): number =>
+  1 - n * (0.75 + (1 - SEA_NIGHT_DARK.floor - 0.75) * dark);
+
+/**
  * How hard spray hits the screen when the bow slams into a wave (0..1): from about depth 28 (mood 0.75)
  * to soaked by the Abyss, so the waves feel more treacherous the deeper the dive (Oscar, 2026-10-31).
  */
