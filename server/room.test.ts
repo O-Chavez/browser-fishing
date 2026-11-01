@@ -169,7 +169,7 @@ describe('Room economy', () => {
     expect(s.rodLevel).toBe(0);
     atShop(a);
     room.handle(a.id, { t: 'levelrod' });
-    expect(s).toMatchObject({ rodLevel: 1, pearls: 76, coins: 42_000 });
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 76, coins: 19_000 });
     expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 76 });
     room.handle(a.id, { t: 'levelrod' });
     expect(s.rodLevel).toBe(1);
@@ -185,7 +185,7 @@ describe('Room economy', () => {
     expect(s.seaLine).toBe(0);
     atShop(a);
     room.handle(a.id, { t: 'levelline' });
-    expect(s).toMatchObject({ seaLine: 1, pearls: 76, coins: 71_000 });
+    expect(s).toMatchObject({ seaLine: 1, pearls: 76, coins: 59_500 });
     expect(last(a.c, 'state').save).toMatchObject({ seaLine: 1, pearls: 76 });
     room.handle(a.id, { t: 'levelline' });
     expect(s.seaLine).toBe(1);

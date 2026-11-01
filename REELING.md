@@ -255,6 +255,19 @@ A scratch sim played whole charters on the bots' fights: per marker 120 rolled f
 | At the old coins, charter fish only just pay for the levels, and a fast player past +15 / +15 needs pond coins. | The line costs half the rod's coins (25k + 4k·N, cap 75k). Charters then pay for both tracks with 20-50% to spare, more once Kelp Deep and below get their own, dearer fish. |
 | Sea fish reach their heaviest (the weight cap) 10-20 leagues short of the frontier, so "too heavy" would show on nearly every fish there; strength crosses the red gradually (about 1 fish in 10 a marker short of the frontier, half at it). | The hook toast names only the line. The rod is named on the drag caption and the RAN OFF card, where its weight is what's costing line. |
 
+### Rerun with the deep zones' fish (slice B, 2026-11-01)
+
+The same sim with the deep zones' own fish (about 2,500 / 3,500 / 5,000 coins a catch, legends 3×) and the legends' longer fights. The frontier and pearls an hour barely moved; coins an hour now climb with gear, from ~220k to ~650k for a fast player. Under the old coin prices (capped at 150k / 75k from +13) levels took only 42-45% of a fast player's charter coins by +20 / +20.
+
+| Rod + line levels | Coins an hour, fast / slow | Share of charter coins on levels, fast / slow: old → new prices |
+|---|---|---|
+| +0 / +0 | 218k / 179k | 46% → 65% / 32% → 45% |
+| +10 / +10 | 336k / 280k | 66% → 68% / 51% → 52% |
+| +20 / +20 | 528k / 418k | 45% → 61% / 45% → 61% |
+| +30 / +30 | 656k / 553k | 42% → 73% / 41% → 71% |
+
+New coin prices (Oscar, 2026-11-01): the rod 75k + 6k·N, the line half that, with only a safety cap past +54. Slow players stay under the 60-75% band early: they earn about as many coins as fast players but far fewer pearls, and pricing for them would leave fast players coin-bound. Best-rate play still farms easy water short of the frontier.
+
 ## Decisions so far
 
 - Line is a separate upgrade path, presented as a spool on the rod (2026-10-31).

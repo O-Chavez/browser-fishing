@@ -695,11 +695,11 @@ describe('rod levels', () => {
     return s;
   };
 
-  it('costs 100 + 24N Black Pearls and 50k + 8k·N coins, the coins capped at 150k', () => {
-    expect(eco.rodLevelCost(1)).toEqual({ coins: 58_000, pearls: 124 });
-    expect(eco.rodLevelCost(10)).toEqual({ coins: 130_000, pearls: 340 });
-    expect(eco.rodLevelCost(13)).toEqual({ coins: 150_000, pearls: 412 });
-    expect(eco.rodLevelCost(40)).toEqual({ coins: 150_000, pearls: 1060 });
+  it('costs 100 + 24N Black Pearls and 75k + 6k·N coins, the coins capped at 400k', () => {
+    expect(eco.rodLevelCost(1)).toEqual({ coins: 81_000, pearls: 124 });
+    expect(eco.rodLevelCost(10)).toEqual({ coins: 135_000, pearls: 340 });
+    expect(eco.rodLevelCost(40)).toEqual({ coins: 315_000, pearls: 1060 });
+    expect(eco.rodLevelCost(60)).toEqual({ coins: 400_000, pearls: 1540 });
   });
 
   it('levels the Aurora Rod for coins and pearls, and coins alone are never enough', () => {
@@ -708,10 +708,10 @@ describe('rod levels', () => {
     expect(eco.levelRod(s)).toBe(false);
     s.pearls = 124;
     expect(eco.levelRod(s)).toBe(true);
-    expect(s).toMatchObject({ rodLevel: 1, pearls: 0, coins: 10_000_000 - 58_000 });
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 0, coins: 10_000_000 - 81_000 });
     s.pearls = 147;
     expect(eco.levelRod(s)).toBe(false);
-    s.coins = 65_999;
+    s.coins = 86_999;
     s.pearls = 1000;
     expect(eco.levelRod(s)).toBe(false);
     expect(s.rodLevel).toBe(1);
@@ -761,11 +761,13 @@ describe('the Deep Sea Line', () => {
     return s;
   };
 
-  it("costs the rod's pearls and half its coins: 100 + 24N Black Pearls and 25k + 4k·N coins, capped at 75k", () => {
-    expect(eco.seaLineCost(1)).toEqual({ coins: 29_000, pearls: 124 });
-    expect(eco.seaLineCost(10)).toEqual({ coins: 65_000, pearls: 340 });
-    expect(eco.seaLineCost(13)).toEqual({ coins: 75_000, pearls: 412 });
-    for (const n of [1, 5, 20, 40]) expect(eco.seaLineCost(n).pearls).toBe(eco.rodLevelCost(n).pearls);
+  it("costs the rod's pearls and half its coins: 100 + 24N Black Pearls and 37.5k + 3k·N coins, capped at 200k", () => {
+    expect(eco.seaLineCost(1)).toEqual({ coins: 40_500, pearls: 124 });
+    expect(eco.seaLineCost(10)).toEqual({ coins: 67_500, pearls: 340 });
+    for (const n of [1, 5, 20, 40, 60]) {
+      expect(eco.seaLineCost(n).pearls).toBe(eco.rodLevelCost(n).pearls);
+      expect(eco.seaLineCost(n).coins).toBe(eco.rodLevelCost(n).coins / 2);
+    }
   });
 
   it('levels for coins and pearls with the Aurora Rod, and coins alone are never enough', () => {
@@ -777,7 +779,7 @@ describe('the Deep Sea Line', () => {
     expect(eco.levelSeaLine(s)).toBe(false);
     s.pearls = 124;
     expect(eco.levelSeaLine(s)).toBe(true);
-    expect(s).toMatchObject({ seaLine: 1, pearls: 0, coins: 10_000_000 - 29_000 });
+    expect(s).toMatchObject({ seaLine: 1, pearls: 0, coins: 10_000_000 - 40_500 });
     s.pearls = 147;
     expect(eco.levelSeaLine(s)).toBe(false);
     expect(s.seaLine).toBe(1);

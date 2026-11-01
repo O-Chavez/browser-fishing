@@ -116,7 +116,9 @@ export const DIVES_OPEN = false;
  * stall with no cap, each level making sea fish lighter (`SEA_FIGHT.ease`); pond fights don't change. A level
  * costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
  * The Deep Sea Line (`SEA_LINE`) is the second track. Each track's step is twice P1's single one, so levelling both
- * evenly keeps P1's pace of a level every 25-45 minutes (REELING.md, "Sea findings").
+ * evenly keeps P1's pace of a level every 25-45 minutes. The coins keep rising with the level, as charter income does
+ * with the deeper zones' dearer fish, so levels take about 60-75% of a fast player's charter coins at every stage
+ * (REELING.md, "Sea economy"; Oscar, 2026-11-01).
  */
 export const ROD_LEVEL = {
   /** The rod that levels. */
@@ -124,10 +126,10 @@ export const ROD_LEVEL = {
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
   pearls: 100,
   pearlsPer: 24,
-  /** ... and min(coinCap, coins + coinsPer·N) coins. */
-  coins: 50_000,
-  coinsPer: 8_000,
-  coinCap: 150_000,
+  /** ... and min(coinCap, coins + coinsPer·N) coins; the cap is only a safety net, reached past +54. */
+  coins: 75_000,
+  coinsPer: 6_000,
+  coinCap: 400_000,
   /** The rod's tip glow changes colour every this many levels (`GLOW_STEPS`). */
   glowEvery: 5,
 };
@@ -141,10 +143,10 @@ export const SEA_LINE = {
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
   pearls: 100,
   pearlsPer: 24,
-  /** ... and min(coinCap, coins + coinsPer·N) coins. */
-  coins: 25_000,
-  coinsPer: 4_000,
-  coinCap: 75_000,
+  /** ... and min(coinCap, coins + coinsPer·N) coins: half the rod's at every level. */
+  coins: 37_500,
+  coinsPer: 3_000,
+  coinCap: 200_000,
 };
 
 /**
