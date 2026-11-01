@@ -21,11 +21,14 @@ export function renderGrid(W: number): number {
   return renderRows(W, 'The Fishdex', `${POND_FISH.length} fish across 5 tiers · 🌙 bites only at night`, rows);
 }
 
-/** The Sea page: the Shelf and Drop-off species, for reviewing their looks. */
+/** The Sea page: every zone's species, one row a zone, for reviewing their looks. */
 export function renderSea(W: number): number {
   const rows: Row[] = [
     { kicker: 'SHELF', name: 'Depths 1-15', color: '#6fb0f2', fish: SEA_FISH.filter((f) => f.locations.includes('shelf')) },
     { kicker: 'DROP-OFF', name: 'Depths 16-40', color: '#6fb0f2', fish: SEA_FISH.filter((f) => f.locations.includes('dropoff')) },
+    { kicker: 'KELP DEEP', name: 'Leagues 41-80', color: '#8fd04a', fish: SEA_FISH.filter((f) => f.locations.includes('kelp')) },
+    { kicker: 'THE TWILIGHT', name: 'Leagues 81-150', color: '#6fd8ff', fish: SEA_FISH.filter((f) => f.locations.includes('twilight')) },
+    { kicker: 'THE ABYSS', name: 'Leagues 151+', color: '#c58aff', fish: SEA_FISH.filter((f) => f.locations.includes('abyss')) },
   ];
   return renderRows(W, 'The Fishdex · Sea', `${SEA_FISH.length} sea fish`, rows);
 }
