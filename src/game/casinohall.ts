@@ -16,10 +16,13 @@ const FELT = 0x1f6b43;
 const GOLD = 0xe0b441;
 const PINK = 0xff4f9a;
 const WEDGES = WHEEL_WEDGES.length;
-/** Lucky Wheel wedges by payout, in the roulette table's felt green, red and gold; losses are black. 0 is a loss. */
-const WEDGE_INK: Record<number, string> = { 0: '#1b1b1f', 2: '#1f6b43', 3: '#c4262e', 4: '#e0b441' };
-/** Numbers in gold, dark on the gold wedge; LOSE dimmed so the wins stand out. */
-const WEDGE_TEXT: Record<number, string> = { 0: '#bfb4a0', 2: '#ffd35a', 3: '#ffd35a', 4: '#3a1a08' };
+/**
+ * Lucky Wheel wedge colours by payout: LOSE black, ×½ charcoal (a soft loss), ×2 roulette red, the rare top prize in
+ * the tables' felt green. Numbers are gold; LOSE and ×½ dimmed so the wins stand out.
+ */
+const wedgeInk = (f: number): string => (f === 0 ? '#1b1b1f' : f < 1 ? '#3b3438' : f === 2 ? '#c4262e' : '#1f6b43');
+const wedgeText = (f: number): string => (f === 0 ? '#bfb4a0' : f < 1 ? '#bfa77a' : '#ffd35a');
+const wedgeLabel = (f: number): string => (f === 0 ? 'LOSE' : f === 0.5 ? '×½' : `×${f}`);
 
 /** The Lucky Wheel's face: one wedge per entry in WHEEL_WEDGES, wedge i from angle i·w clockwise, with a gold peg on each edge. */
 function luckyTexture(): THREE.CanvasTexture {
@@ -33,7 +36,7 @@ function luckyTexture(): THREE.CanvasTexture {
     g.moveTo(px / 2, px / 2);
     g.arc(px / 2, px / 2, px / 2, i * w, (i + 1) * w);
     g.closePath();
-    g.fillStyle = WEDGE_INK[f];
+    g.fillStyle = wedgeInk(f);
     g.fill();
     // A thin gold line between wedges, so the black ones read apart
     g.strokeStyle = 'rgba(224, 180, 65, 0.55)';
@@ -42,11 +45,11 @@ function luckyTexture(): THREE.CanvasTexture {
     g.save();
     g.translate(px / 2, px / 2);
     g.rotate((i + 0.5) * w);
-    g.fillStyle = WEDGE_TEXT[f];
+    g.fillStyle = wedgeText(f);
     g.font = `800 ${f ? 120 : 84}px system-ui, sans-serif`;
     g.textAlign = 'right';
     g.textBaseline = 'middle';
-    g.fillText(f ? `×${f}` : 'LOSE', px / 2 - 56, 0);
+    g.fillText(wedgeLabel(f), px / 2 - 56, 0);
     g.restore();
   });
   g.fillStyle = '#ffd35a';

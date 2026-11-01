@@ -167,17 +167,22 @@ describe('casino tables', () => {
     room.handle(p.id, { t: 'wheel', i: 2 });
     expect(p.c.log.some((m) => m.t === 'wheel')).toBe(false);
     goTo(room, p.id, casino.casino!.wheel);
-    setRoll(3 / 12 + 0.01); // wedge 3, the ×4
+    setRoll(11 / 12 + 0.01); // wedge 11, the ×5
     room.handle(p.id, { t: 'wheel', i: 2 });
-    expect(p.c.log.findLast((m) => m.t === 'wheel')).toMatchObject({ wedge: 3, factor: 4, ms: WHEEL_MS });
+    expect(p.c.log.findLast((m) => m.t === 'wheel')).toMatchObject({ wedge: 11, factor: 5, ms: WHEEL_MS });
     room.handle(p.id, { t: 'drop' });
     room.handle(p.id, { t: 'slot', i: 0 });
     expect(p.acct.save.held).toBe(2);
     expect((p.acct.save.slots[2] as { mult?: number }).mult).toBeUndefined();
     advance(WHEEL_MS);
     room.snapshot();
-    expect(fishValue(p.acct.save.slots[2] as never)).toBe(base * 4);
-    setRoll(1 / 12 + 0.01); // wedge 1, a LOSE
+    expect(fishValue(p.acct.save.slots[2] as never)).toBe(base * 5);
+    setRoll(1 / 12 + 0.01); // wedge 1, a ×½: half back
+    room.handle(p.id, { t: 'wheel', i: 2 });
+    advance(WHEEL_MS);
+    room.snapshot();
+    expect(fishValue(p.acct.save.slots[2] as never)).toBeCloseTo(base * 2.5);
+    setRoll(2 / 12 + 0.01); // wedge 2, a LOSE
     room.handle(p.id, { t: 'wheel', i: 2 });
     advance(WHEEL_MS);
     room.snapshot();
@@ -334,16 +339,16 @@ describe('casino records', () => {
     const ctx = setup();
     const a = seat(ctx, 'Ann', 300);
     goTo(ctx.room, a.id, casino.casino!.wheel);
-    ctx.setRoll(9 / 12 + 0.01); // wedge 9, the ×3
+    ctx.setRoll(5 / 12 + 0.01); // wedge 5, a ×2
     ctx.room.handle(a.id, { t: 'wheel', i: 2 });
     ctx.advance(WHEEL_MS);
     ctx.room.snapshot();
-    expect(ctx.store.records().win).toMatchObject({ amount: 600, game: 'wheel', fishId: dear.id });
-    ctx.setRoll(0.99); // wedge 11, a LOSE
+    expect(ctx.store.records().win).toMatchObject({ amount: 300, game: 'wheel', fishId: dear.id });
+    ctx.setRoll(8 / 12 + 0.01); // wedge 8, a LOSE
     ctx.room.handle(a.id, { t: 'wheel', i: 2 });
     ctx.advance(WHEEL_MS);
     ctx.room.snapshot();
-    expect(ctx.store.records().loss).toMatchObject({ amount: 900, game: 'wheel' });
+    expect(ctx.store.records().loss).toMatchObject({ amount: 600, game: 'wheel' });
   });
 
   it('counts blackjack, with a double down net of the coins it cost', () => {
