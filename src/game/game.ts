@@ -2382,7 +2382,7 @@ export class Game {
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
-      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
+      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean ${this.fightTag}">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
@@ -2906,6 +2906,8 @@ export class Game {
     if (r.status === 'caught') {
       this.toughCatch = r.elapsed > TOUGH_FIGHT_SECS;
       this.landedClean = r.clean;
+      // The catch card takes the badge's corner; its coloured pill says the same thing.
+      this.showFishTag(undefined);
       this.startLanding();
     } else if (r.status === 'snapped') {
       audio.snap();
