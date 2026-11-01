@@ -741,6 +741,8 @@ export class Game {
       openMenu: (tab: string) => this.openMenu(tab),
       closeMenu: () => this.setMenu(false),
       player: () => ({ x: this.player.x, z: this.player.z, y: this.player.eyeY, near: this.near?.label ?? null }),
+      /** The held item is drawn in the player's hand. */
+      inHand: () => !!this.carry?.obj.visible,
       s: this.s,
       press: () => {
         this.holding = true;
@@ -1851,10 +1853,8 @@ export class Game {
       }
     }
     if (this.casinoMsg) lines.push(this.casinoMsg);
-    if (this.aim && !this.spin) lines.push(`<span class="muted">Click: ${this.aimLabel(this.aim)}</span>`);
-    else if (!busy && t === 'roulette') lines.push('<span class="muted">Aim at red, black or green and click to bet.</span>');
-    else if (!busy && t === 'wheel') lines.push('<span class="muted">Aim at the wheel and click to spin it.</span>');
-    else if (!busy && t === 'blackjack' && !g) lines.push('<span class="muted">Click DEAL on the table to play.</span>');
+    // What E (or a click) plays is in the prompt; roulette needs a colour aimed at first.
+    if (!this.aim && !busy && t === 'roulette') lines.push('<span class="muted">Aim at red, black or green, then press <kbd>E</kbd> or click to bet.</span>');
     const html = lines.join('<br>');
     if (html !== this.tableHtml) {
       this.tableHtml = html;
@@ -1868,6 +1868,23 @@ export class Game {
     if (a.k === 'wheel') return 'spin the wheel · ×2, ×3 or ×4, or lose it';
     if (a.id === 'double') return `double down · ${doubleCost(this.s, this.betSlot)} ${COIN}`;
     return { deal: 'deal a hand', hit: 'hit', stand: 'stand' }[a.id] ?? a.id;
+  }
+
+  /** What E plays at a table: the piece aimed at, or with a fish in hand a spin of the wheel or a new blackjack hand. */
+  private tablePlay(): { label: string; act: () => void } | null {
+    const t = this.table;
+    if (!t || t === 'prizes' || this.spin) return null;
+    const it = this.s.slots[this.s.held];
+    const fish = it?.k === 'fish' ? it : null;
+    const bet = fish && `${byId(FISH, fish.fishId).name} (${Math.round(eco.fishValue(fish))} ${COIN})`;
+    const a = this.aim;
+    const free = !this.bj || this.bj.done;
+    // Bets need a fish in hand; the table readout already says so, so no prompt without one.
+    if ((a?.k === 'wheel' || (!a && t === 'wheel')) && bet) return { label: `Spin the wheel with ${bet} · ×2, ×3 or ×4, or lose it`, act: () => this.wheelBet() };
+    if ((a?.id === 'deal' || (!a && t === 'blackjack' && free)) && bet) return { label: `Deal a hand for ${bet}`, act: () => this.blackjackAct('deal') };
+    if (!a || a.k === 'wheel' || a.id === 'deal' || (a.k === 'rbet' && !bet)) return null;
+    const label = this.aimLabel(a);
+    return { label: label[0].toUpperCase() + label.slice(1), act: () => this.tableClick() };
   }
 
   private tableClick(): void {
@@ -1980,6 +1997,8 @@ export class Game {
 
     const c = this.map.casino;
     this.updateTable(walking);
+    const play = this.tablePlay();
+    if (play) spots.push({ d: -30, ...play });
     if (c) {
       const at = (sp: { x: number; z: number }) => Math.hypot(sp.x - x, sp.z - z);
       if (at(c.prizes) <= CASINO_RANGE - 0.4) spots.push({ d: at(c.prizes) - 25, label: 'Prize counter · turn fish in for chips, buy perks', act: () => this.openPrizes() });
@@ -2402,8 +2421,8 @@ export class Game {
       w.camera.remove(this.carry.obj);
       this.carry = null;
     }
-    // At a casino table or the counter the fish is your bet, shown in the hotbar; keep the view clear.
-    if (this.carry) this.carry.obj.visible = !this.table;
+    // A fish bet at a table leaves your hand while the spin or hand plays out, and comes back if it wins.
+    if (this.carry) this.carry.obj.visible = !(this.spin || (this.bj && !this.bj.done));
     if (!key || this.carry || !it || it.k === 'rod') return;
     let model: FishModel | null = null;
     let obj: THREE.Object3D;
