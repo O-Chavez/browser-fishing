@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { COIN } from './format';
 import { migrate, newSave } from './state';
-import { TIP_IDS, markTip, rodHintText, rodUpgrade, tipText } from './tips';
+import { TIP_IDS, lossVerdict, markTip, rodHintText, rodUpgrade, tipText } from './tips';
+import { FISH, byId } from '../data/content';
 
 describe('new-player tips', () => {
   it('marks each known tip once', () => {
@@ -36,6 +37,29 @@ describe('new-player tips', () => {
     const { tips: __, ...played } = { ...newSave(), level: 3, xp: 10, dex: { minnow: { count: 2, best: 8 } } };
     expect(migrate(played).tips).toEqual([...TIP_IDS]);
     expect(migrate({ ...newSave(), tips: ['start', 'bogus'] }).tips).toEqual(['start']);
+  });
+});
+
+describe('loss verdict', () => {
+  const pike = byId(FISH, 'pike'); // tier 3
+  it('a fish over the line snapped it: names the line and where to get it', () => {
+    const v = lossVerdict('snapped', { rod: 'graphite', line: 'mono', level: 10 }, pike, 'Marlow');
+    expect(v.title).toBe('SNAP!');
+    expect(v.cause).toBe('Too strong for your Mono Line');
+    expect(v.fix).toContain('Fluoro Line holds it');
+    expect(v.fix).toContain("Marlow's, 500");
+    expect(lossVerdict('snapped', { rod: 'graphite', line: 'mono', level: 3 }, pike, 'Marlow').fix).toContain('unlocks at level 5');
+  });
+  it('a fish over the rod ran off: names the rod; anything else is a reel tip', () => {
+    const v = lossVerdict('escaped', { rod: 'fiberglass', line: 'fluoro', level: 10 }, pike, 'Marlow');
+    expect(v.title).toBe('RAN OFF!');
+    expect(v.cause).toBe('Too heavy for your Fiberglass Rod');
+    expect(v.fix).toContain('Graphite Rod lands it');
+    const matched = { rod: 'graphite', line: 'fluoro', level: 10 };
+    expect(lossVerdict('snapped', matched, pike, 'Marlow').cause).toBe('Held in the red through a surge');
+    expect(lossVerdict('escaped', matched, pike, 'Marlow').cause).toBe('The fish took all your line');
+    // At sea there is no fish tier to blame.
+    expect(lossVerdict('snapped', { rod: 'twig', line: 'twine', level: 1 }, null, 'Marlow').cause).toBe('Held in the red through a surge');
   });
 });
 

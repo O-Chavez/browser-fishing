@@ -1,5 +1,5 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS, FISH, LINES, RODS, type Line, type Rod } from '../data/content';
+import { BAITS, FISH, LINES, RODS, type Fish, type Line, type Rod } from '../data/content';
 import { BAIT_PACK, CLEAN_BONUS } from './economy';
 import { COIN } from './format';
 import type { SaveData } from './state';
@@ -101,3 +101,32 @@ export function gearHintText(end: FightEnd, gear: Rod | Line, vendor: string): s
 
 /** @deprecated use `gearHintText` */
 export const rodHintText = gearHintText;
+
+export type LossEnd = 'snapped' | 'escaped';
+/** The card after a lost fight: one big word, the cause in a line, the fix in a line (REELING.md, "What the player feels"). */
+export interface Verdict {
+  title: string;
+  cause: string;
+  fix: string;
+}
+
+/**
+ * What to say when a fight is lost. A fish over the line snapped it, a fish over the rod ran off with the line, and
+ * each names the one piece of gear that fixes it and where it is; anything else was the player's own doing, so the
+ * fix is a reel tip. `fish` is null at sea, where gear tiers don't apply.
+ */
+export function lossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'level'>, fish: Fish | null, vendor: string): Verdict {
+  const where = (g: { unlockLevel: number; price: number }) => (s.level < g.unlockLevel ? `unlocks at level ${g.unlockLevel}` : `${vendor}'s, ${g.price.toLocaleString('en-US')} ${COIN}`);
+  if (end === 'snapped') {
+    const line = LINES.find((l) => l.id === s.line) ?? LINES[0];
+    const need = fish && fish.tier > line.tier ? LINES.find((l) => l.tier === fish.tier) : null;
+    return need
+      ? { title: 'SNAP!', cause: `Too strong for your ${line.name}`, fix: `${need.name} holds it · ${where(need)}` }
+      : { title: 'SNAP!', cause: 'Held in the red through a surge', fix: 'Ease off when the gauge goes red' };
+  }
+  const rod = RODS.find((r) => r.id === s.rod) ?? RODS[0];
+  const need = fish && fish.tier > rod.tier ? RODS.find((r) => r.tier === fish.tier) : null;
+  return need
+    ? { title: 'RAN OFF!', cause: `Too heavy for your ${rod.name}`, fix: `The ${need.name} lands it · ${where(need)}` }
+    : { title: 'RAN OFF!', cause: 'The fish took all your line', fix: 'Tighten when the needle drops below the marker' };
+}

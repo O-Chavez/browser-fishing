@@ -168,6 +168,12 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #tableresult.win { color: #7dff9b; }
 #tableresult.lose { color: #ff6b6b; }
 #tableresult.push { color: #ffd35a; }
+/* the card after a lost fight: SNAP! or RAN OFF!, the cause, the fix */
+#verdict { position: fixed; left: 50%; top: 28%; transform: translateX(-50%); z-index: 30; font-size: 64px; font-weight: 900; letter-spacing: 2px; text-align: center; pointer-events: none; white-space: nowrap; color: #ff6b6b; text-shadow: 0 4px 14px #000; animation: verdictIn 5s ease-out forwards; }
+#verdict.hidden { display: none; }
+#verdict small { display: block; font-size: 22px; letter-spacing: 0; font-weight: 700; color: #fff; }
+#verdict small.fix { font-size: 18px; color: #ffd35a; margin-top: 4px; }
+@keyframes verdictIn { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 8% { opacity: 1; transform: translateX(-50%) scale(1.15); } 15% { transform: translateX(-50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes resultIn { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 12% { opacity: 1; transform: translateX(-50%) scale(1.15); } 22% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 #tablehud.hidden { display: none; }
 #tablehud .win { color: #7dff9b; }
@@ -657,6 +663,12 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 #divehud .dfish { font-size: 15px; color: var(--cream-muted); margin-left: 4px; }
 #divetag { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; background: #c96a2b; color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
 #divetag span { font-weight: 700; opacity: .9; }
+/* a Feisty (strength, the red zone's orange) or Brutish (weight, steel blue) pond fish: a badge by the gauge for the whole fight */
+#fishtag { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; color: #fff; font-size: 14px; font-weight: 900; letter-spacing: .04em; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
+#fishtag.hidden { display: none; }
+#fishtag span { font-weight: 700; opacity: .9; letter-spacing: 0; }
+#fishtag.feisty { background: #e0552b; }
+#fishtag.brutish { background: #3f6f9e; }
 #divehud:not(.hidden) ~ #chat { top: 112px; }
 
 #menu.dive .win { width: min(560px, 94vw); }

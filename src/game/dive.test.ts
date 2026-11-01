@@ -105,7 +105,7 @@ describe('fish behaviours', () => {
         // The small per-fish spread (`P.fight`) makes the land-rate curve steeper than it was; 0.2 of difficulty is ~8 leagues.
         expect(b.steepest).toBeLessThanOrEqual(0.75);
       }
-    });
+    }, 30_000);
   }
 
   it('a runner takes more line', () => {

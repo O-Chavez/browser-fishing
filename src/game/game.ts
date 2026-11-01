@@ -34,7 +34,7 @@ import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, SEA_THEME, TIER_THEME } from '../data/fishlook';
 import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
-import { gearHintText, lineUpgrade, markTip, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type TipId } from './tips';
+import { gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
@@ -194,9 +194,8 @@ export class Game {
   private fightB: Behaviour | undefined;
   /** A Feisty or Brutish pond fish, said at hook time. */
   private fightTag: FishTag | undefined;
-  /** The hooked pond fish is above the rod's tier: the first surge that drags line says so, once (REELING.md). */
+  /** The hooked pond fish is above the rod's tier: the gauge's drag caption names the rod (REELING.md). */
   private overRod = false;
-  private saidHeavy = false;
   /** The dive on screen: the strip at sea, and the cards waiting for a quiet moment (`showDiveDue`). */
   private diveHud = new DiveHud($('divehud'), $('divetag'));
   private diveDue: 'marker' | 'diveend' | null = null;
@@ -278,6 +277,7 @@ export class Game {
   private caughtTier = 0;
   /** The rod upgrade hint shows at most once a session. */
   private rodHinted = false;
+  private verdictTimer = 0;
   private toughCatch = false;
   private confirmReset = false;
   /** Settings > Account: the open password or name form or logout confirmation, and its last message. */
@@ -2179,7 +2179,6 @@ export class Game {
     this.fightB = roll.b;
     this.fightTag = roll.tag;
     this.overRod = !this.map.sea && !!this.hooked && this.hooked.tier > byId(RODS, this.s.rod).tier;
-    this.saidHeavy = false;
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2301,6 +2300,7 @@ export class Game {
     audio.splash(1);
     const tag = this.fightTag === 'feisty' ? 'A feisty one! ' : this.fightTag === 'brutish' ? 'A brutish one! ' : '';
     this.toast(`Hooked! ${tag}${difficultyLabel(hard)} fight.`);
+    this.showFishTag(this.fightTag);
   }
 
   private startLanding(): void {
@@ -2538,7 +2538,7 @@ export class Game {
   }
 
   private reset(msg: string): void {
-    this.toast(msg);
+    if (msg) this.toast(msg);
     this.roll = null;
     // A lost fight's button log, so a dive's line pays for what the fight really took.
     this.net.send(this.phase === 'reeling' ? { t: 'lost', h: this.holds.encode() } : { t: 'lost' });
@@ -2549,6 +2549,7 @@ export class Game {
     const w = this.world;
     this.phase = next;
     this.diveHud.fight(null);
+    this.showFishTag(undefined);
     this.reel = null;
     this.hooked = null;
     this.removeShadow();
@@ -2817,11 +2818,6 @@ export class Game {
       this.reelAcc -= FIGHT_DT;
       this.holds.push(this.holding);
       r.update(FIGHT_DT, this.holding);
-      // Too heavy for the rod: said once, at the first surge where the fish drags line with the gauge green.
-      if (this.overRod && !this.saidHeavy && r.dragging) {
-        this.saidHeavy = true;
-        this.toast('Too heavy for your rod! It drags line out even when you hold it right.', 3);
-      }
     }
 
     if (r.wear.frays !== this.lastFrays) {
@@ -2916,12 +2912,9 @@ export class Game {
       w.rig.kick('pitch', -4);
       w.addShake(1.2);
       // Only the short line here: the fray tip already explained snapping.
-      this.reset(this.sighting('The line snapped!'));
-      this.rodHint('snapped');
+      this.lose('snapped');
     } else if (r.status === 'escaped') {
-      this.reset(this.sighting('The fish took all your line!'));
-      // The first time, say why; after that the rod hint (once a session) can show.
-      if (!this.guide('slack')) this.rodHint('escaped');
+      this.lose('escaped');
     } else if (this.holds.steps >= MAX_FIGHT_STEPS) {
       this.reset('The fish wore you out and got away...');
     }
@@ -2977,12 +2970,33 @@ export class Game {
   }
 
   /**
-   * A pond fish lost to a gear wall goes into the Fishdex as seen (the server does the same from the `lost` message),
-   * and the loss message says so.
+   * A lost fight ends on one card: SNAP! or RAN OFF!, why, and the fix (REELING.md, "What the player feels"). A pond
+   * fish lost to a gear wall goes into the Fishdex as seen (the server does the same from the `lost` message).
    */
-  private sighting(msg: string): string {
-    if (this.map.sea || !this.hooked || !eco.recordSighting(this.s, this.hooked)) return msg;
-    return `${msg} The ${this.hooked.name} is in your Fishdex with what it needs.`;
+  private lose(end: LossEnd): void {
+    const fish = this.map.sea ? null : this.hooked;
+    const v = lossVerdict(end, this.s, fish, this.map.vendor.name);
+    const seen = !!fish && eco.recordSighting(this.s, fish);
+    this.showVerdict(v.title, v.cause, seen ? `${v.fix} · noted in your Fishdex` : v.fix);
+    this.reset('');
+  }
+
+  private showVerdict(title: string, cause: string, fix: string): void {
+    const el = $('verdict');
+    el.classList.remove('hidden');
+    el.innerHTML = `${title}<small>${withCoins(cause)}</small><small class="fix">${withCoins(fix)}</small>`;
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this.verdictTimer);
+    this.verdictTimer = window.setTimeout(() => el.classList.add('hidden'), 5000);
+  }
+
+  /** The Feisty or Brutish badge by the gauge, for the whole fight. */
+  private showFishTag(tag: FishTag | undefined): void {
+    const el = $('fishtag');
+    el.className = tag ?? 'hidden';
+    if (tag) el.innerHTML = tag === 'feisty' ? '⚡ FEISTY <span>· pulls harder</span>' : '⚓ BRUTISH <span>· drags more line</span>';
   }
 
   /** Once a session, after a lost or long fight: a snap points at the next line up, the rest at the next rod. */
@@ -3932,6 +3946,12 @@ export class Game {
       const sub = equipped ? 'Equipped' : owned ? 'Owned' : s.level < r.unlockLevel ? `🔒 Lv ${r.unlockLevel}` : `At ${vendor}'s`;
       return this.itemTile({ icon: rodIcon(r.tier, eco.rodLevelOf(s, r.id)), name: `${shortRod(r.name)}${eco.rodPlus(s, r.id)}`, sub, price: this.rodPrice(r), tier: r.tier, on: sel === `rod:${r.id}`, check: equipped, ghost: !owned, attrs: `data-pick="bag" data-id="rod:${r.id}"` });
     }).join('');
+    const cur = eco.lineOf(s);
+    const lines = LINES.map((l) => {
+      const here = l.id === cur.id;
+      const sub = here ? 'Spooled' : s.level < l.unlockLevel ? `🔒 Lv ${l.unlockLevel}` : l.tier < cur.tier ? 'Lighter than yours' : `At ${vendor}'s`;
+      return this.itemTile({ icon: '🧵', name: l.name, sub, price: this.linePrice(l), tier: l.tier, on: sel === `line:${l.id}`, check: here, ghost: !here, attrs: `data-pick="bag" data-id="line:${l.id}"` });
+    }).join('');
     const baits = BAITS.map((b) => {
       const n = eco.baitCount(s, b.id);
       const equipped = s.bait === b.id && eco.activeSlot(s) >= 0;
@@ -3945,6 +3965,7 @@ export class Game {
         <div class="setup"><span class="big">${rodIcon(rod.tier, eco.rodLevelOf(s, rod.id))}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>
           <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div><div>🧵 ${eco.lineOf(s).name} · holds tier ${eco.lineOf(s).tier}</div></div><div class="pips">${pips}</div></div>
         <h4>Rods</h4><div class="tiles">${rods}</div>
+        <h4>Line</h4><div class="tiles">${lines}</div>
         <h4>Bait</h4><div class="tiles">${baits}</div>
         ${this.perksHtml()}
         ${this.pantryHtml()}
@@ -3971,6 +3992,21 @@ export class Game {
     const s = this.s;
     const [kind, id] = sel.split(':');
     const vendor = this.map.vendor.name;
+    if (kind === 'line') {
+      const l = byId(LINES, id);
+      const cur = eco.lineOf(s);
+      const action = l.id === cur.id
+        ? this.btn('Spooled ✓', '', 'ok', true)
+        : this.btn(`${l.tier < cur.tier ? 'Lighter than your ' + cur.name : s.level < l.unlockLevel ? `Unlocks at level ${l.unlockLevel}` : `Sold at ${vendor}'s`} · ${this.linePrice(l)}`, '', 'plain', true);
+      return this.detail({
+        icon: '🧵',
+        name: l.name,
+        tier: l.tier,
+        body: this.meter('Holds', `Tier ${l.tier} fish`, l.tier / 5, l.tier) + `<div class="have">On your rod: <b>${cur.name}</b></div>`,
+        note: 'Line holds the fish: a fish above your line pulls into the red and snaps it. One spool at a time; a better one from the stall replaces it.',
+        actions: action,
+      });
+    }
     if (kind === 'bait') {
       const b = byId(BAITS, id);
       const n = eco.baitCount(s, b.id);
