@@ -7,6 +7,9 @@ Finished items move to [DONE.md](DONE.md).
 ## Up next
 
 - Deep sea fight left (slice 3 of the deep sea mechanics, DONE.md), **on hold until friends have play-tested the deep-sea content** (Oscar, 2026-11-01): show how much fight a hooked fish has left. The F1 play-test version: bursts of heavy fighting with surges close together, then a long calm to reel in once it's spent, so losing line in a burst matters more; endgame buffs (a dish, a charm, rod levels) could shrink a fish's fight. Today `stamina` only trims surge power ×(0.85-1) and drains to 0.2 (`update` in `reel.ts`). Play-test slice 1 first
+- [ ] Update the README with the newer features, a follow-up to the finished "Fill out readme" (DONE.md)
+  - Add the deep sea charters (Reed's seaplane at the beach, the Shelf and Drop-off, Black Pearls, the Aurora Rod and Deep Sea Line levels, the Furthest Out board, the Kraken), the Lucky Wheel at the casino, and the rest of what's shipped since the last fill-out (check `NEWS` in `src/data/news.ts`). Then go over "About this game" and "Features at a glance" (`README.md:13-58`)
+  - Fix what's out of date: the Smokehouse paragraph's "Coming soon: spices for deep-sea charters" (spices were shelved, `README.md:33`). Re-run `npm run screenshots` if a new shot (the harbour, a charter) is worth adding
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
