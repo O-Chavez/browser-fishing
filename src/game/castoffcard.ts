@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { gloomAt, seaMood } from '../data/sea';
+import { gloomAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
 import { nightness, twilight } from './daynight';
 
 /**
@@ -41,8 +41,9 @@ export function cardColours(place: Place, depth: number | null, f: number): Card
     const mood = seaMood(depth);
     const m = Math.min(1, mood);
     const gloom = gloomAt(mood);
-    sky.lerp(c(0xc8bcc6).multiplyScalar(1 - 0.75 * n), m);
-    top.lerp(c(0x8c86a0).multiplyScalar(1 - 0.8 * n), m);
+    const keep = nightSkyKeep(n, nightDarkAt(mood));
+    sky.lerp(c(0xc8bcc6).multiplyScalar(keep), m);
+    top.lerp(c(0x8c86a0).multiplyScalar(keep), m);
     sky.multiplyScalar(1 - 0.4 * gloom);
     top.multiplyScalar(1 - 0.45 * gloom);
     const dim = (h: number, k: number) => c(h).multiplyScalar(k);
