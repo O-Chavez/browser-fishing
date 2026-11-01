@@ -3,6 +3,7 @@ import { RENAME_COOLDOWN_MS, SERVER_PORT } from '../net/protocol';
 import type { BlackjackView } from './casino';
 import type { Roll } from './economy';
 import type { Drop } from './drops';
+import { isRestartClose } from './restart';
 import type { StageId } from '../data/smokehouse';
 import type { SaveData } from './state';
 
@@ -43,6 +44,8 @@ export interface NetEvents {
   /** Slash command replies; `time` is set when a command changed the day/night override, `sent` on a feedback answer. */
   onDev(lines: string[], time: number | null | undefined, sent: boolean | undefined, depth: number | undefined): void;
   onClose(): void;
+  /** The server is restarting (a redeploy): progress is saved, so don't show the offline banner. Fires once. */
+  onRestart(): void;
   /** The socket closed before the server accepted the join. */
   onFailed(): void;
 }
@@ -85,14 +88,30 @@ export class NetClient {
     private events: NetEvents,
   ) {}
 
-  connect(): void {
+  /** The game server's address as a ws(s):// base, for the socket and (as http) for `/health`. */
+  static serverBase(): string {
     // Deployed builds point at the hosted game server via VITE_SERVER_URL (e.g. wss://fishing.onrender.com).
     const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.replace(/\/$/, '');
     const host = location.hostname || 'localhost';
     const secure = location.protocol === 'https:';
     // In production the page is served by the game server itself, so the socket shares its origin.
-    const base = configured || (import.meta.env.PROD ? `${secure ? 'wss' : 'ws'}://${location.host}` : `${secure ? 'wss' : 'ws'}://${host}:${SERVER_PORT}`);
-    const url = `${base}/?room=${encodeURIComponent(this.roomName)}`;
+    return configured || (import.meta.env.PROD ? `${secure ? 'wss' : 'ws'}://${location.host}` : `${secure ? 'wss' : 'ws'}://${host}:${SERVER_PORT}`);
+  }
+
+  /** True once the game socket is closed (or was never opened). */
+  get socketClosed(): boolean {
+    return !this.ws || this.ws.readyState === WebSocket.CLOSED;
+  }
+
+  private restarted = false;
+  private restarting(): void {
+    if (this.restarted) return;
+    this.restarted = true;
+    this.events.onRestart();
+  }
+
+  connect(): void {
+    const url = `${NetClient.serverBase()}/?room=${encodeURIComponent(this.roomName)}`;
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);
@@ -105,12 +124,13 @@ export class NetClient {
       this.pass = undefined;
     };
     ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       const was = this.connected;
       this.connected = false;
       this.players.clear();
       this.events.onPlayers();
-      if (was) this.events.onClose();
+      if (this.restarted || isRestartClose(e.code)) this.restarting();
+      else if (was) this.events.onClose();
       else this.events.onFailed();
     };
   }
@@ -142,6 +162,8 @@ export class NetClient {
 
   private onMessage(m: ServerMsg): void {
     switch (m.t) {
+      case 'restart':
+        return this.restarting();
       case 'welcome':
         this.connected = true;
         this.id = m.id;

@@ -12,6 +12,7 @@ import { JoinFeed, NOT_FORUM, postWebhook } from './discord';
 import { FeedbackGate, feedbackPost, parseTags, type FeedbackReport } from './feedback';
 import { matchTip, parseKofi, tipMessage } from './kofi';
 import { guarded } from './guard';
+import { createShutdown, type ShutdownConn } from './shutdown';
 import { Room } from './room';
 import { SmokeStats } from './smokestats';
 import { createStorage } from './storage';
@@ -110,15 +111,18 @@ async function flush(): Promise<void> {
   }
 }
 setInterval(flush, 2000);
-// Hosts send SIGTERM on redeploy; save before exiting so recent progress survives.
-for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(sig, async () => {
+// Hosts send SIGTERM on redeploy: tell every player, end their sessions, save, then exit (see shutdown.ts).
+const conns = new Set<ShutdownConn>();
+const shutdown = createShutdown(
+  () => conns,
+  async () => {
     saving = false;
     accounts.markDirty();
     await flush();
-    process.exit(0);
-  });
-}
+  },
+  () => process.exit(0),
+);
+for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => void shutdown.run());
 
 function room(name: string): Room {
   let r = rooms.get(name);
@@ -179,7 +183,8 @@ const http = createServer((req, res) => {
   const file = resolve(DIST, '.' + (path === '/' ? '/index.html' : path));
   if (!file.startsWith(DIST) || !existsSync(file) || !statSync(file).isFile()) {
     if (path === '/health' || !existsSync(join(DIST, 'index.html'))) {
-      res.writeHead(200, { 'content-type': 'text/plain' });
+      // Open to any origin: a client served from elsewhere (dev, or a separate host) polls this after a restart.
+      res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' });
       return res.end('fishing server ok');
     }
     res.writeHead(404);
@@ -211,6 +216,7 @@ function kofiHook(req: IncomingMessage, res: ServerResponse): void {
 // 6,000 characters, for a 10-minute fight).
 const wss = new WebSocketServer({ server: http, maxPayload: 8192 });
 wss.on('connection', (ws, req) => {
+  if (shutdown.down) return ws.close(1012);
   const url = new URL(req.url ?? '/', 'http://x');
   const r = room((url.searchParams.get('room') ?? 'lobby').replace(/[^\w-]/g, '').slice(0, 24) || 'lobby');
   sockets.set(r, (sockets.get(r) ?? 0) + 1);
@@ -228,6 +234,8 @@ wss.on('connection', (ws, req) => {
     if (acct && sessions.get(acct) === kick) sessions.delete(acct);
     acct = null;
   };
+  const conn: ShutdownConn = { restart: () => send({ t: 'restart' }), endSession, close: (code) => ws.close(code) };
+  conns.add(conn);
   const kick = () => {
     send({ t: 'error', msg: 'You logged in somewhere else.' });
     endSession();
@@ -257,6 +265,8 @@ wss.on('connection', (ws, req) => {
     task.catch((e) => console.error('account task failed', e)).finally(() => (busy = false));
   };
   ws.on('message', (data) => {
+    // After the final save nothing may change.
+    if (shutdown.down) return;
     let msg: ClientMsg;
     try {
       msg = JSON.parse(data.toString());
@@ -300,6 +310,7 @@ wss.on('connection', (ws, req) => {
     if (msg.t === 'join' && !busy) run(join(msg));
   });
   ws.on('close', () => {
+    conns.delete(conn);
     endSession();
     // Any ?room= name creates a room; drop it once no socket uses it so they don't pile up.
     const left = (sockets.get(r) ?? 1) - 1;

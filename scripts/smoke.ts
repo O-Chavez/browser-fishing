@@ -85,15 +85,19 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
   process.on(sig, () => void stopServer().then(() => process.exit(128 + os.constants.signals[sig])));
 }
 
-const server = spawn('npx', ['tsx', 'server/index.ts'], {
-  // No Discord webhooks: the feedback check below must not post a real report.
-  // Dev console on, for `/sea`; TEST_HOOKS lets the test teleports past the server's move check (`/goto`).
-  env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '', DEV_USER: 'smoke', DEV_PASS: 'smoke-dev-pass', TEST_HOOKS: '1' },
-  stdio: ['ignore', 'pipe', 'pipe'],
-  detached: true,
-});
-serverGroup = server.pid;
-await waitForLine(server, /fishing server on port/);
+/** Starts the game server (again, for the restart check) and waits until it listens. */
+async function startServer(): Promise<void> {
+  const server = spawn('npx', ['tsx', 'server/index.ts'], {
+    // No Discord webhooks: the feedback check below must not post a real report.
+    // Dev console on, for `/sea`; TEST_HOOKS lets the test teleports past the server's move check (`/goto`).
+    env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '', DEV_USER: 'smoke', DEV_PASS: 'smoke-dev-pass', TEST_HOOKS: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+  });
+  serverGroup = server.pid;
+  await waitForLine(server, /fishing server on port/);
+}
+await startServer();
 process.env.VITE_SERVER_URL = `ws://localhost:${SMOKE_SERVER_PORT}`;
 const vite = await createServer({ server: { port: VITE_PORT, strictPort: true }, logLevel: 'error' });
 await vite.listen();
@@ -112,6 +116,7 @@ try {
   await chatChecks();
   await fightChecks();
   await noWebglChecks();
+  await restartChecks();
   // Last: it stops the server.
   await offlineChecks();
 } catch (e) {
@@ -1089,7 +1094,8 @@ async function offlineChecks(): Promise<void> {
     return { text: el.textContent!, clickable: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.id === 'offline-go' };
   });
   check('offline: no disconnected banner while online', (await shown()) === null);
-  await stopServer();
+  // A crash, not a redeploy: SIGTERM would show the updating card instead.
+  signalServerGroup('SIGKILL');
   await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 10000 });
   const drop = await shown();
   await page.screenshot({ path: path.join(SHOTS, 'offline.png') });
@@ -1100,6 +1106,36 @@ async function offlineChecks(): Promise<void> {
   await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 15000 });
   const again = await shown();
   check('offline: reconnect reloads, and an unreachable server keeps the banner up', !!again?.text.includes("Can't reach the game server"), again?.text);
+  await ctx.close();
+}
+
+// ---------- redeploy ----------
+
+/** SIGTERM is what Render sends on a redeploy: players see the updating card (not the offline banner), then reload back in. */
+async function restartChecks(): Promise<void> {
+  const ctx = await browser.createBrowserContext();
+  const page = await openPage(`http://localhost:${VITE_PORT}/?name=Rex&room=redeploy`, ctx, 'Rex-token-0123456789abcdef');
+  await page.waitForFunction(() => window.__game.online(), { timeout: 15000 });
+  const visible = (id: string) => page.evaluate((id) => !document.getElementById(id)!.classList.contains('hidden'), id);
+  const coins = () => page.evaluate(() => (window.__game.s as any).coins as number);
+  const coins0 = await coins();
+  // A marker that survives only if the page is not reloaded.
+  await page.evaluate(() => { (window as any).__beforeRestart = true; });
+  signalServerGroup('SIGTERM');
+  await page.waitForFunction(() => !document.getElementById('updating')!.classList.contains('hidden'), { timeout: 10000 });
+  const card = await page.evaluate(() => document.getElementById('updating')!.textContent ?? '');
+  await page.screenshot({ path: path.join(SHOTS, 'updating.png') });
+  check('redeploy: the updating card shows, with progress saved', /Lakeside is updating/.test(card) && /progress is saved/i.test(card), card.trim());
+  check('redeploy: no offline banner during a redeploy', !(await visible('offline')));
+  for (let i = 0; i < 50 && serverGroupAlive(); i++) await sleep(100);
+  // The old server is gone: stay on the card for a few polls (the page must not reload into nothing).
+  await sleep(5000);
+  check('redeploy: the card waits while the server is down', (await visible('updating')) && (await page.evaluate(() => (window as any).__beforeRestart === true)));
+  await startServer();
+  await page.waitForFunction(() => !(window as any).__beforeRestart, { timeout: 20000 });
+  await page.waitForFunction(() => window.__game && window.__game.online(), { timeout: 20000 });
+  check('redeploy: the page reloads back into the game, connected', (await visible('updating')) === false && (await visible('offline')) === false);
+  check('redeploy: progress is the same after rejoining', (await coins()) === coins0, `${coins0} -> ${await coins()}`);
   await ctx.close();
 }
 

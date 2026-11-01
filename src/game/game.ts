@@ -91,6 +91,7 @@ import { World } from './world';
 import { ScreenSpray } from './screenspray';
 import { zoneAt } from '../data/sea';
 import { CAST_OFF_CARD, cardColours } from './castoffcard';
+import { RESTART_PROBE_TIMEOUT_MS, waitForRestart } from './restart';
 import { dayFraction } from './daynight';
 import { DIVES_OPEN, DIVE, ROD_LEVEL, ZONES, glowColor, glowStep } from '../data/dive';
 
@@ -308,6 +309,8 @@ export class Game {
   private focusFb = false;
   /** Why the server dropped us, shown with the "playing offline" toast. */
   private offlineWhy: string | undefined;
+  /** The server is redeploying: the "Lakeside is updating" card is up and play is paused beneath it. */
+  private restarting = false;
   private bannerTimer = 0;
   /** The rank the latest catch reached, for the catch card's [Wear title] / [Wear it] buttons. */
   private rankCard: RankUp | null = null;
@@ -491,6 +494,7 @@ export class Game {
         this.showOffline(this.offlineWhy ?? 'Disconnected');
         this.offlineWhy = undefined;
       },
+      onRestart: () => this.startRestart(),
     });
     this.world.clock = () => this.net.now();
     this.applyLocation();
@@ -718,7 +722,7 @@ export class Game {
     return document.pointerLockElement === this.world.renderer.domElement;
   }
   private get active() {
-    return (this.locked || this.forceActive) && !this.menuOpen;
+    return (this.locked || this.forceActive) && !this.menuOpen && !this.restarting;
   }
 
   /** Test hook: drive the game without pointer lock. */
@@ -1517,6 +1521,53 @@ export class Game {
     el.classList.remove('hidden');
   }
 
+  /**
+   * The server said it is restarting (a redeploy) and has saved. Pause play under a card, then reload once the new
+   * server answers (a saved login rejoins on its own and gets the new build); after a couple of minutes, fall back
+   * to the offline banner like any other lost connection.
+   */
+  private startRestart(): void {
+    if (this.restarting || this.loggingOut) return;
+    this.restarting = true;
+    // A fight on the line is lost (the server has already ended the session); nothing is saved from here on.
+    if (this.menuOpen) this.closeMenu();
+    if (this.chat.isOpen) this.chat.close();
+    this.holding = false;
+    this.keys.clear();
+    this.roll = null;
+    if (this.phase !== 'idle') this.endCast('idle');
+    $('resume').classList.add('hidden');
+    document.exitPointerLock?.();
+    $('updating').classList.remove('hidden');
+    this.setCovered(true);
+    const health = `${NetClient.serverBase().replace(/^ws/, 'http')}/health`;
+    void waitForRestart({
+      probe: async () => {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), RESTART_PROBE_TIMEOUT_MS);
+        try {
+          return (await fetch(health, { cache: 'no-store', signal: ctl.signal })).ok;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+      socketClosed: () => this.net.socketClosed,
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      reload: () => location.reload(),
+      giveUp: () => {
+        $('updating').classList.add('hidden');
+        this.setCovered(false);
+        this.restarting = false;
+        this.serverDrops = [];
+        this.dropsView.sync(this.localDrops.all(), this.map.id);
+        this.fb.giveUp(OFFLINE_MSG);
+        this.renderFeedback();
+        this.showOffline('Disconnected');
+      },
+    });
+  }
+
   /** The player went offline without choosing to: say so until they reload, which reconnects. */
   private showOffline(why: string, what = "Playing offline: progress here isn't saved to your account.", kind = ''): void {
     $('offline-why').textContent = why;
@@ -1543,7 +1594,7 @@ export class Game {
 
   /** Offline play saves locally; online, the server owns the save. */
   private persist(): void {
-    if (!this.net.connected) save(this.s);
+    if (!this.net.connected && !this.restarting) save(this.s);
   }
 
   /** The pond gate opens at the casino level; the casino's gate always leads back to the pond. */
@@ -2672,7 +2723,7 @@ export class Game {
   private loop = (now: number): void => {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    this.tick(dt);
+    if (!this.restarting) this.tick(dt);
     // Behind the join screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
     this.updateCastOff();
     this.showDiveDue();
