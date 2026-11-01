@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
 import { DIVE, SEA_FIGHT, ZONES, type Behaviour } from '../data/dive';
 import {
-  BEHAVIOUR_TUNE, afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, pearlsAt, powInt, pullWord, rodLevelEase, rollPull, seaOverGear, STRENGTH_RED,
+  BEHAVIOUR_TUNE, afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, pearlsAt, powInt, pullWord, rodLevelEase, rollPull, seaOverGear, STRENGTH_RED, fightTune, LEGEND_TUNE,
   rollSeaFish, seaDifficulty, startDive, surface, zoneAt, type Chart, type SeaGear,
 } from './dive';
 import { rollSeaCast } from './economy';
@@ -146,6 +146,35 @@ describe('sea zones and bites', () => {
     expect(Math.abs(count.pewtercod - count.snapper) / n).toBeLessThan(0.03);
   });
 
+  it('a zone with several legends splits the 1 in 20 between them, and its everyday fish evenly', () => {
+    const rng = mulberry(5);
+    const n = 12000;
+    const count: Record<string, number> = {};
+    for (let i = 0; i < n; i++) {
+      const id = rollSeaFish(160, rng).fish.id;
+      count[id] = (count[id] ?? 0) + 1;
+    }
+    const abyss = ZONES.find((z) => z.id === 'abyss')!;
+    const legends = abyss.legends.reduce((a, id) => a + (count[id] ?? 0), 0) / n;
+    expect(legends).toBeGreaterThan(0.04);
+    expect(legends).toBeLessThan(0.06);
+    for (const id of abyss.legends) expect((count[id] ?? 0) / n, id).toBeGreaterThan(0.01);
+    for (const id of abyss.fish) expect(Math.abs((count[id] ?? 0) / n - 0.95 / abyss.fish.length), id).toBeLessThan(0.02);
+  });
+
+  it('a legend fights 1.5× as long, no stronger and no heavier: the same land rate and spool', () => {
+    expect(fightTune(null, 'pewtercod')).toBeUndefined();
+    expect(fightTune('runner', 'galemackerel')).toBe(BEHAVIOUR_TUNE.runner);
+    expect(fightTune('runner', 'marlin')).toEqual({ ...BEHAVIOUR_TUNE.runner, ...LEGEND_TUNE });
+    const d = { weight: 2.6, strength: 2.3, pace: 2 };
+    const plain = botCell(d, 0.25, 60);
+    const legend = botCell(d, 0.25, 60, 1, STYLES, fightTune(null, 'leviathan'));
+    expect(legend.t / plain.t).toBeGreaterThan(1.35);
+    expect(legend.t / plain.t).toBeLessThan(1.65);
+    expect(legend.land).toBeGreaterThanOrEqual(plain.land - 0.05);
+    expect(legend.lineOut).toBeLessThan(plain.lineOut * 1.2);
+  }, 30_000);
+
   it('each zone past the Shelf has its behaviour, and the Abyss mixes all three', () => {
     const seen = (depth: number) => {
       const rng = mulberry(9);
@@ -190,7 +219,17 @@ describe('sea zones and bites', () => {
       expect(roll.b).toBe(bite.behaviour ?? undefined);
       expect(roll.pull).toBe(pullWord(bite.pull) ?? undefined);
     }
-    for (const z of ZONES) expect(z.fish.length).toBe(2);
+    for (const z of ZONES) {
+      expect(z.fish.length).toBeGreaterThanOrEqual(2);
+      expect(z.legends.length).toBeGreaterThanOrEqual(1);
+      // A zone's legends are exactly its legend-flagged fish, and its everyday fish are not.
+      for (const id of z.legends) expect(byId(FISH, id).legend, id).toBe(true);
+      for (const id of z.fish) expect(byId(FISH, id).legend, id).toBeFalsy();
+    }
+    // Every sea fish swims in exactly one zone.
+    const listed = ZONES.flatMap((z) => [...z.fish, ...z.legends]);
+    expect(new Set(listed).size).toBe(listed.length);
+    expect(FISH.filter((f) => f.sea).map((f) => f.id).sort()).toEqual([...listed].sort());
   });
 });
 

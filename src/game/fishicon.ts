@@ -1,5 +1,6 @@
 import { FISH } from '../data/content';
 import { FISH_LOOK, SHAPES, envelope, type FishLook, type TailKind } from '../data/fishlook';
+import { seaIconLayers } from './seafish';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 let uid = 0;
@@ -16,6 +17,8 @@ const TAIL_PATHS: Record<TailKind, string> = {
   lunate: `M${ROOT + 1} ${MID} L6 ${MID - 12} Q9 ${MID} 6 ${MID + 12} Z`,
   shark: `M${ROOT + 1} ${MID} L2 ${MID - 10} L8 ${MID + 1} L6 ${MID + 5} Z`,
   eel: `M${ROOT + 1} ${MID - 2} Q6 ${MID} ${ROOT + 1} ${MID + 2} Z`,
+  squid: `M${ROOT + 2} ${MID} L8 ${MID - 7} L5 ${MID} L8 ${MID + 7} Z`,
+  none: '',
 };
 
 /**
@@ -94,7 +97,7 @@ export function fishIcon(id: string, opts: { hidden?: boolean; shiny?: boolean }
   const ex0 = HEAD - eyeT * PX;
   const ey = MID - sh.h * envelope(look.shape, eyeT) * PX * hScale * 0.3;
   const iris = tier >= 4 ? `<circle cx="${ex0 + 0.6}" cy="${ey}" r="2" fill="${accent}"/>` : '';
-  const eye = opts.hidden ? '' : `<circle cx="${ex0}" cy="${ey}" r="2.9" fill="#fff"/>${iris}<circle cx="${ex0 + 0.8}" cy="${ey}" r="${tier >= 4 ? 1.1 : 1.6}" fill="${ink}"/>`;
+  const eye = opts.hidden || look.eye === 'none' ? '' : `<circle cx="${ex0}" cy="${ey}" r="2.9" fill="#fff"/>${iris}<circle cx="${ex0 + 0.8}" cy="${ey}" r="${tier >= 4 ? 1.1 : 1.6}" fill="${ink}"/>`;
   // The shiny glint moves aside on spirits so it doesn't sit on the crown.
   const gx = tier >= 5 ? -12 : 0;
   const glint = opts.shiny ? `<path d="M${50 + gx} 4l1.4 3.2 3.2 1.4-3.2 1.4L${50 + gx} 13.2l-1.4-3.2L${45.4 + gx} 8.6l3.2-1.4z" fill="#fff6c2"/>` : '';
@@ -132,11 +135,20 @@ export function fishIcon(id: string, opts: { hidden?: boolean; shiny?: boolean }
     if (look.spirit === 'aurora' || look.spirit === 'ghost')
       under += `<path d="M${ROOT} ${MID - 1} C10 ${MID - 7} 6 ${MID + 4} 0 ${MID - 3}" stroke="${accent}" stroke-width="2" fill="none" opacity=".8"/><path d="M${ROOT} ${MID + 1} C10 ${MID + 6} 6 ${MID - 3} 0 ${MID + 5}" stroke="${look.spirit === 'aurora' ? '#c58aff' : accent}" stroke-width="1.6" fill="none" opacity=".7"/>`;
   }
+  // The deep sea zones draw their own parts and finish (src/game/seafish/).
+  const sea = look.finish
+    ? seaIconLayers({
+        look, id, k, hidden: !!opts.hidden, shiny: !!opts.shiny, HEAD, ROOT, MID, PX, hScale, topAt, body, back, belly, fin, accent, ink,
+        botAt: (t) => MID + (sh.h + sh.sag) * envelope(look.shape, t) * PX * hScale,
+        xAt: (t) => HEAD - t * PX,
+        rng: seeded(`${id}:sea`),
+      })
+    : null;
   return `<svg class="fishico${tier >= 4 ? ` t${tier}` : ''}" viewBox="0 0 64 40" aria-hidden="true">
-    <defs><linearGradient id="fg${k}" x1="0" y1="0" x2="0" y2="1"><stop offset=".25" stop-color="${back}"/><stop offset=".8" stop-color="${belly}"/></linearGradient><clipPath id="fc${k}"><path d="${body}"/></clipPath>${defs}</defs>
-    ${under}<path d="${TAIL_PATHS[look.tail]}" fill="${fin}"/>${dorsal}
+    <defs><linearGradient id="fg${k}" x1="0" y1="0" x2="0" y2="1"><stop offset=".25" stop-color="${back}"/><stop offset=".8" stop-color="${belly}"/></linearGradient><clipPath id="fc${k}"><path d="${body}"/></clipPath>${defs}${sea?.defs ?? ''}</defs>
+    ${under}${sea?.under ?? ''}<path d="${TAIL_PATHS[look.tail]}" fill="${fin}"/>${dorsal}${sea?.behind ?? ''}
     <path d="${body}" fill="url(#fg${k})" stroke="${ink}" stroke-opacity=".25" stroke-width=".8"/>
-    <g clip-path="url(#fc${k})">${marks}${gloss}</g>${extras}${eye}${over}${glint}
+    <g clip-path="url(#fc${k})">${marks}${gloss}${sea?.clipped ?? ''}</g>${extras}${sea?.over ?? ''}${eye}${over}${glint}${sea?.top ?? ''}
   </svg>`;
 }
 

@@ -42,7 +42,7 @@ import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from 
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { BEHAVIOUR_TUNE, rodLevelEase, seaOverGear } from './dive';
+import { fightTune, rodLevelEase, seaOverGear } from './dive';
 import { Player } from './player';
 import {
   animateFish,
@@ -109,6 +109,8 @@ const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '
 /** Milliseconds a player can't cast after a lost fight: time to read the loss card instead of throwing an unaimed cast. */
 const LOSS_CAST_DELAY_MS = 2000;
 /** How much lighter each Aurora Rod level makes sea fish, in percent. */
+/** The catch card's colour for everyday sea fish, which are tier 5 for gear; the zone legends keep the legendary gold. */
+const SEA_COLOR = '#5ec8e0';
 const PER_LEVEL = Math.round(rodLevelEase(1) * 100);
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
@@ -2230,7 +2232,7 @@ export class Game {
     this.waitTotal = roll.wait;
     this.fightSeed = roll.seed ?? 0;
     this.fightD = roll.d ?? 1;
-    this.fightTune = roll.b && BEHAVIOUR_TUNE[roll.b];
+    this.fightTune = fightTune(roll.b, roll.fishId);
     this.fightB = roll.b;
     this.fightTag = roll.tag;
     this.fightPull = roll.pull;
@@ -2270,20 +2272,27 @@ export class Game {
     this.toast(this.hookedShiny ? '✨ Bite! Something is glimmering...' : 'Bite!');
   }
 
-  /** Celebrates landing or hooking the best tier of fish the current bait can attract. */
-  private topTierBanner(fish: { tier: number }, verb: string, shiny: boolean): void {
-    if (fish.tier !== this.bait.tier) return;
+  /**
+   * Celebrates landing or hooking the best tier of fish the current bait can attract. At sea, where every fish is
+   * tier 5, only a zone's legend gets it, and landing one gets the gold LEGEND LANDED! with its name.
+   */
+  private topTierBanner(fish: { tier: number; legend?: boolean; name?: string }, verb: string, shiny: boolean): void {
+    if (this.map.sea ? !fish.legend : fish.tier !== this.bait.tier) return;
     const el = $('banner');
-    el.classList.remove('welcome', 'rank');
-    const name = tierName(fish.tier);
-    el.style.color = this.tierColor(fish.tier);
-    el.innerHTML = `${shiny ? '✨ Shiny ' : ''}${name} fish ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
+    el.classList.remove('welcome', 'rank', 'legend');
+    const legendLanded = this.map.sea && verb === 'caught';
+    if (legendLanded) el.classList.add('legend');
+    const name = this.map.sea ? 'Legend' : `${tierName(fish.tier)} fish`;
+    el.style.color = this.map.sea ? '' : this.tierColor(fish.tier);
+    el.innerHTML = legendLanded
+      ? `${shiny ? '✨ ' : ''}LEGEND LANDED!<small>${escapeHtml(fish.name ?? '')}</small>`
+      : `${shiny ? '✨ Shiny ' : ''}${name} ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
     el.classList.remove('hidden');
     el.style.animation = 'none';
     void el.offsetWidth;
     el.style.animation = '';
     clearTimeout(this.bannerTimer);
-    this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), 3200);
+    this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), legendLanded ? 4600 : 3200);
   }
 
   /** The big gold "⚓ BOSUN ⚓" over what the rank gave. */
@@ -2437,15 +2446,19 @@ export class Game {
     this.bobVel.set(0.5, 0, -0.2).multiplyScalar(Math.min(1, 1.6 / sc));
 
     const el = $('catch');
-    el.style.borderColor = RARITY_COLOR[fish.rarity];
-    el.style.boxShadow = fish.tier >= 3 ? `0 0 ${12 + fish.tier * 10}px ${RARITY_COLOR[fish.rarity]}` : '';
-    el.style.setProperty('--glow', RARITY_COLOR[fish.rarity]);
-    el.dataset.tier = String(fish.tier);
+    // Every sea fish is tier 5 for gear, so at sea the gold is kept for the zone's legends (Oscar, 2026-11-01).
+    const legend = !!fish.legend;
+    const color = legend ? RARITY_COLOR.legendary : fish.sea ? SEA_COLOR : RARITY_COLOR[fish.rarity];
+    el.style.borderColor = color;
+    el.style.boxShadow = fish.tier >= 3 ? `0 0 ${12 + (fish.sea && !legend ? 4 : fish.tier) * 10}px ${color}` : '';
+    el.style.setProperty('--glow', color);
+    el.dataset.tier = String(fish.sea && !legend ? 4 : fish.tier);
+    el.classList.toggle('legend', legend);
     const shiny = this.hookedShiny;
     this.rankCard = rankUp(ranks);
-    el.innerHTML = `<div class="muted">${shiny ? `<b style="color:#ffd23a">✨ SHINY! ✨</b>${shinyFrom ? ` <span class="credit">✨ ${shinyFrom}</span>` : ''} ` : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
+    el.innerHTML = `${legend ? '<div class="legend-tag">★ LEGEND ★</div>' : ''}<div class="muted">${shiny ? `<b style="color:#ffd23a">✨ SHINY! ✨</b>${shinyFrom ? ` <span class="credit">✨ ${shinyFrom}</span>` : ''} ` : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
-      <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
+      <h2 style="color:${color}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
       <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean ${this.fightTag}">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
@@ -2456,7 +2469,7 @@ export class Game {
     el.style.animation = 'none';
     void el.offsetWidth;
     el.style.animation = '';
-    audio.jingle(shiny ? 'legendary' : fish.rarity);
+    audio.jingle(shiny || legend ? 'legendary' : fish.sea ? 'epic' : fish.rarity);
     // A new rank takes the banner from the tier banner, and its jingle follows the catch's.
     if (this.rankCard) this.rankBanner(this.rankCard);
     else this.topTierBanner(fish, 'caught', shiny);
@@ -2482,11 +2495,13 @@ export class Game {
     const w = this.world;
     const g = this.fish?.group;
     if (!g) return;
-    const top = fish.tier >= 5;
+    // At sea only the legends get the top burst, with a gold one on top.
+    const top = fish.sea ? !!fish.legend : fish.tier >= 5;
     const center = g.getWorldPosition(new THREE.Vector3());
     const color = new THREE.Color(shiny ? 0xffd23a : FISH_LOOK[fish.id]?.accent ?? fish.color);
     w.fx.burst(center, color, top ? 140 : 70, top ? 1.3 : 1, 0.25 * g.scale.x);
     if (top) w.fx.burst(center, new THREE.Color(0xffffff), 40, 0.7, 0.4 * g.scale.x);
+    if (fish.legend) w.fx.burst(center, new THREE.Color(0xffc933), 90, 1.6, 0.3 * g.scale.x);
     w.addShake(top ? 0.9 : 0.5);
     w.fovKick = top ? -7 : -4;
     w.rig.kick('pitch', top ? 3 : 1.5);

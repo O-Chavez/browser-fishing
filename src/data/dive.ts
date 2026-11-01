@@ -21,9 +21,9 @@ export interface Zone {
   name: string;
   /** First depth of the zone; it runs to the next zone's. */
   from: number;
-  /** Two everyday fish, evenly split, and the zone's rare legend (`DIVE.legendChance`). */
+  /** Everyday fish, evenly split, and the zone's rare legends (`DIVE.legendChance` for any of them, evenly split). */
   fish: string[];
-  legend: string;
+  legends: string[];
   /** The behaviours its fish roll from, evenly once the zone's first markers have blended in (`behaviourOdds`); none on the Shelf. */
   behaviours: Behaviour[];
   /**
@@ -34,18 +34,15 @@ export interface Zone {
   lead?: { weight?: number; strength?: number; paceCap?: number };
 }
 
-// Kelp Deep and below borrow the Drop-off's fish until their own species are added.
-const DROPOFF_FISH = { fish: ['galemackerel', 'irontuna'], legend: 'marlin' };
-
 export const ZONES: Zone[] = [
-  { id: 'shelf', name: 'The Shelf', from: 0, fish: ['pewtercod', 'snapper'], legend: 'grouper', behaviours: [] },
+  { id: 'shelf', name: 'The Shelf', from: 0, fish: ['pewtercod', 'snapper'], legends: ['grouper'], behaviours: [] },
   // Heavier fish: they take more of the spool. Tests the rod.
-  { id: 'dropoff', name: 'The Drop-off', from: 16, ...DROPOFF_FISH, behaviours: ['runner'], lead: { weight: 15 } },
+  { id: 'dropoff', name: 'The Drop-off', from: 16, fish: ['galemackerel', 'irontuna'], legends: ['marlin'], behaviours: ['runner'], lead: { weight: 15 } },
   // Stronger fish: surges pull nearer the red. Tests the line.
-  { id: 'kelp', name: 'Kelp Deep', from: 41, ...DROPOFF_FISH, behaviours: ['thrasher'], lead: { strength: 10 } },
+  { id: 'kelp', name: 'Kelp Deep', from: 41, fish: ['frondback', 'lionfish', 'wolfeel'], legends: ['kelpbeard', 'kelpwyrm'], behaviours: ['thrasher'], lead: { strength: 10 } },
   // Twitchier fish. Tests the player.
-  { id: 'twilight', name: 'The Twilight', from: 81, ...DROPOFF_FISH, behaviours: ['sounder'], lead: { paceCap: 0.1 } },
-  { id: 'abyss', name: 'The Abyss', from: 151, ...DROPOFF_FISH, behaviours: ['runner', 'thrasher', 'sounder'] },
+  { id: 'twilight', name: 'The Twilight', from: 81, fish: ['hatchet', 'fangjaw', 'lanternshark'], legends: ['oarfish', 'chandelier'], behaviours: ['sounder'], lead: { paceCap: 0.1 } },
+  { id: 'abyss', name: 'The Abyss', from: 151, fish: ['lurker', 'gulper', 'krakenspawn', 'boneserpent'], legends: ['leviathan', 'dreamer', 'kraken'], behaviours: ['runner', 'thrasher', 'sounder'] },
 ];
 
 /**

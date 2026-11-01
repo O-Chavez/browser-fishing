@@ -20,6 +20,15 @@ export const BEHAVIOUR_TUNE: Record<Behaviour, ReelTune> = {
   sounder: { warn: scale(P.warn, 0.4, 1, 1, 0.4) },
 };
 
+/** A sea legend's fight: 1.5× as long (Oscar, 2026-11-01), the line moving slower both ways, so not stronger or heavier. */
+export const LEGEND_TUNE: ReelTune = { length: 1.5 };
+
+/** The reel levers of a sea fight: its behaviour's, and the legend's length if it is one. Used by the fight and the server's replay. */
+export function fightTune(behaviour: Behaviour | null | undefined, fishId: string | null | undefined): ReelTune | undefined {
+  const b = behaviour ? BEHAVIOUR_TUNE[behaviour] : undefined;
+  return FISH.find((f) => f.id === fishId)?.legend ? { ...b, ...LEGEND_TUNE } : b;
+}
+
 /** base^n for a whole n ≥ 0, by repeated multiplication (same result in every JS engine, unlike `Math.pow`). */
 export function powInt(base: number, n: number): number {
   let r = 1;
@@ -132,12 +141,13 @@ export interface SeaBite {
 }
 
 /**
- * Which fish bites at this depth: the zone's legend 1 time in 20, else one of its two everyday fish; how it fights
- * (`behaviourOdds`), and how it pulls.
+ * Which fish bites at this depth: one of the zone's legends 1 time in 20, else one of its everyday fish; how it
+ * fights (`behaviourOdds`), and how it pulls.
  */
 export function rollSeaFish(depth: number, rng: () => number): SeaBite {
   const z = zoneAt(depth);
-  const id = rng() < DIVE.legendChance ? z.legend : z.fish[Math.min(z.fish.length - 1, Math.floor(rng() * z.fish.length))];
+  const pick = (ids: string[]) => (ids.length === 1 ? ids[0] : ids[Math.min(ids.length - 1, Math.floor(rng() * ids.length))]);
+  const id = rng() < DIVE.legendChance ? pick(z.legends) : pick(z.fish);
   const fish = byId(FISH, id);
   const odds = behaviourOdds(depth);
   let r = rng();

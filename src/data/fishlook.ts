@@ -4,9 +4,13 @@
  * The tier adds a consistent finish on top (matte → satin → bold → jewel sheen → spirit glow).
  */
 
-/** Body silhouettes. Length is always 1 unit; these set height, width and where the bulk sits. */
-export type Shape = 'slim' | 'round' | 'deep' | 'torpedo' | 'long' | 'eel' | 'whisker' | 'armored' | 'arowana';
-export type TailKind = 'fork' | 'round' | 'lunate' | 'shark' | 'eel';
+import type { AbyssParts } from './seaparts/abyss';
+import type { KelpParts } from './seaparts/kelp';
+import type { TwilightParts } from './seaparts/twilight';
+
+/** Body silhouettes. Length is always 1 unit; these set height, width and where the bulk sits. The last five are the deep sea's. */
+export type Shape = 'slim' | 'round' | 'deep' | 'torpedo' | 'long' | 'eel' | 'whisker' | 'armored' | 'arowana' | 'ribbon' | 'bulb' | 'gulper' | 'mantle' | 'plated';
+export type TailKind = 'fork' | 'round' | 'lunate' | 'shark' | 'eel' | 'squid' | 'none';
 export type DorsalKind = 'small' | 'soft' | 'spiny' | 'long' | 'sail' | 'none';
 export type Mark =
   | { k: 'stripe'; color: number; width?: number }
@@ -21,6 +25,8 @@ export type Mark =
 export type Extra = 'barbels' | 'whiskers' | 'snout' | 'upmouth' | 'scutes' | 'lantern' | 'bigmouth';
 /** Tier-5 spirit flourishes. */
 export type Spirit = 'ghost' | 'flame' | 'aurora' | 'stars';
+/** The deep sea zones' finishes, their answer to the lake's tiers: Kelp Deep, the Twilight, the Abyss. */
+export type SeaFinish = 'overgrown' | 'lit' | 'abyssal';
 
 /**
  * Body proportions per silhouette. `h`/`w` are the half-height/half-width at the thickest point
@@ -37,6 +43,12 @@ export const SHAPES: Record<Shape, { h: number; w: number; peak: number; front: 
   whisker: { h: 0.13, w: 0.14, peak: 0.24, front: 0.4, back: 0.75, sag: 0.04 },
   armored: { h: 0.11, w: 0.1, peak: 0.3, front: 0.95, back: 0.8, sag: 0 },
   arowana: { h: 0.14, w: 0.07, peak: 0.42, front: 0.8, back: 0.7, sag: 0.05 },
+  // The deep sea's: the oarfish's ribbon, the Abyss's bulbs, the gulper's head-heavy body, squid mantles and armour.
+  ribbon: { h: 0.055, w: 0.025, peak: 0.12, front: 0.5, back: 0.18, sag: 0 },
+  bulb: { h: 0.3, w: 0.22, peak: 0.42, front: 0.5, back: 0.6, sag: 0.05 },
+  gulper: { h: 0.12, w: 0.09, peak: 0.1, front: 0.3, back: 0.4, sag: 0.02 },
+  mantle: { h: 0.17, w: 0.13, peak: 0.25, front: 0.55, back: 0.9, sag: 0 },
+  plated: { h: 0.17, w: 0.13, peak: 0.3, front: 0.7, back: 0.7, sag: 0.03 },
 };
 
 /** Thickness envelope (0..1) at position t along the body (0 nose, 1 tail). */
@@ -60,6 +72,14 @@ export interface FishLook {
   /** Glow and highlight colour for tiers 4-5. */
   accent?: number;
   spirit?: Spirit;
+  /** A deep sea zone's finish, drawn by that zone's module in `src/game/seafish/`. */
+  finish?: SeaFinish;
+  /** 'none' leaves out the usual pair of eyes, for fish whose zone module draws its own. */
+  eye?: 'none';
+  /** Each deep zone's own parts (frills, lights, tentacles...), built by `src/game/seafish/<zone>.ts`. */
+  kelp?: KelpParts;
+  twilight?: TwilightParts;
+  abyss?: AbyssParts;
 }
 
 export const FISH_LOOK: Record<string, FishLook> = {
@@ -99,6 +119,29 @@ export const FISH_LOOK: Record<string, FishLook> = {
   galemackerel: { shape: 'slim', tail: 'lunate', dorsal: 'small', back: 0x1f6f8f, belly: 0xe8f4f6, fin: 0x4a8fa8, marks: [{ k: 'bars', color: 0x143f58, n: 9 }] },
   irontuna: { shape: 'torpedo', tail: 'lunate', dorsal: 'soft', back: 0x1b3a6e, belly: 0xdfe8f2, fin: 0xe8c548, marks: [{ k: 'stripe', color: 0xc9d6e6, width: 0.05 }] },
   marlin: { shape: 'torpedo', tail: 'lunate', dorsal: 'sail', back: 0x153f8a, belly: 0xe6f0fa, fin: 0x3a7fd0, marks: [{ k: 'bars', color: 0x6fb4ff, n: 10 }], extras: ['snout'], accent: 0x7fd0ff },
+
+  // Sea · Kelp Deep, Overgrown: leafy frills, bold bars and spines, with a gloss (parts: `kelp`, src/game/seafish/kelp.ts)
+  frondback: { shape: 'long', tail: 'round', dorsal: 'soft', back: 0x8a8a2e, belly: 0xf0d77a, fin: 0xb6d65a, marks: [{ k: 'bars', color: 0xe6c85a, n: 7 }], extras: ['snout'], accent: 0xc8f06a, finish: 'overgrown' },
+  lionfish: { shape: 'deep', tail: 'round', dorsal: 'spiny', back: 0xc0532c, belly: 0xf6e4c8, fin: 0xf3d2b0, marks: [{ k: 'bars', color: 0x7a2a14, n: 9 }], accent: 0xffb07a, finish: 'overgrown' },
+  wolfeel: { shape: 'eel', tail: 'eel', dorsal: 'long', back: 0x56707e, belly: 0xc9d0c2, fin: 0x6f8794, marks: [{ k: 'spots', color: 0x2c3d48, n: 26, size: 0.03 }], extras: ['bigmouth'], accent: 0xb8d0dc, finish: 'overgrown' },
+  kelpbeard: { shape: 'deep', tail: 'round', dorsal: 'spiny', back: 0x3c6b38, belly: 0xdcc98c, fin: 0x74b04c, marks: [{ k: 'scales', color: 0xe8d890 }], extras: ['barbels', 'bigmouth'], accent: 0xc8f06a, finish: 'overgrown' },
+  kelpwyrm: { shape: 'eel', tail: 'eel', dorsal: 'long', back: 0x2e5a3a, belly: 0xbad98a, fin: 0x7fc24a, marks: [{ k: 'stripe', color: 0x9fcf4a, width: 0.06 }], accent: 0xc8f06a, finish: 'overgrown' },
+
+  // Sea · The Twilight, Lit from within: dark bodies, glowing lights and lures (parts: `twilight`, src/game/seafish/twilight.ts)
+  hatchet: { shape: 'round', tail: 'fork', dorsal: 'small', back: 0x9fb6cc, belly: 0xeef6ff, fin: 0xc8dcef, marks: [{ k: 'glowdots', color: 0x6fd8ff }], accent: 0x6fd8ff, finish: 'lit' },
+  fangjaw: { shape: 'long', tail: 'fork', dorsal: 'small', back: 0x1c1834, belly: 0x3a3366, fin: 0x4a3f86, marks: [{ k: 'glowdots', color: 0x5ae0ff }], extras: ['bigmouth'], accent: 0x5ae0ff, finish: 'lit' },
+  lanternshark: { shape: 'torpedo', tail: 'shark', dorsal: 'small', back: 0x2a2442, belly: 0x5a4c8a, fin: 0x3a3260, marks: [{ k: 'glowdots', color: 0x9a8aff }], accent: 0x9a8aff, finish: 'lit' },
+  oarfish: { shape: 'ribbon', tail: 'none', dorsal: 'long', back: 0xd8e0ee, belly: 0xf4f7ff, fin: 0xff3a5a, marks: [{ k: 'spots', color: 0x8a9ab8, n: 30, size: 0.025 }], accent: 0xff7a9a, finish: 'lit' },
+  chandelier: { shape: 'bulb', tail: 'round', dorsal: 'none', back: 0x2c2040, belly: 0x5a4870, fin: 0x45365e, marks: [{ k: 'glowdots', color: 0xffd27a }], extras: ['lantern', 'bigmouth'], accent: 0xffd27a, finish: 'lit' },
+
+  // Sea · The Abyss, Abyssal: impossible anatomy in a violet aura (parts: `abyss`, src/game/seafish/abyss.ts)
+  lurker: { shape: 'bulb', tail: 'round', dorsal: 'soft', back: 0x5a3a7c, belly: 0xc0a2de, fin: 0x8a68b2, marks: [{ k: 'spots', color: 0xd6ff6a, n: 12, size: 0.04 }], accent: 0xd6ff6a, finish: 'abyssal' },
+  gulper: { shape: 'gulper', tail: 'none', dorsal: 'long', back: 0x241d34, belly: 0x463858, fin: 0x3a2e52, extras: ['bigmouth'], accent: 0xff5a7a, finish: 'abyssal' },
+  krakenspawn: { shape: 'mantle', tail: 'squid', dorsal: 'none', back: 0x8a2a4c, belly: 0xf0a2b4, fin: 0xb84a6a, marks: [{ k: 'spots', color: 0xffd0dc, n: 10, size: 0.03 }], extras: ['barbels'], accent: 0xff8ab0, finish: 'abyssal' },
+  boneserpent: { shape: 'eel', tail: 'eel', dorsal: 'spiny', back: 0xe8e0cc, belly: 0xcab89c, fin: 0xf2ecdc, marks: [{ k: 'bars', color: 0x6a5a48, n: 14 }], accent: 0x7affd8, finish: 'abyssal' },
+  leviathan: { shape: 'plated', tail: 'shark', dorsal: 'spiny', back: 0x2c2c42, belly: 0x4c3c44, fin: 0x3e3a56, marks: [{ k: 'bars', color: 0xff6a1a, n: 6 }], extras: ['scutes', 'barbels', 'bigmouth'], accent: 0xff7a2a, finish: 'abyssal' },
+  dreamer: { shape: 'bulb', tail: 'round', dorsal: 'soft', back: 0x2c6a5c, belly: 0x9ad8b8, fin: 0x4a9a7c, marks: [{ k: 'spots', color: 0x9affd0, n: 8, size: 0.04 }], extras: ['whiskers'], accent: 0x9affd0, finish: 'abyssal' },
+  kraken: { shape: 'mantle', tail: 'squid', dorsal: 'none', back: 0x6a1a36, belly: 0xe07a96, fin: 0x9a2a50, marks: [{ k: 'spots', color: 0xffc8d6, n: 14, size: 0.03 }], extras: ['whiskers'], accent: 0xff6a9a, finish: 'abyssal' },
 };
 
 /** Tier themes, shown as Fishdex section headers and on the catch card. */
@@ -133,4 +176,21 @@ export const FISH_BLURB: Record<string, string> = {
   galemackerel: 'Barred like the sea in a storm. It runs in a blur at the edge of the drop.',
   irontuna: 'A blue-steel torpedo with a golden fin. Built to pull a boat.',
   marlin: 'A sail on its back, a spear on its nose. The storm itself, on a line.',
+  frondback: 'Half fish, half seaweed. You only see it when it bites.',
+  lionfish: 'A bouquet of striped spines, and every one of them is angry.',
+  wolfeel: 'It cracks crabs like walnuts. It would like to try your line next.',
+  kelpbeard: 'The forest grew up around him. Some say he planted it.',
+  kelpwyrm: 'What sailors call a kelp forest, the Kelpwyrm calls its mane.',
+  hatchet: 'So thin you can read through it. Its belly glows so nothing below can see it.',
+  fangjaw: "Its teeth don't fit in its mouth. That's your problem now.",
+  lanternshark: 'It hunts by its own light, and it can see yours.',
+  oarfish: 'Every sea serpent sailors swore they saw. It is real, it is long, and it is on your line.',
+  chandelier: 'Five lights in the dark, and one very large smile.',
+  lurker: 'It sees you from every side. Mostly it sees dinner.',
+  gulper: 'A mouth with a fish attached. It can swallow things bigger than itself.',
+  krakenspawn: 'Every kraken starts small. This one is still bigger than your boat.',
+  boneserpent: 'A skeleton that never got the news. It still bites.',
+  leviathan: 'The oldest name for fear on the sea. It has waited a long time for a line strong enough.',
+  dreamer: 'Sailors say the sea is its dream. Try not to wake it.',
+  kraken: 'Not technically a fish. Try telling it that.',
 };
