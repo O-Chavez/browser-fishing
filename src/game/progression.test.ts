@@ -288,6 +288,9 @@ describe('levels past 50 and ranks', () => {
     expect(nextGoal(20)).toBe("Level 25: Bosun + Oilskin Sou'wester");
     expect(nextGoal(25)).toBe('Level 30: First Mate');
     expect(nextGoal(50)).toBe('Level 60: Fleet Admiral');
+    expect(nextGoal(50, {}, false)).toBe('Level 60: Fleet Admiral');
+    expect(nextGoal(50, {}, true)).toBe("Take a charter: Captain Reed's seaplane, west beach");
+    expect(welcomeText('Ana', { level: 50, xp: 0, coins: 5, dex: { [FISH[0].id]: {} } }, true).line).toContain('a charter with Captain Reed');
   });
   it('estimates thrown-away XP from Fishdex counts, low and never negative', () => {
     expect(backPayXp({ [FISH[0].id]: { count: 10 } })).toBe(0);

@@ -36,7 +36,7 @@ import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { NEWS, type NewsEntry } from '../data/news';
 import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
-import { gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
+import { charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
@@ -671,7 +671,7 @@ export class Game {
   private welcome(name = this.net.name): void {
     this.pendingWelcome = false;
     this.setMenu(false);
-    const { title, line } = welcomeText(name, this.s);
+    const { title, line } = welcomeText(name, this.s, chartersToTry(this.s));
     const el = $('banner');
     el.classList.remove('rank');
     el.classList.add('welcome');
@@ -3659,6 +3659,8 @@ export class Game {
     this.updateBuffs();
     // The first smoked fish to eat: point at the Bag, once the catch card and menus are out of the way.
     if (!this.menuOpen && this.phase === 'idle' && !this.s.tips.includes('snack') && smoke.smokerOpen(this.s) && Object.keys(this.s.smoke.pantry).some((id) => smoke.snackFor(id))) this.guide('snack');
+    // The Aurora Rod in hand while charters are open: point at Captain Reed, once, never mid-fight.
+    if (!this.menuOpen && this.phase === 'idle' && charterTipDue(this.s)) this.guide('charter');
     if (!this.menuOpen) return;
     // A fish finishing (or a snack or dish running out) changes the layout, not just a number.
     const key = `${this.s.smoke.spots.map((x) => (x && x.doneAt <= now ? 'd' : x ? 's' : '-')).join('')}${this.s.smoke.snack ? 1 : 0}${this.s.smoke.dish ? 1 : 0}`;
@@ -4029,7 +4031,7 @@ export class Game {
     }).join('');
 
     return `${this.seaStrip()}<div class="cols"><div class="main">
-        <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex)}</p>
+        <p class="goal">🎯 Next: ${nextGoal(s.level, s.dex, chartersToTry(s))}</p>
         <h4>Your setup</h4>
         <div class="setup"><span class="big">${rodIcon(rod.tier, eco.rodLevelOf(s, rod.id))}</span><span class="plus">+</span><span class="big">${BAIT_ICON[bait.id] ?? '🪱'}</span>
           <div class="txt"><b>Catches up to ${tierName(reach)} fish</b><div>${hint}</div><div>🧵 ${eco.lineOf(s).name} · holds tier ${eco.lineOf(s).tier}</div></div><div class="pips">${pips}</div></div>
