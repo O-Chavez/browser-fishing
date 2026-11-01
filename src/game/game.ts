@@ -4519,7 +4519,7 @@ export class Game {
     const easier = Math.round(rodLevelEase(s.rodLevel) * 100);
     const price = `${cost.coins.toLocaleString()} ${COIN} + ${cost.pearls.toLocaleString()} ${PEARL}`;
     const body = this.meter('Sea fish', `${easier}% lighter`, easier / 100, 5) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`;
-    const note = `+${s.rodLevel} → +${next}: sea fish ${PER_LEVEL}% lighter, so they take less line · ${price}. Black Pearls come up from sea dives.`;
+    const note = `+${s.rodLevel} → +${next}: sea fish ${PER_LEVEL}% lighter, so they take less line · ${price}. Black Pearls come from charters with Captain Reed.`;
     const coins = Math.max(0, cost.coins - s.coins);
     const pearls = Math.max(0, cost.pearls - s.pearls);
     const short = [coins && `${coins.toLocaleString()} ${COIN}`, pearls && `${pearls.toLocaleString()} ${PEARL}`].filter(Boolean).join(' + ');
@@ -4574,7 +4574,7 @@ export class Game {
       name: s.seaLine > 0 ? eco.lineName(s) : DEEP_SEA_LINE.name,
       tier: DEEP_SEA_LINE.tier,
       body: this.meter('Holds', 'Tier 5 fish', 1, 5) + this.meter('Sea fish', `${weaker}% weaker pull`, weaker / 100, 5) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`,
-      note: `${step} Black Pearls come up from sea dives.`,
+      note: `${step} Black Pearls come from charters with Captain Reed.`,
       actions,
     });
   }
