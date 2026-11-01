@@ -26,16 +26,17 @@ const rude = (word: string, safe?: RegExp): boolean => {
   return ROOTS.some((root) => r.includes(root) || rSqueezed.includes(root)) || WORDS.has(p) || WORDS.has(squeezed);
 };
 
-/** Replaces rude words with asterisks of the same length. */
-export function censor(text: string): string {
-  return text.replace(/[\p{L}\p{N}@$!]+/gu, (w) => (rude(w) ? '*'.repeat(w.length) : w));
-}
-
 /**
- * Innocent names that contain a root ("Scunthorpe", "Yoshitaka", "Shiitake", "FishIt"). Only names
- * skip these, and a capital still splits them ("FiShit"); chat masks them as before.
+ * Innocent words that contain a root ("Scunthorpe", "Yoshitaka", "Shiitake", "FishIt"). Chat and
+ * names both skip these; a name's capital still splits them ("FiShit"), so names stay strict there.
  */
 const NAME_SAFE = /scunthorpe|shi+take|[yt]oshit(?=[aeiou])|fishit/g;
+
+/** Replaces rude words with asterisks of the same length. */
+export function censor(text: string): string {
+  return text.replace(/[\p{L}\p{N}@$!]+/gu, (w) => (rude(w, NAME_SAFE) ? '*'.repeat(w.length) : w));
+}
+
 const NAME_SEP = /[^\p{L}\p{N}@$!]+/u;
 /** Between "Big" and "Dick" in "BigDick", or "XX" and "Ass" in "XXAss". */
 const CAMEL = /(?<=[\p{Ll}\p{N}])(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/u;
