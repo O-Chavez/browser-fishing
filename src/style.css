@@ -214,12 +214,6 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #heldname.show { animation: heldname 1.8s ease-out forwards; }
 @keyframes heldname { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 
-#wheelres { position: absolute; top: 22%; width: 100%; text-align: center; pointer-events: none; opacity: 0; transform: scale(.6); transition: opacity .25s, transform .35s cubic-bezier(.2,1.6,.4,1); text-shadow: 0 3px 12px #000; }
-#wheelres.show { opacity: 1; transform: scale(1); }
-#wheelres b { display: block; font-size: 64px; letter-spacing: 4px; }
-#wheelres span { font-size: 24px; }
-#wheelres.win b { color: #6dff8f; }
-#wheelres.lose b { color: #ff5a4d; }
 
 
 

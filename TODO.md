@@ -19,8 +19,6 @@ Finished items move to [DONE.md](DONE.md).
   - Keep the fog colour, sea (`uShallow` / `uDeep` in `src/game/sea.ts`), lightning flash and the player's view of the boat still readable; check with headless screenshots at a few leagues by night
 - 🎨 Show the player's Black Pearls (Oscar, 2026-10-31): the total (`SaveData.pearls`, `src/game/state.ts`) is easy to miss. It's only in the corner of Reed's charter panel (`reedHtml`, `src/game/divehud.ts`), on the card after a charter ("N Black Pearls in all", `endHtml`) and in Marlow's rod level cost. Show it somewhere always to hand, e.g. a 🦪 box by the coin purse like the casino's chip box (`#purse` / `#chipbox` in `index.html`, updated in `game.ts` next to `chipsText`) and/or a line in the Bag
   - Decide when it shows: always once the player owns the Aurora Rod or has any pearls, or only at sea and at the harbour
-- 🎨 Move the Lucky Wheel into the casino with new odds (Oscar, 2026-10-31; was an idea from 2026-10-30): take it off the main map, since some new players get stuck at it gambling away their fish, and the Smokehouse is now the cleaner way to get more for a fish early on. The wheel stand is the `wheel` spot in `src/data/maps.ts`, built in `src/game/hub.ts`; the spin is `Room` in `server/room.ts` (`WHEEL_WIN` 0.45, `applyWheel` in `src/game/economy.ts`)
-  - No longer a 50/50 double-or-nothing: a few wedges with 2-4× multipliers and the rest losses, so the reward matches the risk and stays reasonable next to roulette and blackjack. Propose the wedge table (odds, payouts, expected value) before coding; also settle where it stands in the casino, and keep the casino records board's "wheel" game working
 
 ## Ideas
 

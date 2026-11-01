@@ -122,7 +122,7 @@ const CAMP_TIPS = [
   'Tip: when a fish surges, keep the gauge green: ease off before the red, tighten before it takes your line.',
   `Tip: a fish landed without fraying the line is a clean catch, worth ${Math.round(eco.CLEAN_BONUS * 100)}% more.`,
   'Tip: shiny fish fight harder but sell for 5×.',
-  'Tip: the Lucky Wheel can double a fish... or take it.',
+  'Tip: the Lucky Wheel in Casino Cove can make a fish worth four times as much... or take it.',
   'Tip: bigger rods and better bait attract rarer fish.',
   `Tip: the gate to Casino Cove opens at level ${CASINO_LEVEL}.`,
 ];
@@ -302,7 +302,7 @@ export class Game {
   /** The hand as far as it has been dealt onto the felt, for the table readout. */
   private bjShown: BlackjackView | null = null;
   private casinoMsg = '';
-  private table: 'roulette' | 'blackjack' | 'prizes' | null = null;
+  private table: 'roulette' | 'blackjack' | 'wheel' | 'prizes' | null = null;
   private aim: { k: string; id: string } | null = null;
   private tableHtml = '';
   private last = performance.now();
@@ -335,7 +335,7 @@ export class Game {
         if (this.revealTimers.length && !this.joining) this.heldSave = save;
         else this.applyState(save);
       },
-      onWheel: (win, ms) => this.startSpin(win, ms),
+      onWheel: (r) => this.startWheel(r),
       onRoulette: (r) => this.startRoulette(r),
       onBlackjack: (v) => this.dealt(v),
       onNotice: (msg) => this.toast(msg),
@@ -1245,43 +1245,6 @@ export class Game {
     this.world.hall?.records.set(this.net.records);
   }
 
-  /** Wheel: online the server rolls; offline we roll locally. */
-  private gamble(): void {
-    if (this.spin || this.s.slots[this.s.held]?.k !== 'fish') return;
-    if (this.net.connected) this.net.send({ t: 'gamble' });
-    else this.startSpin(Math.random() < eco.WHEEL_WIN, 3800);
-  }
-
-  private startSpin(win: boolean, ms: number): void {
-    const it = this.s.slots[this.s.held];
-    if (it?.k !== 'fish' || this.spin) return;
-    const value = Math.round(eco.fishValue(it));
-    const name = byId(FISH, it.fishId).name;
-    this.spin = true;
-    this.world.hub?.spinWheel(win, ms);
-    // A beat of quiet after the wheel stops, then the result
-    this.later(ms + RESULT_BEAT_MS, () => {
-      this.endReveal();
-      if (!this.net.connected) {
-        eco.applyWheel(this.s, win);
-        this.persist();
-        this.refreshHud();
-      }
-      this.showWheelResult(win, name, value);
-    });
-  }
-
-  private showWheelResult(win: boolean, name: string, value: number): void {
-    const el = $('wheelres');
-    el.className = `show ${win ? 'win' : 'lose'}`;
-    el.innerHTML = win
-      ? `<b>DOUBLED!</b><span>${name} is now worth ${value * 2} ${COIN} <small>(+${value})</small></span>`
-      : `<b>LOST!</b><span>${name} (${value} ${COIN}) is gone</span>`;
-    if (win) audio.jingle('epic');
-    else audio.snap();
-    setTimeout(() => el.classList.remove('show'), 2600);
-  }
-
   private sellHeld(): void {
     if (this.spin) return;
     const it = this.s.slots[this.s.held];
@@ -1704,6 +1667,33 @@ export class Game {
     });
   }
 
+  private wheelBet(): void {
+    if (this.spin) return;
+    this.casinoMsg = '';
+    this.casinoSend({ t: 'wheel', i: this.betSlot });
+  }
+
+  private startWheel(r: { wedge: number; factor: number; ms: number }): void {
+    const it = this.s.slots[this.betSlot];
+    if (it?.k !== 'fish') return;
+    const name = byId(FISH, it.fishId).name;
+    const before = eco.fishValue(it);
+    const after = before * r.factor;
+    this.spin = true;
+    this.casinoMsg = '<span class="muted">The wheel is spinning…</span>';
+    this.world.hall?.spinLucky(r.wedge, r.ms);
+    this.later(r.ms + RESULT_BEAT_MS, () => {
+      this.endReveal();
+      const win = r.factor > 0;
+      this.casinoMsg = win
+        ? `<b class="win">×${r.factor}! You win</b> ${name} is now worth ${Math.round(after)} ${COIN}`
+        : `<b class="lose">LOSE.</b> ${name} (${Math.round(before)} ${COIN}) is gone`;
+      this.showResult(win ? 'win' : 'lose', win ? `×${r.factor}! YOU WIN` : 'YOU LOSE', win ? `${name} is now worth ${Math.round(after)} ${COIN}` : `${name} is gone`);
+      if (win) audio.jingle('epic');
+      else audio.snap();
+    });
+  }
+
   /**
    * A blackjack view from the server, one per deal or action. Its new cards are dealt onto the felt one
    * at a time; the readout, the buttons, the result and the server's new save wait for the last one.
@@ -1806,11 +1796,12 @@ export class Game {
     const c = this.map.casino;
     const hall = this.world.hall;
     const hud = $('tablehud');
-    let t: 'roulette' | 'blackjack' | 'prizes' | null = null;
+    let t: typeof this.table = null;
     if (c && hall && walking) {
       const d = (sp: { x: number; z: number }) => Math.hypot(sp.x - this.player.x, sp.z - this.player.z);
       if (d(c.roulette) <= 3.4) t = 'roulette';
       else if (d(c.blackjack) <= 3.4) t = 'blackjack';
+      else if (d(c.wheel) <= 3.4) t = 'wheel';
       else if (d(c.prizes) <= 3.6) t = 'prizes';
     }
     this.table = t;
@@ -1862,6 +1853,7 @@ export class Game {
     if (this.casinoMsg) lines.push(this.casinoMsg);
     if (this.aim && !this.spin) lines.push(`<span class="muted">Click: ${this.aimLabel(this.aim)}</span>`);
     else if (!busy && t === 'roulette') lines.push('<span class="muted">Aim at red, black or green and click to bet.</span>');
+    else if (!busy && t === 'wheel') lines.push('<span class="muted">Aim at the wheel and click to spin it.</span>');
     else if (!busy && t === 'blackjack' && !g) lines.push('<span class="muted">Click DEAL on the table to play.</span>');
     const html = lines.join('<br>');
     if (html !== this.tableHtml) {
@@ -1873,6 +1865,7 @@ export class Game {
 
   private aimLabel(a: { k: string; id: string }): string {
     if (a.k === 'rbet') return `bet on ${a.id} · ×${ROULETTE_PAY[a.id as RouletteBet]}`;
+    if (a.k === 'wheel') return 'spin the wheel · ×2, ×3 or ×4, or lose it';
     if (a.id === 'double') return `double down · ${doubleCost(this.s, this.betSlot)} ${COIN}`;
     return { deal: 'deal a hand', hit: 'hit', stand: 'stand' }[a.id] ?? a.id;
   }
@@ -1890,9 +1883,10 @@ export class Game {
     }
     if (!a || this.spin) return;
     const it = this.s.slots[this.betSlot];
-    const needsFish = a.k === 'rbet' || a.id === 'deal';
+    const needsFish = a.k === 'rbet' || a.k === 'wheel' || a.id === 'deal';
     if (needsFish && it?.k !== 'fish') return this.toast(`Hold a fish (${this.fishKeys}) to bet it.`);
     if (a.k === 'rbet') this.rouletteBet(a.id as RouletteBet);
+    else if (a.k === 'wheel') this.wheelBet();
     else this.blackjackAct(a.id as 'deal' | 'hit' | 'stand' | 'double');
   }
 
@@ -1941,7 +1935,7 @@ export class Game {
 
     const hub = w.hub;
     const { x, z } = this.player;
-    // Lower d wins: the wheel, then selling, then picking up, then everything else by distance.
+    // Lower d wins: selling, then picking up, then everything else by distance.
     const spots: { d: number; label: string; act: () => void }[] = [];
 
     for (const d of this.curDrops()) {
@@ -2008,18 +2002,6 @@ export class Game {
           label: `Talk to ${this.map.vendor.name} · open shop`,
           act: () => this.openMenu('shop'),
         });
-      }
-      const dw = Math.hypot(hub.wheelSpot.x - x, hub.wheelSpot.z - z);
-      if (dw <= eco.WHEEL_RANGE - 0.5) {
-        const wh = this.s.slots[this.s.held];
-        // The Smokehouse stands right beside the wheel: a fish in hand only spins it from the wheel's
-        // side, so walking up to Mags's counter can't gamble the fish by accident.
-        const shack = sh && Math.hypot(sh.x - x, sh.z - z) < dw;
-        spots.push(
-          wh?.k === 'fish'
-            ? { d: shack ? dw : -40, label: `Spin the wheel with ${byId(FISH, wh.fishId).name} · 2× or nothing (${Math.round(eco.fishValue(wh))} ${COIN})`, act: () => this.gamble() }
-            : { d: dw, label: 'Lucky Wheel · hold a fish and press E to gamble it', act: () => this.toast(`Hold a fish (${this.fishKeys}), then press E to spin.`) },
-        );
       }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
@@ -3574,7 +3556,7 @@ export class Game {
     el.classList.add('rank');
     el.style.color = '';
     el.innerHTML = intro
-      ? `🔥 New in town: Mags's Smokehouse<small>Smoke your spare fish beside the Lucky Wheel: sell them or snack on them</small>`
+      ? `🔥 New in town: Mags's Smokehouse<small>Smoke your spare fish across from Marlow's stall: sell them or snack on them</small>`
       : `🔥 Smokehouse: ${st.name}<small>${st.id === 'smallfry' ? `Mags left you ${FREE_FISH} smoked fish to try. ` : st.id === 'giants' ? 'Mags cooked you a Fish Cakes to try. ' : ''}${st.line}</small>`;
     el.classList.remove('hidden');
     el.style.animation = 'none';
@@ -3863,7 +3845,7 @@ export class Game {
       const tag = `<button class="pk" ${counter ? `data-pick="smoke" data-id="${id}"` : 'data-act="locked"'}><span class="ico">${fishIcon(id)}</span><span class="txt"><b>Smoked ${f.name} ×${n}</b><small>${snackable ? `${this.snackEffect(id)} · each adds ${SNACK_MINUTES} min, up to ${SNACK_MAX_MINUTES}` : '✨ For dishes in the Kitchen'}</small></span></button>`;
       return `<div class="prow${pick === id ? ' sel' : ''}" style="--c:var(--t${f.tier})">${tag}<span class="pbtns">${btns}</span></div>`;
     }).join('');
-    const none = `<p class="empty">Nothing smoked yet. Mags Cinder smokes fish at the Smokehouse, beside the Lucky Wheel${smoke.smokerOpen(s) ? '' : ` (from level ${SMOKE_LEVEL})`}.</p>`;
+    const none = `<p class="empty">Nothing smoked yet. Mags Cinder smokes fish at the Smokehouse, across the path from Marlow's stall${smoke.smokerOpen(s) ? '' : ` (from level ${SMOKE_LEVEL})`}.</p>`;
     const dishH = smoke.kitchenOpen(s) || d ? `<h4 class="perks-h">Dish · ${d ? 'eating one' : 'none right now'}</h4>${eatingDish}` : '';
     return `<h4 class="perks-h">Snack · ${sn ? 'eating one' : 'none right now'}</h4>${eating}${dishH}<h4 class="perks-h">Pantry${counter ? '' : ' · smoked fish and dishes'}</h4>${rows ? `<div class="prows">${rows}</div>` : none}`;
   }
@@ -4031,7 +4013,7 @@ export class Game {
       : `<p class="peek-open">✔ You're in! Walk through the gate.</p>`;
     return `<div class="peek"><img src="${casinoPreview}" alt="Inside Casino Cove">
       <div class="peek-text"><h3>Bet your best fish, win big</h3>
-        <p>Inside the Gilded Perch Casino you can put a fish on the roulette wheel or a hand of blackjack to multiply its value, then trade your winners for chips at the Prize Counter.</p>
+        <p>Inside the Gilded Perch Casino you can put a fish on the roulette wheel, the Lucky Wheel or a hand of blackjack to multiply its value, then trade your winners for chips at the Prize Counter.</p>
         <p>Chips buy unlocks you can't get anywhere else: Lucky Charms, Quick-Reel Gloves, the Night Owl Lantern, a Tackle Vest, Shiny Lures and a rack of high-roller outfits.</p>
         ${status}</div></div>`;
   }

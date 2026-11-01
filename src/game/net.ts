@@ -8,7 +8,7 @@ import type { SaveData } from './state';
 
 export interface NetEvents {
   onState(save: SaveData): void;
-  onWheel(win: boolean, ms: number): void;
+  onWheel(r: { wedge: number; factor: number; ms: number }): void;
   onRoulette(r: { pocket: number; color: string; factor: number; ms: number }): void;
   onBlackjack(view: BlackjackView | null): void;
   onDrops(list: Drop[]): void;
@@ -200,7 +200,7 @@ export class NetClient {
         this.events.onCorrect(m.x, m.z);
         break;
       case 'wheel':
-        this.events.onWheel(m.win, m.ms);
+        this.events.onWheel(m);
         break;
       case 'roulette':
         this.events.onRoulette(m);

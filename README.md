@@ -30,7 +30,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![Inside the casino](src/assets/images/casino-preview.jpg)
 
-**🔥 Smoke your catch.** From level 3, Mags Cinder's Smokehouse beside the Lucky Wheel smokes your spare fish in seconds (and keeps smoking while you're offline). Sell small fry smoked for more, eat one as a snack for ⭐ more XP or 💰 more coins on every catch, or cook smoked fish into dishes that give several buffs at once, up to ✨ more shinies. Coming soon: spices for deep-sea charters.
+**🔥 Smoke your catch.** From level 3, Mags Cinder's Smokehouse across the path from Marlow's stall smokes your spare fish in seconds (and keeps smoking while you're offline). Sell small fry smoked for more, eat one as a snack for ⭐ more XP or 💰 more coins on every catch, or cook smoked fish into dishes that give several buffs at once, up to ✨ more shinies. Coming soon: spices for deep-sea charters.
 
 **👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, and race for a spot on the **Top Anglers** leaderboard.
 
@@ -42,7 +42,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![The wardrobe, with a player in a crown and cloak and the hats and shirts to choose from](docs/images/wardrobe.jpg)
 
-**🗺️ A town worth exploring.** Chat with Old Salty, Granny Wren and the other locals, try your luck on the lucky wheel, and track down the seven messages in bottles hidden around the map.
+**🗺️ A town worth exploring.** Chat with Old Salty, Granny Wren and the other locals and track down the seven messages in bottles hidden around the map.
 
 ### Features at a glance
 - Free to play, right in your browser, on any desktop (early touch controls for phones and tablets)

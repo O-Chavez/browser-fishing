@@ -576,6 +576,7 @@ export class World {
       this.hub = null;
       this.hall = new CasinoHall(map.casino!);
       this.hall.onPocket = (at, gain) => { for (const d of at) audio.peg(0.09 * gain, 1.5, d); };
+      this.hall.onPeg = (at, gain) => { for (const d of at) audio.peg(0.16 * gain, 0.75, d); };
       this.hall.onCard = (flip) => audio.card(flip);
       this.decor.add(this.hall.group);
       this.lightPool.collect(this.decor);
@@ -642,7 +643,6 @@ export class World {
     this.buildFireflies();
     this.buildMountains();
     this.hub = new Hub(map);
-    this.hub.onWheelTick = (at, gain) => { for (const d of at) audio.peg(0.16 * gain, 0.75, d); };
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);

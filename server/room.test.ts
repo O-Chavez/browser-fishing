@@ -361,50 +361,6 @@ describe('Room economy', () => {
   });
 });
 
-describe('lucky wheel', () => {
-  const stage = () => {
-    const t = setup();
-    const a = t.join('Ann');
-    const w = MAPS[0].wheel;
-    t.room.place(a.id, w.x + 1, w.z, 0);
-    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
-    a.acct.save.held = 2;
-    return { ...t, a };
-  };
-  it('doubles a fish after the spin finishes, not before', () => {
-    const { room, a, advance, setRoll } = stage();
-    const base = eco.fishValue(a.acct.save.slots[2] as never);
-    setRoll(0.1);
-    room.handle(a.id, { t: 'gamble' });
-    expect(last(a.c, 'wheel').win).toBe(true);
-    room.snapshot();
-    expect((a.acct.save.slots[2] as { mult?: number }).mult).toBeUndefined();
-    advance(5000);
-    room.snapshot();
-    expect((a.acct.save.slots[2] as { mult?: number }).mult).toBe(2);
-    room.place(a.id, MAPS[0].vendor.shop.x - 2, MAPS[0].vendor.shop.z, 0);
-    const coins = a.acct.save.coins;
-    room.handle(a.id, { t: 'sell' });
-    expect(a.acct.save.coins).toBe(coins + base * 2);
-  });
-  it('loses the fish, blocks actions mid-spin, and needs the wheel nearby', () => {
-    const { room, a, advance, setRoll } = stage();
-    setRoll(0.9);
-    room.handle(a.id, { t: 'gamble' });
-    room.handle(a.id, { t: 'drop' });
-    room.handle(a.id, { t: 'slot', i: 0 });
-    expect(a.acct.save.held).toBe(2);
-    advance(5000);
-    room.snapshot();
-    expect(a.acct.save.slots[2]).toBeNull();
-    room.place(a.id, 0, 0, 0);
-    a.acct.save.slots[2] = { k: 'fish', fishId: 'perch', size: 20 };
-    a.c.log.length = 0;
-    room.handle(a.id, { t: 'gamble' });
-    expect(a.c.log.some((m) => m.t === 'wheel')).toBe(false);
-  });
-});
-
 describe('shinies & fishing spots', () => {
   it('slows bites when casting from the shore instead of the pier', () => {
     const { room, join } = setup() as ReturnType<typeof setup>;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ROULETTE_PAY, ROULETTE_POCKETS, type RouletteBet } from '../data/casino';
+import { ROULETTE_PAY, ROULETTE_POCKETS, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
 import type { MapDef, Spot } from '../data/maps';
 import { pocketColor, type BlackjackView, type Card } from './casino';
 import { groundHeight } from './env';
@@ -15,6 +15,46 @@ const POCKETS = ROULETTE_POCKETS.red + ROULETTE_POCKETS.black + ROULETTE_POCKETS
 const FELT = 0x1f6b43;
 const GOLD = 0xe0b441;
 const PINK = 0xff4f9a;
+const WEDGES = WHEEL_WEDGES.length;
+/** Lucky Wheel wedge colours by payout; losing wedges alternate two shades so neighbours stay apart. */
+const WEDGE_INK: Record<number, string> = { 2: '#2e9e4f', 3: '#2f6fd0', 4: '#e3b341' };
+const LOSE_INK = ['#8e1f2a', '#4a1426'];
+
+/** The Lucky Wheel's face: one wedge per entry in WHEEL_WEDGES, wedge i from angle i·w clockwise, with a gold peg on each edge. */
+function luckyTexture(): THREE.CanvasTexture {
+  const px = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = px;
+  const g = c.getContext('2d')!;
+  const w = (Math.PI * 2) / WEDGES;
+  let lose = 0;
+  WHEEL_WEDGES.forEach((f, i) => {
+    g.beginPath();
+    g.moveTo(px / 2, px / 2);
+    g.arc(px / 2, px / 2, px / 2, i * w, (i + 1) * w);
+    g.fillStyle = f ? WEDGE_INK[f] : LOSE_INK[lose++ % 2];
+    g.fill();
+    g.save();
+    g.translate(px / 2, px / 2);
+    g.rotate((i + 0.5) * w);
+    g.fillStyle = f === 4 ? '#3a1a08' : '#fff';
+    g.font = `800 ${f ? 120 : 84}px system-ui, sans-serif`;
+    g.textAlign = 'right';
+    g.textBaseline = 'middle';
+    g.fillText(f ? `×${f}` : 'LOSE', px / 2 - 56, 0);
+    g.restore();
+  });
+  g.fillStyle = '#ffd35a';
+  for (let i = 0; i < WEDGES; i++) {
+    g.beginPath();
+    g.arc(px / 2 + Math.cos(i * w) * (px / 2 - 24), px / 2 + Math.sin(i * w) * (px / 2 - 24), 16, 0, Math.PI * 2);
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
 
 function wheelTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -99,6 +139,11 @@ export class CasinoHall {
   readonly colliders: Circle[] = [];
   private wheel = new THREE.Group();
   private anim: { from: number; to: number; t0: number; ms: number; last: number } | null = null;
+  /** The Lucky Wheel's disc (spins about its z axis), and its spin. */
+  private lucky = new THREE.Group();
+  private luckyAnim: { from: number; to: number; t0: number; ms: number; last: number } | null = null;
+  /** Ticks as the Lucky Wheel's pegs pass its pointer: delays (s) spread across the frame, and their gain. */
+  onPeg: (at: number[], gain: number) => void = () => {};
   /** Ticks as pockets pass the pointer while spinning: delays (s) spread across the frame, and their gain. */
   onPocket: (at: number[], gain: number) => void = () => {};
   /** A card leaves the shoe, or the hole card starts to turn over (`flip`). */
@@ -140,6 +185,7 @@ export class CasinoHall {
     );
     this.buildRoulette(def.roulette);
     this.buildBlackjack(def.blackjack);
+    this.buildLucky(def.wheel);
     this.buildPrizes(def.prizes);
     // Bake the static room into a few meshes; anything that spins, gets clicked or is redrawn stays
     // separate. Clickable pieces are baked on their own so raycasts still find them.
@@ -304,6 +350,48 @@ export class CasinoHall {
     t.add(this.neonRing(1.2, 0.2, 0x4fd2ff), sign);
     this.place(t, s, 1.7);
     this.setBlackjack(null);
+  }
+
+  /** The Lucky Wheel: an upright disc on a gold stand under a neon sign. Click the disc to spin the fish in hand. */
+  private buildLucky(s: Spot): void {
+    const g = new THREE.Group();
+    const plum = 0x4a1a2c;
+    const base = cyl(0.75, 0.85, 0.16, plum, 18);
+    base.position.y = 0.08;
+    const trim = cyl(0.78, 0.78, 0.04, GOLD, 18);
+    trim.position.y = 0.17;
+    const post = cyl(0.11, 0.15, 1.15, GOLD, 12);
+    post.position.y = 0.75;
+    const hubY = 2.15;
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(1.0, 64),
+      new THREE.MeshBasicMaterial({ map: luckyTexture(), side: THREE.DoubleSide, toneMapped: false }),
+    );
+    this.lucky.position.set(0, hubY, 0.12);
+    this.lucky.add(disc);
+    const back = cyl(1.04, 1.04, 0.1, plum, 48);
+    back.rotation.x = Math.PI / 2;
+    back.position.set(0, hubY, 0.04);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.03, 0.06, 8, 56), mat(GOLD));
+    rim.position.set(0, hubY, 0.12);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd35a });
+    this.glow.push({ m: glowMat, c: new THREE.Color(0xffd35a) });
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.025, 6, 56), glowMat);
+    halo.position.set(0, hubY, 0.08);
+    const cap = cyl(0.13, 0.13, 0.1, GOLD, 12);
+    cap.rotation.x = Math.PI / 2;
+    cap.position.set(0, hubY, 0.18);
+    const pointer = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.32, 3), mat(GOLD));
+    pointer.rotation.z = Math.PI;
+    pointer.position.set(0, hubY + 1.08, 0.2);
+    const sign = neonSign('LUCKY WHEEL', 2.4, '#ffd35a');
+    sign.position.set(0, hubY + 1.55, 0.05);
+    g.add(base, trim, post, back, rim, halo, cap, pointer, this.lucky, sign, this.neonRing(0.95, 0.05, 0xffd35a));
+    this.addPick(this.lucky, { k: 'wheel', id: 'spin' });
+    g.position.set(s.x, groundHeight(s.x, s.z), s.z);
+    g.rotation.y = s.facing;
+    this.group.add(g);
+    this.colliders.push({ x: s.x, z: s.z, r: 0.8 });
   }
 
   private addPick(o: THREE.Object3D, tag: { k: string; id: string }): void {
@@ -645,7 +733,28 @@ export class CasinoHall {
     this.anim = { from: cur, to: final + turns * Math.PI * 2, t0: performance.now(), ms, last: performance.now() };
   }
 
+  /** Spins the Lucky Wheel and lands wedge `i` under the pointer, a little off its middle. */
+  spinLucky(i: number, ms: number): void {
+    const w = (Math.PI * 2) / WEDGES;
+    // The pointer is a quarter turn round from wedge 0's start, hence the π/2.
+    const base = Math.PI / 2 + (i + 0.5 + (Math.random() - 0.5) * 0.6) * w;
+    const from = this.lucky.rotation.z;
+    const spins = Math.ceil((from + Math.PI * 2 * 6 - base) / (Math.PI * 2));
+    this.luckyAnim = { from, to: base + spins * Math.PI * 2, t0: performance.now(), ms, last: performance.now() };
+  }
+
   update(t: number, dt: number): void {
+    const l = this.luckyAnim;
+    if (l) {
+      const now = performance.now();
+      const k = Math.min(1, (now - l.t0) / l.ms);
+      const prev = this.lucky.rotation.z;
+      this.lucky.rotation.z = l.from + (l.to - l.from) * spinEase(k);
+      const tick = pegTicks(prev, this.lucky.rotation.z, WEDGES, (now - l.last) / 1000);
+      l.last = now;
+      if (tick.at.length) this.onPeg(tick.at, tick.gain);
+      if (k >= 1) this.luckyAnim = null;
+    }
     const a = this.anim;
     if (a) {
       const now = performance.now();

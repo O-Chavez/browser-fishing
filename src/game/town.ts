@@ -402,7 +402,7 @@ export class Town {
    * Mags Cinder's smoke shack: a dark timber lean-to, open at the front, with a counter of smoked fish,
    * more hanging under the eave and on the back wall, a lantern, a SMOKEHOUSE sign up high, and a stone
    * smoker behind it whose pipe puffs smoke over the roof. `sh` is the middle of the counter; the shack
-   * stands behind it. It sits right beside the Lucky Wheel, so nothing juts out at the sides.
+   * stands behind it.
    * Dark and smoky on purpose, so it reads as a different place from Marlow's striped stall.
    */
   private buildSmokehouse(sh: Spot): void {

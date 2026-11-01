@@ -1,4 +1,4 @@
-import { CHIP_COINS, ROULETTE_PAY, ROULETTE_POCKETS, type RouletteBet } from '../data/casino';
+import { CHIP_COINS, ROULETTE_PAY, ROULETTE_POCKETS, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
 import { clearSlot, fishValue } from './economy';
 import type { SaveData } from './state';
 
@@ -69,6 +69,14 @@ export function spinRoulette(bet: RouletteBet, rng: Rng): { pocket: number; colo
   const pocket = Math.floor(rng() * POCKET_COUNT);
   const color = pocketColor(pocket);
   return { pocket, color, factor: color === bet ? ROULETTE_PAY[bet] : 0 };
+}
+
+// ---------- lucky wheel ----------
+
+/** Every wedge is the same size, so each is equally likely. */
+export function spinWheel(rng: Rng): { wedge: number; factor: number } {
+  const wedge = Math.floor(rng() * WHEEL_WEDGES.length);
+  return { wedge, factor: WHEEL_WEDGES[wedge] };
 }
 
 // ---------- blackjack ----------

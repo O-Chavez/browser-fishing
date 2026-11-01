@@ -57,7 +57,7 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
     case 'tier':
       return `A new tier of fish! Keep upgrading your bait and rod to reach rarer ones. Casino Cove opens at <b>Lv ${CASINO_LEVEL}</b>.`;
     case 'smoker':
-      return 'Small fry? Smoke it instead of selling it: <b>Mags Cinder</b> at the Smokehouse, beside the Lucky Wheel, smokes it in seconds.';
+      return 'Small fry? Smoke it instead of selling it: <b>Mags Cinder</b> at the Smokehouse, across the path from Marlow\'s stall, smokes it in seconds.';
     case 'snack':
       return `Smoked fish ready! Eat one from your <b>Bag</b> (${touch ? 'the 🎒 button' : '<kbd>Tab</kbd>'}) for ⭐ more XP on every catch.`;
     case 'dish': {

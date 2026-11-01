@@ -106,7 +106,8 @@ export type ClientMsg =
   | { t: 'ledge'; a: 'on' | 'surface' }
   /** Head home between ledges: the dive ends and its haul sinks. */
   | { t: 'headhome' }
-  | { t: 'gamble' }
+  /** Spin the Lucky Wheel with the fish in hotbar slot i. */
+  | { t: 'wheel'; i: number }
   /** Walk through the gate to another map. */
   | { t: 'travel'; to: string }
   /** Bet the fish in hotbar slot i on a roulette colour. */
@@ -165,7 +166,7 @@ export type ServerMsg =
   /** `b`: a sea fish's behaviour, whose reel levers (`BEHAVIOUR_TUNE`) the fight uses. */
   | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: number; b?: Behaviour }
   | { t: 'castfail'; msg: string }
-  | { t: 'wheel'; win: boolean; ms: number }
+  | { t: 'wheel'; wedge: number; factor: number; ms: number }
   | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }
   | { t: 'bj'; view: BlackjackView | null }
   | { t: 'joined'; player: PlayerInfo }

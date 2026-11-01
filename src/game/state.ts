@@ -31,7 +31,7 @@ export const FISH_SLOT = 2;
  */
 export type Slot =
   | { k: 'bait'; id: BaitType; n: number }
-  | { k: 'fish'; fishId: string; size: number; shiny?: boolean; /** Value multiplier won at the wheel and casino tables. */ mult?: number }
+  | { k: 'fish'; fishId: string; size: number; shiny?: boolean; /** Value multiplier won at the casino's wheels and tables. */ mult?: number }
   | { k: 'rod'; id: string };
 
 export type FishItem = Extract<Slot, { k: 'fish' }>;
