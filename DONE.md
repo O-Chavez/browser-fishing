@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Flaky smoke check "pond night: hub lamps lit and their bulbs drawn" (2026-11-01, branch `smoke-lamp-flake`; was an idea under Bugs and tooling)
+  - `scripts/smoke.ts` now also waits for the hub bulbs' `emissiveIntensity` before reading them, along with the lamp lights, so it no longer reads the bulbs before a frame has drawn the new night.
+  - Checked: `npm run smoke` passes the check.
 - [x] "What's new" board, the framework (Oscar, 2026-11-01, branch `whats-new`; was the release notes idea under Ideas → Gameplay and UI). Decided (Oscar, from options): a card right after the welcome for unread entries, re-read from ⚙️ Settings only (no hub prop), brand-new players skip notes from before they started, and no entries yet (the next big feature is the first).
   - Data: `NEWS` in `src/data/news.ts`, newest first: `id` (a rising release number), `date`, `title`, `body` paragraphs (simple HTML) and an optional bundled `image` with `alt`. Photos go in `src/assets/images/news/`.
   - Read state is per browser, not per account: `localStorage` `fishing-news` holds the highest id shown (`src/game/news.ts`). Every online join (`welcome`, `game.ts`) runs `showNews`: unread entries open the card, then the newest id is stored. Nothing stored plus a fresh save means a new player, who skips everything; a returning player on a new browser sees the newest. The card lists up to `GLANCE_MAX` (3) and points to Settings for the rest; it replaces the welcome banner, and a Smokehouse stage banner that comes up meanwhile waits until "Got it" (`afterNews`). The Settings link only shows once there are entries.
