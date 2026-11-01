@@ -1633,7 +1633,7 @@ export class Game {
     const btn = v.state === 'ledge'
       ? `<button class="btn" data-tab="marker">🚩 Marker ${v.depth}: choose</button>`
       : `<button class="btn bad" data-act="askhome"${this.phase === 'idle' ? '' : ' disabled'}>Head home</button>`;
-    return `<div class="seastrip"><span>⛵ Charter · ${zoneAt(v.depth).name}, league ${v.depth}. ${v.state === 'ledge' ? 'At a marker, heading home banks the haul.' : `Heading home before marker ${nextMarker(v.depth)} sinks the haul.`}</span>${btn}</div>`;
+    return `<div class="seastrip"><span>⛵ Charter · ${zoneAt(v.depth).name}. ${v.state === 'ledge' ? 'At a marker, heading home banks the haul.' : `Heading home before marker ${nextMarker(v.depth)} sinks the haul.`}</span>${btn}</div>`;
   }
 
   /** Opens a marker's choice or the end card once nothing else is on screen: no catch card, menu or "Casting off". */
@@ -3458,7 +3458,7 @@ export class Game {
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags's Smokehouse</b><span>${busy ? `${busy} fish smoking` : 'Smoker ready for fish'}</span></div>`;
     }
     if (this.tab === 'reed') return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>Charters</span></div>`;
-    if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? `${zoneAt(this.diveHud.view.depth).name} · league ${this.diveHud.view.depth}` : 'Back at the harbour'}</span></div>`;
+    if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? `${zoneAt(this.diveHud.view.depth).name}` : 'Back at the harbour'}</span></div>`;
     if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;

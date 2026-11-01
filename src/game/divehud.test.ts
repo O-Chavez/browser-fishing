@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { banked, endHtml, headHomeHtml, hudHtml, lineLevel, lossText, markerHtml, nextMarker, reedHtml, startText } from './divehud';
+import { banked, endHtml, headHomeHtml, hudHtml, lineLevel, lossText, zoneMarkers, markerHtml, nextMarker, reedHtml, startText } from './divehud';
 import { surface, type Dive } from './dive';
 
 const view = (o: Partial<DiveView> = {}): DiveView => ({ id: 1, start: 10, depth: 23, line: 214, state: 'fishing', ledges: 2, pearls: 16, fish: 13, coins: 24000, ...o });
@@ -23,21 +23,33 @@ describe('dive HUD', () => {
   it('shows leagues and markers, the line and the haul, and warns as the line runs low', () => {
     const t = text(hudHtml(view({ worn: 12 }), true));
     expect(t).toContain('The Drop-off');
-    expect(t).toContain('league 23');
-    expect(t).toContain('Marker 25 · 2 more fish');
+    expect(t).not.toMatch(/league/i);
+    expect(t).toContain('Head home at marker 25');
+    expect(t).toContain('Markers to Kelp Deep');
+    expect(hudHtml(view({ worn: 12 }), true).match(/<i class="on/g)).toHaveLength(3);
+    expect(hudHtml(view({ state: 'ledge', depth: 25 }), false).match(/<i class="(flag )?on/g)).toHaveLength(7);
     expect(t).toContain('214 m −12 m');
     expect(t).toContain('16 +20% 🐟 13');
     expect(text(hudHtml(view({ worn: 12 }), false))).not.toContain('−12');
     expect(text(hudHtml(view({ worn: 0.3 }), true))).not.toContain('−');
-    expect(text(hudHtml(view({ state: 'ledge', depth: 25 }), false))).toContain('Head home or sail on?');
+    expect(text(hudHtml(view({ state: 'ledge', depth: 25 }), false))).toContain('Marker 25 reached');
     expect([lineLevel(200), lineLevel(60), lineLevel(25), lineLevel(0)]).toEqual(['ok', 'low', 'danger', 'danger']);
     expect(hudHtml(view({ line: 20 }), false)).toContain('class="line danger"');
+  });
+
+  it('lists a flag per marker in the zone, none in the last one', () => {
+    expect([0, 20, 45, 100, 150].map((d) => zoneMarkers(d).length)).toEqual([3, 5, 8, 14, 14]);
+    expect(zoneMarkers(200)).toEqual([]);
+    expect(zoneMarkers(100)[0]).toBe(85);
+    expect(hudHtml(view({ depth: 92 }), false)).toContain('Markers to the Abyss');
+    expect(hudHtml(view({ depth: 92 }), false).match(/class="flag on/g)).toHaveLength(2);
+    expect(hudHtml(view({ depth: 200 }), false)).not.toContain('Markers to');
   });
 
   it("lists the harbour and charted markers by zone in Reed's panel, or what a charter needs", () => {
     const html = reedHtml({ say: 'Shall we?', chart: { ledges: [5, 10, 15, 20, 25], record: 25 }, pearls: 68, ownsRod: true, pick: 25, open: true });
     const t = text(html);
-    expect(t).toMatch(/The Shelf Harbour league 0 5 marker 10 marker 15 marker The Drop-off 20 marker 25 marker/);
+    expect(t).toMatch(/The Shelf Harbour start 5 marker 10 marker 15 marker The Drop-off 20 marker 25 marker/);
     expect(html).toContain('class="chip sel rec" data-act="divefrom" data-id="25"');
     expect(t).toContain('Start at marker 25 in The Drop-off. Runners: long pulls that take line. 2 pearls a fish.');
     expect(html).toContain('data-act="castoff" data-id="25"');
@@ -52,7 +64,7 @@ describe('dive HUD', () => {
     const closed = (ownsRod: boolean) => reedHtml({ say: 'Shall we?', chart: { ledges: [5], record: 5 }, pearls: 3, ownsRod, pick: 5, open: false });
     const t = text(closed(true));
     expect(t).toContain('Charters are coming soon.');
-    expect(t).toContain('Every 5 leagues there\'s a marker: head home with your haul, or sail on');
+    expect(t).toContain('Every 5 fish you land, you reach a marker: head home with your haul, or sail on');
     expect(t).toContain('Aurora Rod, and you have one.');
     expect(t).not.toContain('Shall we?');
     expect(closed(true)).not.toContain('castoff');
@@ -73,7 +85,7 @@ describe('dive HUD', () => {
   });
 
   it('warns that heading home between markers sinks the haul', () => {
-    expect(text(headHomeHtml(view()))).toContain('The Drop-off · league 23 · 2 fish to marker 25 The haul of 16 pearls sinks');
+    expect(text(headHomeHtml(view()))).toContain('The Drop-off · 2 fish to marker 25 The haul of 16 pearls sinks');
     expect(text(headHomeHtml(view({ pearls: 0, fish: 0 })))).toContain('Nothing in the haul yet');
   });
 
@@ -86,12 +98,12 @@ describe('dive HUD', () => {
     expect(t).toContain('Fish landed and sold 15 · 27,400');
     const sunk = (o: Partial<Extract<DiveEnd, { result: 'sunk' }>>) =>
       text(endHtml({ result: 'sunk', why: 'line', depth: 27, pearls: 24, fish: 17, coins: 31200, ...o }, null, 42, 25));
-    expect(sunk({ lost: 'held-red' })).toContain('Out of line at league 27 · The Drop-off The last fish snapped the line: you held on in the red.');
+    expect(sunk({ lost: 'held-red' })).toContain('Out of line before marker 30 · The Drop-off The last fish snapped the line: you held on in the red.');
     expect(sunk({ lost: 'ran' })).toContain('ran off with the line');
     expect(sunk({})).toContain('took the last of the line');
     expect(sunk({ why: 'home' })).toContain('Headed home');
     expect(sunk({ why: 'away' })).toContain('waited 2 minutes');
     expect(lossText('held-surge')).toContain('through a surge');
-    expect([startText(0), startText(20), startText(24)]).toEqual(['The Shelf · from the harbour', 'The Drop-off · from marker 20', 'The Drop-off · league 24']);
+    expect([startText(0), startText(20), startText(24)]).toEqual(['The Shelf · from the harbour', 'The Drop-off · from marker 20', 'The Drop-off · partway to marker 25']);
   });
 });
