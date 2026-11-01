@@ -587,7 +587,7 @@ async function casinoChecks(): Promise<void> {
   });
   check('casino: turning a fish in at the tray gives chips', chips.after > chips.before, `${chips.before} -> ${chips.after}`);
 
-  // Lucky Wheel (moved from the pond): a fish from the dev console, aim at the wheel, click.
+  // Lucky Wheel: a fish from the dev console, aim at the wheel, press E. The fish stays in hand until the bet.
   for (const line of ['/login smoke smoke-dev-pass', '/fish perch']) {
     await page.keyboard.press('Enter');
     await page.keyboard.type(line);
@@ -603,19 +603,23 @@ async function casinoChecks(): Promise<void> {
     const w = window as any;
     w.__ticks.peg = [];
     w.__ticks.result = [];
-    const label = document.getElementById('tablehud')!.textContent ?? '';
+    const label = g.player().near ?? '';
+    const held = g.inHand();
+    const y0 = h.lucky.position.y;
     const r0 = h.lucky.rotation.z;
-    g.press();
-    g.release();
+    g.interact();
     const t0 = performance.now();
     while (performance.now() - t0 < 3000 && !h.luckyAnim) await new Promise((r) => setTimeout(r, 50));
     const spun = !!h.luckyAnim;
+    await new Promise((r) => setTimeout(r, 100));
+    const betHeld = g.inHand();
     const before = JSON.stringify((g.s as any).slots[i]);
     await new Promise((r) => setTimeout(r, 5500));
-    return { label, spun, moved: h.lucky.rotation.z !== r0, pegs: w.__ticks.peg.length, result: w.__ticks.result.length, before, after: JSON.stringify((g.s as any).slots[i]) };
+    return { label, held, betHeld, still: Math.abs(y0 - 2.15) < 1e-6 && h.lucky.position.y === y0, spun, moved: h.lucky.rotation.z !== r0, pegs: w.__ticks.peg.length, result: w.__ticks.result.length, before, after: JSON.stringify((g.s as any).slots[i]) };
   }, wheelSlot);
   await page.screenshot({ path: `${SHOTS}/casino-wheel.png` });
-  check('casino: the Lucky Wheel spins with a fish in hand', wheelSlot >= 2 && lucky.label.includes('spin the wheel') && lucky.spun && lucky.moved, JSON.stringify(lucky));
+  check('casino: E spins the Lucky Wheel with a fish in hand', wheelSlot >= 2 && lucky.label.startsWith('Spin the wheel with ') && lucky.spun && lucky.moved, JSON.stringify(lucky));
+  check('casino: the fish stays in hand at the wheel until the bet, and the wheel does not rise when aimed at', lucky.held && !lucky.betHeld && lucky.still, JSON.stringify(lucky));
   check('casino: the Lucky Wheel ticks, then settles the fish (multiplied or gone)', lucky.pegs > 20 && lucky.result === 1 && lucky.after !== lucky.before, JSON.stringify(lucky));
 
   // Casino-only cosmetics: bought with chips at the prize counter, then worn.
