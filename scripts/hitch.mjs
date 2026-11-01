@@ -34,11 +34,40 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // --online: a game server with one other player standing at the spawn, and the probe joins through
 // the join screen like a new player (so other players' avatars appear right after joining).
 const ONLINE = flag('--online');
+// The server runs in its own process group (`detached`): npx starts tsx, which starts the server, and
+// stopping only npx would leave the server on the port. stopServer() signals the whole group.
+let serverGroup = null;
+const serverGroupAlive = () => {
+  if (serverGroup === null) return false;
+  try { process.kill(-serverGroup, 0); return true; } catch { return false; }
+};
+const signalServerGroup = (sig) => {
+  if (serverGroup === null) return;
+  try { process.kill(-serverGroup, sig); } catch { /* already gone */ }
+};
+let serverStopping = null;
+/** Stops the game server and everything it started: SIGTERM, then SIGKILL if it's still up after 2 s. */
+function stopServer() {
+  serverStopping ??= (async () => {
+    signalServerGroup('SIGTERM');
+    for (let i = 0; i < 20 && serverGroupAlive(); i++) await sleep(100);
+    if (serverGroupAlive()) signalServerGroup('SIGKILL');
+  })();
+  return serverStopping;
+}
+// Any other exit (a thrown error, process.exit): kill the group at once, there's no time to wait.
+process.on('exit', () => { if (serverGroupAlive()) signalServerGroup('SIGKILL'); });
+// Ctrl-C and kill don't reach the detached server, so stop it before this script ends.
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(sig, () => void stopServer().then(() => process.exit(128 + os.constants.signals[sig])));
+}
+
 let game = null;
 if (ONLINE) {
   const SERVER_PORT = Number(opt('--server-port', 8797));
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fishing-hitch-'));
-  game = spawn('npx', ['tsx', 'server/index.ts'], { cwd: ROOT, env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_WEBHOOK: '', TEST_HOOKS: '1' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  game = spawn('npx', ['tsx', 'server/index.ts'], { cwd: ROOT, env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_WEBHOOK: '', TEST_HOOKS: '1' }, stdio: ['ignore', 'pipe', 'inherit'], detached: true });
+  serverGroup = game.pid;
   await new Promise((res) => game.stdout.on('data', (d) => /fishing server on port/.test(String(d)) && res()));
   process.env.VITE_SERVER_URL = `ws://localhost:${SERVER_PORT}`;
 }
@@ -240,6 +269,6 @@ try {
   if (JSON_OUT) console.log(JSON.stringify(results));
 } finally {
   await friend?.close();
-  game?.kill();
+  await stopServer();
   await server.close();
 }

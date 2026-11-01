@@ -57,12 +57,42 @@ fs.writeFileSync(
 );
 fs.mkdirSync(SHOTS, { recursive: true });
 
+// The server runs in its own process group (`detached`): npx starts tsx, which starts the server, and
+// stopping only npx would leave the server on the port. stopServer() signals the whole group.
+let serverGroup: number | undefined;
+const serverGroupAlive = (): boolean => {
+  if (serverGroup === undefined) return false;
+  try { process.kill(-serverGroup, 0); return true; } catch { return false; }
+};
+const signalServerGroup = (sig: NodeJS.Signals): void => {
+  if (serverGroup === undefined) return;
+  try { process.kill(-serverGroup, sig); } catch { /* already gone */ }
+};
+let serverStopping: Promise<void> | undefined;
+/** Stops the game server and everything it started: SIGTERM, then SIGKILL if it's still up after 2 s. */
+function stopServer(): Promise<void> {
+  serverStopping ??= (async () => {
+    signalServerGroup('SIGTERM');
+    for (let i = 0; i < 20 && serverGroupAlive(); i++) await sleep(100);
+    if (serverGroupAlive()) signalServerGroup('SIGKILL');
+  })();
+  return serverStopping;
+}
+// Any other exit (a thrown error, process.exit): kill the group at once, there's no time to wait.
+process.on('exit', () => { if (serverGroupAlive()) signalServerGroup('SIGKILL'); });
+// Ctrl-C and kill don't reach the detached server, so stop it before this script ends.
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.on(sig, () => void stopServer().then(() => process.exit(128 + os.constants.signals[sig])));
+}
+
 const server = spawn('npx', ['tsx', 'server/index.ts'], {
   // No Discord webhooks: the feedback check below must not post a real report.
   // Dev console on, for `/sea`; TEST_HOOKS lets the test teleports past the server's move check (`/goto`).
   env: { ...process.env, DATA_DIR: dataDir, PORT: String(SMOKE_SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_JOINS_WEBHOOK: '', DISCORD_TIPS_WEBHOOK: '', DEV_USER: 'smoke', DEV_PASS: 'smoke-dev-pass', TEST_HOOKS: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
+  detached: true,
 });
+serverGroup = server.pid;
 await waitForLine(server, /fishing server on port/);
 process.env.VITE_SERVER_URL = `ws://localhost:${SMOKE_SERVER_PORT}`;
 const vite = await createServer({ server: { port: VITE_PORT, strictPort: true }, logLevel: 'error' });
@@ -89,7 +119,7 @@ try {
 } finally {
   await browser.close();
   await vite.close();
-  server.kill();
+  await stopServer();
   fs.rmSync(dataDir, { recursive: true, force: true });
 }
 
@@ -1062,9 +1092,7 @@ async function offlineChecks(): Promise<void> {
     return { text: el.textContent!, clickable: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.id === 'offline-go' };
   });
   check('offline: no disconnected banner while online', (await shown()) === null);
-  const exited = new Promise((r) => server.once('exit', r));
-  server.kill();
-  await exited;
+  await stopServer();
   await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 10000 });
   const drop = await shown();
   await page.screenshot({ path: path.join(SHOTS, 'offline.png') });
