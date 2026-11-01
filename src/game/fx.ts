@@ -101,9 +101,10 @@ export class FX {
     }
   }
 
+  /** A ring spreading on the water at `p`, a point on the surface (at sea it rides the swell's height there). */
   ripple(p: THREE.Vector3, max = 1.6, delay = 0, life = 1.6): void {
     const r = this.rings[this.ringNext++ % this.rings.length];
-    r.mesh.position.set(p.x, 0, p.z);
+    r.mesh.position.set(p.x, p.y, p.z);
     Object.assign(r, { age: 0, life, max, delay, active: true });
   }
 

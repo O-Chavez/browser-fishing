@@ -2382,8 +2382,9 @@ export class Game {
     this.phase = 'landing';
     this.landT = 0;
     this.landFrom.copy(this.fish!.group.position);
-    w.fx.splash(this.landFrom.clone().setY(0), 40, 1.5);
-    w.fx.ripple(this.landFrom, 3.5);
+    const breach = this.landFrom.clone().setY(this.waterLine(this.landFrom.x, this.landFrom.z));
+    w.fx.splash(breach, 40, 1.5);
+    w.fx.ripple(breach, 3.5);
     audio.splash(1);
     w.rig.pose({
       pitch: this.holdPitch(this.heldScale()),
@@ -2860,6 +2861,19 @@ export class Game {
       $('toast').classList.remove('show');
   }
 
+  /** The water's height at (x, z): the swell's at sea, the still pond's 0 elsewhere (its ripples are too small to follow). */
+  private waterLine(x: number, z: number): number {
+    return this.map.sea ? this.world.surface(x, z) : 0;
+  }
+
+  /**
+   * How far under the water a hooked fish swims: 0.4 in the pond; at sea a little deeper the bigger it is, so the
+   * giants' backs ride the swell rather than standing clear of a trough (Oscar's play test, 2026-11-01).
+   */
+  private swimDepth(scale: number): number {
+    return this.map.sea ? 0.4 + 0.15 * Math.max(0, scale - 1) : 0.4;
+  }
+
   private updateShadow(): void {
     if (!this.shadow || !this.hooked) return;
     const w = this.world;
@@ -2879,7 +2893,7 @@ export class Game {
     const q = pos(Math.min(1, u + 0.02));
     const g = this.shadow.group;
     g.visible = true;
-    g.position.set(p.x, -0.45, p.y);
+    g.position.set(p.x, this.waterLine(p.x, p.y) - this.swimDepth(g.scale.x) - 0.05, p.y);
     faceDirection(g, q.x - p.x, q.y - p.y);
     animateFish(this.shadow, w.time, 9, 0.5);
     setFishOpacity(this.shadow, Math.min(1, u * 6));
@@ -2933,7 +2947,10 @@ export class Game {
     w.bobber.rotation.z = Math.sin(t * 20) * 0.2 * r.pull;
 
     const g = fish.group;
-    g.position.set(fp.x, -0.4 + Math.sin(t * 7) * 0.05, fp.z);
+    // The fish swims under the water where it is: at sea that rises and falls with the swell.
+    fp.y = this.waterLine(fp.x, fp.z);
+    const swimY = fp.y - this.swimDepth(g.scale.x);
+    g.position.set(fp.x, swimY + Math.sin(t * 7) * 0.05, fp.z);
     const lead = Math.atan2(-(fp.x - base.x), -(fp.z - base.z));
     g.rotation.y =
       lead + Math.PI + r.lateral * 0.9 + Math.sin(t * 11) * 0.5 * r.pull;
@@ -2943,12 +2960,12 @@ export class Game {
     if (this.leapT >= 0) {
       this.leapT += dt / 0.75;
       const u = Math.min(1, this.leapT);
-      g.position.y = -0.4 + Math.sin(u * Math.PI) * 1.4;
+      g.position.y = swimY + Math.sin(u * Math.PI) * (this.map.sea ? 1.4 + 0.25 * Math.max(0, g.scale.x - 1) : 1.4);
       g.rotation.x = -0.8 + u * 1.6;
       if (this.leapT >= 1) {
         this.leapT = -1;
         g.rotation.x = 0;
-        w.fx.splash(new THREE.Vector3(fp.x, 0, fp.z), 34, 1.4);
+        w.fx.splash(fp, 34, 1.4);
         w.fx.ripple(fp, 3.5);
         audio.splash(0.9);
         w.addShake(0.5);
@@ -2958,7 +2975,7 @@ export class Game {
     this.splashCd -= dt;
     if (this.splashCd <= 0 && r.pull > 0.25) {
       this.splashCd = 0.35 - r.pull * 0.15;
-      w.fx.splash(new THREE.Vector3(fp.x, 0, fp.z), 8, 0.7);
+      w.fx.splash(fp, 8, 0.7);
       w.fx.ripple(fp, 1.8, 0, 1);
     }
 
