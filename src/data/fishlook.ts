@@ -135,13 +135,20 @@ export const FISH_LOOK: Record<string, FishLook> = {
   chandelier: { shape: 'bulb', tail: 'round', dorsal: 'none', back: 0x2c2040, belly: 0x5a4870, fin: 0x45365e, marks: [{ k: 'glowdots', color: 0xffd27a }], extras: ['lantern', 'bigmouth'], accent: 0xffd27a, finish: 'lit' },
 
   // Sea · The Abyss, Abyssal: impossible anatomy in a violet aura (parts: `abyss`, src/game/seafish/abyss.ts)
-  lurker: { shape: 'bulb', tail: 'round', dorsal: 'soft', back: 0x5a3a7c, belly: 0xc0a2de, fin: 0x8a68b2, marks: [{ k: 'spots', color: 0xd6ff6a, n: 12, size: 0.04 }], accent: 0xd6ff6a, finish: 'abyssal' },
-  gulper: { shape: 'gulper', tail: 'none', dorsal: 'long', back: 0x241d34, belly: 0x463858, fin: 0x3a2e52, extras: ['bigmouth'], accent: 0xff5a7a, finish: 'abyssal' },
-  krakenspawn: { shape: 'mantle', tail: 'squid', dorsal: 'none', back: 0x8a2a4c, belly: 0xf0a2b4, fin: 0xb84a6a, marks: [{ k: 'spots', color: 0xffd0dc, n: 10, size: 0.03 }], extras: ['barbels'], accent: 0xff8ab0, finish: 'abyssal' },
-  boneserpent: { shape: 'eel', tail: 'eel', dorsal: 'spiny', back: 0xe8e0cc, belly: 0xcab89c, fin: 0xf2ecdc, marks: [{ k: 'bars', color: 0x6a5a48, n: 14 }], accent: 0x7affd8, finish: 'abyssal' },
-  leviathan: { shape: 'plated', tail: 'shark', dorsal: 'spiny', back: 0x2c2c42, belly: 0x4c3c44, fin: 0x3e3a56, marks: [{ k: 'bars', color: 0xff6a1a, n: 6 }], extras: ['scutes', 'barbels', 'bigmouth'], accent: 0xff7a2a, finish: 'abyssal' },
-  dreamer: { shape: 'bulb', tail: 'round', dorsal: 'soft', back: 0x2c6a5c, belly: 0x9ad8b8, fin: 0x4a9a7c, marks: [{ k: 'spots', color: 0x9affd0, n: 8, size: 0.04 }], extras: ['whiskers'], accent: 0x9affd0, finish: 'abyssal' },
-  kraken: { shape: 'mantle', tail: 'squid', dorsal: 'none', back: 0x6a1a36, belly: 0xe07a96, fin: 0x9a2a50, marks: [{ k: 'spots', color: 0xffc8d6, n: 14, size: 0.03 }], extras: ['whiskers'], accent: 0xff6a9a, finish: 'abyssal' },
+  lurker: { shape: 'bulb', tail: 'round', dorsal: 'soft', back: 0x5a3a7c, belly: 0xc0a2de, fin: 0x8a68b2, marks: [{ k: 'speckle', color: 0x3c2458 }], extras: ['bigmouth'], accent: 0xd6ff6a, finish: 'abyssal', eye: 'none',
+    abyss: { eye: { t: 0.15, r: 0.09, up: 0.3, pupil: 'slit' }, eyes: { n: 13, r: [0.03, 0.07] } } },
+  gulper: { shape: 'gulper', tail: 'none', dorsal: 'long', back: 0x241d34, belly: 0x463858, fin: 0x3a2e52, accent: 0xff5a7a, finish: 'abyssal', eye: 'none',
+    abyss: { eye: { t: 0.24, r: 0.036, up: 0.45 }, jaw: 0xd65a8a, whip: 0xff4a5a } },
+  krakenspawn: { shape: 'mantle', tail: 'none', dorsal: 'none', back: 0x8a2a4c, belly: 0xf0a2b4, fin: 0xb84a6a, marks: [{ k: 'spots', color: 0xffd0dc, n: 10, size: 0.03 }], accent: 0xff8ab0, finish: 'abyssal', eye: 'none',
+    abyss: { eye: { t: 0.15, r: 0.072, up: 0.25, pupil: 'bar' }, tentacles: { n: 6, len: 0.52, r: 0.036, color: 0xb03a5e, dir: 'forward', suckers: 0xffd0dc }, squidFins: 1 } },
+  boneserpent: { shape: 'eel', tail: 'eel', dorsal: 'none', back: 0xe8e0cc, belly: 0xcab89c, fin: 0xf2ecdc, accent: 0x7affd8, finish: 'abyssal', eye: 'none',
+    abyss: { eye: { t: 0.07, r: 0.034, up: 0.35, pupil: 'lamp' }, ribs: { n: 10, color: 0x6a5a48 }, spines: { n: 18, len: 0.11, color: 0xf2ecdc }, horns: { n: 2, len: 0.2, color: 0xf2ecdc }, fangs: 2, wave: { amp: 0.06, freq: 1.3 } } },
+  leviathan: { shape: 'plated', tail: 'shark', dorsal: 'none', back: 0x2c2c42, belly: 0x4c3c44, fin: 0x3e3a56, extras: ['bigmouth'], accent: 0xff7a2a, finish: 'abyssal', eye: 'none',
+    abyss: { eye: { t: 0.1, r: 0.045, up: 0.3, iris: 0xffb02e, pupil: 'slit' }, eyeRow: 2, seams: { n: 4, color: 0xff6a1a }, spines: { n: 10, len: 0.14, color: 0xf4e8cc }, horns: { n: 3, len: 0.3, color: 0xf4e8cc }, fangs: 3, tentacles: { n: 5, len: 0.22, r: 0.016, color: 0x9a86c0, dir: 'down' } } },
+  dreamer: { shape: 'bulb', tail: 'round', dorsal: 'soft', back: 0x2c6a5c, belly: 0x9ad8b8, fin: 0x4a9a7c, accent: 0x9affd0, finish: 'abyssal', eye: 'none',
+    abyss: { eye: { t: 0.16, r: 0.075, up: 0.35 }, eyes: { n: 6, r: [0.026, 0.05] }, tentacles: { n: 8, len: 0.6, r: 0.042, color: 0x2f7a62, dir: 'down' }, halo: true } },
+  kraken: { shape: 'mantle', tail: 'none', dorsal: 'none', back: 0x6a1a36, belly: 0xe07a96, fin: 0x9a2a50, marks: [{ k: 'spots', color: 0xffc8d6, n: 14, size: 0.03 }], accent: 0xff6a9a, finish: 'abyssal', eye: 'none',
+    abyss: { eye: { t: 0.17, r: 0.1, up: 0.25, iris: 0xffc23a, pupil: 'bar' }, tentacles: { n: 9, len: 0.9, r: 0.075, color: 0x8a2246, dir: 'forward', suckers: 0xffc8d6 }, squidFins: 1.35 } },
 };
 
 /** Tier themes, shown as Fishdex section headers and on the catch card. */
