@@ -2360,7 +2360,7 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea);
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch', h: this.holds.encode() });
     this.stagesWaiting.push(...stages);
@@ -2382,7 +2382,7 @@ export class Game {
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${RARITY_COLOR[fish.rarity]}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
-      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}
+      <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
@@ -2996,7 +2996,7 @@ export class Game {
   private showFishTag(tag: FishTag | undefined): void {
     const el = $('fishtag');
     el.className = tag ?? 'hidden';
-    if (tag) el.innerHTML = tag === 'feisty' ? '⚡ FEISTY <span>· pulls harder</span>' : '⚓ BRUTISH <span>· drags more line</span>';
+    if (tag) el.innerHTML = tag === 'feisty' ? '<i>⚡</i><b>Feisty<small>pulls harder · +15%</small></b>' : '<i>⚓</i><b>Brutish<small>drags more line · +15%</small></b>';
   }
 
   /** Once a session, after a lost or long fight: a snap points at the next line up, the rest at the next rod. */

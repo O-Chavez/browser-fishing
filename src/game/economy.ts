@@ -499,9 +499,11 @@ export interface CatchResult {
 
 /** A clean catch (landed without fraying the line) is worth this much more. */
 export const CLEAN_BONUS = 0.1;
+/** A Feisty or Brutish fish landed is worth this much more, on top of a clean catch (REELING.md, "Temperament"). */
+export const TAG_BONUS = 0.15;
 
 /** Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins (dives). */
-export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false): CatchResult {
+export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false, tag: FishTag | null = null): CatchResult {
   const slot = sell ? -1 : freeFishSlot(s);
   if (slot < 0 && !sell) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
@@ -515,7 +517,7 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
   s.seen = s.seen.filter((id) => id !== fish.id);
-  const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1);
+  const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1) * (tag ? 1 + TAG_BONUS : 1);
   const item: Slot = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
   const sold = sell ? sellPrice(s, item) : 0;
   if (sell) s.coins += sold;

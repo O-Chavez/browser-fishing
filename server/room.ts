@@ -4,7 +4,7 @@ import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
-import { fishingSpot } from '../src/game/progression';
+import { fishingSpot, type FishTag } from '../src/game/progression';
 import { BEHAVIOUR_TUNE, afterFight, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
 import { replayFight, type Difficulty, type LossReason, type ReelWear } from '../src/game/reel';
 import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
@@ -39,6 +39,8 @@ interface Pending {
   biteAt: number;
   /** A sea fish's behaviour, whose reel levers the replay uses. */
   b?: Behaviour;
+  /** A Feisty or Brutish pond fish: worth more when landed. */
+  tag?: FishTag;
 }
 
 interface Member {
@@ -882,7 +884,7 @@ export class Room {
       return false;
     }
     const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
-    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000 } : null;
+    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.tag ? { tag: roll.tag } : {}) } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
     return true;
@@ -932,7 +934,7 @@ export class Room {
       return !!run;
     }
     // On a dive the fish is sold as it's landed: the hotbar couldn't hold a dive's catch.
-    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean, !!run);
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean, !!run, p.tag ?? null);
     if (!res.stored) {
       this.setAct(m, null);
       return false;

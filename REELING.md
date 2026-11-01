@@ -217,11 +217,11 @@ Built: line as a spool on the rod, the two-axis ladder in `reelDifficulty`, tags
 - Surge length is a pace lever; weight is drag and reel speed only (2026-10-31).
 - Shiny, size and Brutish all sit on weight; shiny only counts on gear that handles the fish (2026-10-31).
 - Gloves act on weight (they are Quick-Reel Gloves) (2026-10-31).
-- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a badge by the gauge for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the card with the reel-tip lines only.
+- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a sticker in the lower right of the screen for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish, which also says what it pays. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the card with the reel-tip lines only.
 
 ## Open questions
 
 - The time budget numbers, set by play test.
-- Whether tagged fish are worth a little more, so Feisty is welcomed rather than dreaded (Ideas until tested).
+- ~~Whether tagged fish are worth a little more, so Feisty is welcomed rather than dreaded.~~ Yes: +15% on the landed fish, stacking with the clean catch's +10% (Oscar, 2026-10-31).
 - Wording and placement of the bait-over-line shop warning.
 - ~~Whether the Fishdex sighting shows the fish's silhouette or its name.~~ Both: the silhouette with the real name, since the player has seen it on the line (2026-10-31).

@@ -471,8 +471,8 @@ describe('shinies & fishing spots', () => {
     const fish = a.acct.save.slots.find((s) => s?.k === 'fish') as { fishId: string; size: number; shiny?: boolean };
     expect(fish.shiny).toBe(true);
     const plain = sellValue(FISH.find((f) => f.id === fish.fishId)!, fish.size);
-    // Fought clean, so the clean bonus rides on top.
-    expect(eco.fishValue(fish)).toBeCloseTo(plain * 5 * (1 + eco.CLEAN_BONUS), 9);
+    // Fought clean, so the clean bonus rides on top, and a Feisty or Brutish roll pays its own bonus.
+    expect(eco.fishValue(fish)).toBeCloseTo(plain * 5 * (1 + eco.CLEAN_BONUS) * (roll.tag ? 1 + eco.TAG_BONUS : 1), 9);
   });
 });
 

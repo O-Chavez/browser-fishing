@@ -412,6 +412,23 @@ describe('line', () => {
   });
 });
 
+describe('tag bonus', () => {
+  it('a Feisty or Brutish fish is worth more, on top of a clean catch', () => {
+    const pike = byId(FISH, 'pike');
+    const plain = eco.applyCatch(newSave(), pike, 80, false, false, true);
+    const feisty = eco.applyCatch(newSave(), pike, 80, false, false, true, 'feisty');
+    const both = eco.applyCatch(newSave(), pike, 80, false, true, true, 'brutish');
+    expect(feisty.mult).toBeCloseTo((1 + eco.TAG_BONUS) * plain.mult, 9);
+    expect(both.mult).toBeCloseTo((1 + eco.TAG_BONUS) * (1 + eco.CLEAN_BONUS) * plain.mult, 9);
+    expect(feisty.sold!).toBeGreaterThan(plain.sold!);
+    // The bonus rides on the fish, so it still counts when the fish is sold later.
+    const s = newSave();
+    eco.applyCatch(s, pike, 80, false, false, false, 'feisty');
+    const item = s.slots.find((x) => x?.k === 'fish')!;
+    expect(item.k === 'fish' && item.mult).toBeCloseTo(1 + eco.TAG_BONUS, 9);
+  });
+});
+
 describe('sightings', () => {
   it('names what stands between the gear and a species: line to hold it, rod to land it, bait to hook it', () => {
     const s = newSave(); // Twig, Twine, Worm
