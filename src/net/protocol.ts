@@ -6,7 +6,8 @@ import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 import type { Behaviour } from '../data/dive';
 import type { DiveState } from '../game/dive';
-import type { LossReason } from '../game/reel';
+import type { Difficulty, LossReason } from '../game/reel';
+import type { FishTag } from '../game/progression';
 
 export interface PlayerInfo {
   id: number;
@@ -72,6 +73,7 @@ export type ClientMsg =
   /** The player jumped; others on the map replay the arc. */
   | { t: 'jump' }
   | { t: 'buyrod'; id: string }
+  | { t: 'buyline'; id: string }
   /** The Aurora Rod's next level, at the stall (`levelRod`). */
   | { t: 'levelrod' }
   | { t: 'buybait'; id: string }
@@ -163,8 +165,8 @@ export type ServerMsg =
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
   /** With a fish, `seed` and `d` set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
-  /** `b`: a sea fish's behaviour, whose reel levers (`BEHAVIOUR_TUNE`) the fight uses. */
-  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: number; b?: Behaviour }
+  /** `b`: a sea fish's behaviour, whose reel levers (`BEHAVIOUR_TUNE`) the fight uses. `tag`: a Feisty or Brutish pond fish. */
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Difficulty; b?: Behaviour; tag?: FishTag }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; wedge: number; factor: number; ms: number }
   | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }

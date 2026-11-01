@@ -187,12 +187,25 @@ The engine now takes the difficulty as three axes, `weight`, `strength` and `pac
 | Weight alone | A time axis up to about 2.5× matched (×1.9 roughly doubles the fight, ×2.5 lands every time in 55 s), then a cliff: ×3.1 runs off almost always, ×3.75 walks off in 6 s with no snaps. |
 | Riding high | Letting the player save less drag by riding high in the green (50% instead of 90%) only turns the edge fights into 200 s slogs. Leave it. |
 
-What that means for slice 2:
+What that meant for slice 2:
 
-- The ladder can place "one tier over the rod" near ×1.9 weight (a doubled fight, still landed) and "two tiers over" past the cliff, around ×3.75, without changing any constant. The numbers are invisible to the player; only the feel matters.
-- Size and Brutish rolls must stay inside the one-tier band, or they cross the wall. With one tier at ×1.9 and size at ±15%, a trophy sits at ×2.2, still landed.
-- The edge of the weight wall (×2.5 to ×3.1) is a slog zone. Nothing should be placed there on purpose.
+- The ladder places "one tier over the rod" near ×1.9 weight (a doubled fight, still landed) and "two tiers over" past the cliff, without changing any constant. The numbers are invisible to the player; only the feel matters.
+- Size and Brutish rolls must stay inside the one-tier band, or they cross the wall.
+- The edge of the weight wall is a slog zone. Nothing should be placed there on purpose.
 - The strength wall moves with skill, as the fan test records. If the line is to be the same wall for everyone, the ladder should put "over the line" past where even a fast player snaps, about ×2.5.
+
+## Ladder findings (slice 2, 2026-10-31)
+
+Built: line as a spool on the rod, the two-axis ladder in `reelDifficulty`, tags, and the per-fish spread cut from ±50% to ±15% (`P.fight`). Bot measurements that set the numbers:
+
+| Finding | Consequence |
+|---|---|
+| Surge length moved from weight to pace. With it on weight, a slow player following only the big words landed 62% of fish one tier over the rod, losing the rest to fraying in long surges; on pace, 91%. | Weight is now exactly the doc's lever list: drag and reel speed. The cost is a slower run-off, so the two-tier step moved out. |
+| Where the run-off is quick depends on the pace, because drag follows the surge's build-up, which is slow on low-pace fish: at pace 1.4 it takes weight 12 to run off in under 20 s, at 1.8 weight 8. | `WEIGHT_STEP` is ×1.5 one tier over, ×12 two tiers over, so even the smallest tier 3 fish on the Twig Rod runs off within the time a one-tier fight would have been landed. |
+| The slow-player snaps on tier 5 fights come from pace, not weight: tier 5 matched fights were already a coin flip for a 0.7 s player before this work. | Left alone here. It is the tier 4-5 retune under Ideas. |
+| Shiny stacking on a trophy one tier over the rod reached the slog zone. | A shiny fights heavier only on gear that handles it, like a tag. Over the rod it fights like a plain fish of its size. |
+| With the spread small the land-rate curve is steeper than before (the spread used to smear it). The fan's half-landing points moved by under 0.05. | The "no cliff" tests now allow a steeper fall; 0.2 of difficulty is about 8 leagues at sea. |
+| Strength one tier over the line (×2.5): a slow player snaps every time, a fast player lands about half by giving line. Two tiers over, nobody. | Kept as designed: poaching one tier over the line is the "pushing skill" stress. |
 
 ## Decisions so far
 
@@ -200,6 +213,10 @@ What that means for slice 2:
 - Feisty and Brutish tags for outlier rolls, shown at hook time, never wall-crossing (2026-10-31).
 - "Too heavy" only fires when the fish's weight class is above the rod's tier, once per fight (2026-10-31).
 - Both walls end the fight on their own; nothing waits for the player to quit (2026-10-31).
+- Line: Twine, Mono, Fluoro, Braid, Moonsilk, unlocking at levels 1, 2, 5, 9, 13 for 0, 100, 500, 2 000, 8 000 coins; saves from before line get the line of their best rod (2026-10-31).
+- Surge length is a pace lever; weight is drag and reel speed only (2026-10-31).
+- Shiny, size and Brutish all sit on weight; shiny only counts on gear that handles the fish (2026-10-31).
+- Gloves act on weight (they are Quick-Reel Gloves) (2026-10-31).
 
 ## Open questions
 

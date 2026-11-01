@@ -350,6 +350,68 @@ describe('carry slots', () => {
   });
 });
 
+describe('line', () => {
+  it('spools a better line onto the rod: a step up, unlocked and paid for, nothing to carry', () => {
+    const s = newSave();
+    s.coins = 10_000;
+    expect(eco.lineOf(s).id).toBe('twine');
+    expect(eco.buyLine(s, 'mono')).toBe(false); // level 1
+    s.level = 5;
+    expect(eco.buyLine(s, 'mono')).toBe(true);
+    expect(s.line).toBe('mono');
+    expect(s.coins).toBe(9_900);
+    expect(eco.buyLine(s, 'mono')).toBe(false); // already spooled
+    expect(eco.buyLine(s, 'twine')).toBe(false); // lighter
+    expect(eco.buyLine(s, 'braid')).toBe(false); // level 9
+    expect(eco.buyLine(s, 'fluoro')).toBe(true);
+    expect(s.coins).toBe(9_400);
+    s.coins = 10;
+    s.level = 20;
+    expect(eco.buyLine(s, 'braid')).toBe(false); // broke
+    expect(s.slots.filter((x) => x && x.k !== 'rod' && x.k !== 'bait')).toEqual([]);
+  });
+
+  it('a save from before line gets the line of its best rod, so nothing it could land is walled off', () => {
+    const { line: _drop, ...old } = { ...newSave(), rod: 'graphite', locker: { rods: ['carbon'], bait: {} }, slots: [rod('graphite'), bait('worm', 5), null, null, null] };
+    expect(migrate(old as object).line).toBe('braid');
+    expect(migrate({ ...old, locker: { rods: [], bait: {} } } as object).line).toBe('fluoro');
+    expect(migrate({ ...newSave(), line: 'bogus' }).line).toBe('twine');
+    expect(migrate({ ...newSave(), line: 'mono' }).line).toBe('mono');
+  });
+
+  it('the cast roll carries the two-axis difficulty and, now and then, a tag', () => {
+    const s = newSave();
+    s.level = 20;
+    s.line = 'fluoro';
+    eco.buyRod(Object.assign(s, { coins: 100_000 }), 'graphite');
+    let tags = 0, fish = 0;
+    const rng = (() => { let x = 1; return () => ((x = (x * 48271) % 2147483647) / 2147483647); })();
+    for (let i = 0; i < 400; i++) {
+      s.slots[1] = bait('minnow', 50);
+      s.bait = 'minnow';
+      const roll = eco.rollCast(s, 'pond', rng);
+      if (!roll.fishId) continue;
+      fish++;
+      expect(typeof roll.d).toBe('object');
+      const d = roll.d as { weight: number; strength: number; pace: number };
+      expect(d.weight).toBeGreaterThan(0);
+      expect(d.strength).toBeGreaterThan(0);
+      const f = byId(FISH, roll.fishId);
+      expect(roll.d).toEqual(eco.fightDifficulty(s, f, !!roll.shiny, roll.size, roll.tag ?? null));
+      if (roll.tag) {
+        tags++;
+        // A tag only lands on an axis the gear handles (rod and line are both tier 3 here).
+        expect(f.tier).toBeLessThanOrEqual(3);
+        const plain = eco.fightDifficulty(s, f, !!roll.shiny, roll.size);
+        expect(roll.tag === 'feisty' ? d.strength : d.weight).toBeGreaterThan(roll.tag === 'feisty' ? plain.strength : plain.weight);
+      }
+    }
+    expect(fish).toBeGreaterThan(300);
+    expect(tags).toBeGreaterThan(fish / 8 * 0.5);
+    expect(tags).toBeLessThan(fish / 8 * 1.5);
+  });
+});
+
 describe('drops', () => {
   it('expire after 30 seconds', () => {
     let t = 0;

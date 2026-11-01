@@ -124,8 +124,8 @@ export interface MapDef {
   campfire: Spot;
   /** Beach patch where broke players with no bait can dig up worms. */
   worms?: { x: number; z: number };
-  /** What this map's shop menu sells (ids from `RODS` and `BAITS`). */
-  stock: { rods: string[]; bait: string[] };
+  /** What this map's shop menu sells (ids from `RODS`, `LINES` and `BAITS`). */
+  stock: { rods: string[]; lines: string[]; bait: string[] };
   next: { id: string; name: string } | null;
   /** Walkable radius from the map origin. */
   radius: number;
@@ -168,7 +168,7 @@ export const MAPS: MapDef[] = [
     worms: { x: -8.5, z: 10.5 },
     smokehouse: SMOKEHOUSE,
     harbour: HARBOUR,
-    stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
+    stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], lines: ['twine', 'mono', 'fluoro', 'braid', 'moonsilk'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
     town: {

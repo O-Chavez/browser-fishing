@@ -95,6 +95,8 @@ Frequencies are modified by bait quality, rod luck stat, and location.
 
 Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (bite window length), **luck** (rarity chance), **control** (tension stability).
 
+**Line** (added 2026-10-31, see [REELING.md](REELING.md)) is the second gear path: a permanent spool on the rod, one at a time, upgraded at the stall and never carried. Five tiers in the rods' colours (Twine, Mono, Fluoro, Braid, Moonsilk), each unlocking just after the bait of its tier and before its rod, at about 40% of the rod's price. The rod wins line, the line holds the fish.
+
 ### 5.4 Bait & lures
 - **Worms:** cheap, general freshwater.
 - **Insects / flies:** surface feeders, trout.
@@ -145,6 +147,7 @@ Rod stats: **strength** (max fish weight), **cast distance**, **sensitivity** (b
 - The player holds to reel (tension up, stamina down) and releases to relax. Keeping tension in the green zone drains stamina. Red zone for too long breaks the line (lose the fish and some bait). Fish surge periodically: release to ride out a surge, reel in the gaps.
 - **Catch presentation:** the fish dangles from the rod tip on the line (first-person), with a card showing weight (kg, scales with length cubed up to each species' max weight), length, value and XP. Bigger fish of a species are worth more.
 - Higher-rarity fish have harder patterns. Rod control and strength widen the safe zone.
+- **Two axes** (2026-10-31, [REELING.md](REELING.md)): a fish's **weight** against the rod sets drag and reel speed (a fish a tier over the rod is a fight about twice as long; two tiers over, it takes the line and runs off on its own), its **strength** against the line sets how high surges pull and how fast the red frays (a fish over the line pulls into the red and snaps it). The pace, warning, build-up, needle speed and sweet spot follow the fish's tier, not the gear. Size, a shiny and a **Brutish** tag make a fish heavier; a **Feisty** tag makes it stronger; none of them can push a fish over a wall its gear handles.
 
 ### 6.5 Environment
 - Day/night cycle and weather (clear, rain, fog) affect which fish bite.
@@ -291,7 +294,7 @@ The Lucky Wheel stands in the casino's back corner on the roulette side (`casino
 ## 18. Tier rules (bait gates, rod eases)
 
 - **Bait tier decides which fish can bite.** Any rod can use any bait.
-- **Rod tier decides how hard the reel fight is.** Difficulty = fish stamina ÷ rod control^0.45, plus 35% for every tier the fish is above the rod (capped at 3.2). A tier 5 fish on a twig rod is near-impossible; on the Aurora Rod it is about medium-hard.
+- **Rod tier decides how long the reel fight is, line tier whether it holds** (2026-10-31; the earlier single difficulty, +35% a tier above the rod capped at 3.2, is gone). Each axis starts from the fish's tier on matched gear (`MATCHED_DIFFICULTY`) spread a little by species stamina, eased ×0.85 for each tier the gear is above the fish. Weight steps `WEIGHT_STEP` (×1.5 one tier over the rod, ×12 two tiers over, past the run-off cliff); strength steps `STRENGTH_STEP` (×2.5 one tier over the line, where a fast player still lands about half by giving line, ×4 two tiers over). Gloves and the rod boost act on weight. One pond fish in eight rolls a tag (`rollTag`): Feisty ×1.3 strength or Brutish ×1.3 weight, only on an axis the gear already handles.
 - Each tier's fish sell for more and have higher stamina than the tier below. Inventory shows rods, bait and cosmetics as the same icon tiles as the shop.
 
 ## 19. Top-tier banner, brutal fights, stretch cosmetics

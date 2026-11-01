@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FISH, RODS, byId } from '../data/content';
+import { FISH, LINES, RODS, byId } from '../data/content';
 import { mulberry } from './env';
 import { reelDifficulty } from './progression';
 import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, SWEET_MIN, axes, decodeHolds, expArith, lnArith, powArith, replayFight, type Difficulty } from './reel';
@@ -35,8 +35,10 @@ describe('tension reel fight', () => {
     expect(gap).toBeLessThan(1.5);
   });
 
-  it('the landing rate falls smoothly, with no cliff', () => {
-    for (const s of sweeps) expect(s.steepest).toBeLessThanOrEqual(0.35);
+  it('the landing rate falls over several steps, not one', () => {
+    // With the per-fish spread small (`P.fight`), the curve is steeper than it was: the spread used to smear it.
+    // 0.2 of difficulty is about 8 leagues at sea, so this is still no cliff in play.
+    for (const s of sweeps) expect(s.steepest).toBeLessThanOrEqual(0.65);
   });
 
   it('a strong fish drags line out even with the gauge kept green; a matched one does not', () => {
@@ -108,15 +110,16 @@ describe('tension reel fight', () => {
   });
 
   it('a player who just follows the words lands top fish on matched gear, and fish a tier above the rod', () => {
-    expect(botCell(reelDifficulty(byId(FISH, 'aurorapike'), byId(RODS, 'aurora')), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
-    expect(botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'fiberglass')), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.6);
+    const line = (t: number) => LINES[t - 1];
+    expect(botCell(reelDifficulty(byId(FISH, 'aurorapike'), byId(RODS, 'aurora'), line(5)), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
+    expect(botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'fiberglass'), line(3)), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
   });
 
   it('everyday pond fish stay easy for everyone, trophies included', () => {
     const twig = byId(RODS, 'twig');
     for (const id of ['bluegill', 'carp']) {
       const f = byId(FISH, id);
-      const d = reelDifficulty(f, twig, false, f.maxSize);
+      const d = reelDifficulty(f, twig, LINES[0], false, f.maxSize);
       for (const react of [0.25, 0.7]) {
         expect(botCell(d, react, 200).land).toBeGreaterThanOrEqual(0.95);
         expect(botCell(d, react, 200, 1, [NAIVE]).land).toBeGreaterThanOrEqual(0.95);
@@ -124,14 +127,32 @@ describe('tension reel fight', () => {
     }
   });
 
-  it('a tier ladder: matched fish are a light challenge, each tier above the rod a clear step harder', () => {
-    const land = (fish: string, rod: string, react: number) => botCell(reelDifficulty(byId(FISH, fish), byId(RODS, rod)), react, 200).land;
-    // Northern Pike (tier 3) on the Graphite (3), Fiberglass (2) and Twig (1) rods.
-    expect(land('pike', 'graphite', 0.7)).toBeGreaterThan(0.85);
-    expect(land('pike', 'fiberglass', 0.7)).toBeGreaterThan(0.3);
-    expect(land('pike', 'fiberglass', 0.7)).toBeLessThan(0.85);
-    expect(land('pike', 'twig', 0.25)).toBeGreaterThan(0.5);
-    expect(land('pike', 'twig', 0.7)).toBeLessThan(0.4);
+  it('the rod ladder: a fish a tier above the rod is a long fight, two tiers above runs off (REELING.md)', () => {
+    const cell = (fish: string, rod: string, react: number, size?: number) => botCell(reelDifficulty(byId(FISH, fish), byId(RODS, rod), LINES[2], false, size), react, 200);
+    // Northern Pike (tier 3) on Fluoro Line (3) with the Graphite (3), Fiberglass (2) and Twig (1) rods.
+    const matched = cell('pike', 'graphite', 0.7);
+    const over = cell('pike', 'fiberglass', 0.7);
+    expect(matched.land).toBeGreaterThan(0.95);
+    expect(over.land).toBeGreaterThan(0.9);
+    expect(over.t / matched.t).toBeGreaterThan(1.3);
+    expect(over.t / matched.t).toBeLessThan(2.5);
+    for (const react of [0.25, 0.7]) {
+      const wall = cell('pike', 'twig', react);
+      expect(wall.land).toBeLessThan(0.05);
+      expect(wall.snaps).toBeLessThan(0.05);
+    }
+    // The smallest pike on the Twig Rod (two tiers over) is still past the cliff, and walks off within the time budget.
+    const small = botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'twig'), LINES[2], false, byId(FISH, 'pike').minSize), 0.25, 200);
+    expect(small.land).toBeLessThan(0.05);
+    expect(small.t).toBeLessThan(over.t);
+  });
+
+  it('the line ladder: a fish a tier above the line snaps it for a slow player, two tiers above for everyone', () => {
+    const cell = (line: number, react: number) => botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'graphite'), LINES[line - 1]), react, 200);
+    expect(cell(3, 0.7).snaps).toBeLessThan(0.05);
+    expect(cell(2, 0.7).snaps).toBeGreaterThan(0.9);
+    expect(cell(2, 0.25).land).toBeLessThan(0.7);
+    expect(cell(1, 0.25).land).toBeLessThan(0.05);
   });
 
   it('holding the gauge truly green in a surge reels in fish the gear can handle; stronger ones drag line out', () => {
@@ -255,7 +276,7 @@ describe('two-axis difficulty (REELING.md)', () => {
     for (const react of [0.25, 0.7]) {
       const base = land(M, react);
       const heavy = land(3.0, react);
-      const wall = land(6.0, react);
+      const wall = land(12.0, react);
       expect(base.land).toBeGreaterThan(0.95);
       // One step heavier: still landed, about twice as long.
       expect(heavy.land).toBeGreaterThan(0.85);
@@ -266,7 +287,7 @@ describe('two-axis difficulty (REELING.md)', () => {
       expect(wall.snaps).toBeLessThan(0.03);
       expect(wall.t).toBeLessThan(heavy.t);
     }
-    const r = play2({ weight: 6.0, strength: M, pace: M }, 5, (x) => {
+    const r = play2({ weight: 12.0, strength: M, pace: M }, 5, (x) => {
       expect(x.outmatched).toBe(false);
       return x.surging ? x.tension < Math.min(GOOD_MAX - 0.05, x.need + 0.1) : x.tension < 0.6;
     }, 60);
@@ -276,7 +297,7 @@ describe('two-axis difficulty (REELING.md)', () => {
   });
 
   it('prints the outcome matrix the bots play, for the ladder in slice 2', () => {
-    const steps: [string, number][] = [['match', M], ['x1.9', 3.0], ['x2.5', 4.0], ['x3.75', 6.0]];
+    const steps: [string, number][] = [['match', M], ['x1.9', 3.0], ['x2.5', 4.0], ['x7.5', 12.0]];
     const lines: string[] = [];
     for (const react of [0.25, 0.7]) {
       lines.push(`react ${react}s, pace ${M}: land/snap/ran %, mean s · strength down, weight across ${steps.map(([l]) => l).join(' ')}`);

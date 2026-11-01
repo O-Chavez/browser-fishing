@@ -56,8 +56,11 @@ export const P = {
   jitter: 0.2,
   /** ± share of random spread on each surge's strength. */
   powerJitter: 0.2,
-  /** Per-fish strength: ×(1+fight)^±1, log-uniform (some fish of a kind pull harder than others). */
-  fight: 0.5,
+  /**
+   * Per-fish strength: ×(1+fight)^±1, log-uniform (some fish of a kind pull harder than others). Kept small so a
+   * matched fish never reaches the red by luck; the Feisty and Brutish tags carry the visible variety instead.
+   */
+  fight: 0.15,
   /** Holding heads tension to the fish's pull plus this; letting go, to the pull times `slip`. */
   hold: 0.5,
   slip: 0.6,
@@ -163,7 +166,7 @@ export interface ReelWear {
  * between the fish's pull and the red. Holding in the red fills a fray mark (two snap the line; letting go never
  * frays), and the fish escapes if it takes all the line. Harder fish pull harder, move the needle faster, surge
  * longer and fray quicker; a fish whose pull reaches the red is too strong for the gear. The axes (`FightDifficulty`)
- * say which: strength sets the pull and the fraying, weight the drag, reel speed and surge length.
+ * say which: strength sets the pull and the fraying, weight the drag and reel speed, pace the timing.
  * A clean catch is a landed fish with no frays. `surgeDir` only drives where the fish swims visually.
  */
 export class Reel {
@@ -231,7 +234,7 @@ export class Reel {
     // Strength against the line: how high a surge pulls, how fast the red frays.
     this.fillRate = 1 / (2 * (this.p.fray[0] + (this.p.fray[1] - this.p.fray[0]) * between(ds, this.p.fray[2], this.p.fray[3])));
     this.pullAt = (this.p.need[0] + this.p.need[1] * ds * ds) * expArith((2 * rng() - 1) * lnArith(1 + this.p.fight));
-    // Weight against the rod: drag in a surge, whether a surge can be reeled at all (and, in `update`, reel speed and surge length).
+    // Weight against the rod: drag in a surge, whether a surge can be reeled at all (and, in `update`, reel speed).
     this.dragRate = this.p.drag[0] * powArith(Math.max(0, dw - this.p.drag[1]), this.p.drag[4]);
     this.surgeReel = this.p.surgeReel[0] * (1 - between(dw, this.p.surgeReel[1], this.p.surgeReel[2]));
     this.warnMax = this.p.warn[0] * expArith(-this.p.warn[1] * (dp - 2)) * expArith((2 * rng() - 1) * (this.p.temper === P.temper ? LN_TEMPER : lnArith(1 + this.p.temper)));
@@ -298,6 +301,7 @@ export class Reel {
   update(dt: number, holding: boolean): void {
     if (this.status !== 'reeling') return;
     const { weight: dw, pace: dp } = this;
+    // Surge length follows the pace (how long each run lasts is the fish's temperament); weight is drag and reel speed.
     this.t += dt;
 
     if (this.surgeDir !== 0) {
@@ -311,7 +315,7 @@ export class Reel {
       this.nextSurge -= dt;
       if (this.nextSurge <= 0) {
         this.surgeDir = this.rng() < 0.5 ? -1 : 1;
-        this.surgeDur = this.spread(this.p.surge[0] * (1 + this.p.surge[1] * Math.max(0, dw - 1)));
+        this.surgeDur = this.spread(this.p.surge[0] * (1 + this.p.surge[1] * Math.max(0, dp - 1)));
         this.surgeT = 0;
         this.surgeCount++;
         this.surgePower = this.spread(1, this.p.powerJitter) * (0.85 + 0.15 * this.stamina);

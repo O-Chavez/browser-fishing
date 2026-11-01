@@ -10,7 +10,7 @@ import { BOARD_MS, CLOCK_MS, Room } from './room';
 import * as smoke from '../src/game/smoke';
 import { SmokeStats } from './smokestats';
 import { mulberry } from '../src/game/env';
-import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type ReelTune } from '../src/game/reel';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, axes, type Difficulty, type ReelTune } from '../src/game/reel';
 import { BEHAVIOUR_TUNE, haulBonus } from '../src/game/dive';
 import { DIVE } from '../src/data/dive';
 import { HARBOUR } from '../src/data/maps';
@@ -23,7 +23,7 @@ const last = <T extends ServerMsg['t']>(c: { log: ServerMsg[] }, t: T) =>
   [...c.log].reverse().find((m) => m.t === t) as Extract<ServerMsg, { t: T }>;
 
 /** Plays a fight with perfect reactions, staying in the green: the reel and the button log it wrote. */
-const playFight = (d: number, seed: number, hold = (r: Reel) => (r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6), tune?: ReelTune) => {
+const playFight = (d: Difficulty, seed: number, hold = (r: Reel) => (r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6), tune?: ReelTune) => {
   const log = new HoldLog();
   const r = new Reel(d, mulberry(seed), tune);
   while (r.status === 'reeling' && log.steps < MAX_FIGHT_STEPS) {
@@ -136,6 +136,29 @@ describe('Room economy', () => {
     expect(a.acct.save.coins).toBeLessThan(500);
   });
 
+  it('spools line only at the vendor, from its stock, unlocked, paid for and a step up', () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    Object.assign(s, { level: 6, coins: 1_000 });
+    room.handle(a.id, { t: 'buyline', id: 'mono' });
+    expect(s.line).toBe('twine'); // not at the vendor
+    atShop(a);
+    room.handle(a.id, { t: 'buyline', id: 'nope' });
+    room.handle(a.id, { t: 'buyline', id: 'braid' }); // level 9
+    expect(s.line).toBe('twine');
+    room.handle(a.id, { t: 'buyline', id: 'fluoro' });
+    expect(s.line).toBe('fluoro');
+    expect(s.coins).toBe(500);
+    room.handle(a.id, { t: 'buyline', id: 'mono' }); // lighter
+    room.handle(a.id, { t: 'buyline', id: 'fluoro' }); // the same
+    expect(s.line).toBe('fluoro');
+    expect(s.coins).toBe(500);
+    s.level = 20;
+    room.handle(a.id, { t: 'buyline', id: 'moonsilk' }); // 8 000 coins
+    expect(s.line).toBe('fluoro');
+  });
+
   it('levels the Aurora Rod only at the vendor', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
@@ -183,7 +206,7 @@ describe('Room economy', () => {
     };
     let ok = cast();
     expect(ok.seed).toBeTypeOf('number');
-    expect(ok.d).toBeGreaterThan(0);
+    expect(axes(ok.d!).weight).toBeGreaterThan(0);
     // Letting go the whole fight: the fish takes all the line.
     const lost = playFight(ok.d!, ok.seed!, () => false);
     expect(lost.reel.status).toBe('escaped');

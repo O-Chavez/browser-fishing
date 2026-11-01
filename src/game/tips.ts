@@ -1,5 +1,5 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS, FISH, RODS, type Rod } from '../data/content';
+import { BAITS, FISH, LINES, RODS, type Line, type Rod } from '../data/content';
 import { BAIT_PACK, CLEAN_BONUS } from './economy';
 import { COIN } from './format';
 import type { SaveData } from './state';
@@ -82,8 +82,22 @@ export function rodUpgrade(s: Pick<SaveData, 'level' | 'slots' | 'locker'>): Rod
   return next && s.level >= next.unlockLevel ? next : null;
 }
 
-/** Rod upgrade hint as HTML, like `tipText`. */
-export function rodHintText(end: FightEnd, rod: Rod, vendor: string): string {
-  const lead = end === 'snapped' ? 'Line snapped?' : end === 'escaped' ? 'Fish got away?' : 'Tough fight!';
-  return `${lead} A better rod makes fish easier to reel in: the <b>${rod.name}</b> is at ${vendor}'s stall (${rod.price.toLocaleString('en-US')} ${COIN}).`;
+/** The next line up from the one on the rod, if it's unlocked; null otherwise. */
+export function lineUpgrade(s: Pick<SaveData, 'level' | 'line'>): Line | null {
+  const cur = LINES.find((l) => l.id === s.line)?.tier ?? 1;
+  const next = LINES.find((l) => l.tier === cur + 1);
+  return next && s.level >= next.unlockLevel ? next : null;
 }
+
+/**
+ * Gear upgrade hint as HTML, like `tipText`: a snap is the line's doing, a run-off or a long fight the rod's
+ * (REELING.md: a message names exactly one piece of gear).
+ */
+export function gearHintText(end: FightEnd, gear: Rod | Line, vendor: string): string {
+  const lead = end === 'snapped' ? 'Line snapped?' : end === 'escaped' ? 'Fish got away?' : 'Tough fight!';
+  const why = end === 'snapped' ? 'Stronger line holds a harder-pulling fish' : 'A better rod wins line back faster from a heavy fish';
+  return `${lead} ${why}: the <b>${gear.name}</b> is at ${vendor}'s stall (${gear.price.toLocaleString('en-US')} ${COIN}).`;
+}
+
+/** @deprecated use `gearHintText` */
+export const rodHintText = gearHintText;
