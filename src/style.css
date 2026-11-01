@@ -108,6 +108,9 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #catch { position: fixed; left: 3%; bottom: 12%; padding: 20px 32px; background: var(--paper); color: var(--ink); border: 4px solid var(--wood-600); outline: 3px solid var(--wood-900); border-radius: 18px; text-align: center; min-width: 260px; }
 #catch h2 { margin: 6px 0; font-size: 30px; font-weight: 900; -webkit-text-stroke: 6px var(--wood-800); paint-order: stroke fill; letter-spacing: .5px; }
 #catch .muted { color: var(--ink-muted); opacity: 1; }
+/* A sea legend's catch card: a gold frame and a ribbon on top. */
+#catch.legend { border-color: var(--gold); outline-color: #8a5a10; background: radial-gradient(circle at 50% 30%, #fff6d6, var(--paper) 70%); }
+#catch .legend-tag { display: inline-block; margin: -32px 0 4px; padding: 3px 14px; border-radius: 999px; font-size: 14px; font-weight: 900; letter-spacing: 2px; color: var(--wood-900); background: var(--gold); box-shadow: 0 2px 0 var(--wood-800), 0 0 16px rgba(255,201,51,.8); }
 
 
 #gauge { position: fixed; left: 50%; top: 50%; width: 420px; height: 420px; margin: -210px 0 0 -210px; pointer-events: none; }
@@ -238,6 +241,8 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #banner.rank { color: var(--gold); font-size: 52px; animation-duration: 4.6s; }
 #banner.rank small { margin-top: 6px; color: var(--cream); font-size: 20px; text-shadow: 0 1px 3px #000, 0 2px 12px rgba(0,0,0,.9); }
 #banner.welcome { color: var(--gold); animation-duration: 4.2s; }
+#banner.legend { color: var(--gold); font-size: 56px; animation-duration: 4.6s; }
+#banner.legend small { margin-top: 6px; color: var(--cream); font-size: 22px; text-shadow: 0 1px 3px #000, 0 2px 12px rgba(0,0,0,.9); }
 #banner.welcome small { margin-top: 6px; color: var(--cream); }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 

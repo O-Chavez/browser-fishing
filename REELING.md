@@ -156,13 +156,20 @@ What a player of relaxed progression games would say about this, and what answer
 
 ## The sea
 
-The sea behaviours are presets along these same axes rather than new rules:
+The sea uses the same two axes, but its gear climbs in levels rather than tiers and its depth has no end, so it plays as a frontier rather than as walls: the deepest marker where a player still lands about half their fish. Past it the spool runs out and the haul sinks.
 
-- **Runner** — weight-heavy: long pulls that take line. Tests the rod.
-- **Thrasher** — strength-heavy: quick spikes toward the red. Tests the line.
-- **Sounder** — a skill test: little warning before the dive.
+- **The rod decides how long your spool lasts; the line decides whether it holds.** Weight at sea is spool: a heavy fish takes more line from the charter's one spool, about the same for a slow player as a fast one, so it reads as gear. It stops short of the slog (a fight where reeling barely beats the drag), so it never becomes a three-minute fight. Strength is the snap, as in the pond. Pace follows the depth and levels off where a 0.7 s player can still play it; no gear eases it.
+- **Each advance is a step.** A fight is the same all through a marker, then steps up at the next. Each zone leads on one axis and keeps it for the zones below, so no marker is easier than the one before:
+  - **The Drop-off** — heavier fish. Its **Runners** make long pulls that take line. Tests the rod.
+  - **Kelp Deep** — stronger fish. Its **Thrashers** make quick, close surges. Tests the line.
+  - **The Twilight** — twitchier fish. Its **Sounders** dive with little warning. Tests the player.
+  - **The Abyss** — all three behaviours, on top of everything above.
 
-Deeper zones mix them. Nothing new to learn out there, only harder versions of what the pond already taught.
+  A zone's lead and its behaviour come in a quarter at a time over its first four markers, so a new way of fighting arrives a few fish at a time rather than at once. The behaviours themselves are feel only: each plays within about 5% of a plain fish of the same difficulty.
+- **The last markers are a gamble, not a wall.** Every fish rolls its own pull, up to ×1.4 either way, and the hook toast says so ("A strong one!" / "A light one."). Near the frontier some fish are fine and some are too much, and the player sees which before the first surge. Without the roll every fish at a depth is the same and the land rate falls off a cliff.
+- **Both tracks count, and neither is a wall on its own.** Each Aurora Rod level takes the most off weight and a little off strength; each sea line level the reverse. A player who levels only one track still goes deeper, just less far than one who levels both.
+
+Nothing new to learn out there, only harder versions of what the pond already taught.
 
 ## Complexity budget
 
@@ -207,6 +214,60 @@ Built: line as a spool on the rod, the two-axis ladder in `reelDifficulty`, tags
 | With the spread small the land-rate curve is steeper than before (the spread used to smear it). The fan's half-landing points moved by under 0.05. | The "no cliff" tests now allow a steeper fall; 0.2 of difficulty is about 8 leagues at sea. |
 | Strength one tier over the line (×2.5): a slow player snaps every time, a fast player lands about half by giving line. Two tiers over, nobody. | Kept as designed: poaching one tier over the line is the "pushing skill" stress. |
 
+## Sea findings (slice 1, 2026-11-01)
+
+The bots played every marker over the zone's behaviours, four pull rolls and two sizes (`seaRow` in `dive.test.ts`). "Frontier" is where the land rate crosses 50%; "approach" is the leagues from 90% to 50%.
+
+| What | Before (one number, 1% a league) | After |
+|---|---|---|
+| Approach, fast / slow player | 7 / 9 leagues | 17-29 / 14-30 |
+| Worst drop between markers before the frontier | 40-48 points | 9-20 |
+| Fights 30 leagues short of the frontier, fast | 12 s, ~1 m of spool | 18-31 s, 3-9 m |
+| Frontier at +0, +5/+5, +10/+10, +20/+20 rod/line levels, fast | 45, 76, 106, 165 (rod +0/+10/+20/+40) | 59, 85, 105, 170 |
+| The same, slow | 17, 43, 69, 145 | 21, 42, 58, 119 |
+| Rod +10 only / line +10 only / both, fast | (one track) | 79 / 94 / 105 |
+
+What set the numbers:
+
+| Finding | Consequence |
+|---|---|
+| No single axis walls in the sea's range on its own; today's frontier came from all three rising together, which is why it was a cliff. | Each zone leads on one axis instead. |
+| A band wide enough to feel coming is narrow next to the gap between a slow and a fast player, whatever the slope, unless fish vary. | The per-fish pull roll (×1.4 either way), shown on the hook toast. |
+| Weight climbing smoothly runs into the slog (2-3 minute fights) before it runs off, and heavy-and-strong fish compound: each axis alone lands 95-100%, both together 47%. | Weight stops at 3.3 at pace 2, less on twitchier fish (`SEA_FIGHT.weightCap`). |
+| Behaviour leads on the axes made zone borders a reset: Kelp Deep's first marker took less spool than the Drop-off's last, since its Thrashers dropped the Runners' weight. | Leads belong to zones and add up going deeper. |
+| Switching behaviour at a zone border dropped the land rate 25-35 points in one marker, as did an extra step per zone. | No extra zone step; behaviours blend in from the zone above (`behaviourOdds`). |
+| Slow players' frontier grows more slowly with levels than a fast player's. | Kept (Oscar): gear helps land the fish, it doesn't remove the skill. Checked again when tuning (TODO Ideas). |
+
+## Sea economy (slice 2, 2026-11-01)
+
+A scratch sim played whole charters on the bots' fights: per marker 120 rolled fish (zone, behaviour, pull, size), the spool, pearls and haul growth, and the best start marker and head-home rule for pearls an hour. It assumes 4.5 s to a bite, 4 s around each fish and 45 s around each charter. Levels split evenly between the tracks.
+
+| Rod + line levels | Frontier, fast / slow | Pearls an hour, fast / slow | Coins an hour from charter fish |
+|---|---|---|---|
+| +0 / +0 | 56 / 16 | 293 / 168 | 180-220k |
+| +5 / +5 | 82 / 34 | 475 / 310 | ~240k |
+| +10 / +10 | 101 / 51 | 802 / 509 | 255-275k |
+| +20 / +20 | 162 / 113 | 1,298 / 1,033 | 280-295k |
+
+| Finding | Consequence |
+|---|---|
+| Pearls come 1.3-1.6× faster than in P1: the two-axis fights in easy water are quick. Two tracks on the rod's old curve (100 + 12N each) would bring levels ~1.7× faster than P1 (14-23 min for a fast player). | Each track's step doubles to 24 pearls, so even levelling costs what P1's single track did: a level every 24-29 min fast, 29-45 min slow. |
+| At the old coins, charter fish only just pay for the levels, and a fast player past +15 / +15 needs pond coins. | The line costs half the rod's coins (25k + 4k·N, cap 75k). Charters then pay for both tracks with 20-50% to spare, more once Kelp Deep and below get their own, dearer fish. |
+| Sea fish reach their heaviest (the weight cap) 10-20 leagues short of the frontier, so "too heavy" would show on nearly every fish there; strength crosses the red gradually (about 1 fish in 10 a marker short of the frontier, half at it). | The hook toast names only the line. The rod is named on the drag caption and the RAN OFF card, where its weight is what's costing line. |
+
+### Rerun with the deep zones' fish (slice B, 2026-11-01)
+
+The same sim with the deep zones' own fish (about 2,500 / 3,500 / 5,000 coins a catch, legends 3×) and the legends' longer fights. The frontier and pearls an hour barely moved; coins an hour now climb with gear, from ~220k to ~650k for a fast player. Under the old coin prices (capped at 150k / 75k from +13) levels took only 42-45% of a fast player's charter coins by +20 / +20.
+
+| Rod + line levels | Coins an hour, fast / slow | Share of charter coins on levels, fast / slow: old → new prices |
+|---|---|---|
+| +0 / +0 | 218k / 179k | 46% → 65% / 32% → 45% |
+| +10 / +10 | 336k / 280k | 66% → 68% / 51% → 52% |
+| +20 / +20 | 528k / 418k | 45% → 61% / 45% → 61% |
+| +30 / +30 | 656k / 553k | 42% → 73% / 41% → 71% |
+
+New coin prices (Oscar, 2026-11-01): the rod 75k + 6k·N, the line half that, with only a safety cap past +54. Slow players stay under the 60-75% band early: they earn about as many coins as fast players but far fewer pearls, and pricing for them would leave fast players coin-bound. Best-rate play still farms easy water short of the frontier.
+
 ## Decisions so far
 
 - Line is a separate upgrade path, presented as a spool on the rod (2026-10-31).
@@ -217,7 +278,11 @@ Built: line as a spool on the rod, the two-axis ladder in `reelDifficulty`, tags
 - Surge length is a pace lever; weight is drag and reel speed only (2026-10-31).
 - Shiny, size and Brutish all sit on weight; shiny only counts on gear that handles the fish (2026-10-31).
 - Gloves act on weight (they are Quick-Reel Gloves) (2026-10-31).
-- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a sticker in the lower right of the screen for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish, which also says what it pays. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the card with the reel-tip lines only.
+- Sea fights on the two axes (2026-11-01): the rod decides how long the spool lasts, the line whether it holds; each zone leads on an axis and keeps it; per-fish pull roll named on the hook toast; behaviours are feel only. The frontier keeps P1's pacing table, counting rod and line levels together, and levelling only one track is a soft stall (slower), not a wall.
+- A sea line that levels at Marlow's for Black Pearls, a second track next to the Aurora Rod's levels, "because it gives players more to invest in" (Oscar, 2026-11-01). It's the **Deep Sea Line +N**, its own tile after Moonsilk, spooled by its first level (Oscar, 2026-11-01). Priced to keep P1's pace and leave charters paying for both tracks with coins to spare ("Sea economy" below).
+- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a sticker in the lower right of the screen for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish, which also says what it pays. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the same card: a snap names the Deep Sea Line's next level when the fish's surges reached the red, a run-off the Aurora Rod's when it was at its heaviest, anything else a reel tip (slice 2, 2026-11-01).
+
+- The deep zones' fish (Oscar, 2026-11-01): all 17 from the Deep Sea Fish Options page. Legends fight about 1.5× longer than everyday fish at the same depth, from slower reeling only, so a legend is a long fight but never over the gear by itself. Landing one gets its own moment: legendary jingle, a gold banner and catch card; everyday sea fish get a lesser jingle.
 
 ## Open questions
 

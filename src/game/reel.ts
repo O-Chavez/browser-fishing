@@ -82,6 +82,11 @@ export const P = {
   drag: [0.07, 1.3, 0.9, 2, 1],
   /** Where the fight starts on the line (0 = the fish has it all, 1 = landed). */
   start: 0.35,
+  /**
+   * Fight length: the line moves 1/length as fast both ways, reeled in and taken, so the same fight plays out over
+   * `length` times as long without the fish pulling harder or weighing more (a sea legend's `LEGEND_TUNE`).
+   */
+  length: 1,
   /** Seconds held in the red that fill one fray mark: a up to the first difficulty, down to b at the second. [a, b, d0, d1] */
   fray: [2.5, 1.5, 1, 3],
   /** Deeper red frays faster: fill speed ×(1 + k·(tension - GOOD_MAX) / 0.2), so a light touch of red takes the full time. */
@@ -345,8 +350,9 @@ export class Reel {
     const high = this.need < GOOD_MAX ? Math.min(1, Math.max(0, (this.tension - this.need) / (GOOD_MAX - this.need))) : 0;
     this.drag = this.surging ? this.dragRate * this.pull * (1 - this.p.drag[2] * powArith(high, this.p.drag[3])) : 0;
     const loss = this.p.run * Math.max(0, this.need - this.tension) + this.drag;
-    this.wear.lineOut += loss * dt;
-    this.progress = Math.min(1, Math.max(0, this.progress + (rate - loss) * dt));
+    const along = dt / this.p.length;
+    this.wear.lineOut += loss * along;
+    this.progress = Math.min(1, Math.max(0, this.progress + (rate - loss) * along));
 
     this.lateral += (this.surgeDir * this.pull - this.lateral) * Math.min(1, 3 * dt);
 

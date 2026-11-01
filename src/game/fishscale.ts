@@ -31,11 +31,14 @@ export function softCap(x: number, knee: number, max: number): number {
   return knee + room * (1 - Math.exp(-(x - knee) / room));
 }
 
-/** In the water (shadow, fight, the start of the landing arc): there is room, so no cap. */
-export const waterScale = (cm: number, tier: number): number => tierScale(cm, tier) * 0.7;
+/**
+ * In the water (shadow, fight, the start of the landing arc): there is room, so the cap only starts past the
+ * biggest pond fish (~3), for the deep sea's 8-15 m giants.
+ */
+export const waterScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier) * 0.7, 3, 4.2);
 
-/** Dangling from your own rod after a catch. */
-export const heldScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier), 2.2, 3.3);
+/** Dangling from your own rod after a catch. The ceiling keeps the deep sea's 8-15 m giants clear of the dock. */
+export const heldScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier), 2.2, 3.1);
 
 /**
  * Line length between the rod tip and the mouth of a dangling catch. Big fish hang on a shorter

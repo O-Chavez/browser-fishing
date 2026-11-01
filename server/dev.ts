@@ -68,7 +68,7 @@ export interface DevTarget {
 export const TIMES: Record<string, number> = { day: 0.2, dusk: 0.5, night: 0.7, dawn: 0.93 };
 
 export const HELP = [
-  '/coins N · /chips N · /pearls N · /level N · /rodlevel N',
+  '/coins N · /chips N · /pearls N · /level N · /rodlevel N · /linelevel N',
   '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
   '/sea [depth] (start a dive there; 0 is the harbour) · /ledge on|up (at a ledge)',
@@ -80,7 +80,7 @@ export const HELP = [
 
 /** There is no level cap; this only keeps `/level` typos sane. */
 const MAX_DEV_LEVEL = 999;
-/** Rod levels have no cap; this keeps `/rodlevel` typos sane. */
+/** Rod and line levels have no cap; this keeps `/rodlevel` and `/linelevel` typos sane. */
 const MAX_DEV_ROD_LEVEL = 999;
 /** Dives have no bottom either; this keeps `/sea` typos sane. */
 const MAX_DEV_DEPTH = 999;
@@ -112,6 +112,12 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       if (n === null) return say(`Usage: /rodlevel 0-${MAX_DEV_ROD_LEVEL}`);
       s.rodLevel = n;
       return ok(`Aurora Rod level set to +${n}.`);
+    }
+    case 'linelevel': {
+      const n = int(args[0], 0, MAX_DEV_ROD_LEVEL);
+      if (n === null) return say(`Usage: /linelevel 0-${MAX_DEV_ROD_LEVEL}`);
+      s.seaLine = n;
+      return ok(`Deep Sea Line level set to +${n}.`);
     }
     case 'level': {
       const n = int(args[0], 1, MAX_DEV_LEVEL);

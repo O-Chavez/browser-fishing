@@ -5,7 +5,7 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot, type FishTag } from '../src/game/progression';
-import { BEHAVIOUR_TUNE, afterFight, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
+import { afterFight, fightTune, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
 import { replayFight, type Difficulty, type LossReason, type ReelWear } from '../src/game/reel';
 import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type FurthestRow, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, WHEEL_MS, type RouletteBet } from '../src/data/casino';
@@ -280,6 +280,9 @@ export class Room {
         break;
       case 'levelrod':
         changed = this.atVendor(m) && eco.levelRod(s);
+        break;
+      case 'levelline':
+        changed = this.atVendor(m) && eco.levelSeaLine(s);
         break;
       case 'buyline':
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));
@@ -734,7 +737,7 @@ export class Room {
    */
   private seaLost(m: Member, p: Pending, h: unknown): boolean {
     const run = this.runOf(m)!;
-    const fight = typeof h === 'string' && h ? replayFight(p.d, p.seed, h, p.b && BEHAVIOUR_TUNE[p.b]) : null;
+    const fight = typeof h === 'string' && h ? replayFight(p.d, p.seed, h, fightTune(p.b, p.fishId)) : null;
     if (!fight && this.now() < p.biteAt + MISS_MS) return false;
     const ended = fight && (fight.status === 'snapped' || fight.status === 'escaped');
     this.fightOver(m, run, p, false, ended ? fight.wear : { ...GONE, lineOut: fight?.wear.lineOut ?? 0 }, ended ? fight.reason ?? 'gone' : 'gone');
@@ -934,7 +937,7 @@ export class Room {
       return false;
     }
     const run = this.runOf(m);
-    const fight = typeof h === 'string' ? replayFight(p.d, p.seed, h, p.b && BEHAVIOUR_TUNE[p.b]) : null;
+    const fight = typeof h === 'string' ? replayFight(p.d, p.seed, h, fightTune(p.b, p.fishId)) : null;
     const why = !fight ? 'bad log' : fight.status !== 'caught' ? `replay ${fight.status}`
       : this.now() < p.biteAt + fight.elapsed * 1000 - FIGHT_SLACK_MS ? 'too fast' : null;
     if (!fight || why) {

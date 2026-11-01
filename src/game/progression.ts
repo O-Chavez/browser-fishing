@@ -163,6 +163,10 @@ export const STAMINA_SPREAD = 0.5;
 /** Fight difficulty for a species' smallest catch; its largest is the mirror above (×1.15), a mid-size one ×1. */
 export const SIZE_DIFFICULTY = 0.85;
 
+/** What a catch's size does to its weight: ×0.85 for the species' smallest up to ×1.15 for its largest. */
+export const sizeDifficulty = (fish: Fish, size: number): number =>
+  SIZE_DIFFICULTY + 2 * (1 - SIZE_DIFFICULTY) * Math.min(1, Math.max(0, sizeRatio(fish, size)));
+
 /** Mean stamina of each tier's pond fish. */
 const TIER_STAMINA = [1, 2, 3, 4, 5].map((t) => {
   const s = POND_FISH.filter((f) => f.tier === t).map((f) => f.stamina);
@@ -181,7 +185,7 @@ export function reelDifficulty(fish: Fish, rod: Rod, line: Line, shiny = false, 
   const tier = Math.min(5, Math.max(1, fish.tier)) - 1;
   const species = Math.pow(fish.stamina / TIER_STAMINA[tier], STAMINA_SPREAD);
   const base = MATCHED_DIFFICULTY[tier] * species;
-  const big = size === undefined ? 1 : SIZE_DIFFICULTY + 2 * (1 - SIZE_DIFFICULTY) * Math.min(1, Math.max(0, sizeRatio(fish, size)));
+  const big = size === undefined ? 1 : sizeDifficulty(fish, size);
   const boost = Math.pow((RODS.find((r) => r.id === rod.id)?.control ?? rod.control) / rod.control, 0.45);
   const step = (gap: number, up: number[]) => (gap > 0 ? up[Math.min(gap, up.length - 1)] : Math.pow(TIER_DOWN, -gap));
   const r = (x: number) => Math.round(Math.max(0.4, x) * 100) / 100;

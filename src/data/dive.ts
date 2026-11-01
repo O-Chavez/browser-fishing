@@ -4,7 +4,10 @@
  * spool of line has to last the dive. The rules are in `src/game/dive.ts`.
  */
 
-/** How a sea fish fights, named on the HUD when it's hooked. Each is a set of reel levers (`BEHAVIOUR_TUNE`). */
+/**
+ * How a sea fish fights, named on the HUD when it's hooked: its feel on the reel (`BEHAVIOUR_TUNE`). Each comes in
+ * with the zone that leads on its axis (`Zone.lead`), so Runners arrive as the fish get heavier, and so on.
+ */
 export type Behaviour = 'runner' | 'thrasher' | 'sounder';
 
 export const BEHAVIOURS: Record<Behaviour, { name: string; hint: string }> = {
@@ -18,32 +21,60 @@ export interface Zone {
   name: string;
   /** First depth of the zone; it runs to the next zone's. */
   from: number;
-  /** Two everyday fish, evenly split, and the zone's rare legend (`DIVE.legendChance`). */
+  /** Everyday fish, evenly split, and the zone's rare legends (`DIVE.legendChance` for any of them, evenly split). */
   fish: string[];
-  legend: string;
-  /** The behaviours its fish roll from, evenly; none on the Shelf. */
+  legends: string[];
+  /** The behaviours its fish roll from, evenly once the zone's first markers have blended in (`behaviourOdds`); none on the Shelf. */
   behaviours: Behaviour[];
-  /** Multiplies fight difficulty. The behaviours carry each zone's step, so this stays 1 unless play shows otherwise. */
-  factor: number;
+  /**
+   * Leagues the zone adds to an axis, for its fish and every zone below, ramping in over its first markers
+   * (`SEA_FIGHT.ramp`), and how far it lifts the pace's cap. So each zone is harder in its own way, and no marker is
+   * easier than the one before.
+   */
+  lead?: { weight?: number; strength?: number; paceCap?: number };
 }
 
-// Kelp Deep and below borrow the Drop-off's fish until their own species are added.
-const DROPOFF_FISH = { fish: ['galemackerel', 'irontuna'], legend: 'marlin' };
-
 export const ZONES: Zone[] = [
-  { id: 'shelf', name: 'The Shelf', from: 0, fish: ['pewtercod', 'snapper'], legend: 'grouper', behaviours: [], factor: 1 },
-  { id: 'dropoff', name: 'The Drop-off', from: 16, ...DROPOFF_FISH, behaviours: ['runner'], factor: 1 },
-  { id: 'kelp', name: 'Kelp Deep', from: 41, ...DROPOFF_FISH, behaviours: ['thrasher'], factor: 1 },
-  { id: 'twilight', name: 'The Twilight', from: 81, ...DROPOFF_FISH, behaviours: ['sounder'], factor: 1 },
-  { id: 'abyss', name: 'The Abyss', from: 151, ...DROPOFF_FISH, behaviours: ['runner', 'thrasher', 'sounder'], factor: 1.05 },
+  { id: 'shelf', name: 'The Shelf', from: 0, fish: ['pewtercod', 'snapper'], legends: ['grouper'], behaviours: [] },
+  // Heavier fish: they take more of the spool. Tests the rod.
+  { id: 'dropoff', name: 'The Drop-off', from: 16, fish: ['galemackerel', 'irontuna'], legends: ['marlin'], behaviours: ['runner'], lead: { weight: 15 } },
+  // Stronger fish: surges pull nearer the red. Tests the line.
+  { id: 'kelp', name: 'Kelp Deep', from: 41, fish: ['frondback', 'lionfish', 'wolfeel'], legends: ['kelpbeard', 'kelpwyrm'], behaviours: ['thrasher'], lead: { strength: 10 } },
+  // Twitchier fish. Tests the player.
+  { id: 'twilight', name: 'The Twilight', from: 81, fish: ['hatchet', 'fangjaw', 'lanternshark'], legends: ['oarfish', 'chandelier'], behaviours: ['sounder'], lead: { paceCap: 0.1 } },
+  { id: 'abyss', name: 'The Abyss', from: 151, fish: ['lurker', 'gulper', 'krakenspawn', 'boneserpent'], legends: ['leviathan', 'dreamer', 'kraken'], behaviours: ['runner', 'thrasher', 'sounder'] },
 ];
 
+/**
+ * Sea fights on the pond's two axes (REELING.md, "The sea"). Each axis is base × perLeague^x, with x counted in
+ * leagues: the depth at the start of its marker (a fight is the same all through a marker, then steps up), the
+ * axis's head start and the zones' leads (`Zone.lead`), less what the gear eases. So nearing your frontier is felt
+ * marker by marker: heavier fish take more of the spool and stronger ones pull closer to the red, with each fish's
+ * own pull (`spread`) making the last markers a gamble rather than a wall.
+ */
+export const SEA_FIGHT = {
+  base: 1.6,
+  perLeague: 1.01,
+  /** A zone's lead, and its fish's way of fighting, come in a quarter at a time, one each marker, full from its 4th. */
+  ramp: 4,
+  /** Weight's head start, in leagues: sea fish are heavy from the first marker, so even the Shelf takes some line. */
+  weightStart: 15,
+  /** Pace rises at this share of the depth (no gear eases it) up to `paceCap`, which a 0.7 s player can still play. */
+  paceShare: 0.6,
+  paceCap: 2.0,
+  /** Weight stops at cap - k·(pace - 2), short of the slog where reeling barely beats the drag: [cap, k]. */
+  weightCap: [3.3, 1.25],
+  /** Leagues each Aurora Rod level takes off weight, and `cross` off strength; a line level the other way round. */
+  ease: 4.5,
+  cross: 1.5,
+  /** Each fish's pull: strength ×spread^±1, log-uniform, so some fish of a depth pull harder than others. */
+  spread: 1.4,
+  /** The hook toast calls a pull above `strong` "a strong one" and below `light` "a light one" (about 1 fish in 4 each). */
+  strong: 1.2,
+  light: 0.85,
+};
+
 export const DIVE = {
-  /** Fight difficulty: base × perDepth^depth × perRodLevel^rod level × zone factor × stamina / staminaBase. No clamp. */
-  baseDifficulty: 1.6,
-  perDepth: 1.01,
-  perRodLevel: 0.97,
-  staminaBase: 2.6,
   /** A ledge every this many depths. */
   ledgeEvery: 5,
   /** Metres of line on the dive's one spool. */
@@ -74,29 +105,48 @@ export const DIVE = {
 };
 
 /**
- * Whether players can start a charter at Captain Reed's seaplane. Closed while charters are being worked on: Reed's
- * panel says his plane isn't ready, the server refuses `dive`, and only the dev console's `/sea` sails out. While
- * closed, the rod levels only show to players who already have pearls or a level.
+ * Whether players can start a charter at Captain Reed's seaplane. Reopened 2026-11-01 with the deep zones' fish and
+ * the Deep Sea Line (closed 2026-10-31 while they were worked on). Set it to false to close them again: Reed's panel
+ * then says his plane isn't ready, the server refuses `dive`, and only the dev console's `/sea` sails out.
  */
-export const DIVES_OPEN = false;
+export const DIVES_OPEN = true;
 
 /**
  * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's
- * stall with no cap, each level making sea fights 3% easier (`DIVE.perRodLevel`); pond fights don't change. A level
+ * stall with no cap, each level making sea fish lighter (`SEA_FIGHT.ease`); pond fights don't change. A level
  * costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
+ * The Deep Sea Line (`SEA_LINE`) is the second track. Each track's step is twice P1's single one, so levelling both
+ * evenly keeps P1's pace of a level every 25-45 minutes. The coins keep rising with the level, as charter income does
+ * with the deeper zones' dearer fish, so levels take about 60-75% of a fast player's charter coins at every stage
+ * (REELING.md, "Sea economy"; Oscar, 2026-11-01).
  */
 export const ROD_LEVEL = {
   /** The rod that levels. */
   rod: 'aurora',
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
   pearls: 100,
-  pearlsPer: 12,
-  /** ... and min(coinCap, coins + coinsPer·N) coins. */
-  coins: 50_000,
-  coinsPer: 4_000,
-  coinCap: 150_000,
+  pearlsPer: 24,
+  /** ... and min(coinCap, coins + coinsPer·N) coins; the cap is only a safety net, reached past +54. */
+  coins: 75_000,
+  coinsPer: 6_000,
+  coinCap: 400_000,
   /** The rod's tip glow changes colour every this many levels (`GLOW_STEPS`). */
   glowEvery: 5,
+};
+
+/**
+ * The Deep Sea Line's levels, the sea's second track: bought at Marlow's stall like the rod's, each making sea fish
+ * pull weaker (`SEA_FIGHT.ease` off strength). It needs the Aurora Rod, and its first level spools it in place of the
+ * pond line (it holds tier 5 there). Half the rod's coins, so charters pay for both tracks with coins to spare.
+ */
+export const SEA_LINE = {
+  /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
+  pearls: 100,
+  pearlsPer: 24,
+  /** ... and min(coinCap, coins + coinsPer·N) coins: half the rod's at every level. */
+  coins: 37_500,
+  coinsPer: 3_000,
+  coinCap: 200_000,
 };
 
 /**

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FISH } from '../data/content';
+import { FISH_LOOK } from '../data/fishlook';
 import { fishIcon } from './fishicon';
 
 describe('fish icon tier finish', () => {
@@ -12,8 +13,8 @@ describe('fish icon tier finish', () => {
     }
   });
 
-  it('gives sea fish the plain lake-giant finish, with no glow or spirit crown', () => {
-    for (const f of FISH.filter((x) => x.sea)) {
+  it('gives sea fish without a zone finish the plain lake-giant look, with no glow or spirit crown', () => {
+    for (const f of FISH.filter((x) => x.sea && !FISH_LOOK[x.id]?.finish)) {
       const svg = fishIcon(f.id);
       expect(svg, f.id).not.toContain('<filter');
       expect(svg, f.id).not.toContain('fishico t');

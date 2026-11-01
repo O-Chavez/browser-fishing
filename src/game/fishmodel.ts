@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FISH_LOOK, SHAPES, envelope, type DorsalKind, type FishLook, type Shape, type TailKind } from '../data/fishlook';
 import { FISH, isSeaFish } from '../data/content';
 import { WATER_ORDER } from './env';
+import { addSeaParts } from './seafish';
 
 /** A glow material whose colour cycles through the rainbow (the aurora pike). */
 type Hue = { m: THREE.Material & { color: THREE.Color }; off: number };
@@ -262,6 +263,8 @@ const TAILS: Record<TailKind, [number, number][]> = {
   lunate: [[0, 0.025], [0.1, 0.2], [0.07, 0.03], [0.05, 0], [0.07, -0.03], [0.1, -0.2], [0, -0.025]],
   shark: [[0, 0.03], [0.22, 0.16], [0.1, 0.0], [0.13, -0.08], [0, -0.03]],
   eel: [[0, 0.04], [0.12, 0.02], [0.14, 0], [0.12, -0.02], [0, -0.04]],
+  squid: [[-0.04, 0], [0.06, 0.12], [0.12, 0], [0.06, -0.12]],
+  none: [[0, 0.01], [0.02, 0], [0, -0.01]],
 };
 
 // ---------- builder ----------
@@ -360,8 +363,16 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
   group.add(tail);
 
   if (!shadow) {
-    addFace(group, look, tier, accent, pulse);
+    if (look.eye !== 'none') addFace(group, look, tier, accent, pulse);
     addExtras(group, look, L, finMat, pulse, accent);
+    if (look.finish) {
+      addSeaParts({
+        group, look, L, id, shiny, accent, body, tail, pulse, twinkle, finScale, finGeo, glowTexture,
+        bodyMat: bodyMat as THREE.MeshPhysicalMaterial,
+        finMat: finMat as THREE.MeshStandardMaterial,
+        extents: (t) => extents(look.shape, t),
+      });
+    }
   }
 
   // Jewel (T4): a coloured rim glow that keeps the body colour readable; spirits (T5) a stronger aura.
