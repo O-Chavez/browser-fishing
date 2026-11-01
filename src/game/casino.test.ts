@@ -126,16 +126,28 @@ describe('roulette', () => {
 });
 
 describe('lucky wheel', () => {
-  it('has 12 wedges: ×2, ×2, ×3, ×4 and 8 losses, returning 11/12 on average', () => {
+  it('has 12 wedges: 6 losses, two ×½, three ×2 and a ×5, a fair bet on average', () => {
     expect(WHEEL_WEDGES).toHaveLength(12);
-    expect([...WHEEL_WEDGES].filter((f) => f > 0).sort()).toEqual([2, 2, 3, 4]);
-    expect(WHEEL_WEDGES.reduce((a, f) => a + f, 0) / WHEEL_WEDGES.length).toBeCloseTo(11 / 12);
+    expect([...WHEEL_WEDGES].sort((a, b) => a - b)).toEqual([0, 0, 0, 0, 0, 0, 0.5, 0.5, 2, 2, 2, 5]);
+    expect(WHEEL_WEDGES.reduce((a, f) => a + f, 0) / WHEEL_WEDGES.length).toBeCloseTo(1);
+  });
+
+  it('never puts two of the same result side by side, all the way round', () => {
+    WHEEL_WEDGES.forEach((f, i) => expect(WHEEL_WEDGES[(i + 1) % WHEEL_WEDGES.length]).not.toBe(f));
+  });
+
+  it('halves a fish on a ×½', () => {
+    const s = saveWith(fish());
+    const { before, after } = cas.settleBet(s, 2, 0.5);
+    expect(after).toBeCloseTo(before / 2);
+    expect(s.slots[2]).toMatchObject({ mult: 0.5 });
   });
 
   it('lands each wedge equally often and pays what it shows', () => {
-    expect(cas.spinWheel(() => 0)).toEqual({ wedge: 0, factor: 2 });
-    expect(cas.spinWheel(() => 3 / 12 + 0.001)).toEqual({ wedge: 3, factor: 4 });
-    expect(cas.spinWheel(() => 0.999)).toEqual({ wedge: 11, factor: 0 });
+    expect(cas.spinWheel(() => 0)).toEqual({ wedge: 0, factor: 0 });
+    expect(cas.spinWheel(() => 1 / 12 + 0.001)).toEqual({ wedge: 1, factor: 0.5 });
+    expect(cas.spinWheel(() => 3 / 12 + 0.001)).toEqual({ wedge: 3, factor: 2 });
+    expect(cas.spinWheel(() => 0.999)).toEqual({ wedge: 11, factor: 5 });
   });
 });
 
