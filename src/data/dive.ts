@@ -4,7 +4,10 @@
  * spool of line has to last the dive. The rules are in `src/game/dive.ts`.
  */
 
-/** How a sea fish fights, named on the HUD when it's hooked. Each is a set of reel levers (`BEHAVIOUR_TUNE`). */
+/**
+ * How a sea fish fights, named on the HUD when it's hooked: its feel on the reel (`BEHAVIOUR_TUNE`). Each comes in
+ * with the zone that leads on its axis (`Zone.lead`), so Runners arrive as the fish get heavier, and so on.
+ */
 export type Behaviour = 'runner' | 'thrasher' | 'sounder';
 
 export const BEHAVIOURS: Record<Behaviour, { name: string; hint: string }> = {
@@ -21,29 +24,60 @@ export interface Zone {
   /** Two everyday fish, evenly split, and the zone's rare legend (`DIVE.legendChance`). */
   fish: string[];
   legend: string;
-  /** The behaviours its fish roll from, evenly; none on the Shelf. */
+  /** The behaviours its fish roll from, evenly once the zone's first markers have blended in (`behaviourOdds`); none on the Shelf. */
   behaviours: Behaviour[];
-  /** Multiplies fight difficulty. The behaviours carry each zone's step, so this stays 1 unless play shows otherwise. */
-  factor: number;
+  /**
+   * Leagues the zone adds to an axis, for its fish and every zone below, ramping in over its first markers
+   * (`SEA_FIGHT.ramp`), and how far it lifts the pace's cap. So each zone is harder in its own way, and no marker is
+   * easier than the one before.
+   */
+  lead?: { weight?: number; strength?: number; paceCap?: number };
 }
 
 // Kelp Deep and below borrow the Drop-off's fish until their own species are added.
 const DROPOFF_FISH = { fish: ['galemackerel', 'irontuna'], legend: 'marlin' };
 
 export const ZONES: Zone[] = [
-  { id: 'shelf', name: 'The Shelf', from: 0, fish: ['pewtercod', 'snapper'], legend: 'grouper', behaviours: [], factor: 1 },
-  { id: 'dropoff', name: 'The Drop-off', from: 16, ...DROPOFF_FISH, behaviours: ['runner'], factor: 1 },
-  { id: 'kelp', name: 'Kelp Deep', from: 41, ...DROPOFF_FISH, behaviours: ['thrasher'], factor: 1 },
-  { id: 'twilight', name: 'The Twilight', from: 81, ...DROPOFF_FISH, behaviours: ['sounder'], factor: 1 },
-  { id: 'abyss', name: 'The Abyss', from: 151, ...DROPOFF_FISH, behaviours: ['runner', 'thrasher', 'sounder'], factor: 1.05 },
+  { id: 'shelf', name: 'The Shelf', from: 0, fish: ['pewtercod', 'snapper'], legend: 'grouper', behaviours: [] },
+  // Heavier fish: they take more of the spool. Tests the rod.
+  { id: 'dropoff', name: 'The Drop-off', from: 16, ...DROPOFF_FISH, behaviours: ['runner'], lead: { weight: 15 } },
+  // Stronger fish: surges pull nearer the red. Tests the line.
+  { id: 'kelp', name: 'Kelp Deep', from: 41, ...DROPOFF_FISH, behaviours: ['thrasher'], lead: { strength: 10 } },
+  // Twitchier fish. Tests the player.
+  { id: 'twilight', name: 'The Twilight', from: 81, ...DROPOFF_FISH, behaviours: ['sounder'], lead: { paceCap: 0.1 } },
+  { id: 'abyss', name: 'The Abyss', from: 151, ...DROPOFF_FISH, behaviours: ['runner', 'thrasher', 'sounder'] },
 ];
 
+/**
+ * Sea fights on the pond's two axes (REELING.md, "The sea"). Each axis is base × perLeague^x, with x counted in
+ * leagues: the depth at the start of its marker (a fight is the same all through a marker, then steps up), the
+ * axis's head start and the zones' leads (`Zone.lead`), less what the gear eases. So nearing your frontier is felt
+ * marker by marker: heavier fish take more of the spool and stronger ones pull closer to the red, with each fish's
+ * own pull (`spread`) making the last markers a gamble rather than a wall.
+ */
+export const SEA_FIGHT = {
+  base: 1.6,
+  perLeague: 1.01,
+  /** A zone's lead, and its fish's way of fighting, come in a quarter at a time, one each marker, full from its 4th. */
+  ramp: 4,
+  /** Weight's head start, in leagues: sea fish are heavy from the first marker, so even the Shelf takes some line. */
+  weightStart: 15,
+  /** Pace rises at this share of the depth (no gear eases it) up to `paceCap`, which a 0.7 s player can still play. */
+  paceShare: 0.6,
+  paceCap: 2.0,
+  /** Weight stops at cap - k·(pace - 2), short of the slog where reeling barely beats the drag: [cap, k]. */
+  weightCap: [3.3, 1.25],
+  /** Leagues each Aurora Rod level takes off weight, and `cross` off strength; a line level the other way round. */
+  ease: 4.5,
+  cross: 1.5,
+  /** Each fish's pull: strength ×spread^±1, log-uniform, so some fish of a depth pull harder than others. */
+  spread: 1.4,
+  /** The hook toast calls a pull above `strong` "a strong one" and below `light` "a light one" (about 1 fish in 4 each). */
+  strong: 1.2,
+  light: 0.85,
+};
+
 export const DIVE = {
-  /** Fight difficulty: base × perDepth^depth × perRodLevel^rod level × zone factor × stamina / staminaBase. No clamp. */
-  baseDifficulty: 1.6,
-  perDepth: 1.01,
-  perRodLevel: 0.97,
-  staminaBase: 2.6,
   /** A ledge every this many depths. */
   ledgeEvery: 5,
   /** Metres of line on the dive's one spool. */
@@ -82,7 +116,7 @@ export const DIVES_OPEN = false;
 
 /**
  * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's
- * stall with no cap, each level making sea fights 3% easier (`DIVE.perRodLevel`); pond fights don't change. A level
+ * stall with no cap, each level making sea fish lighter (`SEA_FIGHT.ease`); pond fights don't change. A level
  * costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
  */
 export const ROD_LEVEL = {

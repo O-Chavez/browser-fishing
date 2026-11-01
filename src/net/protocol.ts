@@ -166,7 +166,8 @@ export type ServerMsg =
   | { t: 'drops'; list: Drop[] }
   /** With a fish, `seed` and `d` set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
   /** `b`: a sea fish's behaviour, whose reel levers (`BEHAVIOUR_TUNE`) the fight uses. `tag`: a Feisty or Brutish pond fish. */
-  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Difficulty; b?: Behaviour; tag?: FishTag }
+  /** `pull`: a sea fish pulling well above or below its depth's norm, named on the hook toast. */
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Difficulty; b?: Behaviour; tag?: FishTag; pull?: 'strong' | 'light' }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; wedge: number; factor: number; ms: number }
   | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }

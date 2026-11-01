@@ -3,11 +3,11 @@ import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/
 import { BAITS, FISH, LINES, RODS, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { ROD_LEVEL } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
-import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, rollTag, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
+import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, rollTag, sellValue, sizeDifficulty, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
 import type { Difficulty, FightDifficulty } from './reel';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
-import { rollSeaFish } from './dive';
+import { pullWord, rollSeaFish, seaDifficulty, type SeaGear } from './dive';
 import { DIVE, type Behaviour } from '../data/dive';
 import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
@@ -160,6 +160,9 @@ export function levelRod(s: SaveData): boolean {
 
 /** The rod level a sea fight uses (`seaDifficulty`): the Aurora Rod's while it's the rod in use. */
 export const seaRodLevel = (s: SaveData): number => rodLevelOf(s, s.rod);
+
+/** The levels a sea fight is eased by. The sea line comes in its own step; until then it's +0. */
+export const seaGear = (s: SaveData): SeaGear => ({ rod: seaRodLevel(s), line: 0 });
 
 /** This rod's level: the save's rod level for the Aurora Rod, 0 for the others. */
 export const rodLevelOf = (s: SaveData, id: string): number => (id === ROD_LEVEL.rod ? s.rodLevel : 0);
@@ -429,6 +432,8 @@ export interface Roll {
   b?: Behaviour;
   /** A Feisty or Brutish pond fish (`rollTag`). */
   tag?: FishTag;
+  /** A sea fish that pulls well above or below its depth's norm (`pullWord`), for the hook toast. */
+  pull?: 'strong' | 'light';
 }
 
 /** A hooked fish's fight difficulty on the save's rod and line, Quick-Reel Gloves included. */
@@ -458,18 +463,22 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
 }
 
 /**
- * A cast on a dive: the fish comes from the depth's zone (`rollSeaFish`) and fights at the depth's difficulty, whatever
- * the rod and bait. No bait is spent. Shinies roll as in the daytime pond, Shiny Lure included.
+ * A cast on a dive: the fish comes from the depth's zone (`rollSeaFish`) and fights at the depth's difficulty on the
+ * Aurora Rod's levels, its size on the weight and its pull roll on the strength, whatever the bait. No bait is spent.
+ * Shinies roll as in the daytime pond, Shiny Lure included; a shiny sea fish is worth more, not harder.
  */
 export function rollSeaCast(s: SaveData, depth: number, rng: () => number = Math.random): Roll {
-  const bite = rollSeaFish(depth, seaRodLevel(s), rng);
+  const bite = rollSeaFish(depth, rng);
   const lure = lureOn(s);
   if (lure) s.lure--;
   const size = rollSize(bite.fish, rng);
   const wait = DIVE.biteMin + rng() * DIVE.biteSpread;
   const shiny = lure || rng() < SHINY_CHANCE * shinyMult(s);
-  const roll: Roll = { fishId: bite.fish.id, size, wait, shiny, seed: Math.floor(rng() * 4294967296), d: bite.difficulty };
+  const d = seaDifficulty(depth, seaGear(s), bite.fish, bite.pull, sizeDifficulty(bite.fish, size));
+  const roll: Roll = { fishId: bite.fish.id, size, wait, shiny, seed: Math.floor(rng() * 4294967296), d };
   if (bite.behaviour) roll.b = bite.behaviour;
+  const word = pullWord(bite.pull);
+  if (word) roll.pull = word;
   return roll;
 }
 

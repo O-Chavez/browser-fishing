@@ -39,7 +39,7 @@ import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from 
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { BEHAVIOUR_TUNE } from './dive';
+import { BEHAVIOUR_TUNE, rodLevelEase } from './dive';
 import { Player } from './player';
 import {
   animateFish,
@@ -87,7 +87,6 @@ import { World } from './world';
 import { ScreenSpray } from './screenspray';
 import { zoneAt } from '../data/sea';
 import { DIVES_OPEN, DIVE, ROD_LEVEL, glowColor, glowStep } from '../data/dive';
-import { powInt } from './dive';
 
 type Phase =
   | 'idle'
@@ -104,10 +103,10 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 
 /** Item icons shared by the hotbar and the menus. */
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
-/** How much easier each Aurora Rod level makes sea fights, in percent. */
 /** Milliseconds a player can't cast after a lost fight: time to read the loss card instead of throwing an unaimed cast. */
 const LOSS_CAST_DELAY_MS = 2000;
-const PER_LEVEL = Math.round((1 - DIVE.perRodLevel) * 100);
+/** How much lighter each Aurora Rod level makes sea fish, in percent. */
+const PER_LEVEL = Math.round(rodLevelEase(1) * 100);
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
 
@@ -196,6 +195,8 @@ export class Game {
   private fightB: Behaviour | undefined;
   /** A Feisty or Brutish pond fish, said at hook time. */
   private fightTag: FishTag | undefined;
+  /** A sea fish pulling well above or below its depth's norm. */
+  private fightPull: 'strong' | 'light' | undefined;
   /** The hooked pond fish is above the rod's or the line's tier: the hook toast and the gauge's drag caption say so (REELING.md). */
   private overRod = false;
   private overLine = false;
@@ -1225,7 +1226,7 @@ export class Game {
     if (!eco.levelRod(s)) return;
     this.net.send({ t: 'levelrod' });
     const glow = s.rodLevel % ROD_LEVEL.glowEvery === 0 ? ' · a new glow!' : '';
-    this.toast(`Aurora Rod +${s.rodLevel}: sea fights ${PER_LEVEL}% easier${glow}`, 3);
+    this.toast(`Aurora Rod +${s.rodLevel}: sea fish ${PER_LEVEL}% lighter${glow}`, 3);
     audio.jingle(glow ? 'legendary' : 'rare');
   }
 
@@ -2191,6 +2192,7 @@ export class Game {
     this.fightTune = roll.b && BEHAVIOUR_TUNE[roll.b];
     this.fightB = roll.b;
     this.fightTag = roll.tag;
+    this.fightPull = roll.pull;
     this.overRod = !this.map.sea && !!this.hooked && this.hooked.tier > byId(RODS, this.s.rod).tier;
     this.overLine = !this.map.sea && !!this.hooked && this.hooked.tier > eco.lineOf(this.s).tier;
     this.elapsed = 0;
@@ -2315,7 +2317,9 @@ export class Game {
     // The word comes from the fish's pace; the gear gap is said outright, since that is what decides the fight.
     const tag = this.fightTag === 'feisty' ? 'A feisty one! ' : this.fightTag === 'brutish' ? 'A brutish one! ' : '';
     const over = this.overRod && this.overLine ? ' Over your rod and line!' : this.overRod ? ' Heavy for your rod.' : this.overLine ? ' Too strong for your line!' : '';
-    this.toast(`Hooked! ${tag}${difficultyLabel(typeof hard === 'number' ? hard : hard.pace ?? hard.weight)} fight.${over}`, over ? 3 : 2);
+    // At sea the pace levels off with depth, so the word is the fish's own pull instead.
+    const sea = this.fightPull === 'strong' ? 'A strong one!' : this.fightPull === 'light' ? 'A light one.' : 'A typical one.';
+    this.toast(this.map.sea ? `Hooked! ${sea}` : `Hooked! ${tag}${difficultyLabel(typeof hard === 'number' ? hard : hard.pace ?? hard.weight)} fight.${over}`, over ? 3 : 2);
     this.showFishTag(this.fightTag);
   }
 
@@ -4403,10 +4407,10 @@ export class Game {
     if (id !== ROD_LEVEL.rod || !eco.ownsRod(s, id) || !(DIVES_OPEN || s.pearls > 0 || s.rodLevel > 0)) return null;
     const next = s.rodLevel + 1;
     const cost = eco.rodLevelCost(next);
-    const easier = Math.round((1 - powInt(DIVE.perRodLevel, s.rodLevel)) * 100);
+    const easier = Math.round(rodLevelEase(s.rodLevel) * 100);
     const price = `${cost.coins.toLocaleString()} ${COIN} + ${cost.pearls.toLocaleString()} ${PEARL}`;
-    const body = this.meter('Sea fights', `${easier}% easier`, easier / 100, 5) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`;
-    const note = `+${s.rodLevel} → +${next}: sea fights ${PER_LEVEL}% easier · ${price}. Black Pearls come up from sea dives.`;
+    const body = this.meter('Sea fish', `${easier}% lighter`, easier / 100, 5) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`;
+    const note = `+${s.rodLevel} → +${next}: sea fish ${PER_LEVEL}% lighter, so they take less line · ${price}. Black Pearls come up from sea dives.`;
     const coins = Math.max(0, cost.coins - s.coins);
     const pearls = Math.max(0, cost.pearls - s.pearls);
     const short = [coins && `${coins.toLocaleString()} ${COIN}`, pearls && `${pearls.toLocaleString()} ${PEARL}`].filter(Boolean).join(' + ');
