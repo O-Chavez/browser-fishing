@@ -147,6 +147,8 @@ export type ClientMsg =
   | { t: 'rename'; name: string };
 
 export type ServerMsg =
+  /** The server is restarting (a redeploy); progress is saved. The socket closes with code 1012 right after. */
+  | { t: 'restart' }
   /**
    * `name` is the account's current name, which differs from the joined one after a rename; `renameIn` is ms until it can change again.
    * `now` is the server's clock (ms), so every player's sky follows the same day instead of their device's clock.
