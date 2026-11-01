@@ -88,6 +88,8 @@ import { KOFI_URL } from '../data/support';
 import { World } from './world';
 import { ScreenSpray } from './screenspray';
 import { zoneAt } from '../data/sea';
+import { CAST_OFF_CARD, cardColours } from './castoffcard';
+import { dayFraction } from './daynight';
 import { DIVES_OPEN, DIVE, ROD_LEVEL, glowColor, glowStep } from '../data/dive';
 import { powInt } from './dive';
 
@@ -113,8 +115,6 @@ const PER_LEVEL = Math.round((1 - DIVE.perRodLevel) * 100);
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
 
-/** The "Casting off" card stays up at least this long (ms), so it reads as a moment rather than a flash. */
-const CAST_OFF_MS = 1400;
 /** Captain Reed's words on the card, going out to sea and coming back. */
 const CAST_OFF_LINES = [
   'Feet wide, knees soft. She rolls more the further out we go.',
@@ -1565,18 +1565,30 @@ export class Game {
     const lines = out ? CAST_OFF_LINES : HEADING_IN_LINES;
     $('castoff-line').textContent = `Captain Reed: "${lines[Math.floor(Math.random() * lines.length)]}"`;
     const el = $('castoff');
-    el.classList.remove('hidden', 'fade');
+    const c = cardColours(byId(LOCATIONS, this.map.locationId), out ? this.seaDepth : null, this.world.dayOverride ?? dayFraction(this.world.clock() / 1000));
+    el.style.setProperty('--co-top', c.top);
+    el.style.setProperty('--co-horizon', c.horizon);
+    el.style.setProperty('--co-sea', c.sea);
+    el.style.setProperty('--co-deep', c.deep);
+    el.style.setProperty('--co-in', `${CAST_OFF_CARD.fadeInMs}ms`);
+    el.style.setProperty('--co-out', `${CAST_OFF_CARD.fadeOutMs}ms`);
+    // Starts see-through and fades in; the scene swap is already done, but the world holds its last frame until the card is solid.
+    el.classList.add('fade');
+    el.classList.remove('hidden');
+    void el.offsetWidth;
+    el.classList.remove('fade');
     this.castOffAt = performance.now();
+    this.world.holdUntil = this.castOffAt + CAST_OFF_CARD.fadeInMs;
   }
 
   private updateCastOff(): void {
-    if (this.castOffAt === null || !this.world.ready || performance.now() - this.castOffAt < CAST_OFF_MS) return;
+    if (this.castOffAt === null || !this.world.ready || performance.now() - this.castOffAt < CAST_OFF_CARD.minMs) return;
     this.castOffAt = null;
     const el = $('castoff');
     el.classList.add('fade');
     window.setTimeout(() => {
       if (this.castOffAt === null) el.classList.add('hidden');
-    }, 500);
+    }, CAST_OFF_CARD.fadeOutMs);
   }
 
   // ---------- sea trips ----------

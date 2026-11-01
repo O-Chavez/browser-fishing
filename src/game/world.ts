@@ -132,6 +132,8 @@ export class World {
    * on the compile. `Game` sets it while the join screen covers the view.
    */
   holdForShaders = false;
+  /** `performance.now()` until which the last frame stays on screen even once shaders are ready (the cast-off card fading in over it). */
+  holdUntil = 0;
   /** The running `prewarm`, until its shaders are ready and drawn once. */
   private warming: Promise<unknown> | null = null;
   private compiled = false;
@@ -1292,6 +1294,6 @@ export class World {
       this.warming = null;
       this.warmDraw();
     }
-    if (!this.paused && !(this.holdForShaders && this.warming)) this.renderer.render(this.scene, this.camera);
+    if (!this.paused && !(this.holdForShaders && (this.warming || performance.now() < this.holdUntil))) this.renderer.render(this.scene, this.camera);
   }
 }
