@@ -38,7 +38,7 @@ export const NEWS: NewsEntry[] = [
     date: '2026-11-01',
     title: 'Charters to the deep sea',
     image: deepSea,
-    alt: 'The Leviathan, a horned, armoured sea monster glowing with molten cracks, breaching a dark storm swell beside the charter boat',
+    alt: 'The Kraken, a giant crimson squid with a glowing golden eye, rearing its arms out of towering storm waves far out at sea',
     body: [
       "<b>Captain Reed</b>'s seaplane is flying again! Bring the <b>Aurora Rod</b> to his stand on the west beach and cast off on a charter to the open sea. Every 5 fish you land, you reach a marker: <b>Head home</b> with your haul of <b>Black Pearls</b>, or <b>Sail on</b> for a bigger one.",
       'The further out you sail, the stranger the fish: leafy seadragons in <b>Kelp Deep</b>, glowing anglers in <b>the Twilight</b>, and in <b>the Abyss</b>, things with far too many eyes. Every zone has its own legends, long, hard fights that are worth a fortune.',
