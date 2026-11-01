@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Price above the status on the cosmetics stall and Prize Counter tiles (Oscar, 2026-11-01; done 2026-11-01, branch `tile-price-status`)
+  - The same markup the rod and bait tiles use (`itemTile`'s `price` line, then the status): `cosShopHtml` (Marlow's stall and the High Roller tab) and the perk tiles in `casinoHtml` (`src/game/game.ts`) now always show the price, with "Owned" / "Wearing" / "🔒 Locked" under it when it applies (nothing under it otherwise). Buy buttons and picking are unchanged.
+  - Checked: tests, tsc, headless Chrome before/after shots of the stall, the Unlocks tab and the High Roller tab with owned, worn, locked and unaffordable tiles; looked at them. No smoke run in the session (the coordinator runs it).
 - [x] Charter discovery (2026-11-01, branch `charter-discovery`): a one-time tip and a "Next:" line send Aurora Rod owners to Captain Reed. Both are gated on `DIVES_OPEN` (`src/data/dive.ts`), so while charters are closed nothing points at them and they light up by themselves on reopening.
   - `chartersToTry(s, open = DIVES_OPEN)` and `charterTipDue` in `src/game/tips.ts`: the Aurora Rod (`DIVE.rod`) in the hotbar or locker, no marker headed home from yet (`sea.record` 0), and charters open. New tip id `charter` (`TIP_IDS`, `tipText`). `Game.tick` (the per-second check beside the `snack` tip) shows it when idle and no menu is open, so never mid-fight, on getting the rod or on joining with it.
   - `nextGoal(level, dex, charters)` (`src/game/progression.ts`) puts the charter line first when `charters` is set; `welcomeText` takes the same flag for its goal. Callers in `game.ts` (the Bag's "Next:" line and the welcome banner) pass `chartersToTry(s)`.

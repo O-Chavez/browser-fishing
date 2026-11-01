@@ -1841,8 +1841,8 @@ export class Game {
     const tiles = PERKS.map((p) => {
       const owned = !p.consumable && s.perks.includes(p.id);
       const locked = !!p.requires && !s.perks.includes(p.requires);
-      const sub = owned ? 'Owned' : locked ? '🔒 Locked' : `${p.chips} chips`;
-      return this.itemTile({ icon: p.icon, name: p.name, sub, tier: tierOf(p.chips), on: this.pick.perk === p.id, check: owned, ghost: !owned && (locked || s.chips < p.chips), attrs: `data-pick="perk" data-id="${p.id}"` });
+      const sub = owned ? 'Owned' : locked ? '🔒 Locked' : '';
+      return this.itemTile({ icon: p.icon, name: p.name, sub, price: `${p.chips} chips`, tier: tierOf(p.chips), on: this.pick.perk === p.id, check: owned, ghost: !owned && (locked || s.chips < p.chips), attrs: `data-pick="perk" data-id="${p.id}"` });
     }).join('');
     const owned = !p.consumable && s.perks.includes(p.id);
     const locked = !!p.requires && !s.perks.includes(p.requires);
@@ -4521,8 +4521,8 @@ export class Game {
         .map((c) => {
           const has = s.owned.includes(c.id);
           const wearing = s.look[slot] === c.id;
-          const sub = has ? (wearing ? 'Wearing' : 'Owned') : this.cosPrice(c);
-          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, on: chosen?.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
+          const sub = has ? (wearing ? 'Wearing' : 'Owned') : '';
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, price: this.cosPrice(c), tier: c.tier + 1, on: chosen?.id === c.id, check: has, ghost: !has && money < c.price, attrs: `data-pick="${key}" data-id="${c.id}" data-try="${slot}:${c.id}"` });
         })
         .join('');
       return cards ? `<h4>${this.slotTitle(slot)}</h4><div class="tiles">${cards}</div>` : '';
