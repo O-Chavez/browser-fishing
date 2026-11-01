@@ -3,6 +3,8 @@ import { gloomAt, stormAt } from '../data/sea';
 
 /** Background music level; kept low so it sits under the lake ambience. */
 const MUSIC_VOL = 0.17;
+/** Overall output level, before the safety limiter. */
+const MASTER_VOL = 0.7;
 /** How much the music drops under the deepest storms at sea, so the wind and thunder carry the scene. */
 const SEA_MUSIC_DUCK = 0.6;
 /** The bow has to drop at least this fast (m/s) to thud into a wave. */
@@ -43,7 +45,7 @@ class AudioFX {
     const ctx = new AudioContext();
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = 0.7;
+    this.master.gain.value = this.soundOn ? MASTER_VOL : 0;
     // A safety limiter: only the loudest moments (thunder over a storm at sea) reach it.
     const limit = ctx.createDynamicsCompressor();
     limit.threshold.value = -4;
@@ -61,6 +63,20 @@ class AudioFX {
     this.ambience();
     this.startMusic();
     this.setupCreak();
+  }
+
+  private soundOn = localStorage.getItem('fishing-sound') !== 'off';
+
+  get sound(): boolean {
+    return this.soundOn;
+  }
+
+  /** Mutes or unmutes every sound in the game (music included) and remembers the choice. */
+  toggleSound(): boolean {
+    this.soundOn = !this.soundOn;
+    localStorage.setItem('fishing-sound', this.soundOn ? 'on' : 'off');
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.soundOn ? MASTER_VOL : 0, this.ctx.currentTime, 0.1);
+    return this.soundOn;
   }
 
   private musicGain?: GainNode;
