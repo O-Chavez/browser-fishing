@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] A charter poster by the pond gate (Oscar, 2026-11-01; done 2026-11-01, branch `charter-poster`): the gate's other side from the Casino Cove poster, with the Kraken from the "What's new" photo (`src/assets/images/charter-preview.jpg`) under a CHARTERS sign, so players have charters to look forward to while they level up. "Charters poster · take a look" opens a card: what a charter is (Reed, markers every 5 fish, Head home / Sail on, one spool), the zones and their legends, Black Pearls for the rod and line, and how far off the player's Aurora Rod is ("N levels to go", the price at Marlow's, or "You're ready!"). Both posters come from `POSTERS` in `hub.ts`; the card is `chartersPosterHtml` in `game.ts`.
+  - Also fixed: the Fishdex card for an undiscovered sea fish named only the Shelf or the Drop-off; it now names the fish's zone ("Out at sea, in Kelp Deep").
+  - Checked: tests, tsc, headless renders of the plaza, the poster up close and its card, and `npm run smoke`.
 - [x] Reopen charters to players (done 2026-11-01, with the deep sea fishing mechanics on `sea-two-axis`): `DIVES_OPEN` is true again, so Reed's Cast off panel, the charter tip and Next line (charter discovery) and the rod and line level panels are on for players. The smoke test starts its charter from Reed's Cast off button again; the server test for closed charters closes them itself (`chartersOpen = false`).
 - [x] Deep sea fishing mechanics (Oscar, 2026-10-31; done 2026-11-01, branch `sea-two-axis`): sea fights on the pond's two axes, so nearing your frontier is felt marker by marker and failing it feels like pushing your luck, with "I could go deeper if I levelled my rod / my line" as the way on (REELING.md, "The sea" and "Sea findings")
   - Fight left (slice 3) stays in TODO.md, on hold until friends have play-tested the deep-sea content (Oscar, 2026-11-01).
