@@ -396,8 +396,16 @@ export class Room {
         if (p || m.info.act) this.setAct(m, null);
         m.pending = null;
         this.syncCarry(m);
-        // On a dive, the line pays for the fight; at the pond nothing else changes.
-        if (!p || !this.runOf(m) || !this.seaLost(m, p, msg.h)) return;
+        if (!p) return;
+        // On a dive, the line pays for the fight. At the pond a fish lost to a gear wall is noted in the Fishdex, but
+        // only if the replayed log shows a fight that ended in a snap or a run-off: a cast reeled in early saw nothing.
+        if (!this.runOf(m)) {
+          const fight = typeof msg.h === 'string' && msg.h ? replayFight(p.d, p.seed, msg.h) : null;
+          if (!fight || (fight.status !== 'snapped' && fight.status !== 'escaped') || !eco.recordSighting(s, byId(FISH, p.fishId))) return;
+          changed = true;
+          break;
+        }
+        if (!this.seaLost(m, p, msg.h)) return;
         changed = true;
         break;
       }

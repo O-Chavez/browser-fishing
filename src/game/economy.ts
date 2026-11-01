@@ -1,6 +1,6 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
-import { BAITS, FISH, LINES, RODS, byId, type BaitType, type Fish, type Line } from '../data/content';
+import { BAITS, FISH, LINES, RODS, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { ROD_LEVEL } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, rollTag, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
@@ -80,6 +80,28 @@ export function buyRod(s: SaveData, id: string): boolean {
 
 /** The line on the rod (Twine if the save's is unknown). */
 export const lineOf = (s: Pick<SaveData, 'line'>): Line => LINES.find((l) => l.id === s.line) ?? LINES[0];
+
+/** What stands between this player's gear and a species: the line to hold it, the rod to land it in good time, the bait to hook it. */
+export function gearNeeds(s: Pick<SaveData, 'rod' | 'line' | 'bait'>, fish: Fish): { line: Line | null; rod: Rod | null; bait: Bait | null } {
+  const rod = byId(RODS, s.rod);
+  const bait = byId(BAITS, s.bait);
+  return {
+    line: fish.tier > lineOf(s).tier ? LINES.find((l) => l.tier === fish.tier) ?? null : null,
+    rod: fish.tier > rod.tier ? RODS.find((r) => r.tier === fish.tier) ?? null : null,
+    bait: fish.tier > bait.tier ? BAITS.find((b) => b.tier === fish.tier) ?? null : null,
+  };
+}
+
+/**
+ * A fish lost to a gear wall (over the rod or the line) goes into the Fishdex as *seen*, so the loss pays out as a
+ * shopping list (REELING.md, "A wall loss pays out as information"). Fish the gear handles, or already caught, don't.
+ */
+export function recordSighting(s: SaveData, fish: Fish): boolean {
+  const need = gearNeeds(s, fish);
+  if ((!need.line && !need.rod) || s.dex[fish.id] || s.seen.includes(fish.id)) return false;
+  s.seen.push(fish.id);
+  return true;
+}
 
 /** Spools a better line onto the rod: a step up from the current one, unlocked and paid for. There is nothing to carry. */
 export function buyLine(s: SaveData, id: string): boolean {
@@ -492,6 +514,7 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const record = !!entry && size > entry.best;
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
+  s.seen = s.seen.filter((id) => id !== fish.id);
   const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1);
   const item: Slot = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
   const sold = sell ? sellPrice(s, item) : 0;

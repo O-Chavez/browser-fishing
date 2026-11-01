@@ -175,6 +175,37 @@ describe('Room economy', () => {
     expect(s.rodLevel).toBe(1);
   });
 
+  it('a pond fish lost to a gear wall is noted in the Fishdex as seen', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    // Minnow bait on the Twig Rod and Twine: tier 2 and 3 fish bite, and both are over the gear.
+    s.level = 10;
+    s.bait = 'minnow';
+    s.slots[1] = { k: 'bait', id: 'minnow', n: 50 };
+    // Reeling in before the fight, or a log cut short, sees nothing: the fish was never on the line.
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    room.handle(a.id, { t: 'lost' });
+    expect(s.seen).toEqual([]);
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    const half = new HoldLog();
+    for (let i = 0; i < 30; i++) half.push(true);
+    room.handle(a.id, { t: 'lost', h: half.encode() });
+    expect(s.seen).toEqual([]);
+    // A fight held straight through: a fish over the gear is lost (snap or run-off) and seen; a tier 1 fish is simply landed.
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    const ok = last(a.c, 'castok');
+    const fish = FISH.find((f) => f.id === ok.fishId)!;
+    const held = playFight(ok.d!, ok.seed!, () => true);
+    expect(fish.tier > 1 ? ['snapped', 'escaped'] : ['caught']).toContain(held.reel.status);
+    room.handle(a.id, { t: 'lost', h: held.h });
+    expect(s.seen).toEqual(fish.tier > 1 ? [fish.id] : []);
+    if (fish.tier > 1) expect(last(a.c, 'state').save.seen).toEqual([fish.id]);
+    // Saying it twice changes nothing.
+    room.handle(a.id, { t: 'lost', h: held.h });
+    expect(s.seen.length).toBeLessThanOrEqual(1);
+  });
+
   it('rolls fish on the server and rejects instant catches', () => {
     const { room, join, advance } = setup();
     const a = join('Ann');

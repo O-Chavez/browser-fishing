@@ -454,6 +454,8 @@ canvas.preview.dragging { cursor: grabbing; }
 .fish b { font-size: 14px; font-weight: 900; }
 .fish > span:last-child { font-size: 12px; font-weight: 800; color: var(--ink-muted); }
 .fish.unknown { background: var(--paper-2); }
+.fish.seen { background: var(--paper-2); }
+.fish.seen b { color: var(--ink); }
 .fish .moon { position: absolute; top: 6px; right: 8px; font-size: 14px; }
 .fish p { margin: 0; font-size: 12px; font-weight: 700; line-height: 1.3; color: var(--ink-muted); }
 .dex { margin-bottom: 16px; }

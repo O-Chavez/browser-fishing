@@ -194,6 +194,9 @@ export class Game {
   private fightB: Behaviour | undefined;
   /** A Feisty or Brutish pond fish, said at hook time. */
   private fightTag: FishTag | undefined;
+  /** The hooked pond fish is above the rod's tier: the first surge that drags line says so, once (REELING.md). */
+  private overRod = false;
+  private saidHeavy = false;
   /** The dive on screen: the strip at sea, and the cards waiting for a quiet moment (`showDiveDue`). */
   private diveHud = new DiveHud($('divehud'), $('divetag'));
   private diveDue: 'marker' | 'diveend' | null = null;
@@ -1200,7 +1203,9 @@ export class Game {
       if (!eco.buyBait(s, id)) return this.toast('Your locker is full of that bait.');
       this.net.send({ t: 'buybait', id });
       this.toast(`Bought ${eco.BAIT_PACK} ${b.name}`);
-      if (b.tier > 1) this.guide('bait');
+      // The line warning outranks the one-time bait tip, which waits for a buy that doesn't need it.
+      if (b.tier > eco.lineOf(s).tier) this.showGuide(`Your <b>${eco.lineOf(s).name}</b> can't hold most of what this bait attracts: <b>${LINES.find((l) => l.tier === b.tier)!.name}</b> does.`);
+      else if (b.tier > 1) this.guide('bait');
     }
     this.persist();
     this.refreshHud();
@@ -2173,6 +2178,8 @@ export class Game {
     this.fightTune = roll.b && BEHAVIOUR_TUNE[roll.b];
     this.fightB = roll.b;
     this.fightTag = roll.tag;
+    this.overRod = !this.map.sea && !!this.hooked && this.hooked.tier > byId(RODS, this.s.rod).tier;
+    this.saidHeavy = false;
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2810,6 +2817,11 @@ export class Game {
       this.reelAcc -= FIGHT_DT;
       this.holds.push(this.holding);
       r.update(FIGHT_DT, this.holding);
+      // Too heavy for the rod: said once, at the first surge where the fish drags line with the gauge green.
+      if (this.overRod && !this.saidHeavy && r.dragging) {
+        this.saidHeavy = true;
+        this.toast('Too heavy for your rod! It drags line out even when you hold it right.', 3);
+      }
     }
 
     if (r.wear.frays !== this.lastFrays) {
@@ -2904,10 +2916,10 @@ export class Game {
       w.rig.kick('pitch', -4);
       w.addShake(1.2);
       // Only the short line here: the fray tip already explained snapping.
-      this.reset('The line snapped!');
+      this.reset(this.sighting('The line snapped!'));
       this.rodHint('snapped');
     } else if (r.status === 'escaped') {
-      this.reset('The fish took all your line!');
+      this.reset(this.sighting('The fish took all your line!'));
       // The first time, say why; after that the rod hint (once a session) can show.
       if (!this.guide('slack')) this.rodHint('escaped');
     } else if (this.holds.steps >= MAX_FIGHT_STEPS) {
@@ -2962,6 +2974,15 @@ export class Game {
     this.persist();
     this.showGuide(tipText(id, this.s, this.map.vendor.name, !!this.touch));
     return true;
+  }
+
+  /**
+   * A pond fish lost to a gear wall goes into the Fishdex as seen (the server does the same from the `lost` message),
+   * and the loss message says so.
+   */
+  private sighting(msg: string): string {
+    if (this.map.sea || !this.hooked || !eco.recordSighting(this.s, this.hooked)) return msg;
+    return `${msg} The ${this.hooked.name} is in your Fishdex with what it needs.`;
   }
 
   /** Once a session, after a lost or long fight: a snap points at the next line up, the rest at the next rod. */
@@ -3126,7 +3147,7 @@ export class Game {
         : taking
           ? 'The fish is taking line'
           : r.dragging
-            ? 'Strong fish! Ride high in the green to give less line'
+            ? this.overRod ? 'Too heavy for your rod: it drags line even in the green' : 'Strong fish! Ride high in the green to give less line'
             : surge
               ? 'Stay between the marker and the red'
             : warn
@@ -3965,7 +3986,7 @@ export class Game {
         name: b.name,
         tier: b.tier,
         body: this.meter('Luck', `×${b.luck}`, b.luck / 2, b.tier) + this.meter('Reaches', `Tier ${b.tier}`, b.tier / 5, b.tier) + `<div class="have">You have <b>${n}</b></div>`,
-        note: `Bait decides which fish can bite: this one hooks fish up to ${tierName(b.tier)}.`,
+        note: `Bait decides which fish can bite: this one hooks fish up to ${tierName(b.tier)}.` + (b.tier > eco.lineOf(s).tier ? ` ⚠ Your ${eco.lineOf(s).name} can't hold most of what this bait attracts: ${LINES.find((l) => l.tier === b.tier)!.name} does.` : ''),
         actions,
       });
     }
@@ -4064,9 +4085,14 @@ export class Game {
       const size = `${f.minSize}-${f.maxSize} cm`;
       if (e) return `<div class="fish" style="--c:var(--t${f.sea ? 3 : f.tier})">${moon}${fishIcon(f.id)}<b>${f.name}</b><p>${FISH_BLURB[f.id] ?? ''}</p><span>Caught ${e.count} · best ${e.best} cm</span></div>`;
       if (f.sea) return `<div class="fish unknown" style="--c:var(--t3)">${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}</p><span>Out at sea, off the ${f.locations[0] === 'shelf' ? 'Shelf' : 'Drop-off'}</span></div>`;
-      const rodName = shortRod(RODS.find((r) => r.tier === f.tier)!.name);
+      if (this.s.seen.includes(f.id)) {
+        const need = eco.gearNeeds(this.s, f);
+        const parts = [need.line ? `the ${need.line.name} to hold it` : '', need.rod ? `a ${need.rod.name} to land it` : ''].filter(Boolean);
+        return `<div class="fish seen" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.id, { hidden: true })}<b>${f.name}</b><p>${size}${f.night ? ' · bites at night' : ''}</p><span>${parts.length ? `Got away! Needs ${parts.join(' and ')}` : 'Got away! Your gear can land it now'}</span></div>`;
+      }
+      const lineName = LINES.find((l) => l.tier === f.tier)!.name;
       const baitName = BAITS.find((b) => b.tier === f.tier)!.name;
-      return `<div class="fish unknown" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}${f.night ? ' · bites at night' : ''}</p><span>Try a ${rodName} rod with ${baitName}</span></div>`;
+      return `<div class="fish unknown" style="--c:var(--t${f.tier})">${moon}${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}${f.night ? ' · bites at night' : ''}</p><span>Bites on ${baitName} · ${lineName} holds it</span></div>`;
     };
     // One section per tier, under its theme name, so the ladder from Shallows to Spirit fish reads at a glance.
     const sections = TIER_THEME.map((theme, i) => {
@@ -4076,7 +4102,7 @@ export class Game {
     }).join('');
     const sea = SEA_FISH.filter((f) => this.s.dex[f.id]).length;
     const seaPage = `<h4 class="dex-tier"><span class="badge" style="--c:var(--t3)">Sea</span> ${SEA_THEME}<small>${sea} / ${SEA_FISH.length}</small></h4><div class="dex">${SEA_FISH.map(card).join('')}</div>`;
-    return `<div class="dex-head"><b>${found} / ${POND_FISH.length}</b> species discovered<div class="meter big"><i style="width:${(found / POND_FISH.length) * 100}%;--c:var(--gold)"></i></div></div>${sections}${seaPage}`;
+    return `<div class="dex-head"><b>${found} / ${POND_FISH.length}</b> species discovered${this.s.seen.length > 0 ? ` · <b>${this.s.seen.length}</b> seen, not yet caught` : ''}<div class="meter big"><i style="width:${(found / POND_FISH.length) * 100}%;--c:var(--gold)"></i></div></div>${sections}${seaPage}`;
   }
 
   // ---------- Anglers ----------
@@ -4287,7 +4313,7 @@ export class Game {
         name: b.name,
         tier: b.tier,
         body: this.meter('Luck', `×${b.luck}`, b.luck / 2, b.tier) + this.meter('Reaches', `Tier ${b.tier}`, b.tier / 5, b.tier) + `<div class="have">You have <b>${eco.baitCount(s, b.id)}</b></div>`,
-        note: `Hooks fish up to ${tierName(b.tier)}. Each cast uses one.`,
+        note: `Hooks fish up to ${tierName(b.tier)}. Each cast uses one.` + (b.tier > eco.lineOf(s).tier ? ` ⚠ Your ${eco.lineOf(s).name} can't hold most of what this bait attracts: ${LINES.find((l) => l.tier === b.tier)!.name} does.` : ''),
         actions: action,
       });
     }

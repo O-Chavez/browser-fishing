@@ -217,10 +217,11 @@ Built: line as a spool on the rod, the two-axis ladder in `reelDifficulty`, tags
 - Surge length is a pace lever; weight is drag and reel speed only (2026-10-31).
 - Shiny, size and Brutish all sit on weight; shiny only counts on gear that handles the fish (2026-10-31).
 - Gloves act on weight (they are Quick-Reel Gloves) (2026-10-31).
+- Messages as built (slice 3, 2026-10-31): "Too strong for your line!" is the gauge caption whenever a surge's pull sits in the red; "Too heavy for your rod!" is a toast at the first surge that drags line with the gauge green, once per fight and only for a fish above the rod's tier; the drag caption says the same while it lasts. A fish lost to either wall is *seen* in the Fishdex with what it needs; the loss message says so. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get none of these; they go by depth.
 
 ## Open questions
 
 - The time budget numbers, set by play test.
 - Whether tagged fish are worth a little more, so Feisty is welcomed rather than dreaded (Ideas until tested).
 - Wording and placement of the bait-over-line shop warning.
-- Whether the Fishdex sighting shows the fish's silhouette or its name.
+- ~~Whether the Fishdex sighting shows the fish's silhouette or its name.~~ Both: the silhouette with the real name, since the player has seen it on the line (2026-10-31).

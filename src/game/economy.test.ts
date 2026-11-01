@@ -412,6 +412,45 @@ describe('line', () => {
   });
 });
 
+describe('sightings', () => {
+  it('names what stands between the gear and a species: line to hold it, rod to land it, bait to hook it', () => {
+    const s = newSave(); // Twig, Twine, Worm
+    const pike = byId(FISH, 'pike'); // tier 3
+    expect(eco.gearNeeds(s, pike)).toMatchObject({ line: { id: 'fluoro' }, rod: { id: 'graphite' }, bait: { id: 'minnow' } });
+    s.line = 'fluoro';
+    expect(eco.gearNeeds(s, pike).line).toBeNull();
+    s.rod = 'aurora';
+    s.bait = 'pearl';
+    expect(eco.gearNeeds(s, pike)).toEqual({ line: null, rod: null, bait: null });
+    expect(eco.gearNeeds(s, byId(FISH, 'bluegill'))).toEqual({ line: null, rod: null, bait: null });
+  });
+
+  it('a fish lost to a gear wall is seen once, a fish the gear handles is not, and a catch clears it', () => {
+    const s = newSave();
+    const pike = byId(FISH, 'pike');
+    expect(eco.recordSighting(s, byId(FISH, 'bluegill'))).toBe(false);
+    expect(eco.recordSighting(s, pike)).toBe(true);
+    expect(eco.recordSighting(s, pike)).toBe(false);
+    expect(s.seen).toEqual(['pike']);
+    // Over the line only still counts; over nothing does not.
+    const t = { ...newSave(), rod: 'graphite', seen: [] as string[] };
+    expect(eco.recordSighting(t, pike)).toBe(true);
+    const u = { ...newSave(), rod: 'graphite', line: 'fluoro', seen: [] as string[] };
+    expect(eco.recordSighting(u, pike)).toBe(false);
+    // Catching it moves it from seen to the dex.
+    s.slots[2] = null;
+    eco.applyCatch(s, pike, 80, false, false, false);
+    expect(s.seen).toEqual([]);
+    expect(s.dex.pike?.count).toBe(1);
+  });
+
+  it('migration keeps only real, uncaught species in the seen list', () => {
+    expect(migrate({ ...newSave(), seen: ['pike', 'nope', 'pike', 'bluegill'], dex: { bluegill: { count: 1, best: 12 } } }).seen).toEqual(['pike']);
+    const { seen: _s, ...old } = newSave();
+    expect(migrate(old as object).seen).toEqual([]);
+  });
+});
+
 describe('drops', () => {
   it('expire after 30 seconds', () => {
     let t = 0;

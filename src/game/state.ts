@@ -82,6 +82,8 @@ export interface SaveData {
   held: number;
   location: string;
   dex: Record<string, DexEntry>;
+  /** Species hooked and lost to a gear wall but never caught (REELING.md): the Fishdex shows them with what they need. */
+  seen: string[];
   /** Character appearance and the cosmetics bought so far. */
   look: Look;
   owned: string[];
@@ -141,6 +143,7 @@ export const newSave = (): SaveData => ({
   held: 0,
   location: 'pond',
   dex: {},
+  seen: [],
   look: { ...defaultLook(), face: randomFace() },
   owned: [],
   locker: { rods: [], bait: {} },
@@ -327,6 +330,7 @@ export function migrate(raw: object): SaveData {
   }
   layoutSlots(out, slotCount(out));
   if (!Array.isArray(out.owned)) out.owned = [];
+  out.seen = Array.isArray(data.seen) ? [...new Set(data.seen.filter((id): id is string => typeof id === 'string' && FISH.some((f) => f.id === id) && !out.dex[id]))] : [];
   out.titles = Array.isArray(data.titles) ? data.titles.filter((id) => TITLES.some((t) => t.id === id)) : [];
   grantRanks(out);
   if (!out.titles.includes(out.title as string)) out.title = null;

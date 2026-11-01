@@ -57,7 +57,7 @@ Each fish defines its requirements. A fish can only be caught when **all** condi
 | Conditions (optional) | Time of day, weather, season |
 | Water depth / cast distance | Deep fish need long casts and enough line |
 
-If the player lacks a requirement, the fish is never offered. A hint in the Fishdex ("Needs: Heavy rod, Live bait") lets players plan upgrades.
+If the player lacks a requirement, the fish is never offered. A hint in the Fishdex ("Needs: Heavy rod, Live bait") lets players plan upgrades. As built (2026-10-31): bait gates the bite, and a fish hooked but lost to a gear wall is *seen* in the Fishdex with the line it needs to be held and the rod to be landed (`SaveData.seen`, `gearNeeds`).
 
 ## 5. Content
 
