@@ -175,7 +175,7 @@ export class Room {
 
   /** The player starts where their save says; only `travel` (behind the level gate) moves them between maps. */
   join(conn: Conn, acct: Account, color?: number): number {
-    if (color !== undefined) eco.setBodyColor(acct.save, Math.floor(Number(color)));
+    if (color !== undefined) eco.setBodyColor(acct.save, int(color));
     const id = this.nextId++;
     // A dive waits a while for a player who dropped out; after that its haul has sunk.
     let run = acct.dive ?? null;
@@ -267,13 +267,13 @@ export class Room {
         if (finite(msg.x, msg.z, msg.yaw)) this.move(m, msg.x, msg.z, msg.yaw);
         return;
       case 'slot':
-        changed = eco.selectSlot(s, Math.floor(Number(msg.i)));
+        changed = eco.selectSlot(s, int(msg.i));
         break;
       case 'drop':
         changed = this.drop(m);
         break;
       case 'pickup':
-        changed = this.pickup(m, Number(msg.id));
+        changed = this.pickup(m, int(msg.id));
         break;
       case 'buyrod':
         changed = this.atVendor(m) && this.stocks(m).rods.includes(str(msg.id)) && eco.buyRod(s, str(msg.id));
@@ -303,7 +303,7 @@ export class Room {
         changed = this.dig(m);
         break;
       case 'sell':
-        changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, Math.floor(Number(msg.i))));
+        changed = this.atVendor(m) && (msg.i === undefined ? eco.sellHeld(s) : eco.sellSlot(s, int(msg.i)));
         break;
       case 'buycos': {
         // The counter decides the currency: coins at the stall, chips at the casino prize counter.
@@ -315,7 +315,7 @@ export class Room {
         changed = eco.equipCosmetic(s, msg.slot, msg.id === null ? null : str(msg.id));
         break;
       case 'color':
-        changed = eco.setBodyColor(s, Math.floor(Number(msg.color)));
+        changed = eco.setBodyColor(s, int(msg.color));
         break;
       case 'face':
         changed = eco.setFace(s, msg.id);
@@ -375,22 +375,22 @@ export class Room {
         changed = true;
         break;
       case 'wheel':
-        this.wheel(m, Math.floor(Number(msg.i)));
+        this.wheel(m, int(msg.i));
         return;
       case 'travel':
         changed = this.travel(m, str(msg.to));
         break;
       case 'roulette':
-        this.roulette(m, msg.bet, Math.floor(Number(msg.i)));
+        this.roulette(m, msg.bet, int(msg.i));
         return;
       case 'bj':
         this.bj(m, msg.a, msg.i);
         return;
       case 'cashout':
         if (this.atCasino(m, 'prizes')) {
-          const bad = cas.cashOutError(s, Math.floor(Number(msg.i)));
+          const bad = cas.cashOutError(s, int(msg.i));
           if (bad) m.conn.send({ t: 'notice', msg: bad });
-          else changed = cas.cashOut(s, Math.floor(Number(msg.i))) > 0;
+          else changed = cas.cashOut(s, int(msg.i)) > 0;
         }
         break;
       case 'buyperk':
@@ -790,7 +790,7 @@ export class Room {
 
   private bj(m: Member, a: 'deal' | 'hit' | 'stand' | 'double', i?: number): void {
     if (a === 'deal') {
-      const slot = Math.floor(Number(i));
+      const slot = int(i);
       if (m.bj || !this.atCasino(m, 'blackjack')) return;
       const bad = cas.betError(m.acct.save, slot);
       if (bad) return m.conn.send({ t: 'notice', msg: bad });

@@ -11,6 +11,7 @@ import { DevGate } from './dev';
 import { JoinFeed, NOT_FORUM, postWebhook } from './discord';
 import { FeedbackGate, feedbackPost, parseTags, type FeedbackReport } from './feedback';
 import { matchTip, parseKofi, tipMessage } from './kofi';
+import { guarded } from './guard';
 import { Room } from './room';
 import { SmokeStats } from './smokestats';
 import { createStorage } from './storage';
@@ -293,7 +294,8 @@ wss.on('connection', (ws, req) => {
         if (rec.win?.name === acct.name || rec.loss?.name === acct.name) rooms.forEach((o) => o.broadcast({ t: 'records', records: rec }));
         return;
       }
-      return r.handle(id, msg);
+      const who = `#${id} ${acct.name}`;
+      return guarded(who, msg, () => r.handle(id!, msg));
     }
     if (msg.t === 'join' && !busy) run(join(msg));
   });
