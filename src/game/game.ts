@@ -105,6 +105,8 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 /** Item icons shared by the hotbar and the menus. */
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
 /** How much easier each Aurora Rod level makes sea fights, in percent. */
+/** Milliseconds a player can't cast after a lost fight: time to read the loss card instead of throwing an unaimed cast. */
+const LOSS_CAST_DELAY_MS = 2000;
 const PER_LEVEL = Math.round((1 - DIVE.perRodLevel) * 100);
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
@@ -278,6 +280,8 @@ export class Game {
   /** The rod upgrade hint shows at most once a session. */
   private rodHinted = false;
   private verdictTimer = 0;
+  /** No cast until this time after a lost fight: a click on the loss moment used to throw an unaimed cast and spend the bait. */
+  private castLockUntil = 0;
   private toughCatch = false;
   private confirmReset = false;
   /** Settings > Account: the open password or name form or logout confirmation, and its last message. */
@@ -2085,7 +2089,7 @@ export class Game {
         break;
       case 'idle':
       {
-        if (this.spin) return;
+        if (this.spin || performance.now() < this.castLockUntil) return;
         if (this.map.casino) return this.tableClick();
         if (this.diveHud.view?.state === 'ledge') return this.openMenu('marker');
         const can = eco.canCastAt(this.s, !!this.map.sea);
@@ -2980,6 +2984,7 @@ export class Game {
     const v = lossVerdict(end, this.s, fish, this.map.vendor.name);
     const seen = !!fish && eco.recordSighting(this.s, fish);
     this.showVerdict(v.title, v.cause, seen ? `${v.fix} · noted in your Fishdex` : v.fix);
+    this.castLockUntil = performance.now() + LOSS_CAST_DELAY_MS;
     this.reset('');
   }
 
