@@ -2,6 +2,11 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] A bad message can't take the server down (2026-11-01, branch `server-msg-guard`; was an idea under Accounts and server)
+  - `server/guard.ts`: `guarded` wraps `Room.handle` in `server/index.ts` and logs a throw with the player id, name and message type (never the payload), so one packet can't restart the game for everyone.
+  - The `Math.floor(Number(...))` index reads (`slot`, `sell`, `wheel`, `roulette`, `bj`, `cashout`, `color`, the join colour) and `pickup`'s `Number(msg.id)` now use the numbers-only `int()`, so `{ toString: null }` is just NaN.
+  - No process-level `uncaughtException` handler on purpose: past the per-message guard a throw could leave state half-written, and staying up would then save it; a crash restarts from the last good save.
+  - Checked: `server/guard.test.ts` (hostile id into each fixed handler, throwing handler into the guard; fails without the fix), `npm test`, both `tsc` projects, `npm run smoke`.
 - [x] "What's new" board, the framework (Oscar, 2026-11-01, branch `whats-new`; was the release notes idea under Ideas → Gameplay and UI). Decided (Oscar, from options): a card right after the welcome for unread entries, re-read from ⚙️ Settings only (no hub prop), brand-new players skip notes from before they started, and no entries yet (the next big feature is the first).
   - Data: `NEWS` in `src/data/news.ts`, newest first: `id` (a rising release number), `date`, `title`, `body` paragraphs (simple HTML) and an optional bundled `image` with `alt`. Photos go in `src/assets/images/news/`.
   - Read state is per browser, not per account: `localStorage` `fishing-news` holds the highest id shown (`src/game/news.ts`). Every online join (`welcome`, `game.ts`) runs `showNews`: unread entries open the card, then the newest id is stored. Nothing stored plus a fresh save means a new player, who skips everything; a returning player on a new browser sees the newest. The card lists up to `GLANCE_MAX` (3) and points to Settings for the rest; it replaces the welcome banner, and a Smokehouse stage banner that comes up meanwhile waits until "Got it" (`afterNews`). The Settings link only shows once there are entries.
