@@ -189,11 +189,13 @@ async function pondChecks(): Promise<void> {
   // Night: lamps, windows and torches must still be on meshes that are drawn.
   await page.evaluate(() => { window.__game.day(0.7); window.__game.teleport(0, 24); window.__game.look(Math.PI, -0.15); });
   // Real lights fade in (`LightPool`): one near the plaza waits for a far one to dim before taking its
-  // slot, and slow headless frames stretch that well past a fixed sleep.
+  // slot, and slow headless frames stretch that well past a fixed sleep. The bulbs' glow is set by the frame
+  // that draws the new night, so wait for that too (reading it early made this check flaky).
   const litStart = Date.now();
   await page.waitForFunction(() => {
     const w = window.__game.world as any;
-    return w.hub.lampLights.some((l: any) => l.intensity > 1) && w.town.lights.some((l: any) => l.intensity > 1);
+    return w.hub.lampLights.some((l: any) => l.intensity > 1) && w.town.lights.some((l: any) => l.intensity > 1)
+      && w.hub.lampMats.every((m: any) => m.emissiveIntensity > 1);
   }, { timeout: 5000 }).catch(() => null);
   const litMs = Date.now() - litStart;
   const night = await page.evaluate(() => {
