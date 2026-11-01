@@ -15,7 +15,7 @@ export function betError(s: SaveData, i: number): string | null {
   return null;
 }
 
-/** Settles a bet on the fish in slot i: a win multiplies its value, a loss destroys it. */
+/** Settles a bet on the fish in slot i: its value is multiplied by the factor (a Lucky Wheel ×½ halves it), and 0 destroys it. */
 export function settleBet(s: SaveData, i: number, factor: number): { before: number; after: number } {
   const it = s.slots[i];
   if (it?.k !== 'fish') return { before: 0, after: 0 };
@@ -24,7 +24,7 @@ export function settleBet(s: SaveData, i: number, factor: number): { before: num
     clearSlot(s, i);
     return { before, after: 0 };
   }
-  if (factor > 1) it.mult = (it.mult ?? 1) * factor;
+  if (factor !== 1) it.mult = (it.mult ?? 1) * factor;
   return { before, after: fishValue(it) };
 }
 

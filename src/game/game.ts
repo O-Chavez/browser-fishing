@@ -73,7 +73,7 @@ import {
   dishById, smokeSeconds, stageById, type BuffKind, type Dish, type DishId, type StageId,
 } from '../data/smokehouse';
 import { FIGHT_DT, GOOD_MAX, GOOD_MIN, HoldLog, MAX_FIGHT_STEPS, Reel, type ReelTune } from './reel';
-import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, type RouletteBet } from '../data/casino';
+import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
 import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type SaveData } from './state';
@@ -1686,13 +1686,21 @@ export class Game {
     this.world.hall?.spinLucky(r.wedge, r.ms);
     this.later(r.ms + RESULT_BEAT_MS, () => {
       this.endReveal();
-      const win = r.factor > 0;
-      this.casinoMsg = win
-        ? `<b class="win">×${r.factor}! You win</b> ${name} is now worth ${Math.round(after)} ${COIN}`
-        : `<b class="lose">LOSE.</b> ${name} (${Math.round(before)} ${COIN}) is gone`;
-      this.showResult(win ? 'win' : 'lose', win ? `×${r.factor}! YOU WIN` : 'YOU LOSE', win ? `${name} is now worth ${Math.round(after)} ${COIN}` : `${name} is gone`);
-      if (win) audio.jingle('epic');
-      else audio.snap();
+      const worth = `${name} is now worth ${Math.round(after)} ${COIN}`;
+      if (r.factor > 1) {
+        this.casinoMsg = `<b class="win">×${r.factor}! You win</b> ${worth}`;
+        this.showResult('win', `×${r.factor}! YOU WIN`, worth);
+        audio.jingle('epic');
+      } else if (r.factor > 0) {
+        // ×½: a soft loss, the fish comes back worth half
+        this.casinoMsg = `<b>×½. Half back</b> ${worth}`;
+        this.showResult('push', '×½ · HALF BACK', worth);
+        audio.jingle('common');
+      } else {
+        this.casinoMsg = `<b class="lose">LOSE.</b> ${name} (${Math.round(before)} ${COIN}) is gone`;
+        this.showResult('lose', 'YOU LOSE', `${name} is gone`);
+        audio.snap();
+      }
     });
   }
 
@@ -1865,7 +1873,7 @@ export class Game {
 
   private aimLabel(a: { k: string; id: string }): string {
     if (a.k === 'rbet') return `bet on ${a.id} · ×${ROULETTE_PAY[a.id as RouletteBet]}`;
-    if (a.k === 'wheel') return 'spin the wheel · ×2, ×3 or ×4, or lose it';
+    if (a.k === 'wheel') return `spin the wheel · up to ×${Math.max(...WHEEL_WEDGES)}`;
     if (a.id === 'double') return `double down · ${doubleCost(this.s, this.betSlot)} ${COIN}`;
     return { deal: 'deal a hand', hit: 'hit', stand: 'stand' }[a.id] ?? a.id;
   }
@@ -1880,7 +1888,7 @@ export class Game {
     const a = this.aim;
     const free = !this.bj || this.bj.done;
     // Bets need a fish in hand; the table readout already says so, so no prompt without one.
-    if ((a?.k === 'wheel' || (!a && t === 'wheel')) && bet) return { label: `Spin the wheel with ${bet} · ×2, ×3 or ×4, or lose it`, act: () => this.wheelBet() };
+    if ((a?.k === 'wheel' || (!a && t === 'wheel')) && bet) return { label: `Spin the wheel with ${bet} · up to ×${Math.max(...WHEEL_WEDGES)}`, act: () => this.wheelBet() };
     if ((a?.id === 'deal' || (!a && t === 'blackjack' && free)) && bet) return { label: `Deal a hand for ${bet}`, act: () => this.blackjackAct('deal') };
     if (!a || a.k === 'wheel' || a.id === 'deal' || (a.k === 'rbet' && !bet)) return null;
     const label = this.aimLabel(a);

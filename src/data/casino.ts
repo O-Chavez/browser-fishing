@@ -15,9 +15,11 @@ export const ROULETTE_MS = 4200;
 
 /**
  * The Lucky Wheel's wedges in order round the wheel: what a fish is multiplied by, 0 to lose it.
- * 4 wins in 12 and an average return of 11/12, so the house keeps about 8%: between roulette's red and green.
+ * 6 losses, 2 half back (×½), 3 ×2 and a rare ×5, with no two alike side by side. A win 1 spin in 3 and an average
+ * return of exactly 1, so it's a fair bet with no house edge; the ×½ and ×5 keep it from feeling like a coin flip
+ * (Oscar, 2026-10-31). Every win at least doubles, so LOSE can't drop much further without paying players to spin.
  */
-export const WHEEL_WEDGES: readonly number[] = [2, 0, 0, 4, 0, 0, 2, 0, 0, 3, 0, 0];
+export const WHEEL_WEDGES: readonly number[] = [0, 0.5, 0, 2, 0, 2, 0, 0.5, 0, 2, 0, 5];
 export const WHEEL_MS = 3800;
 
 export type PerkId = 'vest' | 'charm1' | 'charm2' | 'charm3' | 'gloves' | 'lantern' | 'lure';
