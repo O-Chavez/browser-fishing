@@ -28,7 +28,8 @@ const INLAND = Math.atan2(-OUT.x, -OUT.z);
  * The harbour for the dives, on the west beach between the rowboat and the bottle at (-15, 18), away from
  * the east beach's racks (a placeholder; a map rework may move it): Captain Reed's seaplane floats in the
  * shallows with its nose toward the sand, Reed stands on the beach beside it by a CHARTERS signpost, and
- * players come back from a dive on the sand between them. The Furthest Out board (D6) has no spot yet.
+ * players come back from a dive on the sand between them. The Furthest Out board stands on the sand past the plane's
+ * town-side wingtip (`board`; its look and words are `FURTHEST_BOARD` in src/game/furthestboard.ts).
  */
 export const HARBOUR = {
   /** Reed stands on the sand facing up the beach, the plane behind his right shoulder. */
@@ -39,6 +40,11 @@ export const HARBOUR = {
   sign: { ...fromReed(-1.3, -0.2), facing: INLAND } as Spot,
   /** Where players land back from a dive: on the sand between Reed and the plane, looking at it. */
   diveStart: { ...fromReed(1.4, -0.6), yaw: 0 },
+  /**
+   * The Furthest Out board (D6): up the beach from the plane, toward town, set back on dry sand; it faces up the
+   * beach, turned a little (the `+ 0.45`) toward Reed and the landing spot. Play-test: the spot and the turn.
+   */
+  board: { ...fromReed(7.0, -1.6), facing: INLAND + 0.45 } as Spot,
 };
 HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.plane.x - HARBOUR.diveStart.x), -(HARBOUR.plane.z - HARBOUR.diveStart.z));
 
@@ -133,7 +139,7 @@ export interface MapDef {
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
   /** Captain Reed's seaplane charters (`HARBOUR`): where he stands, the plane, his signpost and where dives come back to. */
-  harbour?: { stand: Spot; plane: Spot; sign: Spot; diveStart: { x: number; z: number; yaw: number } };
+  harbour?: { stand: Spot; plane: Spot; sign: Spot; board: Spot; diveStart: { x: number; z: number; yaw: number } };
   /** The open sea: players stand on the charter boat's deck (`BOAT` in sea.ts) instead of the shore. */
   sea?: boolean;
   /** Casino maps: where the tables and prize counter stand. */

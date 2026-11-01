@@ -118,9 +118,24 @@ export interface SaveData {
    * The dev console's `/backpay` pays it out; `paid` keeps it from being paid twice.
    */
   backPay: { xp: number; paid: boolean; /** Which estimate made `xp` (see `BACKPAY_VERSION`). */ v?: number };
-  /** Sea dives (`src/game/dive.ts`): the ledges charted by surfacing there, where later dives may start, and the deepest. */
-  sea: Chart;
+  /**
+   * Sea dives (`src/game/dive.ts`): the ledges charted by surfacing there, where later dives may start, and the deepest.
+   * `haul` is what the charter that set the record banked, for the Furthest Out board; records from before it have none.
+   */
+  sea: SeaChart;
 }
+
+/**
+ * What a charter banked when it headed home, as its "Home safe!" card shows it (`endHtml`, divehud.ts): the haul's
+ * Black Pearls with their growth, and the fish landed and sold along the way and their coins.
+ */
+export interface RecordHaul {
+  pearls: number;
+  fish: number;
+  coins: number;
+}
+
+export type SeaChart = Chart & { haul?: RecordHaul };
 
 export interface BestCatch {
   fishId: string;
@@ -221,12 +236,32 @@ function cleanSmoke(raw: unknown): Smoke {
   return out;
 }
 
-/** Keeps whole, positive ledge depths (each once, shallowest first) and a record no shallower than the deepest. */
-function cleanChart(raw: unknown): Chart {
-  const c = (raw ?? {}) as Partial<Chart>;
+/**
+ * Keeps whole, positive ledge depths (each once, shallowest first) and a record no shallower than the deepest. The
+ * record's haul stays only if it's whole and the record didn't move; saves from before it have none.
+ */
+function cleanChart(raw: unknown): SeaChart {
+  const c = (raw ?? {}) as Partial<SeaChart>;
   const ok = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
   const ledges = [...new Set(Array.isArray(c.ledges) ? c.ledges.filter(ok) : [])].sort((a, b) => a - b);
-  return { ledges, record: Math.max(ok(c.record) ? c.record : 0, ledges.at(-1) ?? 0) };
+  const record = Math.max(ok(c.record) ? c.record : 0, ledges.at(-1) ?? 0);
+  const h = c.haul;
+  const whole = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
+  const haul = h && typeof h === 'object' && record > 0 && record === c.record && whole(h.pearls) && whole(h.fish) && whole(h.coins)
+    ? { pearls: h.pearls, fish: h.fish, coins: h.coins } : null;
+  return { ledges, record, ...(haul ? { haul } : {}) };
+}
+
+/**
+ * After heading home from marker `ledge`: keeps this charter's haul as the record's, if it set a new record, or if it
+ * matched the record with a bigger haul (more pearls, then more coins). True when the haul was kept.
+ */
+export function keepRecordHaul(sea: SeaChart, ledge: number, newRecord: boolean, haul: RecordHaul): boolean {
+  if (ledge !== sea.record) return false;
+  const old = sea.haul;
+  if (!newRecord && old && (haul.pearls < old.pearls || (haul.pearls === old.pearls && haul.coins <= old.coins))) return false;
+  sea.haul = { ...haul };
+  return true;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { RENAME_COOLDOWN_MS, waitText, type CasinoRecord, type CasinoRecords, type Gamble, type HallRow } from '../src/net/protocol';
+import { RENAME_COOLDOWN_MS, waitText, type CasinoRecord, type CasinoRecords, type FurthestRow, type Gamble, type HallRow } from '../src/net/protocol';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { payBack } from '../src/game/economy';
@@ -11,6 +11,8 @@ import { Lockout } from './lockout';
 const num = (n: number) => n.toLocaleString('en-US');
 /** Accounts listed by `/backpay` before it says "and N more". */
 const BACKPAY_ROWS = 25;
+/** Rows on the Furthest Out board at the harbour. */
+export const FURTHEST_ROWS = 5;
 
 export interface Account {
   name: string;
@@ -77,6 +79,7 @@ export class AccountStore {
   private accounts = new Map<string, Account>();
   private dirty = false;
   private hallRows: HallRow[] | null = null;
+  private furthestRows: FurthestRow[] | null = null;
   private supporterNames: string[] | null = null;
   private recordRows: CasinoRecords | null = null;
   private lock: Lockout;
@@ -153,6 +156,7 @@ export class AccountStore {
     else {
       this.accounts.delete(nameKey(acct.name));
       this.hallRows = null;
+      this.furthestRows = null;
       this.supporterNames = null;
       this.recordRows = null;
     }
@@ -187,6 +191,7 @@ export class AccountStore {
     acct.renamed = this.now();
     this.accounts.set(key, acct);
     this.hallRows = null;
+    this.furthestRows = null;
     this.supporterNames = null;
     this.recordRows = null;
     this.touch();
@@ -216,6 +221,26 @@ export class AccountStore {
       .slice(0, 8));
   }
 
+  /**
+   * The Furthest Out board: the furthest marker each account headed home from (the deepest ledge surfaced from,
+   * `save.sea.record`) and what that charter banked, online or not, furthest first. Cached until `furthestStale`.
+   */
+  furthest(): FurthestRow[] {
+    return (this.furthestRows ??= [...this.accounts.values()]
+      .filter((a) => a.save.sea.record > 0)
+      .map((a) => {
+        const h = a.save.sea.haul;
+        return { name: a.name, level: a.save.level, ledge: a.save.sea.record, ...(h ? { pearls: h.pearls, fish: h.fish } : {}) };
+      })
+      .sort((a, b) => b.ledge - a.ledge || a.name.localeCompare(b.name))
+      .slice(0, FURTHEST_ROWS));
+  }
+
+  /** Call when an online player's furthest marker or level may have changed, so the next `furthest` re-ranks. */
+  furthestStale(): void {
+    this.furthestRows = null;
+  }
+
   /** Every account, online or not. */
   all(): Account[] {
     return [...this.accounts.values()];
@@ -238,6 +263,7 @@ export class AccountStore {
     if (!apply) return { lines: [...rows, `${due.length} account${due.length === 1 ? '' : 's'} owed. /backpay apply pays them all.`], paid: [] };
     const paid = due.map((acct) => ({ acct, levels: payBack(acct.save).levels }));
     this.hallRows = null;
+    this.furthestRows = null;
     this.touch();
     return { lines: [...rows, `Paid ${due.length} account${due.length === 1 ? '' : 's'}.`], paid };
   }

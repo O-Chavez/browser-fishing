@@ -5,9 +5,11 @@ import { DARK, WOOD, ball, cyl, limb, mat, rbox, textPlane, woodSign } from './h
 import { mergeStatic } from './merge';
 import { NpcWalker, type Bystander } from './npcwalk';
 import { glowTag } from './nightglow';
+import { BOARD_POSTS, FurthestBoard } from './furthestboard';
 import { boxUV, shingleTexture, sidingTexture, stoneTexture } from './textures';
 import { faceHead } from './faces';
 import type { Circle } from './player';
+import type { FurthestRow } from '../net/protocol';
 
 const rnd = (seed: number) => () => {
   seed = (seed * 16807) % 2147483647;
@@ -100,7 +102,7 @@ export class Town {
     this.buildFences();
     this.buildBottles();
     this.buildCozy();
-    mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.bottleMeshes.values(), ...(this.plane ? [this.plane] : [])]);
+    mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.bottleMeshes.values(), ...(this.plane ? [this.plane] : []), ...(this.furthest ? [this.furthest.face.mesh] : [])]);
     if (map.worms) this.buildWormPatch(map.worms.x, map.worms.z);
   }
 
@@ -563,9 +565,11 @@ export class Town {
    * a CHARTERS signpost on the sand. The plane is cream with sea-green wings, tail and cowling, and a red
    * band lettered CHARTERS down each side; it sits on two floats with its nose toward the beach and bobs
    * on the swell (`update`). The signpost carries a lantern lit at night, a lifebuoy and a crate at its foot.
+   * Up the beach past the plane stands the Furthest Out board (`FurthestBoard`).
    */
-  private buildHarbour(h: { plane: Spot; sign: Spot }): void {
+  private buildHarbour(h: { plane: Spot; sign: Spot; board: Spot }): void {
     this.buildSeaplane(h.plane);
+    this.buildFurthest(h.board);
     const s = h.sign;
     const g = new THREE.Group();
     const post = cyl(0.07, 0.08, 2.4, DARK, 8);
@@ -609,6 +613,21 @@ export class Town {
     this.at(g, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.05);
     this.solid(s.x, s.z, 0.3);
     this.solid(s.x + 0.65 * Math.cos(s.facing), s.z - 0.65 * Math.sin(s.facing), 0.45);
+  }
+
+  /** The Furthest Out board by the seaplane (D6); `setFurthest` redraws it from the server's rows. */
+  furthest: FurthestBoard | null = null;
+
+  private buildFurthest(s: Spot): void {
+    const b = (this.furthest = new FurthestBoard());
+    this.lamps.push(b.lamp);
+    this.at(b.group, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.05);
+    for (const lx of BOARD_POSTS) this.solid(s.x + lx * Math.cos(s.facing), s.z - lx * Math.sin(s.facing), 0.3);
+  }
+
+  /** Redraws the Furthest Out board, if this map has one. */
+  setFurthest(rows: FurthestRow[]): void {
+    this.furthest?.set(rows);
   }
 
   /** The seaplane bobbing in the shallows, kept out of the town's merge so it can move; `update` rocks it. */

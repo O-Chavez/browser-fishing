@@ -14,6 +14,17 @@ describe("Captain Reed's seaplane", () => {
     }
   });
 
+  it('stands the Furthest Out board on dry sand, clear of Reed, his signpost, the landing spot, the bottle and the plane', () => {
+    const b = HARBOUR.board;
+    expect(isWater(b.x, b.z)).toBe(false);
+    expect(onDock(b.x, b.z)).toBe(false);
+    for (const p of [HARBOUR.stand, HARBOUR.sign, HARBOUR.diveStart, ...pond.town.bottles]) expect(Math.hypot(b.x - p.x, b.z - p.z)).toBeGreaterThan(2.5);
+    // The plane's town-side wingtip (local -3.8, 0.6), as in the test below.
+    const { x, z, facing } = HARBOUR.plane;
+    const tip = { x: x - 3.8 * Math.cos(facing) + 0.6 * Math.sin(facing), z: z + 3.8 * Math.sin(facing) + 0.6 * Math.cos(facing) };
+    expect(Math.hypot(b.x - tip.x, b.z - tip.z)).toBeGreaterThan(2);
+  });
+
   it('floats the plane on the water, wingtips and tail included', () => {
     const { x, z, facing } = HARBOUR.plane;
     // Local (x, z) to world, as in town.ts: the middle, both wingtips and the tail.

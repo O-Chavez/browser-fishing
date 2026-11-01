@@ -398,6 +398,7 @@ export class Game {
         // A record from your own bet arrives as it settles; the board waits for the reveal like the hotbar.
         if (!this.revealTimers.length) this.world.hall?.records.set(this.net.records);
       },
+      onFurthest: () => this.world.town?.setFurthest(this.net.furthest),
       onFailed: () => {
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
         else if (this.pendingWelcome) {
@@ -1555,6 +1556,7 @@ export class Game {
     this.world.hub?.setLeaders(this.anglers());
     this.world.hub?.setSupporters(this.net.supporters);
     this.world.hall?.records.set(this.net.records);
+    this.world.town?.setFurthest(this.net.furthest);
   }
 
   /** Covers the trip to or from the sea until the new map's shaders are ready; `tick` takes it down. */
