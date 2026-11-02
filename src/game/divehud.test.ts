@@ -73,7 +73,8 @@ describe('dive HUD', () => {
     expect(t).toContain('Furthest marker: 25');
     expect(text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: true, pick: 0, open: true }))).toContain('Start at the harbour, into The Shelf. Steady fish, no tricks. 1 pearl a fish.');
     const locked = text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: false, pick: 0, open: true }));
-    expect(locked).toContain('need the Aurora Rod');
+    expect(locked).toContain('need the Deep Sea Rod');
+    expect(locked).toContain('stays on my boat');
     expect(locked).not.toContain('Cast off');
   });
 
@@ -82,11 +83,11 @@ describe('dive HUD', () => {
     const t = text(closed(true));
     expect(t).toContain('Charters are coming soon.');
     expect(t).toContain('Every 5 fish you land, you reach a marker: head home with your haul, or sail on');
-    expect(t).toContain('Aurora Rod, and you have one.');
+    expect(t).toContain('Deep Sea Rod, and you have one.');
     expect(t).not.toContain('Shall we?');
     expect(closed(true)).not.toContain('castoff');
     expect(closed(true)).not.toContain('divefrom');
-    expect(text(closed(false))).toMatch(/Aurora Rod, which Marlow sells from level \d+\./);
+    expect(text(closed(false))).toMatch(/Deep Sea Rod, which Marlow sells from level \d+\./);
   });
 
   it('offers head home or sail on at a marker, with the haul each way', () => {

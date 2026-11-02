@@ -65,15 +65,16 @@ describe('loss verdict', () => {
   it('at sea, names the next level of the one track the fish was over, the line first', () => {
     const s = { rod: 'aurora', line: 'moonsilk', level: 20, rodLevel: 3, seaLine: 0 };
     const snap = seaLossVerdict('snapped', s, { rod: true, line: true }, 'Marlow');
-    expect(snap).toMatchObject({ title: 'SNAP!', cause: 'Too strong for your Moonsilk Line' });
+    // The Deep Sea Line comes on the Deep Sea Rod, so it's named at +0 too, never the pond line.
+    expect(snap).toMatchObject({ title: 'SNAP!', cause: 'Too strong for your Deep Sea Line' });
     expect(snap.fix).toBe(`Deep Sea Line +1 at Marlow's · 40,500 ${COIN} + 124 Black Pearls`);
     expect(seaLossVerdict('snapped', { ...s, seaLine: 2 }, { rod: false, line: true }, 'Marlow').cause).toBe('Too strong for your Deep Sea Line +2');
     const ran = seaLossVerdict('escaped', s, { rod: true, line: false }, 'Marlow');
-    expect(ran).toMatchObject({ title: 'RAN OFF!', cause: 'Too heavy for your Aurora Rod +3' });
-    expect(ran.fix).toBe(`Aurora Rod +4 at Marlow's · 99,000 ${COIN} + 196 Black Pearls`);
+    expect(ran).toMatchObject({ title: 'RAN OFF!', cause: 'Too heavy for your Deep Sea Rod +3' });
+    expect(ran.fix).toBe(`Deep Sea Rod +4 at Marlow's · 99,000 ${COIN} + 196 Black Pearls`);
     // The line first: a fish over it that ran off took the line given to keep it from fraying (Oscar's play test).
     for (const rod of [true, false]) {
-      expect(seaLossVerdict('escaped', s, { rod, line: true }, 'Marlow')).toMatchObject({ title: 'RAN OFF!', cause: 'Too strong for your Moonsilk Line', fix: snap.fix });
+      expect(seaLossVerdict('escaped', s, { rod, line: true }, 'Marlow')).toMatchObject({ title: 'RAN OFF!', cause: 'Too strong for your Deep Sea Line', fix: snap.fix });
     }
     // Not over the track that lost it: a reel tip.
     expect(seaLossVerdict('snapped', s, { rod: true, line: false }, 'Marlow').cause).toBe('Held in the red through a surge');
@@ -124,12 +125,16 @@ describe('rod upgrade hint', () => {
     expect(tipText('dish', s, 'Marlow')).toContain('3 tier 1 fish and your Northern Pike');
   });
 
-  it('points Aurora Rod owners at Captain Reed once charters are open', () => {
+  it('points Deep Sea Rod owners at Captain Reed once charters are open', () => {
     const s = newSave();
     expect(chartersToTry(s, true)).toBe(false);
     expect(charterTipDue(s, true)).toBe(false);
+    // The Aurora Rod alone isn't enough any more.
     s.locker.rods = ['aurora'];
+    expect(chartersToTry(s, true)).toBe(false);
+    s.seaRod = true;
     expect(chartersToTry(s, true)).toBe(true);
+    expect(chartersToTry(s, false)).toBe(false);
     expect(charterTipDue(s, true)).toBe(true);
     const text = tipText('charter', s, 'Marlow');
     expect(text).toContain('Captain Reed');
@@ -139,15 +144,9 @@ describe('rod upgrade hint', () => {
     expect(charterTipDue(s, true)).toBe(false);
   });
 
-  it('also counts an Aurora Rod in the hotbar', () => {
-    const s = newSave();
-    s.slots[2] = { k: 'rod', id: 'aurora' };
-    expect(charterTipDue(s, true)).toBe(true);
-  });
-
   it('gives way to the usual goals once a marker has been reached', () => {
     const s = newSave();
-    s.locker.rods = ['aurora'];
+    s.seaRod = true;
     s.sea.record = 5;
     expect(chartersToTry(s, true)).toBe(false);
     expect(charterTipDue(s, true)).toBe(false);
@@ -155,7 +154,7 @@ describe('rod upgrade hint', () => {
 
   it('says nothing about charters while they are closed', () => {
     const s = newSave();
-    s.locker.rods = ['aurora'];
+    s.seaRod = true;
     expect(chartersToTry(s, false)).toBe(false);
     expect(charterTipDue(s, false)).toBe(false);
   });

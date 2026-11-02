@@ -206,9 +206,9 @@ describe('sea zones and bites', () => {
     expect(runners / 4000).toBeCloseTo(0.5, 1);
   });
 
-  it('a sea cast fights at the depth on the Aurora Rod level, with its size on weight and its pull on strength', () => {
+  it('a sea cast fights at the depth on the Deep Sea Rod level, with its size on weight and its pull on strength', () => {
     const s = newSave();
-    s.rod = 'aurora';
+    s.seaRod = true;
     s.rodLevel = 6;
     for (let depth = 0; depth < 200; depth += 7) {
       const seed = 100 + depth;

@@ -203,6 +203,8 @@ export class Reel {
   need = 0;
   /** Line a strong fish is dragging out right now, per second, even with the gauge green. */
   drag = 0;
+  /** How fast line is being wound in right now, against the base reel speed (1): slower on heavy fish, 0 when not reeling. Turns the rod's crank. */
+  reelRate = 0;
   /** Line strain, 0..1: each half is a fray mark, filled while holding in the red; snaps at 1. */
   strain = 0;
   readonly wear: ReelWear = { lineOut: 0, frays: 0, snapped: false };
@@ -409,6 +411,7 @@ export class Reel {
     const rate = holding && share > 0
       ? share * (this.p.reel / (1 - this.p.reelK + this.p.reelK * reelW)) * (this.tension > GOOD_MAX ? 0.4 : this.inSweetSpot ? 1.35 : 1)
       : 0;
+    this.reelRate = rate / this.p.reel;
     // Below the fish's pull it takes line fast; above it, a strong fish still drags some out, less the higher you ride.
     const high = this.need < GOOD_MAX ? Math.min(1, Math.max(0, (this.tension - this.need) / (GOOD_MAX - this.need))) : 0;
     this.drag = this.surging ? this.dragRate * this.pull * (1 - this.p.drag[2] * powArith(high, this.p.drag[3])) : 0;

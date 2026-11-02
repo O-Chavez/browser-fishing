@@ -64,7 +64,7 @@ export const SEA_FIGHT = {
   paceCap: 2.0,
   /** Weight stops at cap - k·(pace - 2), short of the slog where reeling barely beats the drag: [cap, k]. */
   weightCap: [3.3, 1.25],
-  /** Leagues each Aurora Rod level takes off weight, and `cross` off strength; a line level the other way round. */
+  /** Leagues each Deep Sea Rod level takes off weight, and `cross` off strength; a line level the other way round. */
   ease: 4.5,
   cross: 1.5,
   /** Each fish's pull: strength ×spread^±1, log-uniform, so some fish of a depth pull harder than others. */
@@ -97,8 +97,8 @@ export const DIVE = {
   /** Seconds until a bite at sea: `biteMin` plus up to `biteSpread`. Casts at sea use no bait (Reed's boat has it). */
   biteMin: 2.5,
   biteSpread: 4,
-  /** The rod a player must own to start a dive; D4's rod levels build on it. */
-  rod: 'aurora',
+  /** The rod a player must own to start a charter (`DEEP_SEA_ROD`); its levels are `ROD_LEVEL`. */
+  rod: 'searod',
   /** How close to Captain Reed a dive can start, in metres. */
   standRange: 5,
   /** A dive waits this long for a player who disconnected mid-dive; after that the haul sinks. */
@@ -113,17 +113,17 @@ export const DIVE = {
 export const DIVES_OPEN = true;
 
 /**
- * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Aurora Rod keeps levelling at Marlow's
- * stall with no cap, each level making sea fish lighter (`SEA_FIGHT.ease`); pond fights don't change. A level
- * costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
+ * Rod levels (Endgame Gameplan, "The chase: rod levels" and "P1 numbers"): the Deep Sea Rod keeps levelling at Marlow's
+ * stall with no cap, each level making sea fish lighter (`SEA_FIGHT.ease`); pond fights don't change. (The Aurora Rod
+ * levelled until the Deep Sea Rod came, 2026-11-01; its levels carried over.) A level costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
  * The Deep Sea Line (`SEA_LINE`) is the second track. Each track's step is twice P1's single one, so levelling both
  * evenly keeps P1's pace of a level every 25-45 minutes. The coins keep rising with the level, as charter income does
  * with the deeper zones' dearer fish, so levels take about 60-75% of a fast player's charter coins at every stage
  * (REELING.md, "Sea economy"; Oscar, 2026-11-01).
  */
 export const ROD_LEVEL = {
-  /** The rod that levels. */
-  rod: 'aurora',
+  /** The rod that levels (`DEEP_SEA_ROD`). */
+  rod: 'searod',
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
   pearls: 100,
   pearlsPer: 24,
@@ -137,8 +137,8 @@ export const ROD_LEVEL = {
 
 /**
  * The Deep Sea Line's levels, the sea's second track: bought at Marlow's stall like the rod's, each making sea fish
- * pull weaker (`SEA_FIGHT.ease` off strength). It needs the Aurora Rod, and its first level spools it in place of the
- * pond line (it holds tier 5 there). Half the rod's coins, so charters pay for both tracks with coins to spare.
+ * pull weaker (`SEA_FIGHT.ease` off strength). The line comes on the Deep Sea Rod, so levelling it needs the rod; it's
+ * only used at sea. Half the rod's coins, so charters pay for both tracks with coins to spare.
  */
 export const SEA_LINE = {
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
@@ -151,12 +151,12 @@ export const SEA_LINE = {
 };
 
 /**
- * The Aurora Rod's tip glow and grip band by glow step (every `ROD_LEVEL.glowEvery` levels): gold, teal, violet,
+ * The Deep Sea Rod's tip glow by glow step (every `ROD_LEVEL.glowEvery` levels): gold, teal, violet,
  * rose, pearl white, then a cycling rainbow from +25. A default, to be tuned after a play test.
  */
 export const GLOW_STEPS = [0xffc933, 0x3fe6c8, 0xa77bff, 0xff6fa8, 0xf2eeff];
 
-/** The Aurora Rod's glow step at this rod level: 0 below +5, then one more every `ROD_LEVEL.glowEvery`. */
+/** The Deep Sea Rod's glow step at this rod level: 0 below +5, then one more every `ROD_LEVEL.glowEvery`. */
 export const glowStep = (rodLevel: number): number => Math.floor(rodLevel / ROD_LEVEL.glowEvery);
 
 /** The glow colour for a step, or null for the rainbow past the last colour. */

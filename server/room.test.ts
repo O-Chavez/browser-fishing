@@ -159,12 +159,34 @@ describe('Room economy', () => {
     expect(s.line).toBe('fluoro');
   });
 
-  it('levels the Aurora Rod only at the vendor', () => {
+  it('sells the Deep Sea Rod only at the vendor, once, and nothing goes in the bag', () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    Object.assign(s, { level: 20, coins: 130_000 });
+    room.handle(a.id, { t: 'buysearod' });
+    expect(s.seaRod).toBe(false);
+    atShop(a);
+    room.handle(a.id, { t: 'buysearod' });
+    expect(s).toMatchObject({ seaRod: true, coins: 30_000 });
+    expect(s.locker.rods).toEqual([]);
+    expect(last(a.c, 'state').save).toMatchObject({ seaRod: true });
+    room.handle(a.id, { t: 'buysearod' });
+    expect(s.coins).toBe(30_000);
+  });
+
+  it('levels the Deep Sea Rod only at the vendor', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
     const s = a.acct.save;
     Object.assign(s, { level: 20, coins: 100_000, pearls: 200 });
+    // The Aurora Rod doesn't level any more.
     s.locker.rods.push('aurora');
+    atShop(a);
+    room.handle(a.id, { t: 'levelrod' });
+    expect(s.rodLevel).toBe(0);
+    room.place(a.id, 0, 0);
+    s.seaRod = true;
     room.handle(a.id, { t: 'levelrod' });
     expect(s.rodLevel).toBe(0);
     atShop(a);
@@ -179,8 +201,7 @@ describe('Room economy', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
     const s = a.acct.save;
-    Object.assign(s, { level: 20, coins: 100_000, pearls: 200 });
-    s.locker.rods.push('aurora');
+    Object.assign(s, { level: 20, coins: 100_000, pearls: 200, seaRod: true });
     room.handle(a.id, { t: 'levelline' });
     expect(s.seaLine).toBe(0);
     atShop(a);
@@ -1067,7 +1088,7 @@ describe('dives', () => {
   const diver = (t: ReturnType<typeof setup>, name = 'Ann') => {
     t.room.chartersOpen = true;
     const p = t.join(name);
-    p.acct.save.locker.rods.push(DIVE.rod);
+    p.acct.save.seaRod = true;
     t.room.place(p.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
     return p;
   };
@@ -1087,7 +1108,7 @@ describe('dives', () => {
     const t = setup();
     t.room.chartersOpen = false;
     const a = t.join('Ann');
-    a.acct.save.locker.rods.push(DIVE.rod);
+    a.acct.save.seaRod = true;
     t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
     t.room.handle(a.id, { t: 'dive', from: 0 });
     expect(last(a.c, 'notice').msg).toMatch(/still working on his seaplane/);
@@ -1095,7 +1116,7 @@ describe('dives', () => {
     expect(states(a)).toEqual([]);
   });
 
-  it("starts only at Captain Reed's seaplane, with the Aurora Rod, from the harbour or a charted ledge", () => {
+  it("starts only at Captain Reed's seaplane, with the Deep Sea Rod, from the harbour or a charted ledge", () => {
     const t = setup();
     t.room.chartersOpen = true;
     const a = t.join('Ann');
@@ -1104,8 +1125,12 @@ describe('dives', () => {
     expect(last(a.c, 'notice').msg).toMatch(/Reed's seaplane/);
     t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
     t.room.handle(a.id, { t: 'dive', from: 0 });
-    expect(last(a.c, 'notice').msg).toBe('Charters need the Aurora Rod.');
+    expect(last(a.c, 'notice').msg).toBe('Charters need the Deep Sea Rod.');
+    // The Aurora Rod alone doesn't open them.
     a.acct.save.locker.rods.push('aurora');
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    expect(last(a.c, 'notice').msg).toBe('Charters need the Deep Sea Rod.');
+    a.acct.save.seaRod = true;
     t.room.handle(a.id, { t: 'dive', from: 5 });
     expect(last(a.c, 'notice').msg).toMatch(/charted/);
     expect(a.acct.save.location).toBe('pond');
@@ -1120,6 +1145,22 @@ describe('dives', () => {
     // One dive at a time.
     t.room.handle(a.id, { t: 'dive', from: 0 });
     expect(lastDive(a).start).toBe(5);
+  });
+
+  it('keeps the hotbar as it was through a charter: at sea the Deep Sea Rod is in hand, and slots and drops wait for home', () => {
+    const t = setup();
+    const a = diver(t);
+    const s = a.acct.save;
+    s.slots[2] = { k: 'fish', fishId: 'pike', size: 60 };
+    s.held = 2;
+    const before = JSON.stringify(s.slots);
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    t.room.handle(a.id, { t: 'slot', i: 0 });
+    t.room.handle(a.id, { t: 'drop' });
+    expect(s.held).toBe(2);
+    expect(JSON.stringify(s.slots)).toBe(before);
+    t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
+    expect(last(a.c, 'castok')).toBeTruthy();
   });
 
   it('sells each fish as it lands, wears the line and goes a depth deeper, stopping at each ledge', () => {

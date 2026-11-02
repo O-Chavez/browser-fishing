@@ -41,6 +41,12 @@ export const waterScale = (cm: number, tier: number): number => softCap(tierScal
 export const heldScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier), 2.2, 3.1);
 
 /**
+ * Dangling from the Deep Sea Rod at sea: the longer rod holds the catch out over the water (`seaHangPitch`), so there's
+ * room for more and the big sea fish keep growing, while the biggest still fit the screen.
+ */
+export const seaHeldScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier), 2.2, 4.5);
+
+/**
  * Line length between the rod tip and the mouth of a dangling catch. Big fish hang on a shorter
  * line (and the rod is raised, see `hangPitch`) so their tail stays clear of the dock and water.
  */
@@ -48,6 +54,12 @@ export const hangLen = (scale: number): number => Math.max(0.3, Math.min(1, 1 - 
 
 /** Rod pitch while a catch dangles: raised further for big fish to lift them clear. */
 export const hangPitch = (scale: number): number => 0.85 + Math.max(0, Math.min(0.3, (scale - 2) * 0.2));
+
+/**
+ * The Deep Sea Rod's pitch while a catch dangles: lower than the pond's, holding the fish out past the rail so the
+ * biggest fit the screen, and higher for smaller ones so the rail doesn't hide their tails.
+ */
+export const seaHangPitch = (scale: number): number => 0.75 - Math.max(0, Math.min(0.25, (scale - 2.6) * 0.25));
 
 /** Carried in first person while walking: kept small so it never blocks the view. */
 export const carryScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier) * 0.13, 0.17, 0.3);

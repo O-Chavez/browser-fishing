@@ -74,7 +74,8 @@ export type ClientMsg =
   | { t: 'jump' }
   | { t: 'buyrod'; id: string }
   | { t: 'buyline'; id: string }
-  /** The Aurora Rod's next level, at the stall (`levelRod`). */
+  /** The Deep Sea Rod, at the stall (`buySeaRod`), and its next level (`levelRod`). */
+  | { t: 'buysearod' }
   | { t: 'levelrod' }
   | { t: 'levelline' }
   | { t: 'buybait'; id: string }

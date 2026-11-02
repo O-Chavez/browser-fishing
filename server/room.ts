@@ -1,4 +1,4 @@
-import { FISH, RODS, byId } from '../src/data/content';
+import { DEEP_SEA_ROD, FISH, byId } from '../src/data/content';
 import { DIVE, DIVES_OPEN, type Behaviour } from '../src/data/dive';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
@@ -267,7 +267,8 @@ export class Room {
         if (finite(msg.x, msg.z, msg.yaw)) this.move(m, msg.x, msg.z, msg.yaw);
         return;
       case 'slot':
-        changed = eco.selectSlot(s, int(msg.i));
+        // At sea the Deep Sea Rod is the only thing in hand: the hotbar waits as it was until home.
+        changed = !this.maps[m.info.map]?.sea && eco.selectSlot(s, int(msg.i));
         break;
       case 'drop':
         changed = this.drop(m);
@@ -277,6 +278,9 @@ export class Room {
         break;
       case 'buyrod':
         changed = this.atVendor(m) && this.stocks(m).rods.includes(str(msg.id)) && eco.buyRod(s, str(msg.id));
+        break;
+      case 'buysearod':
+        changed = this.atVendor(m) && eco.buySeaRod(s);
         break;
       case 'levelrod':
         changed = this.atVendor(m) && eco.levelRod(s);
@@ -658,14 +662,14 @@ export class Room {
     return run && m.info.dive === run.id ? run : null;
   }
 
-  /** Starts a dive at Captain Reed's seaplane, from the harbour or a charted ledge, for a player who owns the rod for it. */
+  /** Starts a dive at Captain Reed's seaplane, from the harbour or a charted ledge, for a player who owns the Deep Sea Rod. */
   private startDive(m: Member, from: unknown): boolean {
     const s = m.acct.save;
     const h = this.maps[m.info.map]?.harbour;
     if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Charters start at Captain Reed's seaplane on the west beach.");
     if (m.acct.dive || m.pending) return false;
     if (!this.chartersOpen) return this.deny(m, "Reed's still working on his seaplane. Charters open soon!");
-    if (!eco.ownsRod(s, DIVE.rod)) return this.deny(m, `Charters need the ${byId(RODS, DIVE.rod).name}.`);
+    if (!eco.ownsSeaRod(s)) return this.deny(m, `Charters need the ${DEEP_SEA_ROD.name}.`);
     const start = int(from);
     if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, "Reed sails from the harbour or a marker you've charted.");
     return this.launch(m, start);

@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { BAITS, FISH, LINES, RODS } from '../src/data/content';
+import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
 import { zoneAt } from '../src/data/sea';
 import * as eco from '../src/game/economy';
@@ -111,7 +111,7 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       const n = int(args[0], 0, MAX_DEV_ROD_LEVEL);
       if (n === null) return say(`Usage: /rodlevel 0-${MAX_DEV_ROD_LEVEL}`);
       s.rodLevel = n;
-      return ok(`Aurora Rod level set to +${n}.`);
+      return ok(`Deep Sea Rod level set to +${n}.`);
     }
     case 'linelevel': {
       const n = int(args[0], 0, MAX_DEV_ROD_LEVEL);
@@ -137,8 +137,13 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       return ok(`Added ${n} ${b.name}.`);
     }
     case 'rod': {
+      if (args[0] === DEEP_SEA_ROD.id) {
+        if (s.seaRod) return say(`You already have the ${DEEP_SEA_ROD.name}.`);
+        s.seaRod = true;
+        return ok(`Added the ${DEEP_SEA_ROD.name} (on Reed's boat).`);
+      }
       const r = RODS.find((x) => x.id === args[0]);
-      if (!r) return say(`Rod ids: ${ids(RODS)}`);
+      if (!r) return say(`Rod ids: ${ids(RODS)}, ${DEEP_SEA_ROD.id}`);
       if (eco.ownsRod(s, r.id)) return say(`You already have the ${r.name}.`);
       s.locker.rods.push(r.id);
       eco.equipRod(s, r.id);
