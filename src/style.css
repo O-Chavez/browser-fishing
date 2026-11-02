@@ -699,8 +699,11 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 #divehud .trail i.on { opacity: 1; filter: none; }
 #divehud .trail i.pop { animation: trailPop var(--pop-ms) ease-out both; }
 @keyframes trailPop { 0% { transform: scale(.5); opacity: .3; } 55% { transform: scale(1.35); opacity: 1; } 100% { transform: scale(1); } }
-#divetag { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; background: #c96a2b; color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
+/* Under the reel gauge's words (the gauge is centred on the screen), so the top stays the charter's. */
+#divetag { position: absolute; top: calc(50% + 190px); left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; background: #c96a2b; color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
 #divetag span { font-weight: 700; opacity: .9; }
+#divetag.over { background: #d63a2f; }
+body.touch #divetag { top: calc(50% + 152px); font-size: 12px; }
 /* a Feisty (strength, the red zone's orange) or Brutish (weight, steel blue) pond fish: a sticker in the lower left, where the catch card lands, for the whole fight */
 #fishtag { --a: #ff7a3d; --b: #e0552b; --d: #a83a17; position: fixed; left: 3%; bottom: 12%; display: flex; align-items: center; gap: 12px; padding: 8px 18px 9px 8px; border-radius: 16px; color: #fff; background: linear-gradient(170deg, var(--a), var(--b)); border: 3px solid var(--wood-900); box-shadow: 0 4px 0 var(--d), 0 10px 18px rgba(0,0,0,.35), inset 0 2px 0 rgba(255,255,255,.35); white-space: nowrap; animation: tag-in .45s cubic-bezier(.2,1.4,.4,1); }
 #fishtag.hidden { display: none; }

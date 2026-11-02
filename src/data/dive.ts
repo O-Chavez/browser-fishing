@@ -80,8 +80,9 @@ export const DIVE = {
   /** Metres of line on the dive's one spool. */
   spool: 300,
   /** Metres off the spool per fight length of line the fish takes (`ReelWear.lineOut`): about 2 m for a fish a 0.25 s
-   * player lands 99% of, 15-25 m near their frontier. Set by the P1 rerun to keep its frontiers (20 m costs ~5 depths). */
-  metresPerLine: 10,
+   * player lands 99% of, 15-30 m near their frontier. Set by the P1 rerun to keep its frontiers, and raised from 10 when
+   * sea fish began to tire (fewer run-offs) to keep them again (`scripts/seafights.ts`). */
+  metresPerLine: 15,
   /** Metres lost with a snapped line. */
   snapMetres: 25,
   /** Metres for each fray left on a landed fish. */

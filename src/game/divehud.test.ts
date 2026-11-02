@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { banked, endHtml, headHomeHtml, hudHtml, lastMarker, lineLevel, lossText, zoneMarkers, markerHtml, nextMarker, reedHtml, startText } from './divehud';
+import { banked, endHtml, fishTagHtml, headHomeHtml, hudHtml, lastMarker, lineLevel, lossText, zoneMarkers, markerHtml, nextMarker, reedHtml, startText } from './divehud';
 import { surface, type Dive } from './dive';
 
 const view = (o: Partial<DiveView> = {}): DiveView => ({ id: 1, start: 10, depth: 23, line: 214, state: 'fishing', ledges: 2, pearls: 16, fish: 13, coins: 24000, ...o });
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
 describe('dive HUD', () => {
+  it("the fish's sticker keeps its pull and behaviour up all fight, and says when it's too strong for the line", () => {
+    expect(text(fishTagHtml({ b: 'thrasher', pull: 'strong', overLine: true }))).toBe('💪 Strong · 💥 Thrasher · too strong for your line');
+    expect(text(fishTagHtml({ b: 'runner', pull: 'light', overLine: false }))).toBe('🪶 Light · 🏃 Runner · long pulls that take line');
+    expect(text(fishTagHtml({ b: 'sounder', pull: null, overLine: false }))).toBe('⤵️ Sounder · dives with little warning');
+    expect(text(fishTagHtml({ b: null, pull: 'strong', overLine: false }))).toBe('💪 Strong');
+    expect(fishTagHtml({ b: null, pull: null, overLine: true })).toBe('Too strong for your line');
+    // A typical Shelf fish the line holds: no sticker.
+    expect(fishTagHtml({ b: null, pull: null, overLine: false })).toBe('');
+  });
+
   it('counts to the next marker, and past the one the boat is at', () => {
     expect(nextMarker(0)).toBe(5);
     expect(nextMarker(23)).toBe(25);

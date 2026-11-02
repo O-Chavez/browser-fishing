@@ -11,7 +11,7 @@ import * as smoke from '../src/game/smoke';
 import { SmokeStats } from './smokestats';
 import { mulberry } from '../src/game/env';
 import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, axes, type Difficulty, type ReelTune } from '../src/game/reel';
-import { BEHAVIOUR_TUNE, haulBonus } from '../src/game/dive';
+import { fightTune, haulBonus } from '../src/game/dive';
 import { DIVE } from '../src/data/dive';
 import { HARBOUR } from '../src/data/maps';
 
@@ -1077,7 +1077,7 @@ describe('dives', () => {
   const fight = (t: ReturnType<typeof setup>, p: P, win = true) => {
     t.room.handle(p.id, { t: 'cast', x: 0, z: -8 });
     const ok = last(p.c, 'castok');
-    const f = playFight(ok.d!, ok.seed!, win ? undefined : () => false, ok.b && BEHAVIOUR_TUNE[ok.b]);
+    const f = playFight(ok.d!, ok.seed!, win ? undefined : () => false, fightTune(ok.b, ok.fishId));
     t.advance(ok.wait * 1000 + f.ms + 10);
     t.room.handle(p.id, win ? { t: 'catch', h: f.h } : { t: 'lost', h: f.h });
     return f;
@@ -1218,7 +1218,7 @@ describe('dives', () => {
     // A caught fish reported as lost still pays for its line, but isn't landed.
     t.advance(last(a.c, 'castok').wait * 1000);
     const ok = last(a.c, 'castok');
-    const won = playFight(ok.d!, ok.seed!, undefined, ok.b && BEHAVIOUR_TUNE[ok.b]);
+    const won = playFight(ok.d!, ok.seed!, undefined, fightTune(ok.b, ok.fishId));
     t.advance(won.ms);
     t.room.handle(a.id, { t: 'lost', h: won.h });
     expect(lastDive(a)).toMatchObject({ fish: 0, lost: 'gone' });

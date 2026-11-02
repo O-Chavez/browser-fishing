@@ -98,6 +98,16 @@ export const P = {
    * base on matched gear, a sliver when the fish outclasses the gear. Reeling in it is 35% faster.
    */
   sweet: [[0.6, 0.21], [2.0, 0.13], [3.2, 0.03]],
+  /**
+   * Fight left (REELING.md, "Fish stamina"), off when k is 0 (pond fights): a fish has k·max(min, weight - w0)·length seconds
+   * of surging against a tight line in it; slack line tires it at `slack` of that, and reeling it in the calm with the
+   * gauge green at `calm`. At full fight its surges come close together (gaps ×`burst`). From `tiredAt` fight left it's
+   * tired: going from there to exhausted, its surges pull up to `tiredPull` weaker, last up to `tiredSurge` shorter and
+   * come up to ×(1 + `tiredGap`) further apart. Exhausted, it surges no more and reels in as a fish of weight
+   * `exhaustedWeight`. A surge that reaches the red at full strength never tires below it, so tiring never beats the
+   * line. [k, w0, min, slack, burst, exhaustedWeight, tiredAt, tiredGap, tiredPull, tiredSurge, calm]
+   */
+  tire: [0, 1, 0.5, 0.25, 1, 1, 0.5, 2, 0.5, 0, 0],
 };
 
 /** Per-fight overrides of `P` (a fish's behaviour at sea, say); anything left out keeps its `P` value. */
@@ -106,6 +116,8 @@ export type ReelTune = Partial<typeof P>;
 const lever = ([a, k]: number[], d: number) => a / (1 + k * Math.max(0, d - 0.4));
 const between = (d: number, d0: number, d1: number) => Math.min(1, Math.max(0, (d - d0) / (d1 - d0)));
 const SWEET_CENTER = (SWEET_MIN + SWEET_MAX) / 2;
+/** How far into the red a tired fish's surge stays when its full-strength pull reaches it. */
+const RED_FLOOR = 0.03;
 /** The sweet spot's half-width at difficulty d, straight between the `sweet` points. */
 function sweetHalf(pts: number[][], d: number): number {
   if (d <= pts[0][0]) return pts[0][1];
@@ -178,6 +190,8 @@ export class Reel {
   tension = 0.1;
   progress: number;
   stamina = 1;
+  /** Fight left, 1 to 0, when the fish tires (`P.tire`): full fight, then tired, then exhausted at 0 (no more surges). */
+  fightLeft = 1;
   status: ReelStatus = 'reeling';
   reason: LossReason | null = null;
   surgeDir: -1 | 0 | 1 = 0;
@@ -215,6 +229,8 @@ export class Reel {
   private readonly follow: number;
   private readonly dragRate: number;
   private readonly surgeReel: number;
+  /** Seconds of surging against a tight line this fish has in it; 0 if it never tires. */
+  private readonly fightLen: number;
   /** This fight's levers: `P` with the fight's overrides. */
   private readonly p: typeof P;
 
@@ -242,6 +258,8 @@ export class Reel {
     // Weight against the rod: drag in a surge, whether a surge can be reeled at all (and, in `update`, reel speed).
     this.dragRate = this.p.drag[0] * powArith(Math.max(0, dw - this.p.drag[1]), this.p.drag[4]);
     this.surgeReel = this.p.surgeReel[0] * (1 - between(dw, this.p.surgeReel[1], this.p.surgeReel[2]));
+    // A longer fight (a legend) has as much more fight in it.
+    this.fightLen = this.p.tire[0] * Math.max(this.p.tire[2], dw - this.p.tire[1]) * this.p.length;
     this.warnMax = this.p.warn[0] * expArith(-this.p.warn[1] * (dp - 2)) * expArith((2 * rng() - 1) * (this.p.temper === P.temper ? LN_TEMPER : lnArith(1 + this.p.temper)));
     this.warnLen = this.rollWarn();
     this.nextSurge = 1.2 + this.warnLen;
@@ -267,7 +285,7 @@ export class Reel {
 
   /** A surge is about to start. */
   get warning(): boolean {
-    return this.surgeDir === 0 && this.nextSurge < this.warnLen;
+    return this.surgeDir === 0 && !this.exhausted && this.nextSurge < this.warnLen;
   }
 
   get inSweetSpot(): boolean {
@@ -298,6 +316,41 @@ export class Reel {
     return this.surging && this.need > GOOD_MAX;
   }
 
+  /** The fish tires as it fights (a sea fish): its fight-left bar shows. */
+  get tires(): boolean {
+    return this.fightLen > 0;
+  }
+
+  /** Past full fight: its surges come further apart and take less line, more so the closer it is to exhausted. */
+  get tired(): boolean {
+    return this.fightLen > 0 && this.fightLeft <= this.p.tire[6];
+  }
+
+  /** Out of fight: no more surges, the reel brings it in. */
+  get exhausted(): boolean {
+    return this.fightLen > 0 && this.fightLeft <= 0;
+  }
+
+  /**
+   * A tired fish's surge strength right now, 1 down to 1 - `tiredPull` at exhausted, sliding as it tires even within a
+   * surge. A surge that reaches the red at full strength stays just in it: tiring never beats the line.
+   */
+  private fade(): number {
+    const weak = 1 - this.p.tire[8] * this.tiredness;
+    const full = this.pullAt * this.surgePower;
+    return full > GOOD_MAX ? Math.max(weak, (GOOD_MAX + RED_FLOOR) / full) : weak;
+  }
+
+  /** The fish is wearing itself out right now: surging against a tight line. */
+  get tiring(): boolean {
+    return this.fightLen > 0 && !this.exhausted && this.status === 'reeling' && this.surgeDir !== 0 && this.tension >= this.need;
+  }
+
+  /** How far a tired fish is toward exhausted, 0 to 1; 0 at full fight. */
+  private get tiredness(): number {
+    return this.tired ? 1 - this.fightLeft / this.p.tire[6] : 0;
+  }
+
   /** Landed with no frays. */
   get clean(): boolean {
     return this.status === 'caught' && this.wear.frays === 0;
@@ -314,23 +367,27 @@ export class Reel {
       if (this.surgeT >= this.surgeDur) {
         this.surgeDir = 0;
         this.warnLen = this.rollWarn();
-        this.nextSurge = this.spread(lever(this.p.gap, dp)) + this.warnLen;
+        const tiring = this.fightLen === 0 ? 1 : this.tired ? 1 + this.p.tire[7] * this.tiredness : this.p.tire[4];
+        this.nextSurge = this.spread(lever(this.p.gap, dp) * tiring) + this.warnLen;
       }
-    } else {
+    } else if (!this.exhausted) {
       this.nextSurge -= dt;
       if (this.nextSurge <= 0) {
         this.surgeDir = this.rng() < 0.5 ? -1 : 1;
-        this.surgeDur = this.spread(this.p.surge[0] * (1 + this.p.surge[1] * Math.max(0, dp - 1)));
+        this.surgeDur = this.spread(this.p.surge[0] * (1 + this.p.surge[1] * Math.max(0, dp - 1)) * (1 - this.p.tire[9] * this.tiredness));
+        const power = this.spread(1, this.p.powerJitter);
         this.surgeT = 0;
         this.surgeCount++;
-        this.surgePower = this.spread(1, this.p.powerJitter) * (0.85 + 0.15 * this.stamina);
+        // A fish that tires fades as it goes (`fade`, every step); one that doesn't, by its old stamina at the surge's start.
+        this.surgePower = this.fightLen > 0 ? power : power * (0.85 + 0.15 * this.stamina);
       }
     }
 
     if (this.surgeDir !== 0) {
       const ramp = Math.max(0, Math.min(1, this.surgeT / this.riseLen, (this.surgeDur - this.surgeT) / 0.25));
-      this.need = this.pullAt * this.surgePower * ramp;
-      this.pull = this.surgePower * ramp;
+      const fade = this.fade();
+      this.need = this.pullAt * this.surgePower * fade * ramp;
+      this.pull = this.surgePower * fade * ramp;
     } else {
       this.need = 0.04 * dp * tri(this.t * 0.5);
       this.pull = this.need;
@@ -340,11 +397,17 @@ export class Reel {
     this.tension += (target - this.tension) * Math.min(1, this.follow * dt);
 
     this.stamina = Math.max(0.2, this.stamina - dt * 0.05 * (holding && this.inGoodZone ? 1 : 0.25));
+    // A surge against a tight line tires the fish, against slack much less; so does reeling it in the calm, at `calm`.
+    if (this.fightLen > 0) {
+      const work = this.surgeDir !== 0 ? (this.tension >= this.need ? 1 : this.p.tire[3]) : holding && this.inGoodZone ? this.p.tire[10] : 0;
+      this.fightLeft = Math.max(0, this.fightLeft - (dt / this.fightLen) * work);
+    }
+    const reelW = this.exhausted ? Math.min(dw, this.p.tire[5]) : dw;
 
     // Reeling in the calm; in a surge only on fish the gear can handle, with the gauge truly green.
     const share = !this.surging ? 1 : this.inGoodZone && this.tension >= this.need ? this.surgeReel : 0;
     const rate = holding && share > 0
-      ? share * (this.p.reel / (1 - this.p.reelK + this.p.reelK * dw)) * (this.tension > GOOD_MAX ? 0.4 : this.inSweetSpot ? 1.35 : 1)
+      ? share * (this.p.reel / (1 - this.p.reelK + this.p.reelK * reelW)) * (this.tension > GOOD_MAX ? 0.4 : this.inSweetSpot ? 1.35 : 1)
       : 0;
     // Below the fish's pull it takes line fast; above it, a strong fish still drags some out, less the higher you ride.
     const high = this.need < GOOD_MAX ? Math.min(1, Math.max(0, (this.tension - this.need) / (GOOD_MAX - this.need))) : 0;
