@@ -97,9 +97,14 @@ export interface SaveData {
   chips: number;
   /** Black Pearls, banked from sea dives and spent on rod levels. Never sold anywhere. */
   pearls: number;
-  /** The Aurora Rod's level (+N), bought at the stall; each makes sea fish lighter (see `ROD_LEVEL`). */
+  /**
+   * The Deep Sea Rod (`DEEP_SEA_ROD`) is bought: charters are open to this player. It's no bag item; it stays on Reed's
+   * boat and is in hand at sea.
+   */
+  seaRod: boolean;
+  /** The Deep Sea Rod's level (+N), bought at the stall; each makes sea fish lighter (see `ROD_LEVEL`). Saves from before the rod levelled the Aurora Rod; those levels carried over. */
   rodLevel: number;
-  /** The Deep Sea Line's level (+N), bought at the stall; each makes sea fish pull weaker (see `SEA_LINE`). 0 until bought. */
+  /** The Deep Sea Line's level (+N), bought at the stall; each makes sea fish pull weaker (see `SEA_LINE`). Sea only. */
   seaLine: number;
   /** Casino perks owned (see `PERKS`). */
   perks: string[];
@@ -168,6 +173,7 @@ export const newSave = (): SaveData => ({
   bottles: [],
   chips: 0,
   pearls: 0,
+  seaRod: false,
   rodLevel: 0,
   seaLine: 0,
   perks: [],
@@ -353,6 +359,7 @@ export function migrate(raw: object): SaveData {
   out.pearls = Number.isFinite(out.pearls) ? Math.max(0, Math.floor(out.pearls)) : 0;
   out.rodLevel = Number.isFinite(out.rodLevel) ? Math.max(0, Math.floor(out.rodLevel)) : 0;
   out.seaLine = Number.isFinite(out.seaLine) ? Math.max(0, Math.floor(out.seaLine)) : 0;
+  out.seaRod = out.seaRod === true;
   out.lureOff = out.lureOff === true;
   // Saves from before the tips only get them if they haven't started playing yet.
   out.tips = Array.isArray(data.tips) ? data.tips.filter(isTip) : isFreshSave(out) ? [] : [...TIP_IDS];
@@ -367,6 +374,9 @@ export function migrate(raw: object): SaveData {
     const best = Math.max(1, ...RODS.filter((r) => owned.includes(r.id)).map((r) => r.tier));
     out.line = (LINES.find((l) => l.tier === best) ?? LINES[0]).id;
   }
+  // Saves from before the Deep Sea Rod: the Deep Sea Line held tier 5 in the pond once spooled, and it's sea only now,
+  // so a pond line under Moonsilk becomes Moonsilk and no one's pond fishing gets worse.
+  if (data.seaRod === undefined && out.seaLine > 0 && (LINES.find((l) => l.id === out.line)?.tier ?? 1) < 5) out.line = 'moonsilk';
   layoutSlots(out, slotCount(out));
   if (!Array.isArray(out.owned)) out.owned = [];
   out.seen = Array.isArray(data.seen) ? [...new Set(data.seen.filter((id): id is string => typeof id === 'string' && FISH.some((f) => f.id === id) && !out.dex[id]))] : [];

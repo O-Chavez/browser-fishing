@@ -118,8 +118,20 @@ export const LINES: Line[] = [
 ];
 
 /**
- * The sea's line (`SEA_LINE` in dive.ts): not sold for coins but levelled with Black Pearls, and on the rod once it's
- * +1. It holds tier 5 in the pond, like Moonsilk.
+ * The charters' rod, not one of the pond's `RODS`: bought once at Marlow's stall, which is what pays for charter access,
+ * and kept on Reed's boat rather than in the bag. The boat hands it over when a charter casts off and keeps it when the
+ * player heads home. Its levels (`ROD_LEVEL`) make sea fish lighter. The stats only matter for casting at sea. Priced as
+ * the next grind after the Aurora Rod and the pond's top gear (Oscar, 2026-11-01): five times the Aurora Rod, from the
+ * level after it that takes ~70-90 top-gear catches to reach. A default, to tune after a play test.
+ */
+export const DEEP_SEA_ROD: Rod = { id: 'searod', name: 'Deep Sea Rod', tier: 5, unlockLevel: 20, price: 100000, castDistance: 34, luck: 2.5, control: 2.2, color: 0x36548f };
+
+/** The Deep Sea Rod's short name, for the hotbar and tiles ("Sea Rod +12"). */
+export const SEA_ROD_SHORT = 'Sea Rod';
+
+/**
+ * The sea's line (`SEA_LINE` in dive.ts): comes spooled on the Deep Sea Rod and is levelled with Black Pearls. Sea
+ * only: the pond uses the pond line bought (`SaveData.line`).
  */
 export const DEEP_SEA_LINE: Line = { id: 'deepsea', name: 'Deep Sea Line', tier: 5, unlockLevel: 15, price: 0, color: 0x3fb6e6 };
 

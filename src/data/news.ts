@@ -17,6 +17,7 @@
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
 import deepSea from '../assets/images/news/deep-sea.jpg';
+import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
 
 export interface NewsEntry {
@@ -34,6 +35,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 3,
+    date: '2026-11-02',
+    title: 'The Deep Sea Rod',
+    image: deepSeaRod,
+    alt: 'First person on a charter boat: a long navy Deep Sea Rod with brass loop guides and a big brass reel holds up a striped Squall Marlin over the open sea',
+    body: [
+      "Charters have their own gear now. Buy the <b>Deep Sea Rod</b> on the new <b>Sea gear</b> tab at <b>Marlow's stall</b> (from level 20, 100,000 coins), then find <b>Captain Reed</b> on the west beach. Every angler needs one to cast off, Aurora Rod or not.",
+      "Reed keeps it on his boat and hands it to you as a charter casts off. Out at sea it's all you hold: your hotbar waits just as you left it until you head home. Its brass reel shows how much line you have left, and the badges in the corner show your rod's and line's levels. Land a big one and it hangs out over the water, bigger than ever.",
+      "Black Pearl levels now go on the Deep Sea Rod, and any you put on the Aurora Rod carry over. The <b>Deep Sea Line</b> comes on the rod and is for charters only, so the Aurora Rod is the pond's top rod again. If the Deep Sea Line was on your rod, your pond line is now <b>Moonsilk Line</b>, free.",
+    ],
+  },
   {
     id: 2,
     date: '2026-11-01',

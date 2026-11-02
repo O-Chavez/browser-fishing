@@ -1,7 +1,7 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS, FISH, LINES, RODS, byId, type Fish, type Line, type Rod } from '../data/content';
-import { DIVE, DIVES_OPEN, ROD_LEVEL } from '../data/dive';
-import { BAIT_PACK, CLEAN_BONUS, lineName, rodLevelCost, seaLineCost } from './economy';
+import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, byId, type Fish, type Line, type Rod } from '../data/content';
+import { DIVES_OPEN } from '../data/dive';
+import { BAIT_PACK, CLEAN_BONUS, rodLevelCost, seaLineCost, seaLineName, seaRodName } from './economy';
 import { COIN } from './format';
 import type { SaveData } from './state';
 
@@ -30,16 +30,16 @@ function nextBait(s: Pick<SaveData, 'slots' | 'locker'>) {
 }
 
 /**
- * Whether charters are worth pointing the player at: they own the Aurora Rod (carried or in the locker), haven't
- * headed home from a marker yet (`sea.record`), and the seaplane is taking players out (`open`, `DIVES_OPEN`), so
+ * Whether charters are worth pointing the player at: they own the Deep Sea Rod, haven't headed home from a marker
+ * yet (`sea.record`), and the seaplane is taking players out (`open`, `DIVES_OPEN`), so
  * nothing points at closed charters and the usual goals come back after a first charter.
  */
-export function chartersToTry(s: Pick<SaveData, 'slots' | 'locker' | 'sea'>, open = DIVES_OPEN): boolean {
-  return open && s.sea.record === 0 && (s.locker.rods.includes(DIVE.rod) || s.slots.some((sl) => sl?.k === 'rod' && sl.id === DIVE.rod));
+export function chartersToTry(s: Pick<SaveData, 'seaRod' | 'sea'>, open = DIVES_OPEN): boolean {
+  return open && s.sea.record === 0 && s.seaRod;
 }
 
 /** True when the one-time charter tip should show now. */
-export const charterTipDue = (s: Pick<SaveData, 'slots' | 'locker' | 'sea' | 'tips'>, open = DIVES_OPEN): boolean => !s.tips.includes('charter') && chartersToTry(s, open);
+export const charterTipDue = (s: Pick<SaveData, 'seaRod' | 'sea' | 'tips'>, open = DIVES_OPEN): boolean => !s.tips.includes('charter') && chartersToTry(s, open);
 
 /** Tip text as HTML. Only game data goes in, so nothing needs escaping. `touch` words controls for the on-screen buttons. */
 export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker' | 'dex'>, vendor: string, touch = false): string {
@@ -74,7 +74,7 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
     case 'snack':
       return `Smoked fish ready! Eat one from your <b>Bag</b> (${touch ? 'the 🎒 button' : '<kbd>Tab</kbd>'}) for ⭐ more XP on every catch.`;
     case 'charter':
-      return 'Your Aurora Rod can fish the open sea! Find <b>Captain Reed</b> and his seaplane on the <b>west beach</b> and book a charter: the further out, the rarer the fish.';
+      return 'Your Deep Sea Rod is waiting on <b>Captain Reed</b>\'s seaplane! Find him on the <b>west beach</b> and book a charter: the further out, the rarer the fish.';
     case 'dish': {
       // Names the player's own tier 3 catch, so the next Fish Cakes is easy to picture.
       const t3 = FISH.filter((f) => f.tier === 3 && s.dex[f.id]).sort((a, b) => s.dex[b.id]!.count - s.dex[a.id]!.count)[0];
@@ -148,7 +148,7 @@ export function lossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'le
 
 /**
  * The card after a lost sea fight. The tracks are levels, so a fish over the line (its surges reach the red) names
- * the Deep Sea Line's next level, and one over the rod (as heavy as sea fish get) the Aurora Rod's; each names one
+ * the Deep Sea Line's next level, and one over the rod (as heavy as sea fish get) the Deep Sea Rod's; each names one
  * piece of gear. The line comes first: a fish over it that ran off took the line the player gave to save it from
  * fraying, whatever its weight. Anything else gets the pond's reel tip.
  */
@@ -156,12 +156,11 @@ export function seaLossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 
   const price = (c: { coins: number; pearls: number }) => `${c.coins.toLocaleString('en-US')} ${COIN} + ${c.pearls.toLocaleString('en-US')} Black Pearls`;
   if (over.line) {
     const n = s.seaLine + 1;
-    return { title: end === 'snapped' ? 'SNAP!' : 'RAN OFF!', cause: `Too strong for your ${lineName(s)}`, fix: `Deep Sea Line +${n} at ${vendor}'s · ${price(seaLineCost(n))}` };
+    return { title: end === 'snapped' ? 'SNAP!' : 'RAN OFF!', cause: `Too strong for your ${seaLineName(s)}`, fix: `Deep Sea Line +${n} at ${vendor}'s · ${price(seaLineCost(n))}` };
   }
   if (end === 'escaped' && over.rod) {
-    const rod = byId(RODS, ROD_LEVEL.rod).name;
     const n = s.rodLevel + 1;
-    return { title: 'RAN OFF!', cause: `Too heavy for your ${rod}${s.rodLevel > 0 ? ` +${s.rodLevel}` : ''}`, fix: `${rod} +${n} at ${vendor}'s · ${price(rodLevelCost(n))}` };
+    return { title: 'RAN OFF!', cause: `Too heavy for your ${seaRodName(s)}`, fix: `${DEEP_SEA_ROD.name} +${n} at ${vendor}'s · ${price(rodLevelCost(n))}` };
   }
   return lossVerdict(end, s, null, vendor);
 }

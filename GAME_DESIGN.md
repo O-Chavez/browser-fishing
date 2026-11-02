@@ -509,6 +509,8 @@ Planned 2026-10-30; the build steps are the "Endgame step N of 8" items in TODO.
 
 Two goals (decided 2026-10-30): charters get harder but never impossible, and every trip gives the player something good and a clear next thing to go for.
 
+**The gear** (as built, 2026-11-01): charters need the **Deep Sea Rod**, bought once at Marlow's stall's Sea gear tab (level 20, 100,000 coins: the next grind after the Aurora Rod), which is what pays for charter access. It stays on Reed's boat and is the only thing in hand at sea (the hotbar waits as it was until home), and comes with the Deep Sea Line; both level with Black Pearls (REELING.md, "Decisions so far"). The Aurora Rod is the pond's top rod.
+
 **The trip**
 - A new map, run as an instance. Captain Reed sells the trip; a loading screen leads to the player on a boat in rough ocean, which gets rougher with depth (bigger swell rocking the boat, wind, rain, a darker sky, fog, lightning far down).
 - A fare buys **8 casts at Depth N**, with the boat's bait included. Catches go into the boat's 8-fish hold, not the hotbar, so a trip never stops on "slots full". The hold's fish come home with the player at the end.

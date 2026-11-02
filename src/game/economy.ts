@@ -1,6 +1,6 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
-import { BAITS, DEEP_SEA_LINE, FISH, LINES, RODS, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
+import { BAITS, DEEP_SEA_LINE, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { ROD_LEVEL, SEA_LINE } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, rollTag, sellValue, sizeDifficulty, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
@@ -27,9 +27,9 @@ export const ownsRod = (s: SaveData, id: string): boolean => hasRod(s, id) || s.
 /**
  * Whether the HUD's Black Pearl box shows: from the first pearl a player earns, and still after spending them all
  * (pearls only go on rod levels, so a level means pearls were earned). Hidden before that, so it doesn't sit at 0
- * through the early game. A new pearl spend (the sea line, say) should count here too.
+ * through the early game. A new pearl spend should count here too.
  */
-export const showPearlBox = (s: SaveData): boolean => s.pearls > 0 || s.rodLevel > 0;
+export const showPearlBox = (s: SaveData): boolean => s.pearls > 0 || s.rodLevel > 0 || s.seaLine > 0;
 
 export const LOCKER_CAP = 200;
 
@@ -85,15 +85,20 @@ export function buyRod(s: SaveData, id: string): boolean {
   return true;
 }
 
-/** The line on the rod: the Deep Sea Line once it's levelled, else the pond line bought (Twine if the save's is unknown). */
-export const lineOf = (s: Pick<SaveData, 'line'> & { seaLine?: number }): Line =>
-  (s.seaLine ?? 0) > 0 ? DEEP_SEA_LINE : LINES.find((l) => l.id === s.line) ?? LINES[0];
+/** The pond line on the rod (Twine if the save's is unknown). The Deep Sea Line is only used at sea (`seaLineName`). */
+export const lineOf = (s: Pick<SaveData, 'line'>): Line => LINES.find((l) => l.id === s.line) ?? LINES[0];
 
-/** Whether a pond line is below the one on the rod, so it can't be bought: a lower tier, or any once the Deep Sea Line is on. */
-export const lineBeaten = (s: Pick<SaveData, 'line' | 'seaLine'>, l: Line): boolean => s.seaLine > 0 || l.tier < lineOf(s).tier;
+/** Whether a pond line is below the one on the rod, so it can't be bought. */
+export const lineBeaten = (s: Pick<SaveData, 'line'>, l: Line): boolean => l.tier < lineOf(s).tier;
 
-/** The line's name as shown: "Deep Sea Line +3" once levelled, else the pond line's. */
-export const lineName = (s: Pick<SaveData, 'line'> & { seaLine?: number }): string => lineOf(s).name + ((s.seaLine ?? 0) > 0 ? ` +${s.seaLine}` : '');
+/** The pond line's name as shown. */
+export const lineName = (s: Pick<SaveData, 'line'>): string => lineOf(s).name;
+
+/** The line a charter fights on, as shown: the Deep Sea Line that comes on the Deep Sea Rod, "Deep Sea Line +3" once levelled. */
+export const seaLineName = (s: Pick<SaveData, 'seaLine'>): string => DEEP_SEA_LINE.name + (s.seaLine > 0 ? ` +${s.seaLine}` : '');
+
+/** The Deep Sea Rod's name as shown, with its level: "Deep Sea Rod +12", or `SEA_ROD_SHORT` for the hotbar and tiles. */
+export const seaRodName = (s: Pick<SaveData, 'rodLevel'>, short = false): string => (short ? SEA_ROD_SHORT : DEEP_SEA_ROD.name) + (s.rodLevel > 0 ? ` +${s.rodLevel}` : '');
 
 /** What stands between this player's gear and a species: the line to hold it, the rod to land it in good time, the bait to hook it. */
 export function gearNeeds(s: Pick<SaveData, 'rod' | 'line' | 'bait'>, fish: Fish): { line: Line | null; rod: Rod | null; bait: Bait | null } {
@@ -120,7 +125,7 @@ export function recordSighting(s: SaveData, fish: Fish): boolean {
 /** Spools a better line onto the rod: a step up from the current one, unlocked and paid for. There is nothing to carry. */
 export function buyLine(s: SaveData, id: string): boolean {
   const l = LINES.find((x) => x.id === id);
-  if (!l || s.level < l.unlockLevel || s.coins < l.price || l.tier <= lineOf(s).tier || s.seaLine > 0) return false;
+  if (!l || s.level < l.unlockLevel || s.coins < l.price || l.tier <= lineOf(s).tier) return false;
   s.coins -= l.price;
   s.line = id;
   return true;
@@ -156,16 +161,28 @@ export function equipRod(s: SaveData, id: string): boolean {
   return true;
 }
 
-/** What taking the Aurora Rod from +n-1 to +n costs. */
+/** Charters are open to this player: the Deep Sea Rod is bought. */
+export const ownsSeaRod = (s: Pick<SaveData, 'seaRod'>): boolean => s.seaRod;
+
+/** Buys the Deep Sea Rod at the stall, once: it stays on Reed's boat, so nothing goes in the bag. Rod levels bought before it (on the Aurora Rod) count from now on. */
+export function buySeaRod(s: SaveData): boolean {
+  const r = DEEP_SEA_ROD;
+  if (s.seaRod || s.level < r.unlockLevel || s.coins < r.price) return false;
+  s.coins -= r.price;
+  s.seaRod = true;
+  return true;
+}
+
+/** What taking the Deep Sea Rod from +n-1 to +n costs. */
 export function rodLevelCost(n: number): { coins: number; pearls: number } {
   const L = ROD_LEVEL;
   return { coins: Math.min(L.coinCap, L.coins + L.coinsPer * n), pearls: L.pearls + L.pearlsPer * n };
 }
 
-/** The next Aurora Rod level, paid in coins and Black Pearls. The level is the player's, so it stays if the rod is dropped. */
+/** The next Deep Sea Rod level, paid in coins and Black Pearls. */
 export function levelRod(s: SaveData): boolean {
   const cost = rodLevelCost(s.rodLevel + 1);
-  if (!ownsRod(s, ROD_LEVEL.rod) || s.coins < cost.coins || s.pearls < cost.pearls) return false;
+  if (!s.seaRod || s.coins < cost.coins || s.pearls < cost.pearls) return false;
   s.coins -= cost.coins;
   s.pearls -= cost.pearls;
   s.rodLevel++;
@@ -178,26 +195,26 @@ export function seaLineCost(n: number): { coins: number; pearls: number } {
   return { coins: Math.min(L.coinCap, L.coins + L.coinsPer * n), pearls: L.pearls + L.pearlsPer * n };
 }
 
-/** The next Deep Sea Line level, paid in coins and Black Pearls. Needs the Aurora Rod, as the rod's levels do. */
+/** The next Deep Sea Line level, paid in coins and Black Pearls. Needs the Deep Sea Rod, which the line comes on. */
 export function levelSeaLine(s: SaveData): boolean {
   const cost = seaLineCost(s.seaLine + 1);
-  if (!ownsRod(s, ROD_LEVEL.rod) || s.coins < cost.coins || s.pearls < cost.pearls) return false;
+  if (!s.seaRod || s.coins < cost.coins || s.pearls < cost.pearls) return false;
   s.coins -= cost.coins;
   s.pearls -= cost.pearls;
   s.seaLine++;
   return true;
 }
 
-/** The rod level a sea fight uses (`seaDifficulty`): the Aurora Rod's while it's the rod in use. */
-export const seaRodLevel = (s: SaveData): number => rodLevelOf(s, s.rod);
+/** The rod level a sea fight uses (`seaDifficulty`): the Deep Sea Rod's, which is always the rod in hand at sea. */
+export const seaRodLevel = (s: SaveData): number => (s.seaRod ? s.rodLevel : 0);
 
 /** The levels a sea fight is eased by: the rod's (weight) and the Deep Sea Line's (strength). */
 export const seaGear = (s: SaveData): SeaGear => ({ rod: seaRodLevel(s), line: s.seaLine });
 
-/** This rod's level: the save's rod level for the Aurora Rod, 0 for the others. */
+/** This rod's level: the save's rod level for the Deep Sea Rod, 0 for the pond rods. */
 export const rodLevelOf = (s: SaveData, id: string): number => (id === ROD_LEVEL.rod ? s.rodLevel : 0);
 
-/** A rod's level as shown after its name: " +12" on a levelled Aurora Rod, else nothing. */
+/** A rod's level as shown after its name: " +12" on a levelled Deep Sea Rod, else nothing. */
 export const rodPlus = (s: SaveData, id: string): string => (rodLevelOf(s, id) > 0 ? ` +${s.rodLevel}` : '');
 
 /** Equips a bait type: the stack in the bait slot goes back to the locker and a fresh stack comes out. */
@@ -436,8 +453,9 @@ export function canCast(s: SaveData): CastCheck {
 
 /** Whether the player can cast here. At sea no bait is spent and the catch is sold as it's landed, so only the rod matters. */
 export function canCastAt(s: SaveData, sea: boolean): CastCheck {
-  const c = canCast(s);
-  return sea && (c === 'nobait' || c === 'full') ? 'ok' : c;
+  // At sea the Deep Sea Rod from Reed's boat is always in hand, whatever the hotbar holds.
+  if (sea) return 'ok';
+  return canCast(s);
 }
 
 export const CAST_MESSAGES: Record<Exclude<CastCheck, 'ok'>, string> = {

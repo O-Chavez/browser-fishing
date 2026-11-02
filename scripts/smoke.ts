@@ -49,7 +49,7 @@ const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, s
 const save = { ...newSave(), level: 20, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
 // Smokehouse stages already seen, so their banner and jingle don't land in the middle of the casino checks.
 save.smoke.seen = STAGES.map((st) => st.id);
-// The Aurora Rod in the locker, for a trip out to sea on Captain Reed's seaplane.
+// The Aurora Rod in the locker: charters still need the Deep Sea Rod, which the trip checks buy at the stall.
 save.locker.rods.push('aurora');
 fs.writeFileSync(
   path.join(dataDir, 'accounts.json'),
@@ -856,21 +856,60 @@ async function tripChecks(): Promise<void> {
     return [...seen];
   });
 
-  await page.evaluate(() => { window.__game.teleport(-15.93, 15.17); window.__game.look(-0.58, -0.05); });
-  await sleep(600);
-  await page.evaluate(() => window.__game.interact());
-  await sleep(300);
-  const reed = await tab();
-  check('charter: Captain Reed offers a charter from the harbour with a Cast off button', reed.includes('tab-reed') && reed.includes('Start at the harbour') && reed.includes('Cast off'), reed.slice(0, 160));
-  await page.click('#menu [data-act="castoff"]');
   const dev = async (line: string) => {
     await page.keyboard.press('Enter');
     await page.keyboard.type(line);
     await page.keyboard.press('Enter');
     await sleep(300);
   };
-  await arrived(true);
   await dev('/login smoke smoke-dev-pass');
+  const toReed = async () => {
+    await page.evaluate(() => { window.__game.teleport(-15.93, 15.17); window.__game.look(-0.58, -0.05); });
+    await sleep(600);
+    await page.evaluate(() => window.__game.interact());
+    await sleep(300);
+    return tab();
+  };
+  // The Aurora Rod alone doesn't open charters: Reed sends you to the stall for the Deep Sea Rod.
+  const refused = await toReed();
+  check('charter: without the Deep Sea Rod, Captain Reed sends you to the stall and offers no Cast off', refused.includes('tab-reed') && refused.includes('need the Deep Sea Rod') && !refused.includes('Cast off'), refused.slice(0, 200));
+  await page.evaluate(() => window.__game.closeMenu());
+  await dev('/coins 130000');
+  await page.evaluate(() => {
+    const h = (window.__game.world as any).hub;
+    window.__game.teleport(h.vendorSpot.x + Math.cos(h.npcYaw) * 2, h.vendorSpot.z - Math.sin(h.npcYaw) * 2);
+  });
+  await sleep(600);
+  await page.evaluate(() => window.__game.openMenu('shop'));
+  await sleep(200);
+  await page.click('#menu [data-shop="sea"]');
+  await sleep(200);
+  await page.click('#menu [data-act="buysearod"]');
+  await sleep(800);
+  const bought = await page.evaluate(() => ({ seaRod: window.__game.s.seaRod, coins: window.__game.s.coins, rods: window.__game.s.locker.rods.join(',') }));
+  check("charter: the Deep Sea Rod is bought at the stall's Sea gear tab for 100,000 coins, with nothing put in the bag", bought.seaRod === true && bought.coins === 30000 && bought.rods === 'aurora', JSON.stringify(bought));
+  await page.evaluate(() => window.__game.closeMenu());
+  const reed = await toReed();
+  check('charter: Captain Reed offers a charter from the harbour with a Cast off button', reed.includes('tab-reed') && reed.includes('Start at the harbour') && reed.includes('Cast off'), reed.slice(0, 160));
+  await page.click('#menu [data-act="castoff"]');
+  /** The rod in hand and the hotbar's rod and bait slots. */
+  const gear = () => page.evaluate(() => {
+    const rig = (window.__game.world as any).rig;
+    const levels = document.getElementById('seagear')!;
+    return {
+      kind: rig.kind as string,
+      shown: rig.root.visible as boolean,
+      rod: document.querySelector('#hotbar .slot.rodslot')!.textContent,
+      baitAway: document.querySelector('#hotbar .slot.baitslot')!.classList.contains('away'),
+      slots: [...document.querySelectorAll('#hotbar .slot')].filter((el) => getComputedStyle(el).display !== 'none').length,
+      levels: levels.classList.contains('hidden') ? '' : [...levels.querySelectorAll('.tag')].map((t) => t.textContent).join(''),
+    };
+  });
+  await arrived(true);
+  await page.keyboard.press('Digit1');
+  await sleep(300);
+  const atSea = await gear();
+  check("charter: at sea the Deep Sea Rod is in hand, the hotbar shows only it, and its and the line's levels show", atSea.kind === 'sea' && atSea.shown && !!atSea.rod?.includes('Sea Rod') && atSea.baitAway && atSea.slots === 1 && atSea.levels === 'RodLine', JSON.stringify(atSea));
   const hud = await page.evaluate(() => ({ shown: !document.getElementById('divehud')!.classList.contains('hidden'), text: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') }));
   check('charter: Cast off sails out from the harbour, with the strip showing the zone, the line and the haul', hud.shown && hud.text.includes('The Shelf') && hud.text.includes('300 m') && hud.text.includes('5 fish to marker 5') && hud.text.includes('3 markers to the Drop-off'), hud.text);
 
@@ -891,6 +930,10 @@ async function tripChecks(): Promise<void> {
   const sank = await tab();
   check('charter: heading home between markers asks first, then brings you back with the "Headed home" card', ask.includes('tab-headhome') && sank.includes('Headed home') && sank.includes('Fish sold along the way'), `${ask.slice(0, 60)} | ${sank.slice(0, 120)}`);
   await page.click('#menu [data-act="close"]');
+  await page.keyboard.press('Digit1');
+  await sleep(300);
+  const home = await gear();
+  check('charter: back home the pond rod is in hand again, with the whole hotbar back', home.kind === 'pond' && home.shown && !home.rod?.includes('Sea Rod') && !home.baitAway && home.slots > 2 && home.levels === '', JSON.stringify(home));
 
   // From league 4, one fish reaches the marker at 5: its choice waits for the catch card, then 1 heads home with the haul.
   await dev('/sea 4');

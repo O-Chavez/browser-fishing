@@ -292,6 +292,14 @@ describe('levels past 50 and ranks', () => {
     expect(nextGoal(50, {}, true)).toBe("Take a charter: Captain Reed's seaplane, west beach");
     expect(welcomeText('Ana', { level: 50, xp: 0, coins: 5, dex: { [FISH[0].id]: {} } }, true).line).toContain('a charter with Captain Reed');
   });
+  it('names the Deep Sea Rod after the Aurora Rod, until it is bought, while charters are open', () => {
+    expect(nextGoal(12, {}, false, false, true)).toBe('Level 15: the Aurora Rod becomes available');
+    expect(nextGoal(16, {}, false, false, true)).toBe("Level 20: the Deep Sea Rod, for Captain Reed's charters");
+    expect(nextGoal(16, {}, false, false, false)).toBe(nextGoal(16));
+    expect(nextGoal(20, {}, false, false, true)).toBe("The Deep Sea Rod at the stall: it opens Captain Reed's charters");
+    expect(nextGoal(20, {}, false, true, true)).toBe("Level 25: Bosun + Oilskin Sou'wester");
+    expect(nextGoal(20, {}, true, true, true)).toBe("Take a charter: Captain Reed's seaplane, west beach");
+  });
   it('estimates thrown-away XP from Fishdex counts, low and never negative', () => {
     expect(backPayXp({ [FISH[0].id]: { count: 10 } })).toBe(0);
     const eel = byId(FISH, 'constellation');

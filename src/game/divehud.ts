@@ -2,7 +2,7 @@
 // marker, heading home early, and the cards at the end. Players read a dive as a charter sailing further out
 // (Oscar, 2026-10-31): the zones (The Shelf, The Drop-off, ...) are stretches of sea, each holding markers ("marker
 // 25"), and distance is told in fish and markers. The rules and messages keep depth and ledge.
-import { RODS, byId } from '../data/content';
+import { DEEP_SEA_ROD } from '../data/content';
 import { BEHAVIOURS, DIVE, ZONES, type Behaviour } from '../data/dive';
 import type { DiveEnd, DiveView } from '../net/protocol';
 import { haulBonus, pearlsAt, zoneAt, type Chart } from './dive';
@@ -174,15 +174,15 @@ function waterText(depth: number): string {
  */
 export function reedHtml(o: { say: string; chart: Chart; pearls: number; ownsRod: boolean; pick: number; open: boolean }): string {
   if (!o.open) {
-    const rod = byId(RODS, DIVE.rod);
+    const rod = DEEP_SEA_ROD;
     return `<div class="reed"><p class="say">"Still tinkering with the old girl's engine. She'll be flying again soon, I promise."</p>
       <div class="detail"><b>Charters are coming soon.</b> Reed flies you out to sea. Every ${DIVE.ledgeEvery} fish you land, you reach a marker: head home with your haul, or sail on for a bigger one. The haul is only safe once you head home at a marker. Charters will need the ${rod.name}${o.ownsRod ? ', and you have one.' : `, which Marlow sells from level ${rod.unlockLevel}.`}</div>
       <div class="btns"><button class="btn plain" data-act="close">OK</button></div></div>`;
   }
   if (!o.ownsRod) {
-    const rod = byId(RODS, DIVE.rod);
-    return `<div class="reed"><p class="say">"The open sea snaps lesser rods like reeds. No offence to me."</p>
-      <div class="detail"><b>Charters need the ${rod.name}.</b> Marlow sells it from level ${rod.unlockLevel}. Every ${DIVE.ledgeEvery} fish you land, you reach a marker, where you can head home with the haul.</div>
+    const rod = DEEP_SEA_ROD;
+    return `<div class="reed"><p class="say">"The open sea snaps lake rods like reeds. No offence to me. Get yourself a proper rod and I'll keep it aboard for you."</p>
+      <div class="detail"><b>Charters need the ${rod.name}.</b> Marlow sells it from level ${rod.unlockLevel} for ${rod.price.toLocaleString('en-US')} ${COIN}, and it stays on my boat between charters. Every ${DIVE.ledgeEvery} fish you land, you reach a marker, where you can head home with the haul.</div>
       <div class="btns"><button class="btn plain" data-act="close">OK</button></div></div>`;
   }
   const starts = [0, ...o.chart.ledges];

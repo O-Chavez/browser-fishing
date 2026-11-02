@@ -198,7 +198,17 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #hotbar .slot i { position: absolute; top: -8px; left: -8px; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 900; font-style: normal; background: var(--wood-800); box-shadow: 0 0 0 2px var(--wood-600); color: var(--cream-muted); }
 /* slots 1 and 2 always hold the rod and bait you fish with: a teal frame, a tag under them, and a gap before the fish */
 #hotbar .slot.gear { --ring: var(--gear); background: var(--gear-bg); }
+/* At sea the bait slot steps aside: sea casts use no bait. */
+#hotbar .slot.away { display: none; }
 #hotbar .slot.baitslot { margin-right: 10px; }
+/* At sea: the Deep Sea Rod's and Deep Sea Line's levels in the bottom right, framed like the gear slots */
+#seagear { position: absolute; right: 22px; bottom: 22px; display: flex; gap: 12px; }
+#seagear .sg { position: relative; width: 72px; height: 72px; border-radius: 16px; background: var(--gear-bg); box-shadow: 0 0 0 3px var(--gear), 0 6px 14px rgba(0,0,0,.35); display: grid; place-items: center; }
+#seagear .ic { font-size: 30px; line-height: 1; margin-top: -14px; }
+#seagear b { position: absolute; bottom: 9px; left: 0; right: 0; text-align: center; font-size: 15px; font-weight: 900; color: var(--gold); }
+#seagear .tag { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); padding: 1px 7px; border-radius: 6px; font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; line-height: 14px; background: var(--gear); color: var(--gear-ink); }
+/* the touch controls take the bottom right */
+body.touch #seagear { bottom: 236px; right: 30px; }
 #hotbar .slot.gear .nm { bottom: 9px; }
 #hotbar .slot .tag { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); padding: 1px 7px; border-radius: 6px; font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; line-height: 14px; background: var(--gear); color: var(--gear-ink); }
 #hotbar .slot.gear.empty { opacity: .75; }

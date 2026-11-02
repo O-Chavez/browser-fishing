@@ -1,10 +1,11 @@
 import {
-  FISH, POND_FISH, RARITY_VALUE, SEA_VALUE, RARITY_WEIGHT, RARITY_XP, RODS,
+  DEEP_SEA_ROD, FISH, POND_FISH, RARITY_VALUE, SEA_VALUE, RARITY_WEIGHT, RARITY_XP, RODS,
   type Fish, type Rod, type Bait, type Line,
 } from '../data/content';
 import type { Difficulty, FightDifficulty } from './reel';
 
 import { CASINO_LEVEL } from '../data/casino';
+import { DIVES_OPEN } from '../data/dive';
 import { cosById } from '../data/cosmetics';
 import { RANKS, nextRank, type Rank } from '../data/ranks';
 import { SMOKE_LEVEL } from '../data/smokehouse';
@@ -282,12 +283,19 @@ export function catchXp(fish: Fish, size: number, firstCatch: boolean, shiny = f
   return Math.round(5 * RARITY_XP[fish.rarity] * (1 + sizeRatio(fish, size) * 0.5) * (firstCatch ? 2 : 1) * (shiny ? 3 : 1));
 }
 
-/** Next unlock, for the "next goal" HUD hint: a charter once the Aurora Rod is owned (`charters`, see `chartersToTry`), the next rod, then the next rank and its reward. */
-export function nextGoal(level: number, dex: Record<string, unknown> = {}, charters = false): string {
+/**
+ * Next unlock, for the "next goal" HUD hint: a charter once the Deep Sea Rod is owned (`charters`, see
+ * `chartersToTry`), the next rod, then the Deep Sea Rod while charters are open and `seaRod` isn't bought, then the
+ * next rank and its reward.
+ */
+export function nextGoal(level: number, dex: Record<string, unknown> = {}, charters = false, seaRod = true, open = DIVES_OPEN): string {
   if (charters) return 'Take a charter: Captain Reed\'s seaplane, west beach';
   const rod = RODS.find((r) => r.unlockLevel > level);
-  if (level < SMOKE_LEVEL) return `Level ${SMOKE_LEVEL}: Mags's Smokehouse opens${rod?.unlockLevel === SMOKE_LEVEL ? ` and the ${rod.name} becomes available` : ''}`;
-  if (rod) return `Level ${rod.unlockLevel}: the ${rod.name} becomes available`;
+  const sea = open && !seaRod;
+  const named = (r: Rod) => (sea && r.unlockLevel === DEEP_SEA_ROD.unlockLevel ? `the ${r.name} and the ${DEEP_SEA_ROD.name} become available` : `the ${r.name} becomes available`);
+  if (level < SMOKE_LEVEL) return `Level ${SMOKE_LEVEL}: Mags's Smokehouse opens${rod?.unlockLevel === SMOKE_LEVEL ? ` and ${named(rod)}` : ''}`;
+  if (rod) return `Level ${rod.unlockLevel}: ${named(rod)}`;
+  if (sea) return level < DEEP_SEA_ROD.unlockLevel ? `Level ${DEEP_SEA_ROD.unlockLevel}: the ${DEEP_SEA_ROD.name}, for Captain Reed's charters` : `The ${DEEP_SEA_ROD.name} at the stall: it opens Captain Reed's charters`;
   const rank = nextRank(level);
   if (rank) return `Level ${rank.level}: ${rankReward(rank)}`;
   const missing = POND_FISH.filter((f) => !dex[f.id]).length;

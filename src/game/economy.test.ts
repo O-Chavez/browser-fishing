@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as eco from './economy';
-import { SLOT_COUNT, migrate, newSave, type SaveData } from './state';
+import { ROD_SLOT, SLOT_COUNT, migrate, newSave, type SaveData } from './state';
 import { FISH, LINES, byId } from '../data/content';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, xpForNextLevel } from './progression';
 import { Drops } from './drops';
@@ -686,12 +686,56 @@ describe('ranks, titles and back pay', () => {
   });
 });
 
-describe('rod levels', () => {
-  const aurora = () => {
+describe('the Deep Sea Rod', () => {
+  const ready = () => {
     const s = newSave();
     s.level = 20;
+    s.coins = 105_000;
+    return s;
+  };
+
+  it('is bought once at level 20 for 100,000 coins, and goes nowhere in the bag', () => {
+    const s = ready();
+    s.level = 19;
+    expect(eco.buySeaRod(s)).toBe(false);
+    s.level = 20;
+    s.coins = 99_999;
+    expect(eco.buySeaRod(s)).toBe(false);
+    s.coins = 105_000;
+    const slots = JSON.stringify(s.slots);
+    expect(eco.buySeaRod(s)).toBe(true);
+    expect(s).toMatchObject({ seaRod: true, coins: 5_000 });
+    expect(eco.ownsSeaRod(s)).toBe(true);
+    expect(JSON.stringify(s.slots)).toBe(slots);
+    expect(s.locker.rods).toEqual([]);
+    expect(eco.buySeaRod(s)).toBe(false);
+    expect(s.coins).toBe(5_000);
+  });
+
+  it('is needed by every player, Aurora Rod owners included', () => {
+    const s = ready();
     s.locker.rods.push('aurora');
     eco.equipRod(s, 'aurora');
+    expect(eco.ownsSeaRod(s)).toBe(false);
+  });
+
+  it('is always in hand at sea, whatever the hotbar holds, and needs no bait or free slot there', () => {
+    const s = ready();
+    s.slots[ROD_SLOT] = null;
+    s.slots[1] = null;
+    s.held = ROD_SLOT;
+    expect(eco.canCastAt(s, true)).toBe('ok');
+    expect(eco.canCastAt(s, false)).toBe('norod');
+    s.held = 1;
+    expect(eco.canCastAt(s, true)).toBe('ok');
+  });
+});
+
+describe('rod levels', () => {
+  const owner = () => {
+    const s = newSave();
+    s.level = 20;
+    s.seaRod = true;
     return s;
   };
 
@@ -702,8 +746,8 @@ describe('rod levels', () => {
     expect(eco.rodLevelCost(60)).toEqual({ coins: 400_000, pearls: 1540 });
   });
 
-  it('levels the Aurora Rod for coins and pearls, and coins alone are never enough', () => {
-    const s = aurora();
+  it('levels the Deep Sea Rod for coins and pearls, and coins alone are never enough', () => {
+    const s = owner();
     s.coins = 10_000_000;
     expect(eco.levelRod(s)).toBe(false);
     s.pearls = 124;
@@ -717,47 +761,46 @@ describe('rod levels', () => {
     expect(s.rodLevel).toBe(1);
   });
 
-  it('needs the Aurora Rod', () => {
+  it('needs the Deep Sea Rod: the Aurora Rod no longer levels', () => {
     const s = newSave();
-    s.coins = 1e6;
-    s.pearls = 1000;
+    Object.assign(s, { level: 20, coins: 1e6, pearls: 1000 });
+    s.locker.rods.push('aurora');
+    eco.equipRod(s, 'aurora');
     expect(eco.levelRod(s)).toBe(false);
     expect(s.rodLevel).toBe(0);
+    expect(eco.rodPlus(s, 'aurora')).toBe('');
   });
 
-  it('counts at sea only with the Aurora Rod in use, keeps the level if the rod is dropped, and shows it in the name', () => {
-    const s = aurora();
+  it('counts at sea once the Deep Sea Rod is bought, levels from the Aurora Rod included, and shows in its name', () => {
+    const s = newSave();
     s.rodLevel = 7;
-    expect(eco.seaRodLevel(s)).toBe(7);
-    expect(eco.rodPlus(s, 'aurora')).toBe(' +7');
-    expect(eco.rodPlus(s, 'carbon')).toBe('');
-    s.locker.rods.push('carbon');
-    eco.equipRod(s, 'carbon');
     expect(eco.seaRodLevel(s)).toBe(0);
-    eco.equipRod(s, 'aurora');
-    s.held = 0;
-    expect(eco.dropHeld(s)).toMatchObject({ k: 'rod', id: 'aurora' });
-    expect(s.rodLevel).toBe(7);
-    expect(eco.rodPlus(newSave(), 'aurora')).toBe('');
+    s.seaRod = true;
+    expect(eco.seaRodLevel(s)).toBe(7);
+    expect(eco.seaRodName(s)).toBe('Deep Sea Rod +7');
+    expect(eco.seaRodName(s, true)).toBe('Sea Rod +7');
+    expect(eco.rodPlus(s, 'searod')).toBe(' +7');
+    expect(eco.rodPlus(s, 'carbon')).toBe('');
+    expect(eco.seaRodName(newSave())).toBe('Deep Sea Rod');
   });
 
   it('starts at 0 on old saves and cleans bad values', () => {
     const old = newSave() as Partial<SaveData>;
     delete old.pearls;
     delete old.rodLevel;
-    expect(migrate(old)).toMatchObject({ pearls: 0, rodLevel: 0 });
-    expect(migrate({ ...newSave(), pearls: -5, rodLevel: 'x' })).toMatchObject({ pearls: 0, rodLevel: 0 });
-    expect(migrate({ ...newSave(), pearls: 41.7, rodLevel: 12 })).toMatchObject({ pearls: 41, rodLevel: 12 });
+    delete old.seaRod;
+    expect(migrate(old)).toMatchObject({ pearls: 0, rodLevel: 0, seaRod: false });
+    expect(migrate({ ...newSave(), pearls: -5, rodLevel: 'x', seaRod: 'yes' })).toMatchObject({ pearls: 0, rodLevel: 0, seaRod: false });
+    expect(migrate({ ...newSave(), pearls: 41.7, rodLevel: 12, seaRod: true })).toMatchObject({ pearls: 41, rodLevel: 12, seaRod: true });
   });
 });
 
 describe('the Deep Sea Line', () => {
-  const aurora = () => {
+  const owner = () => {
     const s = newSave();
     s.level = 20;
     s.line = 'moonsilk';
-    s.locker.rods.push('aurora');
-    eco.equipRod(s, 'aurora');
+    s.seaRod = true;
     return s;
   };
 
@@ -770,11 +813,12 @@ describe('the Deep Sea Line', () => {
     }
   });
 
-  it('levels for coins and pearls with the Aurora Rod, and coins alone are never enough', () => {
+  it('levels for coins and pearls with the Deep Sea Rod, and coins alone are never enough', () => {
     const none = newSave();
     Object.assign(none, { coins: 1e6, pearls: 1000 });
+    none.locker.rods.push('aurora');
     expect(eco.levelSeaLine(none)).toBe(false);
-    const s = aurora();
+    const s = owner();
     s.coins = 10_000_000;
     expect(eco.levelSeaLine(s)).toBe(false);
     s.pearls = 124;
@@ -785,25 +829,35 @@ describe('the Deep Sea Line', () => {
     expect(s.seaLine).toBe(1);
   });
 
-  it('eases sea fights on the line track, whatever rod is in use', () => {
-    const s = aurora();
+  it('eases sea fights on both tracks', () => {
+    const s = owner();
     expect(eco.seaGear(s)).toEqual({ rod: 0, line: 0 });
     Object.assign(s, { rodLevel: 3, seaLine: 5 });
     expect(eco.seaGear(s)).toEqual({ rod: 3, line: 5 });
   });
 
-  it('is the line on the rod from +1: tier 5 in the pond, its level in the name, and the pond lines below it', () => {
-    const s = aurora();
+  it('is sea only: the pond keeps its own line, and pond lines stay for sale', () => {
+    const s = owner();
+    s.seaLine = 4;
     expect(eco.lineOf(s).id).toBe('moonsilk');
     expect(eco.lineName(s)).toBe('Moonsilk Line');
-    s.seaLine = 4;
-    expect(eco.lineOf(s)).toMatchObject({ name: 'Deep Sea Line', tier: 5 });
-    expect(eco.lineName(s)).toBe('Deep Sea Line +4');
-    expect(eco.lineBeaten(s, byId(LINES, 'moonsilk'))).toBe(true);
+    expect(eco.seaLineName(s)).toBe('Deep Sea Line +4');
+    expect(eco.seaLineName(newSave())).toBe('Deep Sea Line');
     s.line = 'braid';
     s.coins = 1e6;
-    expect(eco.buyLine(s, 'moonsilk')).toBe(false);
-    expect(s.line).toBe('braid');
+    expect(eco.lineBeaten(s, byId(LINES, 'moonsilk'))).toBe(false);
+    expect(eco.buyLine(s, 'moonsilk')).toBe(true);
+    expect(s.line).toBe('moonsilk');
+  });
+
+  it('gives Moonsilk to saves from before the Deep Sea Rod that had it spooled over a lighter pond line, once', () => {
+    const old = { ...newSave(), line: 'braid', seaLine: 3 } as Partial<SaveData>;
+    delete old.seaRod;
+    expect(migrate(old).line).toBe('moonsilk');
+    const unlevelled = { ...old, seaLine: 0 };
+    expect(migrate(unlevelled).line).toBe('braid');
+    // A save made since keeps its line: the Deep Sea Line never held the pond for it.
+    expect(migrate({ ...newSave(), line: 'braid', seaLine: 3 }).line).toBe('braid');
   });
 
   it('starts at 0 on old saves and cleans bad values', () => {
@@ -822,5 +876,6 @@ describe('pearl box', () => {
     expect(eco.showPearlBox({ ...s, slots: [rod('aurora'), ...s.slots.slice(1)] })).toBe(false);
     expect(eco.showPearlBox({ ...s, pearls: 1 })).toBe(true);
     expect(eco.showPearlBox({ ...s, pearls: 0, rodLevel: 2 })).toBe(true);
+    expect(eco.showPearlBox({ ...s, pearls: 0, seaLine: 1 })).toBe(true);
   });
 });
