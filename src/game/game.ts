@@ -815,6 +815,9 @@ export class Game {
         warning: this.reel?.warning,
         strain: this.reel?.strain,
         frays: this.reel?.wear.frays,
+        fightLeft: this.reel?.tires ? this.reel.fightLeft : undefined,
+        tired: this.reel?.tired,
+        exhausted: this.reel?.exhausted,
         reason: this.reel?.reason,
         hooked: this.hooked?.id,
         power: this.power,
@@ -2416,7 +2419,7 @@ export class Game {
     $('alert').classList.add('hidden');
     const hard = this.fightD;
     this.reel = new Reel(hard, mulberry(this.fightSeed), this.fightTune);
-    this.diveHud.fight(this.fightB);
+    this.diveHud.fight(this.map.sea ? { b: this.fightB, pull: this.fightPull, overLine: this.overLine } : null);
     this.holds = new HoldLog();
     this.reelAcc = 0;
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
@@ -3306,7 +3309,33 @@ export class Game {
     ctx.textAlign = 'center';
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 6;
-    ctx.fillStyle = accent;
+    // Fight left (a sea fish): drains while it surges against a tight line; yellow once it's tired, empty once it's
+    // exhausted. The label stays FIGHT throughout, so "tired" can't read as the player (Oscar, 2026-11-01).
+    if (r.tires) {
+      const bw = 132, bh = 8, bx = cx - bw / 2, by = cy - 132;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath();
+      ctx.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 6);
+      ctx.fill();
+      if (r.fightLeft > 0) {
+        // A soft glow in its own colour while the fish is wearing itself out in a surge against a tight line.
+        const colour = r.tired ? '#ffd23a' : '#ff9a3c';
+        ctx.fillStyle = colour;
+        if (r.tiring) {
+          ctx.shadowColor = colour;
+          ctx.shadowBlur = 8 + 4 * pulse;
+        }
+        ctx.beginPath();
+        ctx.roundRect(bx, by, Math.max(bh, bw * r.fightLeft), bh, 4);
+        ctx.fill();
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 6;
+      }
+      ctx.font = '800 12px system-ui';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('FIGHT', cx, by - 7);
+    }
+    ctx.fillStyle = r.exhausted && !surge && !red ? '#7dff8a' : accent;
     ctx.font = `800 ${danger ? 34 + 4 * pulse : 28}px system-ui`;
     const big = red
       ? 'EASE OFF!'
@@ -3316,9 +3345,11 @@ export class Game {
           ? 'KEEP IT GREEN'
           : warn
             ? 'SURGE!'
-            : this.holding
-              ? 'REELING'
-              : 'HOLD TO REEL';
+            : r.exhausted
+              ? 'REEL IT IN!'
+              : this.holding
+                ? 'REELING'
+                : 'HOLD TO REEL';
     ctx.fillText(big, cx, cy + 150);
     ctx.font = '600 14px system-ui';
     ctx.fillStyle = '#fff';
@@ -3329,11 +3360,15 @@ export class Game {
         : taking
           ? 'The fish is taking line'
           : r.dragging
-            ? this.overRod ? 'Too heavy for your rod: it drags line even in the green' : 'Strong fish! Ride high in the green to give less line'
+            // Strength first: a fish over the line is lost to the line, whatever its weight (REELING.md, "Both").
+            ? this.map.sea && this.overLine ? 'Too strong for your line: its surges reach the red'
+              : this.overRod ? 'Too heavy for your rod: it drags line even in the green' : 'Strong fish! Ride high in the green to give less line'
             : surge
               ? 'Stay between the marker and the red'
             : warn
               ? 'Get ready to ease off'
+              : r.exhausted
+                ? 'The fish has no fight left'
               : r.inSweetSpot
           ? 'Sweet spot — reeling fast!'
           : '';

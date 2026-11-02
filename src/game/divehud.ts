@@ -127,14 +127,37 @@ export class DiveHud {
     if (due) this.timer = window.setTimeout(() => this.render(), due - now + 20);
   }
 
-  /** Names the hooked fish's way of fighting while it's on, or hides the tag. */
-  fight(b: Behaviour | null | undefined): void {
-    this.tag.classList.toggle('hidden', !b || !this.view);
-    if (b) this.tag.innerHTML = `${BEHAVIOUR_ICON[b]} ${BEHAVIOURS[b].name} <span>· ${BEHAVIOURS[b].hint.toLowerCase()}</span>`;
+  /** Shows the hooked fish's pull and way of fighting while it's on (`fishTagHtml`), red when it's too strong for the line. */
+  fight(f: SeaFightTag | null): void {
+    const html = f && this.view ? fishTagHtml(f) : '';
+    this.tag.classList.toggle('hidden', !html);
+    this.tag.classList.toggle('over', !!f?.overLine);
+    if (html) this.tag.innerHTML = html;
   }
 }
 
 const BEHAVIOUR_ICON: Record<Behaviour, string> = { runner: '🏃', thrasher: '💥', sounder: '⤵️' };
+
+/** What the top sticker says about a hooked sea fish. */
+export interface SeaFightTag {
+  b: Behaviour | null | undefined;
+  /** Its pull roll's word (`pullWord`); none for a typical one. */
+  pull: 'strong' | 'light' | null | undefined;
+  /** Its surges reach the red: the line, not the player, decides this fight. */
+  overLine: boolean;
+}
+
+/**
+ * The sticker for the whole fight: the fish's pull and behaviour, and "too strong for your line" in place of the
+ * behaviour's hint when its surges reach the red, so the hook toast's warning doesn't vanish after a few seconds.
+ * Empty for a typical fish with no behaviour that the line holds.
+ */
+export function fishTagHtml(f: SeaFightTag): string {
+  const parts = [f.pull === 'strong' ? '💪 Strong' : f.pull === 'light' ? '🪶 Light' : '', f.b ? `${BEHAVIOUR_ICON[f.b]} ${BEHAVIOURS[f.b].name}` : ''].filter(Boolean);
+  const hint = f.overLine ? 'too strong for your line' : f.b ? BEHAVIOURS[f.b].hint.toLowerCase() : '';
+  if (!parts.length) return f.overLine ? 'Too strong for your line' : '';
+  return `${parts.join(' · ')}${hint ? ` <span>· ${hint}</span>` : ''}`;
+}
 
 /** What the water at this depth holds, for Reed's panel and the marker card. */
 function waterText(depth: number): string {

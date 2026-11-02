@@ -34,6 +34,11 @@ export interface BotFight {
   lineOut: number;
   /** The line snapped while the button was up (must never happen). */
   snappedReleased: boolean;
+  /** The fish got tired, or exhausted, before the fight ended (a sea fish, `P.tire`). */
+  tired: boolean;
+  exhausted: boolean;
+  /** Surges that started while the fish was tired. */
+  tiredSurges: number;
 }
 
 /**
@@ -48,6 +53,7 @@ export function botFight(d: Difficulty, react: number, style: BotStyle, rng: () 
   let desired = true;
   const queue: { at: number; v: boolean }[] = [];
   let t = 0;
+  let tiredSurges = 0;
   while (r.status === 'reeling' && t < maxT) {
     const take = r.surging ? Math.min(r.need + style.lo, GOOD_MAX - style.hi - 0.03) : 0.6;
     const want: boolean = style.naive
@@ -59,7 +65,9 @@ export function botFight(d: Difficulty, react: number, style: BotStyle, rng: () 
     }
     while (queue.length && queue[0].at <= t) holding = queue.shift()!.v;
     log?.push(holding);
+    const was = r.surgeCount;
     r.update(dt, holding);
+    if (r.surgeCount > was && r.tired) tiredSurges++;
     t += dt;
   }
   return {
@@ -68,6 +76,9 @@ export function botFight(d: Difficulty, react: number, style: BotStyle, rng: () 
     frays: r.wear.frays,
     lineOut: r.wear.lineOut,
     snappedReleased: r.status === 'snapped' && !holding,
+    tired: r.tired,
+    exhausted: r.exhausted,
+    tiredSurges,
   };
 }
 

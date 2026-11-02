@@ -17,6 +17,7 @@
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
 import deepSea from '../assets/images/news/deep-sea.jpg';
+import fightLeft from '../assets/images/news/fight-left.jpg';
 
 export interface NewsEntry {
   /** Release number: unique, and higher than every entry below it. */
@@ -33,6 +34,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 2,
+    date: '2026-11-01',
+    title: 'Wear down the big ones',
+    image: fightLeft,
+    alt: "A charter fight at Marker 35 in the Drop-off: above the reel gauge a half-empty yellow FIGHT bar, and under it a tag reads Runner, long pulls that take line",
+    body: [
+      "Fish at sea now tire as you fight them. The <b>Fight</b> bar above the reel gauge shows how much fight a hooked fish has left.",
+      "Keep your line tight through its surges to wear it down; the bar glows while it's tiring. As the bar runs low the fish pulls weaker, in shorter surges that come less often, and once it's empty the fish stops fighting: reel it in.",
+      "A tag under the gauge shows how each fish fights and whether it's a strong one. When it turns red, that fish is too strong for your line and won't tire out of the red: the <b>Deep Sea Line</b> at <b>Marlow's stall</b> holds it.",
+    ],
+  },
   {
     id: 1,
     date: '2026-11-01',

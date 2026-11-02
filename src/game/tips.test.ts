@@ -62,18 +62,22 @@ describe('loss verdict', () => {
     expect(lossVerdict('snapped', { rod: 'twig', line: 'twine', level: 1 }, null, 'Marlow').cause).toBe('Held in the red through a surge');
   });
 
-  it('at sea, names the next level of the one track the fish was over', () => {
+  it('at sea, names the next level of the one track the fish was over, the line first', () => {
     const s = { rod: 'aurora', line: 'moonsilk', level: 20, rodLevel: 3, seaLine: 0 };
     const snap = seaLossVerdict('snapped', s, { rod: true, line: true }, 'Marlow');
     expect(snap).toMatchObject({ title: 'SNAP!', cause: 'Too strong for your Moonsilk Line' });
     expect(snap.fix).toBe(`Deep Sea Line +1 at Marlow's · 40,500 ${COIN} + 124 Black Pearls`);
     expect(seaLossVerdict('snapped', { ...s, seaLine: 2 }, { rod: false, line: true }, 'Marlow').cause).toBe('Too strong for your Deep Sea Line +2');
-    const ran = seaLossVerdict('escaped', s, { rod: true, line: true }, 'Marlow');
+    const ran = seaLossVerdict('escaped', s, { rod: true, line: false }, 'Marlow');
     expect(ran).toMatchObject({ title: 'RAN OFF!', cause: 'Too heavy for your Aurora Rod +3' });
     expect(ran.fix).toBe(`Aurora Rod +4 at Marlow's · 99,000 ${COIN} + 196 Black Pearls`);
+    // The line first: a fish over it that ran off took the line given to keep it from fraying (Oscar's play test).
+    for (const rod of [true, false]) {
+      expect(seaLossVerdict('escaped', s, { rod, line: true }, 'Marlow')).toMatchObject({ title: 'RAN OFF!', cause: 'Too strong for your Moonsilk Line', fix: snap.fix });
+    }
     // Not over the track that lost it: a reel tip.
     expect(seaLossVerdict('snapped', s, { rod: true, line: false }, 'Marlow').cause).toBe('Held in the red through a surge');
-    expect(seaLossVerdict('escaped', s, { rod: false, line: true }, 'Marlow').cause).toBe('The fish took all your line');
+    expect(seaLossVerdict('escaped', s, { rod: false, line: false }, 'Marlow').cause).toBe('The fish took all your line');
   });
 });
 

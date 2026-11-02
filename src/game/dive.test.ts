@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
 import { DIVE, SEA_FIGHT, ZONES, type Behaviour } from '../data/dive';
 import {
-  BEHAVIOUR_TUNE, afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, pearlsAt, powInt, pullWord, rodLevelEase, rollPull, seaOverGear, STRENGTH_RED, fightTune, LEGEND_TUNE,
+  BEHAVIOUR_TUNE, afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, pearlsAt, powInt, pullWord, rodLevelEase, rollPull, seaOverGear, STRENGTH_RED, fightTune, LEGEND_TUNE, SEA_TUNE,
   rollSeaFish, seaDifficulty, startDive, surface, zoneAt, type Chart, type SeaGear,
 } from './dive';
 import { rollSeaCast } from './economy';
 import { mulberry } from './env';
 import { sizeDifficulty } from './progression';
-import { Reel, type ReelWear } from './reel';
+import { GOOD_MAX, Reel, type ReelWear } from './reel';
 import { STYLES, botCell, botFight, botSweep } from './reelbot';
 import { newSave } from './state';
 
@@ -163,16 +163,17 @@ describe('sea zones and bites', () => {
   });
 
   it('a legend fights 1.5× as long, no stronger and no heavier: the same land rate and spool', () => {
-    expect(fightTune(null, 'pewtercod')).toBeUndefined();
-    expect(fightTune('runner', 'galemackerel')).toBe(BEHAVIOUR_TUNE.runner);
-    expect(fightTune('runner', 'marlin')).toEqual({ ...BEHAVIOUR_TUNE.runner, ...LEGEND_TUNE });
+    expect(fightTune(null, 'pewtercod')).toEqual(SEA_TUNE);
+    expect(fightTune('runner', 'galemackerel')).toEqual({ ...SEA_TUNE, ...BEHAVIOUR_TUNE.runner });
+    expect(fightTune('runner', 'marlin')).toEqual({ ...SEA_TUNE, ...BEHAVIOUR_TUNE.runner, ...LEGEND_TUNE });
     const d = { weight: 2.6, strength: 2.3, pace: 2 };
-    const plain = botCell(d, 0.25, 60);
+    const plain = botCell(d, 0.25, 60, 1, STYLES, fightTune(null, 'irontuna'));
     const legend = botCell(d, 0.25, 60, 1, STYLES, fightTune(null, 'leviathan'));
     expect(legend.t / plain.t).toBeGreaterThan(1.35);
-    expect(legend.t / plain.t).toBeLessThan(1.65);
+    expect(legend.t / plain.t).toBeLessThan(1.7);
     expect(legend.land).toBeGreaterThanOrEqual(plain.land - 0.05);
-    expect(legend.lineOut).toBeLessThan(plain.lineOut * 1.2);
+    // Its tired surges fade over a longer fight, so it takes a little more line (about 1.4×; legends are 1 bite in 20).
+    expect(legend.lineOut).toBeLessThan(plain.lineOut * 1.45);
   }, 30_000);
 
   it('each zone past the Shelf has its behaviour, and the Abyss mixes all three', () => {
@@ -290,7 +291,7 @@ function seaRow(gear: SeaGear, react: number, from = 0, to = 300, n = 20) {
     const fish = byId(FISH, zoneAt(depth).fish[0]);
     let land = 0, t = 0, metres = 0;
     for (const [b, p] of behaviourOdds(depth)) for (const pull of pulls) for (const big of [0.88, 1.12]) {
-      const c = botCell(seaDifficulty(depth, gear, fish, pull, big), react, n, 1, STYLES, b ? BEHAVIOUR_TUNE[b] : undefined);
+      const c = botCell(seaDifficulty(depth, gear, fish, pull, big), react, n, 1, STYLES, fightTune(b, fish.id));
       const k = p / (pulls.length * 2);
       land += c.land * k;
       t += c.t * k;
@@ -309,6 +310,134 @@ function crossing(rows: ReturnType<typeof seaRow>, share: number): number {
   }
   return Infinity;
 }
+
+describe('fight left', () => {
+  /** A fight held gently in the green, like the room tests' player: the surges' peak pulls and when it was exhausted. */
+  function watch(d: { weight: number; strength: number; pace: number }, seed: number, tune = SEA_TUNE) {
+    const r = new Reel(d, mulberry(seed), tune);
+    const peaks: number[] = [];
+    // The calm before each surge and the surge's length, at full fight and late in the tired stage.
+    const gaps = { full: [] as number[], tired: [] as number[] };
+    const surges = { full: [] as number[], tired: [] as number[] };
+    let peak = 0, tiredAt = -1, exhaustedAt = -1, surgesAfter = 0, lastEnd = -1, start = -1, late = false;
+    for (let k = 0; k < 60 * 300 && r.status === 'reeling'; k++) {
+      const was = r.surgeCount, surging = r.surging;
+      r.update(1 / 60, r.surging ? r.tension < Math.min(0.75, r.need + 0.1) : r.tension < 0.6);
+      if (r.surgeCount > was && exhaustedAt >= 0) surgesAfter++;
+      const sample = !r.tired || r.fightLeft < 0.2;
+      if (r.surgeCount > was) {
+        late = r.tired;
+        start = sample ? r.elapsed : -1;
+        if (lastEnd >= 0 && sample) (late ? gaps.tired : gaps.full).push(r.elapsed - lastEnd);
+      }
+      if (surging && !r.surging) {
+        if (start >= 0) (late ? surges.tired : surges.full).push(r.elapsed - start);
+        lastEnd = r.elapsed;
+      }
+      if (r.surging) peak = Math.max(peak, r.need);
+      else if (peak > 0) peaks.push(peak), (peak = 0);
+      if (r.tired && tiredAt < 0) tiredAt = r.elapsed;
+      if (r.exhausted && exhaustedAt < 0) exhaustedAt = r.elapsed;
+    }
+    return { r, peaks, gaps, surges, tiredAt, exhaustedAt, surgesAfter };
+  }
+
+  it('pond fish never tire; every sea fish does', () => {
+    expect(new Reel(2.5, mulberry(1)).tires).toBe(false);
+    expect(fightTune(null, 'bluegill')).toBeUndefined();
+    for (const z of ZONES) for (const id of [...z.fish, ...z.legends]) expect(new Reel(2.5, mulberry(1), fightTune(null, id)).tires, id).toBe(true);
+  });
+
+  it('an exhausted fish surges no more and comes in (most are reeled in while still tired)', () => {
+    let exhausted = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const w = watch({ weight: 3.2, strength: 2, pace: 2 }, seed);
+      expect(w.r.status).toBe('caught');
+      if (w.exhaustedAt < 0) continue;
+      exhausted++;
+      expect(w.surgesAfter).toBe(0);
+      expect(w.r.warning).toBe(false);
+    }
+    expect(exhausted).toBeGreaterThan(2);
+  });
+
+  it('a tired fish still surges, shorter and further apart the more tired it is', () => {
+    const gaps = { full: [] as number[], tired: [] as number[] };
+    const surges = { full: [] as number[], tired: [] as number[] };
+    for (let seed = 1; seed <= 30; seed++) {
+      const w = watch({ weight: 3.2, strength: 2, pace: 2 }, seed);
+      gaps.full.push(...w.gaps.full);
+      gaps.tired.push(...w.gaps.tired);
+      surges.full.push(...w.surges.full);
+      surges.tired.push(...w.surges.tired);
+    }
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    expect(gaps.tired.length).toBeGreaterThan(5);
+    expect(mean(gaps.tired)).toBeGreaterThan(1.4 * mean(gaps.full));
+    expect(mean(surges.tired)).toBeLessThan(0.8 * mean(surges.full));
+  });
+
+  it('a tired fish fades gradually: no surge pulls far below the one before it', () => {
+    let steps = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const { peaks } = watch({ weight: 3.2, strength: 2.6, pace: 2 }, seed);
+      for (let i = 1; i < peaks.length; i++) {
+        // At most about a sixth of the gauge a surge (the marker slides; it doesn't jump).
+        expect(peaks[i - 1] - peaks[i], `seed ${seed}, surge ${i}`).toBeLessThan(0.16);
+        steps++;
+      }
+    }
+    expect(steps).toBeGreaterThan(60);
+  });
+
+  it('a tired fish pulls weaker, but a surge that reaches the red never tires out of it', () => {
+    const fade = (strength: number) => {
+      let first = 0, lastPulls = 0, inRed = true;
+      for (let seed = 1; seed <= 40; seed++) {
+        const { peaks } = watch({ weight: 3.2, strength, pace: 2 }, seed);
+        if (peaks.length < 4) continue;
+        first += peaks[0] + peaks[1];
+        lastPulls += peaks[peaks.length - 1] + peaks[peaks.length - 2];
+        // Fish whose own roll pulls into the red at full strength stay there.
+        if (peaks[0] > GOOD_MAX + 0.05) inRed &&= peaks.every((p) => p > GOOD_MAX);
+      }
+      return { ratio: lastPulls / first, inRed };
+    };
+    // A fish the line holds fades toward exhausted; one over the line keeps every surge in the red.
+    expect(fade(2.6).ratio).toBeLessThan(0.75);
+    expect(fade(3.5).inRed).toBe(true);
+  });
+
+  it('every surge of a sea fish pulls about the same, so the marker reads as its strength', () => {
+    // At full fight, before it tires.
+    for (let seed = 1; seed <= 10; seed++) {
+      const peaks = watch({ weight: 3.2, strength: 2.6, pace: 2 }, seed).peaks.slice(0, 3);
+      for (const p of peaks) expect(Math.abs(p / peaks[0] - 1)).toBeLessThan(0.12);
+    }
+  });
+
+  it('heavier fish have more fight in them, so the rod still decides how long a fight runs', () => {
+    const tiresAfter = (weight: number) => {
+      let t = 0;
+      for (let seed = 1; seed <= 20; seed++) t += watch({ weight, strength: 2, pace: 2 }, seed).tiredAt;
+      return t / 20;
+    };
+    // Fight is in proportion to weight (3.2 is 1.45× 2.2).
+    expect(tiresAfter(3.2)).toBeGreaterThan(1.3 * tiresAfter(2.2));
+  });
+
+  it('no slog: a careful player fights a Drop-off fish at marker 35 inside a minute, 9 times in 10', () => {
+    const rng = mulberry(35);
+    const ts: number[] = [];
+    for (let i = 0; i < 80; i++) {
+      const bite = rollSeaFish(35, rng);
+      const d = seaDifficulty(35, none, bite.fish, bite.pull);
+      ts.push(botFight(d, 0.3, { lo: 0.05, hi: 0.2 }, mulberry(i + 1), mulberry(i + 99), fightTune(bite.behaviour, bite.fish.id)).t);
+    }
+    ts.sort((a, b) => a - b);
+    expect(ts[Math.floor(0.9 * ts.length)]).toBeLessThan(60);
+  }, 30_000);
+});
 
 describe('sea gear messages', () => {
   it('a fish is over the line once its surges reach the red, and over the rod at its heaviest', () => {
@@ -341,20 +470,22 @@ describe('the frontier', () => {
     }
   }, 30_000);
 
+  // Fish tire, so a fish the line holds costs bounded spool and one over it is lost: past the Drop-off the land rate
+  // follows the share of fish the line holds, and the spool climbs less steeply than before they tired (2026-11-01).
   it('each landed fish costs more of the spool as it nears, marker by marker', () => {
     for (const rows of [fast.none, fast.five]) {
       const near = rows.filter((r) => r.depth >= crossing(rows, 0.5) - 30 && r.land > 0.5);
       expect(near.length).toBeGreaterThanOrEqual(4);
       // Never far back from the dearest marker so far (the bots are noisy near 50%), and well up overall.
       for (let i = 1; i < near.length; i++) expect(near[i].metres).toBeGreaterThan(0.75 * Math.max(...near.slice(0, i).map((r) => r.metres)));
-      expect(near[near.length - 1].metres).toBeGreaterThan(2.5 * near[0].metres);
+      expect(near[near.length - 1].metres).toBeGreaterThan(1.75 * near[0].metres);
     }
   }, 30_000);
 
   it('the water short of it is not a walkover: fights there last 15 s or more', () => {
     for (const rows of [fast.none, fast.five]) {
       const comfy = rows.find((r) => r.depth >= crossing(rows, 0.5) - 30)!;
-      expect(comfy.land).toBeGreaterThan(0.85);
+      expect(comfy.land).toBeGreaterThan(0.8);
       expect(comfy.t).toBeGreaterThanOrEqual(15);
     }
   }, 30_000);

@@ -14,8 +14,8 @@ const scale = (a: number[], ...m: number[]) => a.map((x, i) => x * (m[i] ?? 1));
 export const BEHAVIOUR_TUNE: Record<Behaviour, ReelTune> = {
   // Longer surges, and slack costs more line.
   runner: { surge: scale(P.surge, 1.1), run: 1.7 },
-  // Short, close, uneven surges that build quicker.
-  thrasher: { surge: scale(P.surge, 0.7), gap: scale(P.gap, 0.55), powerJitter: 0.4, rise: scale(P.rise, 0.8) },
+  // Short, close surges that build quicker.
+  thrasher: { surge: scale(P.surge, 0.7), gap: scale(P.gap, 0.55), rise: scale(P.rise, 0.8) },
   // Little warning before a surge.
   sounder: { warn: scale(P.warn, 0.4, 1, 1, 0.4) },
 };
@@ -23,10 +23,22 @@ export const BEHAVIOUR_TUNE: Record<Behaviour, ReelTune> = {
 /** A sea legend's fight: 1.5× as long (Oscar, 2026-11-01), the line moving slower both ways, so not stronger or heavier. */
 export const LEGEND_TUNE: ReelTune = { length: 1.5 };
 
-/** The reel levers of a sea fight: its behaviour's, and the legend's length if it is one. Used by the fight and the server's replay. */
+/**
+ * How every sea fish fights (REELING.md, "Fish stamina"): it tires, from close, full-strength bursts to weaker, shorter,
+ * sparser surges until it's exhausted and comes in; heavier fish have more fight in them, so the rod still decides
+ * how much spool a fight costs. Each surge pulls about the same, so the gauge's marker reads as the fish's strength
+ * (and, as it tires, its fading strength) rather than luck.
+ */
+export const SEA_TUNE: ReelTune = { powerJitter: 0.05, tire: [6, 0, 0.5, 0.25, 0.8, 1, 0.6, 0.75, 0.6, 0.35, 0.45] };
+
+/**
+ * The reel levers of a sea fight: tiring, its behaviour's, and the legend's length if it is one. Pond fish have none.
+ * Used by the fight and the server's replay.
+ */
 export function fightTune(behaviour: Behaviour | null | undefined, fishId: string | null | undefined): ReelTune | undefined {
-  const b = behaviour ? BEHAVIOUR_TUNE[behaviour] : undefined;
-  return FISH.find((f) => f.id === fishId)?.legend ? { ...b, ...LEGEND_TUNE } : b;
+  const fish = FISH.find((f) => f.id === fishId);
+  if (!fish?.sea) return behaviour ? BEHAVIOUR_TUNE[behaviour] : undefined;
+  return { ...SEA_TUNE, ...(behaviour ? BEHAVIOUR_TUNE[behaviour] : undefined), ...(fish.legend ? LEGEND_TUNE : undefined) };
 }
 
 /** base^n for a whole n ≥ 0, by repeated multiplication (same result in every JS engine, unlike `Math.pow`). */

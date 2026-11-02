@@ -95,15 +95,17 @@ On the base Aurora Rod and line Oscar reached fish 39 with no snaps and ran out 
 | Fast (0.25 s, best style, rides near the red) | 15 m / 0% | 27 / 0% | 42 / 1% | 65 / 0% | 76 / 0% | ~fish 49 |
 | Careful (0.3 s, eases off 0.2 short of the red, like Oscar) | 33 / 3% | 65 / 14% | 127 / 36% | 163 / 42% | 152 / 41% | ~fish 36 |
 
-The careful player's 90th-percentile fight passes 2.5 minutes from marker 30 on: easing off early hands the fish line in every surge, and Drop-off weight makes it slow to win back. A lower weight cap (3.0), milder Runners (`run` 1.3) or less pull spread (1.2) each moved the careful player's run by a fish at most, so the fix is fish that tire (TODO, fight left).
+The careful player's 90th-percentile fight passes 2.5 minutes from marker 30 on: easing off early hands the fish line in every surge, and Drop-off weight makes it slow to win back. A lower weight cap (3.0), milder Runners (`run` 1.3) or less pull spread (1.2) each moved the careful player's run by a fish at most, so the fix is fish that tire (built: "Fight left" below).
 
 ### Fish stamina (fight left)
 
-How much fight a hooked fish has left. It drains with every surge and with time spent held in the green, and a tired fish surges less often and less hard. Stamina is what makes the one-tier-over fight an arc (hard start, tired finish) rather than a flat slog, and it belongs on the **weight** side only:
+How much fight a hooked fish has left. Built for the sea (2026-11-01, `P.tire` in `reel.ts`, `SEA_TUNE` in `dive.ts`); pond fights keep the old light trim (surge power ×0.85-1) and no bar. The fight is you against the fish: your skill and persistence, backed by your gear, against its size, strength and energy.
 
-- It shortens and softens surges. It **never** lowers a surge's pull below the line's red. A fish that can snap the line keeps that ability until it's landed or gone, so stamina never erodes the hard wall.
-- It never makes a two-tiers-over fish landable. Drag past that point beats the reel even when the fish is tired.
-- Shown as a simple fight-left bar, so a long heavy fight visibly progresses and the player can see the payoff of hanging on.
+- **Three stages, on one bar above the gauge labelled FIGHT** (only the bar says which stage; words like "tired" could read as the player, Oscar). **Full fight** (orange): full-strength surges, the longest, close together. **Tired** (yellow, from 60% left): as it drains, its surges pull weaker (to 40%), get shorter (to 65%) and come further apart (to 1.75×), all gradually: the pull marker slides down even within a surge. **Exhausted** (empty): dead weight, no more surges, REEL IT IN!
+- **You tire it.** Fight drains while it surges against a tight line (tension at or above its pull), at a quarter of that against slack, and at 45% of that while you reel it in the calm with the gauge green. The bar glows softly while it's surging against a tight line, where it tires fastest.
+- **Heavier fish have more fight**, in proportion to weight (6 s of surging a unit), so the rod still decides how long a fight runs and how much spool it costs; a legend's has 1.5× as much.
+- **Tiring never beats the line.** A surge that reaches the red at full strength stays just inside it however tired the fish gets, so a fish too strong for your line keeps fraying it; it can't be waited out.
+- **The marker reads as strength.** Each surge of a sea fish pulls within ±5% of the others (`powerJitter`, ±20% in the pond), so how high the marker sits is the fish's strength, and its fall is the fish tiring, not luck. Fish still differ from each other by their own pull roll.
 
 ### Size
 
@@ -177,7 +179,7 @@ The sea uses the same two axes, but its gear climbs in levels rather than tiers 
   - **The Abyss** — all three behaviours, on top of everything above.
 
   A zone's lead and its behaviour come in a quarter at a time over its first four markers, so a new way of fighting arrives a few fish at a time rather than at once. The behaviours themselves are feel only: each plays within about 5% of a plain fish of the same difficulty.
-- **The last markers are a gamble, not a wall.** Every fish rolls its own pull, up to ×1.4 either way, and the hook toast says so ("A strong one!" / "A light one."). Near the frontier some fish are fine and some are too much, and the player sees which before the first surge. Without the roll every fish at a depth is the same and the land rate falls off a cliff.
+- **The last markers are a gamble, not a wall.** Every fish rolls its own pull, up to ×1.4 either way, and the hook toast says so ("A strong one!" / "A light one."); the sticker under the gauge keeps it up all fight ("💪 Strong · 💥 Thrasher"), red with "too strong for your line" when its surges reach the red. Near the frontier some fish are fine and some are too much, and the player sees which before the first surge. Without the roll every fish at a depth is the same and the land rate falls off a cliff.
 - **Both tracks count, and neither is a wall on its own.** Each Aurora Rod level takes the most off weight and a little off strength; each sea line level the reverse. A player who levels only one track still goes deeper, just less far than one who levels both.
 
 Nothing new to learn out there, only harder versions of what the pond already taught.
@@ -191,7 +193,7 @@ What the player has to hold in their head, kept to the minimum that is still act
 - **One line bar** that already exists, now the place where weight-vs-rod is read.
 - **Two gear numbers** to compare against a fish: rod and line, on one item. Two messages, one each.
 - **Two tags** a fish can carry, one per axis.
-- **One optional bar**, fight left, that never changes the outcome, only the length.
+- **One bar**, fight left, at sea: it shows the fish wearing down and how to tire it (keep the line tight), and never lets a fish past the line's wall.
 
 Not in the budget: a second button, a third gear stat, swappable line, per-species patterns the player must memorise, or stamina that can beat either wall. If an addition can't be tied to one of the two messages above, it waits in TODO Ideas until a play test asks for it.
 
@@ -279,6 +281,42 @@ The same sim with the deep zones' own fish (about 2,500 / 3,500 / 5,000 coins a 
 
 New coin prices (Oscar, 2026-11-01): the rod 75k + 6k·N, the line half that, with only a safety cap past +54. Slow players stay under the 60-75% band early: they earn about as many coins as fast players but far fewer pearls, and pricing for them would leave fast players coin-bound. Best-rate play still farms easy water short of the frontier.
 
+## Fight left (2026-11-01)
+
+After Oscar's first charters (above). Measured with `scripts/seafights.ts` (spool, long fights and stages per depth, base gear unless stated) and `scripts/seaeconomy.ts` (whole charters, best start marker and head-home rule). "Careful" eases off 0.2 short of the red at 0.3 s, like Oscar; "fast" is the best of the bot styles at 0.25 s.
+
+| On base gear | Before | After |
+|---|---|---|
+| Out of line from the harbour, fast / careful | fish 44 / 34 | 45 / 39 |
+| Careful: fights over a minute at marker 30 / 45 | 36% / 35% | 0% / 0% |
+| Careful: slowest 1 in 10 fights at marker 30 / 45 | 140 s / 157 s | 35 s / 38 s |
+| Tired surges before exhausted, at marker 45 | | 5-6 |
+| Fights reaching exhausted at marker 45, fast / careful | | 20% / 31% |
+
+| Rod + line levels | Out of line, fast / careful: before → after | Pearls an hour, fast / careful: before → after |
+|---|---|---|
+| +10 / +0 | 68 / 61 → 72 / 66 | |
+| +0 / +10 | 79 / 50 → 76 / 55 | |
+| +0 / +0 | 44 / 34 → 45 / 39 | 288 / 228 → 297 / 256 |
+| +5 / +5 | 73 / 60 → 75 / 64 | 498 / 360 → 566 / 488 |
+| +10 / +10 | 96 / 87 → 98 / 91 | 786 / 655 → 828 / 738 |
+| +20 / +20 | not rerun | 1,318 / 1,185 → 1,347 / 1,220 |
+
+What set the numbers, over five play-test rounds:
+
+| Finding | Consequence |
+|---|---|
+| Fish that tire take far less spool, and a slow player stops losing it to slogs, so the frontier moved 5-10 fish deeper. | Line taken costs 15 m of spool per fight length (`DIVE.metresPerLine`, was 10), keeping a fast player's frontier within a fish or two of before at every gear level. |
+| With fight in proportion to weight minus 1, rod levels shortened fights so much that rod +10 moved a fast player's frontier 7 fish deeper. | Fight is in proportion to weight itself (`tire` w0 = 0). |
+| Tiring only during surges left 2-3 tired surges, with few fish ever exhausted; tiring in the calm as well cut the tired stage short. | Calm tiring at 45% of a surge's, with weaker, shorter tired surges, gives 5-6 tired surges near the frontier. |
+| Surge strength fixed at each surge's start made the fade a staircase: full, ~90%, then ~30% on the last surge. | The pull fades every step, sliding within a surge; no surge pulls more than a sixth of the gauge below the one before. |
+| Per-surge spread (±20%, Thrashers ±40%) made the pull marker jump, so a fish near the red felt random. | ±5% at sea, and the sticker and loss card name the line (below). |
+| A legend's weaker tired surges come over a longer fight. | A legend takes about 1.4× the spool of an everyday fish at its depth (was ~1×); legends are 1 bite in 20. |
+| Pearls an hour rose 2-14% for fast players and 3-36% for careful ones (most at +5 / +5), coins an hour barely moved. | Prices left alone: within the spread the level pricing already allows. |
+| With fish that tire, a fish the line holds comes in and one over it gets away, so past the Drop-off the land rate follows the share of fish the line holds: the approach to the frontier is longer and spool per fish climbs less steeply. | The frontier tests now allow it (`dive.test.ts`). |
+
+The bots never flutter into the red the way Oscar does, so they understate how far that play goes (he rode one spool from marker 35 to 60 on base gear); see the green-zone item in TODO Ideas.
+
 ## Decisions so far
 
 - Line is a separate upgrade path, presented as a spool on the rod (2026-10-31).
@@ -291,8 +329,9 @@ New coin prices (Oscar, 2026-11-01): the rod 75k + 6k·N, the line half that, wi
 - Gloves act on weight (they are Quick-Reel Gloves) (2026-10-31).
 - Sea fights on the two axes (2026-11-01): the rod decides how long the spool lasts, the line whether it holds; each zone leads on an axis and keeps it; per-fish pull roll named on the hook toast; behaviours are feel only. The frontier keeps P1's pacing table, counting rod and line levels together, and levelling only one track is a soft stall (slower), not a wall.
 - A sea line that levels at Marlow's for Black Pearls, a second track next to the Aurora Rod's levels, "because it gives players more to invest in" (Oscar, 2026-11-01). It's the **Deep Sea Line +N**, its own tile after Moonsilk, spooled by its first level (Oscar, 2026-11-01). Priced to keep P1's pace and leave charters paying for both tracks with coins to spare ("Sea economy" below).
-- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a sticker in the lower right of the screen for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish, which also says what it pays. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the same card: a snap names the Deep Sea Line's next level when the fish's surges reached the red, a run-off the Aurora Rod's when it was at its heaviest, anything else a reel tip (slice 2, 2026-11-01).
+- Messages as built (slice 3, 2026-10-31, reworked after Oscar's first play test the same day): during the fight only the gauge speaks ("Too strong for your line!" when a surge's pull sits in the red, "Too heavy for your rod" on the drag caption for a fish above the rod's tier), plus a sticker in the lower right of the screen for a Feisty (⚡, the red zone's orange) or Brutish (⚓, steel blue) fish, which also says what it pays. A lost fight ends on one card: **SNAP!** or **RAN OFF!**, the cause in a line ("Too strong for your Mono Line"), the fix in a line ("Fluoro Line holds it · Marlow's, 500 🪙"), and "noted in your Fishdex" when the fish was over the gear. Player-error losses get a reel tip instead of a gear fix. No mid-fight toasts, no separate hint bubble after a loss. Buying or inspecting bait above the line warns which line holds what it attracts. Sea fights get the same card: a snap names the Deep Sea Line's next level when the fish's surges reached the red, a run-off the Aurora Rod's when it was at its heaviest, anything else a reel tip (slice 2, 2026-11-01). The line comes first (Oscar's play test, 2026-11-01): a fish whose surges reach the red that runs off took the line given to save it from fraying, so that card names the line too, as does the drag caption.
 
+- Fight left at sea (Oscar, 2026-11-01, five play-test rounds): full fight, tired, exhausted on one bar labelled FIGHT; tired surges fade gradually in strength, length and frequency; you tire a fish by keeping the line tight, in surges and while reeling it in; tiring never takes a surge out of the red; each surge pulls about the same; a sticker under the gauge shows the fish's pull and behaviour all fight. Pond fights unchanged for now.
 - The deep zones' fish (Oscar, 2026-11-01): all 17 from the Deep Sea Fish Options page. Legends fight about 1.5× longer than everyday fish at the same depth, from slower reeling only, so a legend is a long fight but never over the gear by itself. Landing one gets its own moment: legendary jingle, a gold banner and catch card; everyday sea fish get a lesser jingle.
 
 ## Open questions
