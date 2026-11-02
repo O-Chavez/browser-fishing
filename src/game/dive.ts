@@ -1,45 +1,10 @@
-// Sea dive rules (Endgame Gameplan, "The challenge: charter dives"): depth sets the fight, each zone's fish fight
-// their own way, one spool of line lasts the dive, and the haul is only safe once the player surfaces at a ledge.
+// Sea dive rules (Endgame Gameplan, "The challenge: charter dives"): depth sets the fight, one spool of line lasts the
+// dive, and the haul is only safe once the player surfaces at a ledge.
 // Pure logic for the server (D2) and the dive HUD (D3); no Math.pow, so the server and the client agree.
-import { byId, FISH, type Fish } from '../data/content';
-import { DIVE, SEA_FIGHT, ZONES, type Behaviour, type Zone } from '../data/dive';
-import { GOOD_MAX, P, axes, expArith, lnArith, type Difficulty, type FightDifficulty, type ReelTune, type ReelWear } from './reel';
-
-const scale = (a: number[], ...m: number[]) => a.map((x, i) => x * (m[i] ?? 1));
-
-/**
- * How each behaviour feels on the reel. How hard a fish is lives on the axes (`seaDifficulty`); these levers only set
- * its pattern, so a Runner, a Thrasher and a Sounder of the same difficulty play differently (see dive.test.ts).
- */
-export const BEHAVIOUR_TUNE: Record<Behaviour, ReelTune> = {
-  // Longer surges, and slack costs more line.
-  runner: { surge: scale(P.surge, 1.1), run: 1.7 },
-  // Short, close surges that build quicker.
-  thrasher: { surge: scale(P.surge, 0.7), gap: scale(P.gap, 0.55), rise: scale(P.rise, 0.8) },
-  // Little warning before a surge.
-  sounder: { warn: scale(P.warn, 0.4, 1, 1, 0.4) },
-};
-
-/** A sea legend's fight: 1.5× as long (Oscar, 2026-11-01), the line moving slower both ways, so not stronger or heavier. */
-export const LEGEND_TUNE: ReelTune = { length: 1.5 };
-
-/**
- * How every sea fish fights (REELING.md, "Fish stamina"): it tires, from close, full-strength bursts to weaker, shorter,
- * sparser surges until it's exhausted and comes in; heavier fish have more fight in them, so the rod still decides
- * how much spool a fight costs. Each surge pulls about the same, so the gauge's marker reads as the fish's strength
- * (and, as it tires, its fading strength) rather than luck.
- */
-export const SEA_TUNE: ReelTune = { powerJitter: 0.05, tire: [6, 0, 0.5, 0.25, 0.8, 1, 0.6, 0.75, 0.6, 0.35, 0.45] };
-
-/**
- * The reel levers of a sea fight: tiring, its behaviour's, and the legend's length if it is one. Pond fish have none.
- * Used by the fight and the server's replay.
- */
-export function fightTune(behaviour: Behaviour | null | undefined, fishId: string | null | undefined): ReelTune | undefined {
-  const fish = FISH.find((f) => f.id === fishId);
-  if (!fish?.sea) return behaviour ? BEHAVIOUR_TUNE[behaviour] : undefined;
-  return { ...SEA_TUNE, ...(behaviour ? BEHAVIOUR_TUNE[behaviour] : undefined), ...(fish.legend ? LEGEND_TUNE : undefined) };
-}
+import { byId, DEEP_SEA_LINE, DEEP_SEA_ROD, FISH, type Fish } from '../data/content';
+import { DIVE, SEA_FIGHT, SEA_TIERS, ZONES, type Behaviour, type Zone } from '../data/dive';
+import { gapsOf, type FishTiers, type GearTiers } from './progression';
+import type { Gaps, ReelWear } from './reel';
 
 /** base^n for a whole n ≥ 0, by repeated multiplication (same result in every JS engine, unlike `Math.pow`). */
 export function powInt(base: number, n: number): number {
@@ -54,35 +19,18 @@ export function zoneAt(depth: number): Zone {
   return z;
 }
 
-/** The Aurora Rod and sea line levels a sea fight is eased by. */
+/** The Deep Sea Rod and Line levels a sea fight is eased by. */
 export interface SeaGear {
   rod: number;
   line: number;
 }
 
-const LN_LEAGUE = lnArith(SEA_FIGHT.perLeague);
-/** base × perLeague^x for any x, without `Math.pow`. */
-const atLeagues = (x: number) => SEA_FIGHT.base * expArith(x * LN_LEAGUE);
 const round = (x: number) => Math.round(x * 100) / 100;
 
 /** How far into its zone a depth is: a quarter in the marker the zone starts in, up to 1 from its `SEA_FIGHT.ramp`th. */
 function rampShare(depth: number, z: Zone): number {
   const markers = Math.floor(depth / DIVE.ledgeEvery) - Math.floor(z.from / DIVE.ledgeEvery) + 1;
   return Math.min(1, markers / SEA_FIGHT.ramp);
-}
-
-/** The zones' leads at this depth: every zone's down to here, the current one ramping in (`rampShare`). */
-function leads(depth: number): { weight: number; strength: number; paceCap: number } {
-  const here = zoneAt(depth);
-  const sum = { weight: 0, strength: 0, paceCap: 0 };
-  for (const z of ZONES) {
-    if (z.from > here.from) break;
-    const share = z === here ? rampShare(depth, z) : 1;
-    sum.weight += (z.lead?.weight ?? 0) * share;
-    sum.strength += (z.lead?.strength ?? 0) * share;
-    sum.paceCap += (z.lead?.paceCap ?? 0) * share;
-  }
-  return sum;
 }
 
 /**
@@ -103,58 +51,41 @@ export function behaviourOdds(depth: number): [Behaviour | null, number][] {
   return odds;
 }
 
-/**
- * A sea fight on the two axes (`SEA_FIGHT`): weight against the Aurora Rod's level (how much spool a fish takes),
- * strength against the line's (how near the red it pulls), and a pace that follows the depth and levels off. Each
- * zone leads on its axis (`Zone.lead`); `pull` is the fish's own strength roll and `big` its size
- * (`sizeDifficulty`), both 1 for a typical fish. The species' stamina (÷ 2.6) scales weight and strength.
- */
-export function seaDifficulty(depth: number, gear: SeaGear, fish?: Pick<Fish, 'stamina'>, pull = 1, big = 1): FightDifficulty {
-  const x = Math.floor(depth / DIVE.ledgeEvery) * DIVE.ledgeEvery;
-  const lead = leads(depth);
-  const species = fish ? fish.stamina / 2.6 : 1;
-  const pace = Math.min(SEA_FIGHT.paceCap + lead.paceCap, atLeagues(SEA_FIGHT.paceShare * x));
-  const cap = SEA_FIGHT.weightCap[0] - SEA_FIGHT.weightCap[1] * (pace - 2);
-  const weight = atLeagues(x + SEA_FIGHT.weightStart + lead.weight - SEA_FIGHT.ease * gear.rod - SEA_FIGHT.cross * gear.line);
-  const strength = atLeagues(x + lead.strength - SEA_FIGHT.ease * gear.line - SEA_FIGHT.cross * gear.rod);
-  return { weight: round(Math.min(cap, weight * species * big)), strength: round(strength * species * pull), pace: round(pace) };
+/** A sea fish's tiers (`SEA_TIERS`): from how far out it is, the same all through a marker. Like the pond, nothing else counts for now. */
+export function seaFishTiers(depth: number): FishTiers {
+  const t = SEA_TIERS.harbour + (Math.floor(depth / DIVE.ledgeEvery) * DIVE.ledgeEvery) / SEA_TIERS.perTier;
+  return { strength: t, weight: t };
 }
 
-/** How much lighter this many Aurora Rod levels make sea fish, as a share (0.37 is 37% lighter). A Deep Sea Line level makes them pull as much weaker. */
-export const rodLevelEase = (level: number): number => 1 - expArith(-SEA_FIGHT.ease * level * LN_LEAGUE);
+/** The Deep Sea Rod's and Line's tiers with their levels (`SEA_TIERS.level` of a tier each). */
+export const seaGearTiers = (gear: SeaGear): GearTiers => ({
+  line: DEEP_SEA_LINE.tier + SEA_TIERS.level * gear.line,
+  rod: DEEP_SEA_ROD.tier + SEA_TIERS.level * gear.rod,
+});
 
-/** The strength where a typical surge pulls into the red (`P.need` past `GOOD_MAX`): the sea line's wall. */
-export const STRENGTH_RED = Math.sqrt((GOOD_MAX - P.need[0]) / P.need[1]);
-
-/** Weight within this share of its cap counts as too heavy for the rod: it takes the most spool a fish can. */
-const NEAR_CAP = 0.95;
-
-/**
- * Which sea track a fight is over, for the hook toast, the gauge's captions and the loss card (REELING.md, "The sea"):
- * the line when its surges reach the red, the rod when its weight is at or near the cap (`SEA_FIGHT.weightCap`).
- */
-export function seaOverGear(d: Difficulty): { rod: boolean; line: boolean } {
-  const a = axes(d);
-  const cap = SEA_FIGHT.weightCap[0] - SEA_FIGHT.weightCap[1] * (a.pace - 2);
-  return { rod: a.weight >= NEAR_CAP * cap, line: a.strength > STRENGTH_RED };
+/** A sea fight's gaps: the pond's formula (`gapsOf`) on the sea fish's and gear's tiers, to a hundredth. */
+export function seaGaps(depth: number, gear: SeaGear): Gaps {
+  const g = gapsOf(seaFishTiers(depth), seaGearTiers(gear));
+  return { strength: round(g.strength), weight: round(g.weight) };
 }
 
-/** A fish's pull roll: ×spread^±1, log-uniform. */
-export const rollPull = (rng: () => number): number => expArith((2 * rng() - 1) * lnArith(SEA_FIGHT.spread));
-
-/** The hook toast's word for a pull roll. */
-export const pullWord = (pull: number): 'strong' | 'light' | null => (pull > SEA_FIGHT.strong ? 'strong' : pull < SEA_FIGHT.light ? 'light' : null);
+/**
+ * The first marker where a typical sea fish is `rungs` over a Deep Sea Rod or Line at this level (`seaGaps`), for the
+ * level panels' "heavy for it from marker 30" (Oscar, 2026-11-03): each level moves it one marker further out.
+ */
+export function markerOver(gearTier: number, level: number, rungs: number): number {
+  const depth = (rungs + gearTier + SEA_TIERS.level * level - SEA_TIERS.harbour) * SEA_TIERS.perTier;
+  return Math.ceil(depth / DIVE.ledgeEvery - 1e-9) * DIVE.ledgeEvery;
+}
 
 export interface SeaBite {
   fish: Fish;
   behaviour: Behaviour | null;
-  /** The fish's strength roll (`rollPull`). */
-  pull: number;
 }
 
 /**
- * Which fish bites at this depth: one of the zone's legends 1 time in 20, else one of its everyday fish; how it
- * fights (`behaviourOdds`), and how it pulls.
+ * Which fish bites at this depth: one of the zone's legends 1 time in 20, else one of its everyday fish, and its
+ * way of fighting (`behaviourOdds`), which the fight leaves off for now.
  */
 export function rollSeaFish(depth: number, rng: () => number): SeaBite {
   const z = zoneAt(depth);
@@ -171,7 +102,7 @@ export function rollSeaFish(depth: number, rng: () => number): SeaBite {
     }
     r -= p;
   }
-  return { fish, behaviour, pull: rollPull(rng) };
+  return { fish, behaviour };
 }
 
 /** Pearls a fish landed at this depth adds to the haul. */
@@ -180,9 +111,9 @@ export const pearlsAt = (depth: number): number => 1 + Math.floor(depth / DIVE.p
 /** The haul's multiplier on surfacing after reaching this many ledges this dive. */
 export const haulBonus = (ledges: number): number => 1 + Math.min(DIVE.haulCap, DIVE.haulPerLedge * ledges);
 
-/** Metres of line a fight wore: the line the fish took, plus a length if it snapped, or each fray left on a landed fish. */
+/** Metres of line a fight wore: the line the fish took, plus a length if it got away, or each fray left on a landed fish. */
 export function lineWorn(wear: ReelWear, landed: boolean): number {
-  return wear.lineOut * DIVE.metresPerLine + (wear.snapped ? DIVE.snapMetres : landed ? wear.frays * DIVE.frayMetres : 0);
+  return wear.lineOut * DIVE.metresPerLine + (landed ? wear.frays * DIVE.frayMetres : DIVE.lostMetres);
 }
 
 export type DiveState = 'fishing' | 'ledge' | 'surfaced' | 'sunk';

@@ -52,7 +52,7 @@ export const PERKS: Perk[] = [
   { id: 'charm1', name: 'Lucky Charm I', desc: charmDesc('charm1'), chips: 25, icon: '🍀' },
   { id: 'charm2', name: 'Lucky Charm II', desc: charmDesc('charm2'), chips: 80, requires: 'charm1', icon: '🍀' },
   { id: 'charm3', name: 'Lucky Charm III', desc: charmDesc('charm3'), chips: 200, requires: 'charm2', icon: '🍀' },
-  { id: 'gloves', name: 'Quick-Reel Gloves', desc: 'Fights are easier and reeling is faster', chips: 60, icon: '🧤' },
+  { id: 'gloves', name: 'Quick-Reel Gloves', desc: 'Reel in fish faster', chips: 60, icon: '🧤' },
   { id: 'lantern', name: 'Night Owl Lantern', desc: 'Better luck with night fish', chips: 50, icon: '🏮' },
   { id: 'lure', name: 'Shiny Lure', desc: `${LURE_CHARGES} casts that always hook a shiny`, chips: 15, consumable: true, icon: '✨' },
 ];

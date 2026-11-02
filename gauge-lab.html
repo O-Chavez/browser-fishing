@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Gauge lab</title>
+  <!-- Dev-only lab for the reel fight and its gauge (TODO: the reel fight's tier ladder). Not part of the build. -->
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui; color: #fff; user-select: none; -webkit-user-select: none; }
+    #bg { position: fixed; inset: -20px; background: url(/docs/images/reel.jpg) 0% 50% / 260% auto; filter: blur(4px) brightness(0.9); }
+    #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; gap: 28px; padding-left: 270px; padding-right: 270px; }
+    .gauge { position: relative; text-align: center; }
+    .gauge h3 { margin: 0; font: 800 13px system-ui; text-transform: uppercase; letter-spacing: .08em; text-shadow: 0 1px 4px #000; opacity: .9; }
+    #now { width: 460px; height: 520px; }
+    #now.shake { animation: jitter .12s linear infinite; }
+    @keyframes jitter { 0% { transform: translate(0, 0); } 25% { transform: translate(1.5px, -1px); } 50% { transform: translate(-1px, 1.5px); } 75% { transform: translate(1px, 1px); } }
+    .panel { position: fixed; top: 12px; bottom: 12px; width: 250px; overflow: auto; background: rgba(20,32,40,.82); border-radius: 12px; padding: 12px; box-sizing: border-box; font-size: 12.5px; }
+    #left { left: 12px; }
+    #right { right: 12px; }
+    .panel h2 { font: 800 14px system-ui; margin: 4px 0 8px; }
+    .panel h4 { font: 800 11px system-ui; text-transform: uppercase; letter-spacing: .06em; opacity: .7; margin: 12px 0 6px; }
+    .panel button { display: block; width: 100%; text-align: left; margin: 0 0 4px; padding: 6px 8px; border: 0; border-radius: 7px; background: rgba(255,255,255,.1); color: #fff; font: 600 12.5px system-ui; cursor: pointer; }
+    .panel button small { display: block; font-weight: 500; opacity: .7; font-size: 11px; }
+    .panel button.on { background: #3a8f5a; }
+    .panel label { display: block; margin: 4px 0; cursor: pointer; }
+    .row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,.07); }
+    .row b { font-weight: 700; }
+    #result { margin-top: 10px; padding: 8px; border-radius: 8px; font: 800 15px system-ui; text-align: center; }
+    .hint { opacity: .7; font-size: 11.5px; line-height: 1.4; margin-top: 10px; }
+    #hold { position: fixed; inset: 0; }
+    .seg { display: flex; gap: 4px; margin-bottom: 4px; }
+    .seg button { text-align: center; margin: 0; }
+    .grid { display: grid; grid-template-columns: 20px repeat(6, 1fr); gap: 2px; align-items: center; }
+    .grid .ax { font: 700 11px system-ui; opacity: .7; text-align: center; }
+    .panel .grid button.cell { margin: 0; padding: 2px 0; text-align: center; min-height: 34px; line-height: 1.15; }
+    .panel .grid button.cell i { font-style: normal; font-size: 9px; display: block; }
+    .panel .grid button.cell small { display: block; font-size: 10px; opacity: 1; }
+    .hs { color: #ffd23a; }
+    .hc { color: #8fd8ff; }
+    .lever { margin: 6px 0 8px; }
+    .lever span { display: block; font-size: 11.5px; opacity: .85; }
+    .lever b { font-size: 12px; }
+    .lever input { width: 100%; }
+    .lever.moved b { color: #ffd23a; }
+    .two { display: flex; gap: 4px; }
+    .two button { text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="hold"></div>
+  <div id="stage">
+    <div class="gauge"><canvas id="now" width="920" height="1040"></canvas></div>
+  </div>
+  <div class="panel" id="left">
+    <h2>🎣 Gauge lab</h2>
+    <div id="fish"></div>
+    <h4>Fight</h4>
+    <button id="again">Same fish again <small>R · same seed: the same surges</small></button>
+    <button id="next">New roll of this fish <small>N · new seed</small></button>
+    <div class="hint">Hold the mouse button, Space or a finger anywhere to reel. P pauses.</div>
+  </div>
+  <div class="panel" id="right">
+    <h2>Fight</h2>
+    <div id="stats"></div>
+    <div id="result"></div>
+    <h4>Reference hands on this fish</h4>
+    <div id="hands"></div>
+    <h4>Levers <small style="text-transform:none;font-weight:500">· a change restarts the fight, same seed</small></h4>
+    <div id="levers"></div>
+    <h4>Your fights</h4>
+    <div id="logcount" class="hint" style="margin:0 0 6px"></div>
+    <div class="two"><button id="export">Export JSON</button><button id="clear">Clear</button></div>
+  </div>
+  <script type="module" src="/src/lab/gaugelab.ts"></script>
+</body>
+</html>

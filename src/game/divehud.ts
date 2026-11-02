@@ -127,11 +127,11 @@ export class DiveHud {
     if (due) this.timer = window.setTimeout(() => this.render(), due - now + 20);
   }
 
-  /** Shows the hooked fish's pull and way of fighting while it's on (`fishTagHtml`), red when it's too strong for the line. */
+  /** Shows the hooked fish's matchup with the gear while it's on (`fishTagHtml`), red when it's two rungs or more over. */
   fight(f: SeaFightTag | null): void {
     const html = f && this.view ? fishTagHtml(f) : '';
     this.tag.classList.toggle('hidden', !html);
-    this.tag.classList.toggle('over', !!f?.overLine);
+    this.tag.classList.toggle('over', !!f?.too);
     if (html) this.tag.innerHTML = html;
   }
 }
@@ -141,31 +141,31 @@ const BEHAVIOUR_ICON: Record<Behaviour, string> = { runner: '🏃', thrasher: '�
 /** What the top sticker says about a hooked sea fish. */
 export interface SeaFightTag {
   b: Behaviour | null | undefined;
-  /** Its pull roll's word (`pullWord`); none for a typical one. */
+  /** Its pull roll's word; none for a typical one (the pull roll is off while the foundation leaves variety out). */
   pull: 'strong' | 'light' | null | undefined;
-  /** Its surges reach the red: the line, not the player, decides this fight. */
-  overLine: boolean;
+  /** The matchup in words (`matchupWords`), and whether it's two rungs or more over the gear. */
+  match: string;
+  too: boolean;
 }
 
 /**
- * The sticker for the whole fight: the fish's pull and behaviour, and "too strong for your line" in place of the
- * behaviour's hint when its surges reach the red, so the hook toast's warning doesn't vanish after a few seconds.
- * Empty for a typical fish with no behaviour that the line holds.
+ * The sticker for the whole fight: the fish's pull and behaviour (both off for now), and the matchup with the gear in
+ * place of the behaviour's hint, so the hook toast's warning doesn't vanish after a few seconds. Empty when the gear
+ * handles a typical fish with no behaviour.
  */
 export function fishTagHtml(f: SeaFightTag): string {
   const parts = [f.pull === 'strong' ? '💪 Strong' : f.pull === 'light' ? '🪶 Light' : '', f.b ? `${BEHAVIOUR_ICON[f.b]} ${BEHAVIOURS[f.b].name}` : ''].filter(Boolean);
-  const hint = f.overLine ? 'too strong for your line' : f.b ? BEHAVIOURS[f.b].hint.toLowerCase() : '';
-  if (!parts.length) return f.overLine ? 'Too strong for your line' : '';
+  const hint = f.match ? f.match.toLowerCase() : f.b ? BEHAVIOURS[f.b].hint.toLowerCase() : '';
+  if (!parts.length) return f.match;
   return `${parts.join(' · ')}${hint ? ` <span>· ${hint}</span>` : ''}`;
 }
 
-/** What the water at this depth holds, for Reed's panel and the marker card. */
+/**
+ * What the water at this depth pays, for Reed's panel and the marker card. The zones' ways of fighting are left out
+ * until the deep sea mechanics pass fleshes them out (Oscar, 2026-11-03).
+ */
 function waterText(depth: number): string {
-  const z = zoneAt(depth);
-  const fight = z.behaviours.length
-    ? z.behaviours.map((b) => `${BEHAVIOURS[b].name}s: ${BEHAVIOURS[b].hint.toLowerCase()}`).join('. ')
-    : 'Steady fish, no tricks';
-  return `${fight}. ${plural(pearlsAt(depth), 'pearl')} a fish.`;
+  return `${plural(pearlsAt(depth), 'pearl')} a fish.`;
 }
 
 /**

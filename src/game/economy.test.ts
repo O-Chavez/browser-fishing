@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import * as eco from './economy';
 import { ROD_SLOT, SLOT_COUNT, migrate, newSave, type SaveData } from './state';
 import { FISH, LINES, byId } from '../data/content';
-import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, xpForNextLevel } from './progression';
+import { GLOVES_CONTROL } from '../data/casino';
+import { mulberry } from './env';
+import { FIGHT_DT, P, Reel, type ReelTune } from './reel';
+import { BACKPAY_VERSION, FISH_SPREAD, FLAT_LEVEL, TAG_TIERS, backPayXp, xpForNextLevel } from './progression';
 import { Drops } from './drops';
 import { COSMETICS, COS_SLOTS, cosById, isFace } from '../data/cosmetics';
 
@@ -350,6 +353,25 @@ describe('carry slots', () => {
   });
 });
 
+describe('Quick-Reel Gloves', () => {
+  it('reel in fish faster: the cast roll carries the faster calm reeling, which the fight and the replay both use', () => {
+    const s = newSave();
+    expect(eco.fightTune(s)).toBeUndefined();
+    s.perks = ['gloves'];
+    expect(eco.fightTune(s)).toEqual({ reel: P.reel * GLOVES_CONTROL });
+    s.seaRod = true;
+    expect(eco.rollSeaCast(s, 10, mulberry(1)).tune).toEqual(eco.fightTune(s));
+    // A matched fish held all fight lands sooner with the gloves.
+    const held = (tune?: ReelTune) => {
+      const r = new Reel({ strength: 0, weight: 0 }, mulberry(4), tune);
+      while (r.status === 'reeling') r.update(FIGHT_DT, r.tension < 0.75);
+      return r;
+    };
+    expect(held().status).toBe('caught');
+    expect(held(eco.fightTune(s)).elapsed).toBeLessThan(held().elapsed * 0.9);
+  });
+});
+
 describe('line', () => {
   it('spools a better line onto the rod: a step up, unlocked and paid for, nothing to carry', () => {
     const s = newSave();
@@ -379,12 +401,12 @@ describe('line', () => {
     expect(migrate({ ...newSave(), line: 'mono' }).line).toBe('mono');
   });
 
-  it('the cast roll carries the two-axis difficulty and, now and then, a tag', () => {
+  it('the cast roll carries the fish\'s gaps over the rod and line, with its tag and spread', () => {
     const s = newSave();
     s.level = 20;
     s.line = 'fluoro';
-    eco.buyRod(Object.assign(s, { coins: 100_000 }), 'graphite');
-    let tags = 0, fish = 0;
+    eco.buyRod(Object.assign(s, { coins: 100_000 }), 'fiberglass');
+    let fish = 0, tagged = 0;
     const rng = (() => { let x = 1; return () => ((x = (x * 48271) % 2147483647) / 2147483647); })();
     for (let i = 0; i < 400; i++) {
       s.slots[1] = bait('minnow', 50);
@@ -392,23 +414,14 @@ describe('line', () => {
       const roll = eco.rollCast(s, 'pond', rng);
       if (!roll.fishId) continue;
       fish++;
-      expect(typeof roll.d).toBe('object');
-      const d = roll.d as { weight: number; strength: number; pace: number };
-      expect(d.weight).toBeGreaterThan(0);
-      expect(d.strength).toBeGreaterThan(0);
       const f = byId(FISH, roll.fishId);
-      expect(roll.d).toEqual(eco.fightDifficulty(s, f, !!roll.shiny, roll.size, roll.tag ?? null));
-      if (roll.tag) {
-        tags++;
-        // A tag only lands on an axis the gear handles (rod and line are both tier 3 here).
-        expect(f.tier).toBeLessThanOrEqual(3);
-        const plain = eco.fightDifficulty(s, f, !!roll.shiny, roll.size);
-        expect(roll.tag === 'feisty' ? d.strength : d.weight).toBeGreaterThan(roll.tag === 'feisty' ? plain.strength : plain.weight);
-      }
+      const tag = (t: string) => (roll.tag === t ? (t === 'feisty' ? TAG_TIERS.feisty : TAG_TIERS.brutish) : 0);
+      expect(Math.abs(roll.d!.strength - (f.tier - 3) - tag('feisty'))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+      expect(Math.abs(roll.d!.weight - (f.tier - 2) - tag('brutish'))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+      if (roll.tag) tagged++;
     }
     expect(fish).toBeGreaterThan(300);
-    expect(tags).toBeGreaterThan(fish / 8 * 0.5);
-    expect(tags).toBeLessThan(fish / 8 * 1.5);
+    expect(tagged).toBeGreaterThan(0);
   });
 });
 
@@ -440,6 +453,15 @@ describe('sightings', () => {
     s.bait = 'pearl';
     expect(eco.gearNeeds(s, pike)).toEqual({ line: null, rod: null, bait: null });
     expect(eco.gearNeeds(s, byId(FISH, 'bluegill'))).toEqual({ line: null, rod: null, bait: null });
+  });
+
+  it('a sea fish lost a step or more over the Deep Sea Rod or Line is seen once; one the gear handles is not', () => {
+    const s = newSave();
+    const sea = FISH.find((f) => f.sea)!;
+    expect(eco.recordSeaSighting(s, sea, { strength: 0.8, weight: 0.6 })).toBe(false);
+    expect(eco.recordSeaSighting(s, sea, { strength: 0.2, weight: 1.1 })).toBe(true);
+    expect(eco.recordSeaSighting(s, sea, { strength: 1.5, weight: 1.5 })).toBe(false);
+    expect(s.seen).toEqual([sea.id]);
   });
 
   it('a fish lost to a gear wall is seen once, a fish the gear handles is not, and a catch clears it', () => {

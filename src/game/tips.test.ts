@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { COIN } from './format';
 import { migrate, newSave } from './state';
-import { TIP_IDS, charterTipDue, chartersToTry, lossVerdict, markTip, rodHintText, rodUpgrade, seaLossVerdict, tipText } from './tips';
-import { FISH, byId } from '../data/content';
+import { TIP_IDS, baitWarning, charterTipDue, chartersToTry, lossVerdict, markTip, rodHintText, rodUpgrade, seaLossVerdict, tipText } from './tips';
+import { BAITS, FISH, byId } from '../data/content';
 
 describe('new-player tips', () => {
   it('marks each known tip once', () => {
@@ -42,43 +42,38 @@ describe('new-player tips', () => {
 
 describe('loss verdict', () => {
   const pike = byId(FISH, 'pike'); // tier 3
-  it('a fish over the line snapped it: names the line and where to get it', () => {
-    const v = lossVerdict('snapped', { rod: 'graphite', line: 'mono', level: 10 }, pike, 'Marlow');
-    expect(v.title).toBe('SNAP!');
-    expect(v.cause).toBe('Too strong for your Mono Line');
-    expect(v.fix).toContain('Fluoro Line holds it');
-    expect(v.fix).toContain("Marlow's, 500");
-    expect(lossVerdict('snapped', { rod: 'graphite', line: 'mono', level: 3 }, pike, 'Marlow').fix).toContain('unlocks at level 5');
-  });
-  it('a fish over the rod ran off: names the rod; anything else is a reel tip', () => {
-    const v = lossVerdict('escaped', { rod: 'fiberglass', line: 'fluoro', level: 10 }, pike, 'Marlow');
-    expect(v.title).toBe('RAN OFF!');
-    expect(v.cause).toBe('Too heavy for your Fiberglass Rod');
-    expect(v.fix).toContain('Graphite Rod lands it');
-    const matched = { rod: 'graphite', line: 'fluoro', level: 10 };
-    expect(lossVerdict('snapped', matched, pike, 'Marlow').cause).toBe('Held in the red through a surge');
-    expect(lossVerdict('escaped', matched, pike, 'Marlow').cause).toBe('The fish took all your line');
-    // At sea there is no fish tier to blame.
-    expect(lossVerdict('snapped', { rod: 'twig', line: 'twine', level: 1 }, null, 'Marlow').cause).toBe('Held in the red through a surge');
+  it('the big word says how it ended, and a short line names each piece of gear the fish was over', () => {
+    expect(lossVerdict('snapped', { rod: 'graphite', line: 'mono', level: 10 }, pike)).toEqual({ title: 'SNAP!', fixes: ['Line too weak → Fluoro Line'] });
+    expect(lossVerdict('escaped', { rod: 'graphite', line: 'mono', level: 10 }, pike)).toEqual({ title: 'RAN OFF!', fixes: ['Line too weak → Fluoro Line'] });
+    expect(lossVerdict('snapped', { rod: 'fiberglass', line: 'fluoro', level: 10 }, pike)).toEqual({ title: 'SNAP!', fixes: ['Rod too weak → Graphite Rod'] });
+    // Over both: both, and gear not unlocked yet says when it is.
+    expect(lossVerdict('escaped', { rod: 'twig', line: 'twine', level: 5 }, pike)).toEqual({ title: 'RAN OFF!', fixes: ['Line too weak → Fluoro Line', 'Rod too weak → Graphite Rod at level 6'] });
   });
 
-  it('at sea, names the next level of the one track the fish was over, the line first', () => {
-    const s = { rod: 'aurora', line: 'moonsilk', level: 20, rodLevel: 3, seaLine: 0 };
-    const snap = seaLossVerdict('snapped', s, { rod: true, line: true }, 'Marlow');
-    // The Deep Sea Line comes on the Deep Sea Rod, so it's named at +0 too, never the pond line.
-    expect(snap).toMatchObject({ title: 'SNAP!', cause: 'Too strong for your Deep Sea Line' });
-    expect(snap.fix).toBe(`Deep Sea Line +1 at Marlow's · 40,500 ${COIN} + 124 Black Pearls`);
-    expect(seaLossVerdict('snapped', { ...s, seaLine: 2 }, { rod: false, line: true }, 'Marlow').cause).toBe('Too strong for your Deep Sea Line +2');
-    const ran = seaLossVerdict('escaped', s, { rod: true, line: false }, 'Marlow');
-    expect(ran).toMatchObject({ title: 'RAN OFF!', cause: 'Too heavy for your Deep Sea Rod +3' });
-    expect(ran.fix).toBe(`Deep Sea Rod +4 at Marlow's · 99,000 ${COIN} + 196 Black Pearls`);
-    // The line first: a fish over it that ran off took the line given to keep it from fraying (Oscar's play test).
-    for (const rod of [true, false]) {
-      expect(seaLossVerdict('escaped', s, { rod, line: true }, 'Marlow')).toMatchObject({ title: 'RAN OFF!', cause: 'Too strong for your Deep Sea Line', fix: snap.fix });
-    }
-    // Not over the track that lost it: a reel tip.
-    expect(seaLossVerdict('snapped', s, { rod: true, line: false }, 'Marlow').cause).toBe('Held in the red through a surge');
-    expect(seaLossVerdict('escaped', s, { rod: false, line: false }, 'Marlow').cause).toBe('The fish took all your line');
+  it('a fish the gear handles was the player\'s doing: the cause and a reel tip', () => {
+    const matched = { rod: 'graphite', line: 'fluoro', level: 10 };
+    expect(lossVerdict('snapped', matched, pike)).toEqual({ title: 'SNAP!', cause: 'Held in the red through a surge', fixes: ['Ease off when the gauge goes red'] });
+    expect(lossVerdict('escaped', matched, pike).cause).toBe('The fish took all your line');
+    // At sea there is no fish tier to blame.
+    expect(lossVerdict('snapped', { rod: 'twig', line: 'twine', level: 1 }, null).cause).toBe('Held in the red through a surge');
+  });
+
+  it('at sea, names the first level of each track on which the fish is no longer over it', () => {
+    const s = { rodLevel: 3, seaLine: 0 };
+    // A level is one marker: a fish right at the wall is cleared by the next level, one 2 markers past it by the third.
+    expect(seaLossVerdict('snapped', s, { strength: 1, weight: 0 })).toEqual({ title: 'SNAP!', fixes: ['Line too weak → Deep Sea Line +1'] });
+    expect(seaLossVerdict('escaped', { ...s, seaLine: 2 }, { strength: 1.33, weight: 1.33 })).toEqual({ title: 'RAN OFF!', fixes: ['Line too weak → Deep Sea Line +5', 'Rod too weak → Deep Sea Rod +6'] });
+    // A Brutish fish takes its tag's levels too.
+    expect(seaLossVerdict('snapped', s, { strength: 0.2, weight: 1.5 }).fixes).toEqual(['Rod too weak → Deep Sea Rod +7']);
+    expect(seaLossVerdict('escaped', s, { strength: 0.8, weight: 0.8 }).cause).toBe('The fish took all your line');
+  });
+  it("words a bait's top fish against the line and rod as the hook toast does, warning from two rungs over", () => {
+    const minnow = BAITS.find((b) => b.tier === 3)!;
+    expect(baitWarning({ rod: 'graphite', line: 'fluoro' }, minnow)).toBeNull();
+    expect(baitWarning({ rod: 'graphite', line: 'mono' }, minnow)).toEqual({ text: 'Its top fish: strong for your line.', too: false });
+    expect(baitWarning({ rod: 'twig', line: 'mono' }, minnow)).toEqual({ text: '⚠ Its top fish: strong for your line, too heavy for your rod. Fluoro Line and the Graphite Rod handle them.', too: true });
+    expect(baitWarning({ rod: 'twig', line: 'fluoro' }, minnow)!.text).toBe('⚠ Its top fish: too heavy for your rod. The Graphite Rod handles them.');
+    expect(baitWarning({ rod: 'twig', line: 'twine' }, minnow, 'Its fish')!.text).toBe('⚠ Its fish: too strong for your line, too heavy for your rod. Fluoro Line and the Graphite Rod handle them.');
   });
 });
 
