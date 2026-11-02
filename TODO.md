@@ -15,6 +15,9 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] Update the README with the newer features, a follow-up to the finished "Fill out readme" (DONE.md)
   - Add the deep sea charters (Reed's seaplane at the beach, the Shelf and Drop-off, Black Pearls, the Aurora Rod and Deep Sea Line levels, the Furthest Out board, the Kraken), the Lucky Wheel at the casino, and the rest of what's shipped since the last fill-out (check `NEWS` in `src/data/news.ts`). Then go over "About this game" and "Features at a glance" (`README.md:13-58`)
   - Fix what's out of date: the Smokehouse paragraph's "Coming soon: spices for deep-sea charters" (spices were shelved, `README.md:33`). Re-run `npm run screenshots` if a new shot (the harbour, a charter) is worth adding
+- [ ] 🎨 Make the charter's words and zones clear to players (Oscar, 2026-11-01), a follow-up to the finished "Charter terminology and the two-row charter HUD" (DONE.md)
+  - Words: go over every charter term players read (marker, charted marker, haul, Head home / Sail on, Black Pearls and their growth per marker, the line running out, Furthest Out) and make each one explain itself, simplifying or dropping terms where that's clearer. Places: the charter HUD and cards (`src/game/divehud.ts`), Reed's panel, the charters poster (`chartersPosterHtml`, `game.ts`), tips. List the terms with proposed rewordings for Oscar before changing anything
+  - Zones: show the zones as something to grind toward, e.g. a small chart of the five zones (the Shelf to the Abyss) with where the player is now, their furthest marker and what each zone holds (its fish and legends), on Reed's panel and/or the charter HUD. Show 2-3 mockups in the game's style first; ties in with the Boat upgrades idea (Ideas) if zones get gated later
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
