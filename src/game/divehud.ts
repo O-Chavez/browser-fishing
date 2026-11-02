@@ -1,7 +1,7 @@
 // The dive on screen (D3): the strip at the top of the screen at sea, Captain Reed's charter panel, the choice at a
 // marker, heading home early, and the cards at the end. Players read a dive as a charter sailing further out
-// (Oscar, 2026-10-31): the zones (The Shelf, The Drop-off, ...) are stretches of sea, each holding markers named by
-// their league ("marker 25"), and the boat's place is "league N". The rules and messages keep depth and ledge.
+// (Oscar, 2026-10-31): the zones (The Shelf, The Drop-off, ...) are stretches of sea, each holding markers ("marker
+// 25"), and distance is told in fish and markers. The rules and messages keep depth and ledge.
 import { RODS, byId } from '../data/content';
 import { BEHAVIOURS, DIVE, ZONES, type Behaviour } from '../data/dive';
 import type { DiveEnd, DiveView } from '../net/protocol';
@@ -58,31 +58,36 @@ export function lossText(lost: LossReason | 'gone'): string {
   }
 }
 
-/** The strip's contents: the zone, the fish and marker rows, the line and the haul. `pop` is the trail icon that just lit. */
+/** The last marker the boat has passed (0 before the first). */
+export const lastMarker = (depth: number): number => Math.floor(depth / DIVE.ledgeEvery) * DIVE.ledgeEvery;
+
+/** The strip's contents: the zone and last marker, the fish and marker rows, the line and the haul. `pop` is the trail icon that just lit. */
 export function hudHtml(v: DiveView, worn: boolean, pop = -1): string {
   const z = zoneAt(v.depth);
   const at = v.state === 'ledge';
   const next = nextMarker(v.depth);
-  const left = next - v.depth;
+  const last = lastMarker(v.depth);
   // Row 1: fish landed since the last marker light up one by one (all lit at a marker).
   const landed = at ? TRAIL.count : Math.min(TRAIL.count, v.depth % DIVE.ledgeEvery);
   const icons = Array.from({ length: TRAIL.count }, (_, i) =>
     `<i class="${i < landed ? 'on' : ''}${i === pop ? ' pop' : ''}">${TRAIL.fish}</i>`).join('');
-  const fishRow = `<span class="trailrow"><span class="lab">${at ? `Marker ${v.depth} reached` : `Head home at marker ${next}`}</span><span class="trail">${icons}</span></span>`;
+  const fishRow = `<span class="trailrow"><span class="lab">${at ? `Marker ${v.depth} reached` : `${plural(next - v.depth, 'fish', 'fish')} to marker ${next}`}</span><span class="trail">${icons}</span></span>`;
   // Row 2: a flag per marker in this zone, lit once reached; hidden in the last zone, which never ends.
   const marks = zoneMarkers(v.depth);
   const flags = marks.map((m) => `<i class="flag${m <= v.depth ? ' on' : ''}${at && m === v.depth && pop === TRAIL.count ? ' pop' : ''}">${TRAIL.flag}</i>`).join('');
   const to = zoneAfter(v.depth);
-  const flagRow = marks.length && to ? `<span class="trailrow"><span class="lab">Markers to ${lower(to.name)}</span><span class="trail">${flags}</span></span>` : '';
+  const ahead = marks.filter((m) => m > v.depth).length;
+  const flagLab = !to ? '' : ahead ? `${plural(ahead, 'marker')} to ${lower(to.name)}` : `${to.name} next`;
+  const flagRow = marks.length && to ? `<span class="trailrow"><span class="lab">${flagLab}</span><span class="trail">${flags}</span></span>` : '';
   const marker = fishRow + flagRow;
   const full = Math.max(0, Math.min(100, (v.line / DIVE.spool) * 100));
   // Easy fights barely touch the spool; the cost shows once it's a metre or more.
   const cost = worn && v.worn && v.worn >= 0.5 ? `<span class="worn">−${Math.round(v.worn)} m</span>` : '';
   const grow = v.ledges ? `<span class="grow">${pct(haulBonus(v.ledges))}</span>` : '';
-  return `<div><span class="zone">${z.name}</span></div>
+  return `<div><span class="zone">${z.name}</span>${last ? `<span class="at">Marker ${last}</span>` : ''}</div>
     <div>${marker}</div>
     <div class="line ${lineLevel(v.line)}"><span class="lab">Line</span><span class="linerow"><span class="bar"><i style="width:${full.toFixed(1)}%"></i></span><span class="m">${Math.floor(v.line)} m</span>${cost}</span></div>
-    <div><span class="lab">Haul</span><span class="haul">${PEARL}${v.pearls}${grow}<span class="dfish">🐟 ${v.fish}</span></span></div>`;
+    <div><span class="lab">Haul</span><span class="haul">${PEARL}${v.pearls}${grow}<span class="dcoins">${COIN} ${v.coins.toLocaleString()}</span></span></div>`;
 }
 
 /** The dive strip at the top of the screen, and the hooked sea fish's behaviour under it. */
@@ -184,7 +189,7 @@ export function markerHtml(v: DiveView): string {
     ? `Sail on and the haul grows to ${pct(then)} at marker ${next}, but if the line runs out it sinks.`
     : `The haul is at its best (${pct(now)}). Sail on and it still sinks if the line runs out.`;
   return `<div class="dcard"><h2>🚩 Marker ${v.depth}</h2>
-    <div class="sub">${zoneAt(v.depth).name} · ${plural(v.fish, 'fish', 'fish')} landed this charter</div>
+    <div class="sub">${zoneAt(v.depth).name} · ${v.coins.toLocaleString()} ${COIN} from fish this charter</div>
     <div class="rows">
       <div class="row ${lineLevel(v.line)}">Line left <span class="bar"><i style="width:${full.toFixed(1)}%"></i></span><b>${Math.floor(v.line)} m</b></div>
       <div class="row">Haul <span>${PEARL} <b>${v.pearls}</b> × ${now.toFixed(1)} = <b>${banked(v)}</b></span></div>
@@ -202,7 +207,7 @@ export function headHomeHtml(v: DiveView): string {
   return `<div class="dcard"><h2 class="blue">Head home?</h2>
     <div class="sub">${zoneAt(v.depth).name} · ${plural(next - v.depth, 'fish', 'fish')} to marker ${next}</div>
     <div class="why">${v.pearls ? `The haul of ${plural(v.pearls, 'pearl')} sinks if you head home now.` : 'Nothing in the haul yet, so nothing is lost.'}</div>
-    <p class="note">${v.fish ? `Your ${plural(v.fish, 'fish', 'fish')} ${v.fish === 1 ? 'is' : 'are'} already sold. ` : ''}Markers you've charted stay charted.</p>
+    <p class="note">${v.coins ? `You keep the ${v.coins.toLocaleString()} ${COIN} from fish sold so far. ` : ''}Markers you've charted stay charted.</p>
     <div class="btns"><button class="btn plain" data-act="close">Stay out</button><button class="btn bad" data-act="headhome">Head home</button></div></div>`;
 }
 
