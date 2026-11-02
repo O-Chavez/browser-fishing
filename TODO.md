@@ -12,6 +12,8 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] 🎨 Make the charter's words and zones clear to players (Oscar, 2026-11-01), a follow-up to the finished "Charter terminology and the two-row charter HUD" (DONE.md)
   - Words: go over every charter term players read (marker, charted marker, haul, Head home / Sail on, Black Pearls and their growth per marker, the line running out, Furthest Out) and make each one explain itself, simplifying or dropping terms where that's clearer. Places: the charter HUD and cards (`src/game/divehud.ts`), Reed's panel, the charters poster (`chartersPosterHtml`, `game.ts`), tips. List the terms with proposed rewordings for Oscar before changing anything
   - Zones: show the zones as something to grind toward, e.g. a small chart of the five zones (the Shelf to the Abyss) with where the player is now, their furthest marker and what each zone holds (its fish and legends), on Reed's panel and/or the charter HUD. Show 2-3 mockups in the game's style first; ties in with the Boat upgrades idea (Ideas) if zones get gated later
+- [ ] Leave the casino only when looking at the door (Oscar, 2026-11-02): players who spam E as they walk in leave again at once, since they arrive by the exit and its "Exit to the pond" prompt is the nearest spot (`spots` in `game.ts` ~2175, picked by distance alone)
+  - Show the exit prompt only while the player faces the doors (a view-angle check like a look cone), so E does nothing on arrival; maybe also give the casino a `gateArrival` a few steps in, facing the floor (`arrivalSpot`, `src/data/maps.ts`). Smoke check: entering and pressing E right away stays inside
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
