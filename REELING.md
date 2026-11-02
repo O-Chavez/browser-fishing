@@ -86,6 +86,17 @@ Target feel in one line: the diagonal is fun, the third column is slow, the four
 
 ## Secondary variables
 
+### Oscar's first charters (2026-11-01)
+
+On the base Aurora Rod and line Oscar reached fish 39 with no snaps and ran out of line there. The last stretch was a slog: fights of minutes, barely gaining line after each surge. Rebuilt from the bots (`botFight` on `rollSeaFish`, `rollSize` and `seaDifficulty`, 300 fish a marker), metres of spool per marker of 5 fish / share of fights over 60 s:
+
+| Player | 20 | 25 | 30 | 35 | 40 | Out of line from the harbour |
+|---|---|---|---|---|---|---|
+| Fast (0.25 s, best style, rides near the red) | 15 m / 0% | 27 / 0% | 42 / 1% | 65 / 0% | 76 / 0% | ~fish 49 |
+| Careful (0.3 s, eases off 0.2 short of the red, like Oscar) | 33 / 3% | 65 / 14% | 127 / 36% | 163 / 42% | 152 / 41% | ~fish 36 |
+
+The careful player's 90th-percentile fight passes 2.5 minutes from marker 30 on: easing off early hands the fish line in every surge, and Drop-off weight makes it slow to win back. A lower weight cap (3.0), milder Runners (`run` 1.3) or less pull spread (1.2) each moved the careful player's run by a fish at most, so the fix is fish that tire (TODO, fight left).
+
 ### Fish stamina (fight left)
 
 How much fight a hooked fish has left. It drains with every surge and with time spent held in the green, and a tired fish surges less often and less hard. Stamina is what makes the one-tier-over fight an arc (hard start, tired finish) rather than a flat slog, and it belongs on the **weight** side only:

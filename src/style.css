@@ -688,7 +688,8 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 @keyframes wornIn { from { opacity: 0; transform: translateY(-4px); } }
 #divehud .haul { font-size: 19px; font-weight: 900; display: flex; align-items: center; gap: 6px; }
 #divehud .grow { font-size: 12px; font-weight: 900; padding: 1px 7px; border-radius: 99px; background: var(--gold); color: var(--gold-ink); }
-#divehud .dfish { font-size: 15px; color: var(--cream-muted); margin-left: 4px; }
+#divehud .dcoins { font-size: 15px; color: var(--cream-muted); margin-left: 4px; display: flex; align-items: center; gap: 4px; }
+#divehud .at { font-size: 15px; font-weight: 900; }
 /* Next-marker trail: a fish per catch between markers, then the flag. Tweak the grey-out and pop here. */
 #divehud .trail { --off-opacity: .35; --off-flag-opacity: .55; --off-filter: grayscale(1); --pop-ms: .6s; display: flex; align-items: center; gap: 1px; font-size: 15px; line-height: 1; }
 #divehud .trailrow { display: flex; align-items: center; gap: 8px; }
