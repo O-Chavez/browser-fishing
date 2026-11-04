@@ -2,7 +2,7 @@ import {
   DEEP_SEA_ROD, FISH, POND_FISH, RARITY_VALUE, SEA_VALUE, RARITY_WEIGHT, RARITY_XP, RODS,
   type Fish, type Rod, type Bait, type Line,
 } from '../data/content';
-import type { Difficulty, FightDifficulty } from './reel';
+import type { Gaps } from './reel';
 
 import { CASINO_LEVEL } from '../data/casino';
 import { DIVES_OPEN } from '../data/dive';
@@ -122,86 +122,91 @@ export function backPayXp(dex: Record<string, { count: number }>, since = 0): nu
 /** The best tier of fish you can hook is set by the bait; the rod only decides how hard the fight is. */
 export const gearTier = (_rod: Rod, bait: Bait): number => bait.tier;
 
-/** Fight difficulty of a typical fish of each tier on gear of the same tier: a light challenge that grows with the tiers. */
-export const MATCHED_DIFFICULTY = [1.2, 1.5, 1.6, 1.7, 1.8];
+/** A hooked fish's strength and weight, in tiers: a pond fish's tier on both, a sea fish's from how far out (`seaFishTiers`). */
+export interface FishTiers {
+  strength: number;
+  weight: number;
+}
+
+/** The gear's, in tiers: the line answers strength and the rod weight, one to one (a sea level is a share of a tier, `seaGearTiers`). */
+export interface GearTiers {
+  line: number;
+  rod: number;
+}
 
 /**
- * The weight axis for each tier a fish is above the rod (REELING.md, "Engine findings"): one tier over makes the
- * fight about twice as long and still landed (×1.5, up to 3.1 with a trophy of tier 5); two tiers over puts even
- * the smallest tier 3 fish past 14, where the run-off is quick at every pace, so the fish takes the line on its own
- * within the time a one-tier fight would have been landed. The numbers are big because drag follows the surge's
- * build-up, which is slow on low-pace fish.
+ * The one formula, pond and sea (REELING.md, "The foundation"; Oscar, 2026-11-02): each gap is the fish's stat over the
+ * gear's that answers it. One tier is one rung.
  */
-export const WEIGHT_STEP = [1, 1.5, 12, 24, 48];
-/**
- * The strength axis for each tier a fish is above the line: one tier over puts the surges in the red for everyone
- * (a fast player still lands about half by giving line); two tiers over, nobody holds it.
- */
-export const STRENGTH_STEP = [1, 2.5, 4, 6, 8];
-/** Each tier a fish is below the gear on an axis multiplies that axis by this. */
-export const TIER_DOWN = 0.85;
+export const gapsOf = (fish: FishTiers, gear: GearTiers): Gaps => ({ strength: fish.strength - gear.line, weight: fish.weight - gear.rod });
 
-/** A fish that rolled far from its species on one axis, named so the player can read it (REELING.md, "Temperament"). */
+/**
+ * A hooked pond fish against the gear (`gapsOf`): its strength and weight are its tier, as are a line's strength and a
+ * rod's. Nothing else about the fish counts for now: species, size, a shiny, Feisty or Brutish and the gloves are
+ * left off the foundation, to come back as modifiers on top if they're wanted (Oscar, 2026-11-02).
+ */
+export function fightGaps(fish: Fish, rod: Rod, line: Line): Gaps {
+  return gapsOf({ strength: fish.tier, weight: fish.tier }, { line: line.tier, rod: rod.tier });
+}
+
+/**
+ * The first modifiers on top of the foundation, pond and sea (REELING.md, "The sea mapping"; Oscar, 2026-11-03): each
+ * fish rolls its strength and its weight separately, up to `FISH_SPREAD` of a tier either way.
+ */
+export const FISH_SPREAD = 0.15;
+
+/** Whole rungs over the gear, give or take a fish's spread, so a pond fish a tier over always reads as one. */
+export const rungsOver = (gap: number): number => Math.floor(gap + FISH_SPREAD);
+
+/** Which gear a fight is over, pond and sea alike, for the loss card: a rung or more over it. */
+export const overGear = (g: Gaps): { rod: boolean; line: boolean } => ({ rod: rungsOver(g.weight) >= 1, line: rungsOver(g.strength) >= 1 });
+
+/** A fish a rung or more under the gear on both axes, give or take its spread: "An easy one" on the hook toast (Oscar, 2026-11-03). */
+export const underGear = (g: Gaps): boolean => rungsOver(-g.strength) >= 1 && rungsOver(-g.weight) >= 1;
+
+/**
+ * The matchup in words, for the hook toast and the sea sticker (Oscar, 2026-11-03): a rung over is "strong for your
+ * line" or "heavy for your rod", two or more "too strong" or "too heavy", so the bigger problem reads as one. Empty
+ * when the gear handles the fish; `too` when either axis is two or more over.
+ */
+export function matchupWords(g: Gaps): { words: string; too: boolean } {
+  const say = (gap: number, a: string, gear: string) => (rungsOver(gap) >= 2 ? `too ${a} for your ${gear}` : rungsOver(gap) >= 1 ? `${a} for your ${gear}` : '');
+  const words = [say(g.strength, 'strong', 'line'), say(g.weight, 'heavy', 'rod')].filter(Boolean).join(', ');
+  return { words: words && words[0].toUpperCase() + words.slice(1), too: rungsOver(g.strength) >= 2 || rungsOver(g.weight) >= 2 };
+}
+
+/** A fish stronger (Feisty) or heavier (Brutish) than others of its kind, named on the hook toast and the badge (REELING.md, "Temperament"). */
 export type FishTag = 'feisty' | 'brutish';
-/** How often a pond fish carries a tag, and how much it adds to that axis. */
+/** How often a fish carries a tag, pond and sea. */
 export const TAG_CHANCE = 1 / 8;
-export const TAG_BOOST = 1.3;
+/**
+ * Tiers a tag adds to its axis (Oscar, 2026-11-03): a change you notice in the fight, not a lost fish. Feisty is
+ * smaller, since a careful player's strength limit is a cliff at the red's edge (Brutish +0.5 only lengthens the fight).
+ */
+export const TAG_TIERS: Record<FishTag, number> = { feisty: 0.25, brutish: 0.5 };
 
 /**
- * Rolls a Feisty (strength) or Brutish (weight) tag, one fish in `TAG_CHANCE`, and only on an axis the gear already
- * handles: a tag never crosses a wall, so a Feisty fish on matched line still can't reach the red.
+ * Rolls a Feisty (strength) or Brutish (weight) tag, one fish in `TAG_CHANCE`, on any fish (Oscar, 2026-11-03): at the
+ * frontier too, since tags that stopped where the gear strains would make pushing past it easier.
  */
-export function rollTag(fish: Fish, rod: Rod, line: Line, rng: () => number): FishTag | null {
+export function rollTag(rng: () => number): FishTag | null {
   if (rng() >= TAG_CHANCE) return null;
-  const tag: FishTag = rng() < 0.5 ? 'feisty' : 'brutish';
-  const over = tag === 'feisty' ? fish.tier > line.tier : fish.tier > rod.tier;
-  return over ? null : tag;
+  return rng() < 0.5 ? 'feisty' : 'brutish';
 }
 
-/** How much a species' stamina sets it apart within its tier: difficulty ×(stamina / the tier's mean)^this. */
-export const STAMINA_SPREAD = 0.5;
+const hundredths = (x: number) => Math.round(x * 100) / 100;
 
-/** Fight difficulty for a species' smallest catch; its largest is the mirror above (×1.15), a mid-size one ×1. */
-export const SIZE_DIFFICULTY = 0.85;
-
-/** What a catch's size does to its weight: ×0.85 for the species' smallest up to ×1.15 for its largest. */
-export const sizeDifficulty = (fish: Fish, size: number): number =>
-  SIZE_DIFFICULTY + 2 * (1 - SIZE_DIFFICULTY) * Math.min(1, Math.max(0, sizeRatio(fish, size)));
-
-/** Mean stamina of each tier's pond fish. */
-const TIER_STAMINA = [1, 2, 3, 4, 5].map((t) => {
-  const s = POND_FISH.filter((f) => f.tier === t).map((f) => f.stamina);
-  return s.reduce((a, b) => a + b, 0) / s.length;
-});
-
-/**
- * How hard a hooked fish fights, on two axes (REELING.md). The base is its tier on matched gear, spread a little by
- * species stamina. **Weight** against the rod steps up by `WEIGHT_STEP` for each tier the fish is above the rod,
- * and carries size, a shiny, a Brutish tag and the rod boost (the gloves raise `control`), so these make a fight
- * longer, never a snap. **Strength** against the line steps up by `STRENGTH_STEP` for each tier above the line and
- * carries a Feisty tag. Each tier below the gear eases that axis by `TIER_DOWN`. The pace is the base, so the
- * fish's twitchiness follows its tier, not the gear. Without a size it's a mid-size fish.
- */
-export function reelDifficulty(fish: Fish, rod: Rod, line: Line, shiny = false, size?: number, tag: FishTag | null = null): FightDifficulty {
-  const tier = Math.min(5, Math.max(1, fish.tier)) - 1;
-  const species = Math.pow(fish.stamina / TIER_STAMINA[tier], STAMINA_SPREAD);
-  const base = MATCHED_DIFFICULTY[tier] * species;
-  const big = size === undefined ? 1 : sizeDifficulty(fish, size);
-  const boost = Math.pow((RODS.find((r) => r.id === rod.id)?.control ?? rod.control) / rod.control, 0.45);
-  const step = (gap: number, up: number[]) => (gap > 0 ? up[Math.min(gap, up.length - 1)] : Math.pow(TIER_DOWN, -gap));
-  const r = (x: number) => Math.round(Math.max(0.4, x) * 100) / 100;
+/** A hooked fish's gaps with its modifiers: maybe a tag (`rollTag`), then its own spread on each axis (`FISH_SPREAD`). */
+export function rollFishGaps(g: Gaps, rng: () => number): { d: Gaps; tag: FishTag | null } {
+  const tag = rollTag(rng);
+  const spread = () => (2 * rng() - 1) * FISH_SPREAD;
   return {
-    // A shiny fights heavier only on gear that handles it, like a tag: it lengthens a fight, never pushes one over the wall.
-    weight: r(base * step(fish.tier - rod.tier, WEIGHT_STEP) * big * boost * (shiny && fish.tier <= rod.tier ? SHINY_DIFFICULTY : 1) * (tag === 'brutish' ? TAG_BOOST : 1)),
-    strength: r(base * step(fish.tier - line.tier, STRENGTH_STEP) * (tag === 'feisty' ? TAG_BOOST : 1)),
-    pace: r(base),
+    d: {
+      strength: hundredths(g.strength + (tag === 'feisty' ? TAG_TIERS.feisty : 0) + spread()),
+      weight: hundredths(g.weight + (tag === 'brutish' ? TAG_TIERS.brutish : 0) + spread()),
+    },
+    tag,
   };
-}
-
-/** The word for a fight on the "Hooked!" toast, from its hardest axis. */
-export function difficultyLabel(d: Difficulty): string {
-  const x = typeof d === 'number' ? d : Math.max(d.weight, d.strength);
-  return x < 1.0 ? 'Easy' : x < 1.4 ? 'Gentle' : x < 1.9 ? 'Medium' : x < 2.4 ? 'Hard' : 'Brutal';
 }
 
 export function canCatch(fish: Fish, locationId: string, rod: Rod, bait: Bait, night = false): boolean {
@@ -273,7 +278,6 @@ const weightRatio = (fish: Fish, size: number) => {
 export const SHINY_CHANCE = 0.05;
 export const SHINY_CHANCE_NIGHT = 0.15;
 export const SHINY_VALUE = 5;
-export const SHINY_DIFFICULTY = 1.4;
 
 export function sellValue(fish: Fish, size: number, shiny = false): number {
   return Math.max(1, Math.round(fish.baseValue * (fish.sea ? SEA_VALUE : RARITY_VALUE[fish.rarity]) * (0.5 + weightRatio(fish, size)) * (shiny ? SHINY_VALUE : 1)));

@@ -6,7 +6,7 @@ import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 import type { Behaviour } from '../data/dive';
 import type { DiveState } from '../game/dive';
-import type { Difficulty, LossReason } from '../game/reel';
+import type { Gaps, LossReason, ReelTune } from '../game/reel';
 import type { FishTag } from '../game/progression';
 
 export interface PlayerInfo {
@@ -168,10 +168,9 @@ export type ServerMsg =
   | { t: 'stages'; ids: StageId[]; intro: boolean }
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
-  /** With a fish, `seed` and `d` set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
-  /** `b`: a sea fish's behaviour, whose reel levers (`BEHAVIOUR_TUNE`) the fight uses. `tag`: a Feisty or Brutish pond fish. */
-  /** `pull`: a sea fish pulling well above or below its depth's norm, named on the hook toast. */
-  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Difficulty; b?: Behaviour; tag?: FishTag; pull?: 'strong' | 'light' }
+  /** With a fish, `seed` and `d`, its gaps over the gear, set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
+  /** `b`: a sea fish's behaviour, `tag`: a Feisty or Brutish pond fish; neither is rolled while the foundation leaves variety off. */
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Gaps; b?: Behaviour; tag?: FishTag; tune?: ReelTune }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; wedge: number; factor: number; ms: number }
   | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }

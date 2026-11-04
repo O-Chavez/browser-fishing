@@ -1,22 +1,20 @@
-// Charter fight sim (REELING.md, "Oscar's first charters"): the reel bots fight rolled sea fish depth by depth on a
-// fresh spool and base gear, and report spool per marker, long fights, snaps and where each player runs out of line.
+// Charter fight sim (REELING.md, "The sea mapping"): the reference hands (`HANDS`) fight sea fish depth by depth on
+// the given levels, each with the style that costs the least spool there, and report spool per marker, long fights,
+// snaps, and how far one spool lasts from each start marker (every fish fought until one lands, never heading home).
 // Run: npx tsx scripts/seafights.ts [n fish a depth, default 200] [last depth, default 55] [rod level] [line level]
 import { DIVE } from '../src/data/dive';
-import { SEA_TUNE, fightTune, lineWorn, rollSeaFish, seaDifficulty } from '../src/game/dive';
+import { lineWorn, rollSeaFish, seaGaps } from '../src/game/dive';
 import { mulberry } from '../src/game/env';
-import { rollSize, sizeDifficulty } from '../src/game/progression';
-import { botFight, STYLES, type BotStyle } from '../src/game/reelbot';
+import { rollFishGaps, rollSize } from '../src/game/progression';
+import { P } from '../src/game/reel';
+import { botFight, HANDS, type BotStyle, type Hand } from '../src/game/reelbot';
 
 const n = Number(process.argv[2] ?? 200);
 const last = Number(process.argv[3] ?? 55);
 const gear = { rod: Number(process.argv[4] ?? 0), line: Number(process.argv[5] ?? 0) };
-// TIRE="k,w0,min,slack,burst,exhaustedWeight,tiredAt,tiredGap,tiredPull,tiredSurge,calm" tries other fight-left levers (P.tire);
-// TIRE=0 plays without tiring.
 // START sets where a sea fight starts on the line (P.start), MPL the spool metres per fight length (DIVE.metresPerLine).
-if (process.env.START) SEA_TUNE.start = Number(process.env.START);
+if (process.env.START) P.start = Number(process.env.START);
 if (process.env.MPL) DIVE.metresPerLine = Number(process.env.MPL);
-if (process.env.TIRE === '0') delete SEA_TUNE.powerJitter;
-if (process.env.TIRE) SEA_TUNE.tire = process.env.TIRE === '0' ? [0, 1, 0.5, 0.25, 1, 1, 0.5, 2, 0.5, 0, 0] : process.env.TIRE.split(',').map(Number);
 
 interface Row {
   land: number;
@@ -41,9 +39,10 @@ function play(depth: number, react: number, style: BotStyle): Row {
   for (let i = 0; i < n; i++) {
     const bite = rollSeaFish(depth, rng);
     const size = rollSize(bite.fish, rng);
-    const d = seaDifficulty(depth, gear, bite.fish, bite.pull, sizeDifficulty(bite.fish, size));
+    // Each fish with its modifiers (tag and spread, `rollFishGaps`); PLAIN=1 fights the bare gaps.
+    const d = process.env.PLAIN ? seaGaps(depth, gear) : rollFishGaps(seaGaps(depth, gear), rng).d;
     const seed = Math.floor(rng() * 2 ** 31);
-    const f = botFight(d, react, style, mulberry(seed), mulberry(seed ^ 0x5bd1e995), fightTune(bite.behaviour, bite.fish.id));
+    const f = botFight(d, react, style, mulberry(seed), mulberry(seed ^ 0x5bd1e995));
     const land = f.status === 'caught';
     fights.push({ t: f.t, land, snap: f.status === 'snapped', tired: f.tired, exhausted: f.exhausted, tiredSurges: f.tiredSurges, m: lineWorn({ lineOut: f.lineOut, frays: f.frays, snapped: f.status === 'snapped' }, land) });
   }
@@ -62,31 +61,35 @@ function play(depth: number, react: number, style: BotStyle): Row {
   };
 }
 
-const players: { name: string; react: number; styles: BotStyle[] }[] = [
-  { name: 'Fast (0.25 s, best style)', react: 0.25, styles: STYLES },
-  { name: 'Careful (0.3 s, eases off 0.2 short)', react: 0.3, styles: [{ lo: 0.05, hi: 0.2 }] },
-];
+const players = (process.env.HANDS ?? 'careful,skilled').split(',').map((h) => ({ name: `${h} (${HANDS[h as Hand].react} s)`, ...HANDS[h as Hand] }));
 
 const pct = (x: number) => `${Math.round(100 * x)}%`;
 for (const p of players) {
   console.log(`\n${p.name}, rod +${gear.rod} line +${gear.line}, ${n} fish a depth`);
   console.log('depth  land  snaps  m/fish  >60s   p90    mean  tired  exhausted  tired surges');
-  let spool = 0;
-  let outAt: number | null = null;
+  const rows: Row[] = [];
   for (let depth = 0; depth <= last; depth++) {
     // The best style here: least spool per landed fish.
     let best: Row | null = null;
     for (const st of p.styles) {
       const r = play(depth, p.react, st);
-      if (!best || r.metres < best.metres) best = r;
+      if (!best || (r.land > 0 && (best.land === 0 || r.metres < best.metres))) best = r;
     }
-    const r = best!;
-    spool += r.metres;
-    if (outAt === null && spool > DIVE.spool) outAt = depth;
+    const r = rows[depth] = best!;
     if (depth % 5 === 0 || depth === last)
       console.log(
-        `${String(depth).padStart(5)}  ${pct(r.land).padStart(4)}  ${pct(r.snaps).padStart(5)}  ${r.metres.toFixed(1).padStart(6)}  ${pct(r.long).padStart(4)}  ${r.p90.toFixed(0).padStart(4)}s  ${r.mean.toFixed(0).padStart(4)}s  ${pct(r.tired).padStart(5)}  ${pct(r.exhausted).padStart(9)}  ${r.tiredSurges.toFixed(1).padStart(12)}`,
+        `${String(depth).padStart(5)}  ${pct(r.land).padStart(4)}  ${pct(r.snaps).padStart(5)}  ${(r.land ? r.metres.toFixed(1) : '–').padStart(6)}  ${pct(r.long).padStart(4)}  ${r.p90.toFixed(0).padStart(4)}s  ${r.mean.toFixed(0).padStart(4)}s  ${pct(r.tired).padStart(5)}  ${pct(r.exhausted).padStart(9)}  ${r.tiredSurges.toFixed(1).padStart(12)}`,
       );
   }
-  console.log(`Out of line from the harbour: ${outAt === null ? `past fish ${last}` : `fish ${outAt}`} (${spool.toFixed(0)} m to depth ${last})`);
+  // One spool from each start marker: each depth costs its spool per landed fish until the line runs out, or the
+  // fights stop it first (no fish landed there).
+  const reach: string[] = [];
+  for (let start = 0; start <= last; start += DIVE.ledgeEvery) {
+    let spool = 0, depth = start;
+    while (depth <= last && rows[depth].land > 0 && spool + rows[depth].metres <= DIVE.spool) spool += rows[depth++].metres;
+    const why = depth > last ? `past ${last}` : rows[depth].land === 0 ? `fights stop it at ${depth}` : `out of line at ${depth}`;
+    reach.push(`from ${start}: ${depth - start} fish, ${why}`);
+    if (rows[start].land === 0) break;
+  }
+  console.log(`One spool (${DIVE.spool} m), every fish fought until one lands:\n  ${reach.join('\n  ')}`);
 }

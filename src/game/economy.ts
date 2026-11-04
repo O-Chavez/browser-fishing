@@ -3,11 +3,11 @@ import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/
 import { BAITS, DEEP_SEA_LINE, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { ROD_LEVEL, SEA_LINE } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
-import { applyXp, catchXp, eligibleFish, grantRanks, levelGifts, type Gifts, pickFish, reelDifficulty, rollSize, rollTag, sellValue, sizeDifficulty, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
-import type { Difficulty, FightDifficulty } from './reel';
+import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, overGear, type Gifts, pickFish, rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
+import { P, type Gaps, type ReelTune } from './reel';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
-import { pullWord, rollSeaFish, seaDifficulty, type SeaGear } from './dive';
+import { rollSeaFish, seaGaps, type SeaGear } from './dive';
 import { DIVE, type Behaviour } from '../data/dive';
 import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
@@ -122,6 +122,17 @@ export function recordSighting(s: SaveData, fish: Fish): boolean {
   return true;
 }
 
+/**
+ * A sea fish lost over the Deep Sea Rod or Line (`overGear` on its own gaps, `d`) goes into the Fishdex as seen, as the
+ * pond's do (Oscar, 2026-11-03). Its card names its zone rather than a level, since how hard it is depends on the marker.
+ */
+export function recordSeaSighting(s: SaveData, fish: Fish, d: Gaps): boolean {
+  const over = overGear(d);
+  if ((!over.line && !over.rod) || s.dex[fish.id] || s.seen.includes(fish.id)) return false;
+  s.seen.push(fish.id);
+  return true;
+}
+
 /** Spools a better line onto the rod: a step up from the current one, unlocked and paid for. There is nothing to carry. */
 export function buyLine(s: SaveData, id: string): boolean {
   const l = LINES.find((x) => x.id === id);
@@ -205,7 +216,7 @@ export function levelSeaLine(s: SaveData): boolean {
   return true;
 }
 
-/** The rod level a sea fight uses (`seaDifficulty`): the Deep Sea Rod's, which is always the rod in hand at sea. */
+/** The rod level a sea fight uses (`seaGaps`): the Deep Sea Rod's, which is always the rod in hand at sea. */
 export const seaRodLevel = (s: SaveData): number => (s.seaRod ? s.rodLevel : 0);
 
 /** The levels a sea fight is eased by: the rod's (weight) and the Deep Sea Line's (strength). */
@@ -272,7 +283,7 @@ export function activePerks(s: Pick<SaveData, 'perks' | 'lure' | 'lureOff'>): { 
   // Lucky Charms replace each other, so only the best one counts.
   const charm = (['charm3', 'charm2', 'charm1'] as const).find((id) => s.perks.includes(id));
   if (charm) add(charm, `Fish worth +${Math.round(CHARM_BONUS[charm] * 100)}%`);
-  if (s.perks.includes('gloves')) add('gloves', `Fights ×${GLOVES_CONTROL} easier`);
+  if (s.perks.includes('gloves')) add('gloves', `Reeling ×${GLOVES_CONTROL} faster`);
   if (s.perks.includes('lantern')) add('lantern', `Night luck ×${LANTERN_NIGHT_LUCK}`);
   if (s.perks.includes('vest')) add('vest', `+${VEST_SLOTS} hotbar slots`);
   if (s.lure > 0) add('lure', s.lureOff ? `Shiny Lure off · ${s.lure} saved` : `${s.lure} shiny cast${s.lure === 1 ? '' : 's'} left`);
@@ -289,7 +300,7 @@ export function setLure(s: SaveData, on: unknown): boolean {
   return true;
 }
 
-/** Rod control with the Quick-Reel Gloves on. */
+/** Rod control with the Quick-Reel Gloves on: a longer window to strike when a fish bites. */
 export const reelControl = (s: Pick<SaveData, 'perks'>, base: number): number => (s.perks.includes('gloves') ? base * GLOVES_CONTROL : base);
 
 /** Sells the fish in hand. */
@@ -473,22 +484,22 @@ export interface Roll {
   shiny?: boolean;
   perfect?: boolean;
   spot?: string;
-  /** The fight, with a fish: its reel seed and difficulty. The server replays the catch from these. */
+  /** The fight, with a fish: its reel seed and gaps over the gear. The server replays the catch from these. */
   seed?: number;
-  d?: Difficulty;
-  /** How a sea fish fights (`BEHAVIOUR_TUNE`); pond fish have none. */
+  d?: Gaps;
+  /** How a sea fish fights. Not rolled onto the fight while the foundation leaves variety off (`fightGaps`). */
   b?: Behaviour;
-  /** A Feisty or Brutish pond fish (`rollTag`). */
+  /** A Feisty or Brutish fish, pond or sea (`rollTag`), already counted in `d`. */
   tag?: FishTag;
-  /** A sea fish that pulls well above or below its depth's norm (`pullWord`), for the hook toast. */
-  pull?: 'strong' | 'light';
+  /** Fight levers this fight runs with over `P` (the Quick-Reel Gloves' faster reeling, `fightTune`); the server replays with them. */
+  tune?: ReelTune;
 }
 
-/** A hooked fish's fight difficulty on the save's rod and line, Quick-Reel Gloves included. */
-export function fightDifficulty(s: SaveData, fish: Fish, shiny: boolean, size: number, tag: FishTag | null = null): FightDifficulty {
-  const rod = byId(RODS, s.rod);
-  return reelDifficulty(fish, { ...rod, control: reelControl(s, rod.control) }, lineOf(s), shiny, size, tag);
-}
+/** The levers a save's fights run with over `P`: the Quick-Reel Gloves reel in `GLOVES_CONTROL` times faster in the calm. */
+export const fightTune = (s: Pick<SaveData, 'perks'>): ReelTune | undefined => (s.perks.includes('gloves') ? { reel: P.reel * GLOVES_CONTROL } : undefined);
+
+/** A hooked pond fish's gaps over the save's rod and line (`fightGaps`). */
+export const fightGapsOf = (s: SaveData, fish: Fish): Gaps => fightGaps(fish, byId(RODS, s.rod), lineOf(s));
 
 export function rollCast(s: SaveData, locationId: string, rng: () => number = Math.random, perfect = false, spot: SpotId = 'prime', night = false): Roll {
   const rod = byId(RODS, s.rod);
@@ -503,17 +514,19 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
   const roll: Roll = { perfect, spot, fishId: fish?.id ?? null, size, wait, shiny };
   if (fish) {
     roll.seed = Math.floor(rng() * 4294967296);
-    const tag = rollTag(fish, rod, lineOf(s), rng);
-    if (tag) roll.tag = tag;
-    roll.d = fightDifficulty(s, fish, shiny, size, tag);
+    const m = rollFishGaps(fightGapsOf(s, fish), rng);
+    roll.d = m.d;
+    if (m.tag) roll.tag = m.tag;
+    const tune = fightTune(s);
+    if (tune) roll.tune = tune;
   }
   return roll;
 }
 
 /**
- * A cast on a dive: the fish comes from the depth's zone (`rollSeaFish`) and fights at the depth's difficulty on the
- * Aurora Rod's levels, its size on the weight and its pull roll on the strength, whatever the bait. No bait is spent.
- * Shinies roll as in the daytime pond, Shiny Lure included; a shiny sea fish is worth more, not harder.
+ * A cast on a dive: the fish comes from the depth's zone (`rollSeaFish`) and fights at the depth's gaps over the Deep
+ * Sea Rod's and Line's levels (`seaGaps`) with its own modifiers (`rollFishGaps`), whatever the bait. No bait is
+ * spent. Shinies roll as in the daytime pond, Shiny Lure included; a shiny sea fish is worth more, not harder.
  */
 export function rollSeaCast(s: SaveData, depth: number, rng: () => number = Math.random): Roll {
   const bite = rollSeaFish(depth, rng);
@@ -522,12 +535,10 @@ export function rollSeaCast(s: SaveData, depth: number, rng: () => number = Math
   const size = rollSize(bite.fish, rng);
   const wait = DIVE.biteMin + rng() * DIVE.biteSpread;
   const shiny = lure || rng() < SHINY_CHANCE * shinyMult(s);
-  const d = seaDifficulty(depth, seaGear(s), bite.fish, bite.pull, sizeDifficulty(bite.fish, size));
-  const roll: Roll = { fishId: bite.fish.id, size, wait, shiny, seed: Math.floor(rng() * 4294967296), d };
-  if (bite.behaviour) roll.b = bite.behaviour;
-  const word = pullWord(bite.pull);
-  if (word) roll.pull = word;
-  return roll;
+  const seed = Math.floor(rng() * 4294967296);
+  const m = rollFishGaps(seaGaps(depth, seaGear(s)), rng);
+  const tune = fightTune(s);
+  return { fishId: bite.fish.id, size, wait, shiny, seed, d: m.d, ...(m.tag ? { tag: m.tag } : {}), ...(tune ? { tune } : {}) };
 }
 
 export interface CatchResult {

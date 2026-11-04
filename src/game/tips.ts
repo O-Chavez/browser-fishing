@@ -1,8 +1,10 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, byId, type Fish, type Line, type Rod } from '../data/content';
-import { DIVES_OPEN } from '../data/dive';
-import { BAIT_PACK, CLEAN_BONUS, rodLevelCost, seaLineCost, seaLineName, seaRodName } from './economy';
+import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, byId, type Bait, type Fish, type Line, type Rod } from '../data/content';
+import { DIVES_OPEN, SEA_TIERS } from '../data/dive';
+import { BAIT_PACK, CLEAN_BONUS } from './economy';
 import { COIN } from './format';
+import { gapsOf, matchupWords, overGear, rungsOver } from './progression';
+import type { Gaps } from './reel';
 import type { SaveData } from './state';
 
 /**
@@ -118,49 +120,79 @@ export function gearHintText(end: FightEnd, gear: Rod | Line, vendor: string): s
 export const rodHintText = gearHintText;
 
 export type LossEnd = 'snapped' | 'escaped';
-/** The card after a lost fight: one big word, the cause in a line, the fix in a line (REELING.md, "What the player feels"). */
+/**
+ * The card after a lost fight (REELING.md, "What the player feels"): one big word for how it ended, then either one
+ * short line per piece of gear the fish was over, naming the next one to get (Oscar, 2026-11-03: "Rod too weak", no
+ * wall of text), or, when the gear handled it, the cause and a reel tip.
+ */
 export interface Verdict {
   title: string;
-  cause: string;
-  fix: string;
+  /** What went wrong, when it was the player's doing; none when it was the gear. */
+  cause?: string;
+  /** The gear lines, or the reel tip. */
+  fixes: string[];
 }
 
+const ended = (end: LossEnd) => (end === 'snapped' ? 'SNAP!' : 'RAN OFF!');
+/** A fish over neither piece of gear: the player's doing. */
+const reelTip = (end: LossEnd): Verdict =>
+  end === 'snapped'
+    ? { title: 'SNAP!', cause: 'Held in the red through a surge', fixes: ['Ease off when the gauge goes red'] }
+    : { title: 'RAN OFF!', cause: 'The fish took all your line', fixes: ['Hold in the green, above the blue'] };
+
 /**
- * What to say when a fight is lost. A fish over the line snapped it, a fish over the rod ran off with the line, and
- * each names the one piece of gear that fixes it and where it is; anything else was the player's own doing, so the
- * fix is a reel tip. `fish` is null at sea, where gear tiers don't apply.
+ * What to say when a fight is lost: the big word says how it ended, and the lines follow the matchup rather than the
+ * ending (Oscar, 2026-11-03: a fish too strong for the line snaps it if the player wrestles it and runs off if they
+ * let it go, and either way the line is the fix): "Line too weak", "Rod too weak" or both, each with the next one to
+ * get. `fish` is null at sea, where gear tiers don't apply.
  */
-export function lossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'level'>, fish: Fish | null, vendor: string): Verdict {
-  const where = (g: { unlockLevel: number; price: number }) => (s.level < g.unlockLevel ? `unlocks at level ${g.unlockLevel}` : `${vendor}'s, ${g.price.toLocaleString('en-US')} ${COIN}`);
-  if (end === 'snapped') {
-    const line = LINES.find((l) => l.id === s.line) ?? LINES[0];
-    const need = fish && fish.tier > line.tier ? LINES.find((l) => l.tier === fish.tier) : null;
-    return need
-      ? { title: 'SNAP!', cause: `Too strong for your ${line.name}`, fix: `${need.name} holds it · ${where(need)}` }
-      : { title: 'SNAP!', cause: 'Held in the red through a surge', fix: 'Ease off when the gauge goes red' };
-  }
+export function lossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'level'>, fish: Fish | null): Verdict {
+  const next = (g: { name: string; unlockLevel: number }) => (s.level < g.unlockLevel ? `${g.name} at level ${g.unlockLevel}` : g.name);
+  const line = LINES.find((l) => l.id === s.line) ?? LINES[0];
   const rod = RODS.find((r) => r.id === s.rod) ?? RODS[0];
-  const need = fish && fish.tier > rod.tier ? RODS.find((r) => r.tier === fish.tier) : null;
-  return need
-    ? { title: 'RAN OFF!', cause: `Too heavy for your ${rod.name}`, fix: `The ${need.name} lands it · ${where(need)}` }
-    : { title: 'RAN OFF!', cause: 'The fish took all your line', fix: 'Tighten when the needle drops below the marker' };
+  const needLine = fish && fish.tier > line.tier ? LINES.find((l) => l.tier === fish.tier) : null;
+  const needRod = fish && fish.tier > rod.tier ? RODS.find((r) => r.tier === fish.tier) : null;
+  const fixes = [needLine && `Line too weak → ${next(needLine)}`, needRod && `Rod too weak → ${next(needRod)}`].filter((x): x is string => !!x);
+  return fixes.length ? { title: ended(end), fixes } : reelTip(end);
+}
+
+/** Levels past the current one until a fish this far over a sea track is no longer over it: a level is one marker (`SEA_TIERS.level`). */
+function levelsToClear(gap: number): number {
+  let k = 1;
+  while (rungsOver(Math.round((gap - k * SEA_TIERS.level) * 100) / 100) >= 1) k++;
+  return k;
 }
 
 /**
- * The card after a lost sea fight. The tracks are levels, so a fish over the line (its surges reach the red) names
- * the Deep Sea Line's next level, and one over the rod (as heavy as sea fish get) the Deep Sea Rod's; each names one
- * piece of gear. The line comes first: a fish over it that ran off took the line the player gave to save it from
- * fraying, whatever its weight. Anything else gets the pond's reel tip.
+ * The card after a lost sea fight, as the pond's: each gear line names the first Deep Sea Line or Rod level on which
+ * this fish (`g`, its own gaps) is no longer over that gear, as the pond names the line that holds it (Oscar,
+ * 2026-11-03: the next level alone undersold a fish several markers past the wall).
  */
-export function seaLossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'level' | 'rodLevel' | 'seaLine'>, over: { rod: boolean; line: boolean }, vendor: string): Verdict {
-  const price = (c: { coins: number; pearls: number }) => `${c.coins.toLocaleString('en-US')} ${COIN} + ${c.pearls.toLocaleString('en-US')} Black Pearls`;
-  if (over.line) {
-    const n = s.seaLine + 1;
-    return { title: end === 'snapped' ? 'SNAP!' : 'RAN OFF!', cause: `Too strong for your ${seaLineName(s)}`, fix: `Deep Sea Line +${n} at ${vendor}'s · ${price(seaLineCost(n))}` };
-  }
-  if (end === 'escaped' && over.rod) {
-    const n = s.rodLevel + 1;
-    return { title: 'RAN OFF!', cause: `Too heavy for your ${seaRodName(s)}`, fix: `${DEEP_SEA_ROD.name} +${n} at ${vendor}'s · ${price(rodLevelCost(n))}` };
-  }
-  return lossVerdict(end, s, null, vendor);
+export function seaLossVerdict(end: LossEnd, s: Pick<SaveData, 'rodLevel' | 'seaLine'>, g: Gaps): Verdict {
+  const over = overGear(g);
+  const fixes = [
+    over.line && `Line too weak → Deep Sea Line +${s.seaLine + levelsToClear(g.strength)}`,
+    over.rod && `Rod too weak → ${DEEP_SEA_ROD.name} +${s.rodLevel + levelsToClear(g.weight)}`,
+  ].filter((x): x is string => !!x);
+  return fixes.length ? { title: ended(end), fixes } : reelTip(end);
+}
+
+/**
+ * A bait's top fish against the player's line and rod, in the hook toast's words (`matchupWords`; Oscar, 2026-11-03),
+ * for the bait's details: "Its top fish: strong for your line." From two rungs over (`too`) it's a ⚠ warning that names
+ * the gear that handles them, and shows after buying too. Null when the gear handles them. `who` names the fish.
+ */
+export function baitWarning(s: Pick<SaveData, 'rod' | 'line'>, bait: Bait, who = 'Its top fish'): { text: string; too: boolean } | null {
+  const line = LINES.find((l) => l.id === s.line) ?? LINES[0];
+  const rod = RODS.find((r) => r.id === s.rod) ?? RODS[0];
+  const g = gapsOf({ strength: bait.tier, weight: bait.tier }, { line: line.tier, rod: rod.tier });
+  const { words, too } = matchupWords(g);
+  if (!words) return null;
+  const said = `${who}: ${words[0].toLowerCase()}${words.slice(1)}.`;
+  if (!too) return { text: said, too };
+  const over = overGear(g);
+  const needLine = over.line ? LINES.find((l) => l.tier === bait.tier)?.name : undefined;
+  const needRod = over.rod ? RODS.find((r) => r.tier === bait.tier)?.name : undefined;
+  const fix = needLine && needRod ? `${needLine} and the ${needRod} handle them.` : needLine ? `${needLine} holds them.` : `The ${needRod} handles them.`;
+  return { text: `⚠ ${said} ${fix}`, too };
 }

@@ -24,7 +24,7 @@ export interface Fish {
   night?: boolean;
   /** Caught on the sea dive (locations `shelf`, `dropoff`...), not in the pond. Tier 5 for gear, but no spirit glow and sold at `SEA_VALUE`. */
   sea?: boolean;
-  /** A sea zone's legend: 1 bite in 20 (`DIVE.legendChance`), a longer fight (`LEGEND_TUNE`) and its own catch moment. */
+  /** A sea zone's legend: 1 bite in 20 (`DIVE.legendChance`) and its own catch moment. */
   legend?: boolean;
 }
 
@@ -36,7 +36,7 @@ export interface Rod {
   price: number;
   castDistance: number;
   luck: number; // multiplies rare chances
-  control: number; // eases the reel: tames fish pulls (see reelDifficulty)
+  control: number; // how long a bite waits for the strike; the gloves raise it (`reelControl`)
   /** Accent colour of the rod model; high tiers also glow. */
   color: number;
 }
@@ -181,8 +181,8 @@ const FISH_DEFS: FishDef[] = [
   { id: 'marlin', name: 'Squall Marlin', tier: 5, sea: true, legend: true, locations: ['dropoff'], minSize: 260, maxSize: 320, maxWeight: 300, baseValue: 560, stamina: 2.8, color: 0x1d5fb0 },
 
   // Sea · Kelp Deep (41-80), the Twilight (81-150) and the Abyss (151+): stranger and dearer the further out (the
-  // Deep Sea Fish Options page, Oscar 2026-11-01). Stamina stays in the Drop-off's band so the frontier tuning holds;
-  // legends fight longer by `LEGEND_TUNE`, not harder.
+  // Deep Sea Fish Options page, Oscar 2026-11-01). Stamina stays in the Drop-off's band; for now a
+  // sea fish's fight comes from how far out it is only (`seaGaps`).
   { id: 'frondback', name: 'Frondback Seadragon', tier: 5, sea: true, locations: ['kelp'], minSize: 160, maxSize: 240, maxWeight: 50, baseValue: 240, stamina: 2.6, color: 0x8a8a2e },
   { id: 'lionfish', name: 'Bramble Lionfish', tier: 5, sea: true, locations: ['kelp'], minSize: 160, maxSize: 230, maxWeight: 70, baseValue: 260, stamina: 2.65, color: 0xc0532c },
   { id: 'wolfeel', name: 'Ironjaw Wolf-eel', tier: 5, sea: true, locations: ['kelp'], minSize: 200, maxSize: 300, maxWeight: 90, baseValue: 250, stamina: 2.65, color: 0x56707e },

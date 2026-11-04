@@ -1,80 +1,168 @@
 import { describe, expect, it } from 'vitest';
-import { FISH, LINES, RODS, byId } from '../data/content';
 import { mulberry } from './env';
-import { reelDifficulty } from './progression';
-import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, SWEET_MIN, axes, decodeHolds, expArith, lnArith, powArith, replayFight, type Difficulty } from './reel';
-import { NAIVE, STYLES, botCell, botFight, botSweep } from './reelbot';
+import { rollFishGaps } from './progression';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, decodeHolds, expArith, lnArith, powArith, replayFight, type Gaps } from './reel';
+import { HANDS, STYLES, botFight, cellOf, handCell, type Hand } from './reelbot';
 
-/**
- * Where a bot of each reaction time lands half its fish. The P1 pacing model (rod costs, zones) was fitted to the
- * prototype's 2.89 / 2.61 / 2.29 / 1.93, so a tuning change that moves one by more than ~0.1 means rerunning it
- * (see the Endgame Gameplan).
- */
-const FAN_HALF: [number, number][] = [[0.15, 2.82], [0.25, 2.67], [0.4, 2.31], [0.7, 1.93]];
+const gaps = (strength: number, weight: number): Gaps => ({ strength, weight });
 
 /** Plays a fight with a simple policy until it ends or `secs` pass. */
-function play(d: number, seed: number, hold: (r: Reel) => boolean, secs = 120): Reel {
-  return play2(d, seed, hold, secs);
-}
-function play2(d: Difficulty, seed: number, hold: (r: Reel) => boolean, secs = 120): Reel {
+function play(d: Gaps, seed: number, hold: (r: Reel) => boolean, secs = 120): Reel {
   const r = new Reel(d, mulberry(seed));
-  for (let k = 0; k < 60 * secs && r.status === 'reeling'; k++) r.update(1 / 60, hold(r));
+  for (let k = 0; k < 60 * secs && r.status === 'reeling'; k++) r.update(FIGHT_DT, hold(r));
   return r;
 }
 
-describe('tension reel fight', () => {
-  const sweeps = FAN_HALF.map(([react]) => ({ react, ...botSweep(react, 1.4, 3.6) }));
-
-  it('a fan of reaction times lands half its fish at steadily harder fish', () => {
-    for (const [i, [, half]] of FAN_HALF.entries()) expect(Math.abs(sweeps[i].d50 - half)).toBeLessThan(0.1);
+/**
+ * The foundation's ladder (REELING.md, "The foundation"), band by band rather than against exact rates: the rungs are
+ * conceptual (0 parity, +1 a slight challenge, +2 the frontier, +3 the hard line), so these only pin the bands.
+ */
+describe('the foundation ladder', () => {
+  it('a matched fish is practically always landed, careful hands included, in about 10 s', () => {
+    const c = handCell(gaps(0, 0), 'careful');
+    expect(c.land).toBe(1);
+    expect(c.t).toBeGreaterThan(6);
+    expect(c.t).toBeLessThan(14);
   });
 
-  it('skill counts but is not everything: a fast player reaches 30-50% harder fish than a slow one', () => {
-    const gap = sweeps[0].d50 / sweeps[3].d50;
-    expect(gap).toBeGreaterThan(1.3);
-    expect(gap).toBeLessThan(1.5);
+  it('weight tests persistence: each rung over the rod is a longer fight that still lands, and +3 runs off', () => {
+    const t = [0, 1, 2].map((w) => handCell(gaps(0, w), 'skilled'));
+    for (const c of t) expect(c.land).toBe(1);
+    expect(t[1].t).toBeGreaterThan(1.8 * t[0].t);
+    expect(t[2].t).toBeGreaterThan(1.8 * t[1].t);
+    const over = handCell(gaps(0, 3), 'best');
+    expect(over.land).toBe(0);
+    expect(over.snaps).toBe(0);
   });
 
-  it('the landing rate falls over several steps, not one', () => {
-    // With the per-fish spread small (`P.fight`), the curve is steeper than it was: the spread used to smear it.
-    // 0.2 of difficulty is about 8 leagues at sea, so this is still no cliff in play.
-    for (const s of sweeps) expect(s.steepest).toBeLessThanOrEqual(0.65);
+  it('strength tests tension: +1 a slight challenge, +2 the frontier for quick hands only, +3 for no one', () => {
+    expect(handCell(gaps(1, 0), 'careful').land).toBeGreaterThanOrEqual(0.8);
+    expect(handCell(gaps(2, 0), 'careful').land).toBeLessThanOrEqual(0.2);
+    expect(handCell(gaps(2, 0), 'best').land).toBeGreaterThanOrEqual(0.5);
+    expect(handCell(gaps(3, 0), 'ceiling', 10).land).toBe(0);
   });
 
-  it('a strong fish drags line out even with the gauge kept green; a matched one does not', () => {
-    const steady = (d: number) => {
-      let dragged = false;
-      const r = play(d, 2, (x) => {
-        if (x.dragging) dragged = true;
-        return x.surging ? x.tension < Math.min(GOOD_MAX - 0.03, x.need + 0.15) : x.tension < 0.6;
-      }, 60);
-      return { dragged, frays: r.wear.frays, lineOut: r.wear.lineOut };
-    };
-    expect(steady(1.2).dragged).toBe(false);
-    const strong = steady(3.0);
-    expect(strong.dragged).toBe(true);
-    expect(strong.lineOut).toBeGreaterThan(0.2);
+  it('the overs add up: +1 on both still lands, +2 on one and +1 on the other does not', () => {
+    expect(handCell(gaps(1, 1), 'skilled').land).toBeGreaterThanOrEqual(0.8);
+    expect(handCell(gaps(2, 1), 'best').land).toBeLessThanOrEqual(0.2);
   });
 
-  it('letting go never frays the line, but the fish takes it all', () => {
-    for (const s of sweeps) for (const p of s.pts) expect(p.cell.snappedReleased).toBe(0);
-    for (let seed = 1; seed <= 20; seed++) {
-      const r = play(3.4, seed, () => false);
+  it('every fight ends on its own, by a landing, a snap or a run-off', () => {
+    for (let s = 0; s <= 3; s++) for (let w = 0; w <= 3; w++) expect(handCell(gaps(s, w), 'careful', 5).timeouts).toBe(0);
+  });
+
+  it('gear above the fish shortens the fight, down to a floor two rungs under', () => {
+    const t = (g: number) => play(gaps(g, g), 3, (r) => r.tension < 0.7).elapsed;
+    expect(t(-1)).toBeLessThan(t(0));
+    expect(t(-2)).toBeLessThan(t(-1));
+    expect(t(-4)).toBe(t(-2));
+  });
+});
+
+/**
+ * The fan (main's `FAN_HALF`, refit to the foundation): the gap at which each reference hand lands half its fish, on
+ * each axis and on both at once, judged by band (as measured 2026-11-03: careful +1.35 strength, +2.52 weight, +1.00
+ * on both; skilled +2.18, +2.55, +1.36). The sea sims and the panels' marker ranges rest on these, so a change that
+ * moves one out of its band means rerunning `scripts/seafights.ts` and `scripts/seaeconomy.ts`.
+ */
+describe('the fan of hands', () => {
+  const AXES = {
+    strength: (g: number) => gaps(g, 0),
+    weight: (g: number) => gaps(0, g),
+    both: (g: number) => gaps(g, g),
+  };
+  type Axis = keyof typeof AXES;
+  const FAN: Partial<Record<Hand, Record<Axis, [number, number]>>> = {
+    careful: { strength: [1, 2], weight: [2, 3], both: [0.9, 1.5] },
+    skilled: { strength: [2, 2.5], weight: [2, 3], both: [1, 1.5] },
+  };
+  /** Bisects for the gap landed half the time, assuming the land rate falls as it grows. */
+  const half = (h: Hand, axis: Axis) => {
+    let lo = 0, hi = 3.5;
+    while (hi - lo > 0.025) {
+      const mid = (lo + hi) / 2;
+      if (handCell(AXES[axis](mid), h).land >= 0.5) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const halves = Object.fromEntries(Object.keys(FAN).map((h) => [h, Object.fromEntries(Object.keys(AXES).map((a) => [a, half(h as Hand, a as Axis)]))])) as Record<string, Record<Axis, number>>;
+
+  it('each hand lands half its fish within its band on each axis, and on both', () => {
+    for (const [h, bands] of Object.entries(FAN))
+      for (const [a, [lo, hi]] of Object.entries(bands)) {
+        expect(halves[h][a as Axis], `${h} ${a}`).toBeGreaterThanOrEqual(lo);
+        expect(halves[h][a as Axis], `${h} ${a}`).toBeLessThan(hi);
+      }
+  });
+
+  it('skill counts but is not everything: quick hands reach most of a rung further on strength, about as far on weight', () => {
+    const { careful, skilled } = halves;
+    expect(skilled.strength - careful.strength).toBeGreaterThan(0.5);
+    expect(skilled.strength - careful.strength).toBeLessThan(1.25);
+    expect(Math.abs(skilled.weight - careful.weight)).toBeLessThan(0.25);
+    expect(skilled.both).toBeGreaterThan(careful.both);
+  });
+
+  it("with each fish's own spread and tags, a hand's wall is a slope, not a cliff", () => {
+    // The plain gaps fall up to 100% in 0.1 of a rung (skilled at strength +2.0 to +2.1); the spread smears that.
+    for (const h of Object.keys(FAN) as Hand[])
+      for (const [a, f] of Object.entries(AXES)) {
+        const land = (g: number) => {
+          const srng = mulberry(99);
+          return cellOf((rng) => new Reel(rollFishGaps(f(g), srng).d, rng), g, HANDS[h].react, 40, 1, HANDS[h].styles).land;
+        };
+        let prev = land(0.5), steepest = 0;
+        for (let k = 6; k <= 30; k++) {
+          const l = land(k / 10);
+          steepest = Math.max(steepest, prev - l);
+          prev = l;
+        }
+        expect(steepest, `${h} ${a}`).toBeLessThanOrEqual(0.6);
+      }
+  });
+});
+
+describe('the fight', () => {
+  it('strength places the pull and weight the threshold, the same on every fish with those gaps', () => {
+    expect(new Reel(gaps(0, 0)).pullAt).toBeCloseTo(0.575, 9);
+    expect(new Reel(gaps(1, 0)).pullAt).toBeCloseTo(GOOD_MAX, 9);
+    expect(new Reel(gaps(3, 0)).pullAt).toBeGreaterThan(1);
+    expect(new Reel(gaps(0, 0)).baseThreshold).toBeCloseTo(0.4, 9);
+    expect(new Reel(gaps(0, 3)).baseThreshold).toBe(1);
+  });
+
+  it('with the button up the fish always takes line, in the calm too, and never frays it', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const r = new Reel(gaps(0, 0), mulberry(seed));
+      for (let k = 0; k < 60 * 120 && r.status === 'reeling'; k++) {
+        const before = r.progress;
+        r.update(FIGHT_DT, false);
+        expect(r.progress).toBeLessThanOrEqual(before);
+      }
       expect(r.status).toBe('escaped');
       expect(r.reason).toBe('ran');
       expect(r.wear.frays).toBe(0);
-      expect(r.wear.lineOut).toBeGreaterThan(0);
     }
   });
 
-  it('easy fish forgive holding straight through a surge; on hard ones it frays the line', () => {
-    expect(play(0.8, 4, () => true, 20).wear.frays).toBe(0);
-    expect(play(3.2, 4, () => true, 20).wear.frays).toBeGreaterThan(0);
+  it('letting go in a surge gives more line the stronger the fish', () => {
+    const given = (s: number) => {
+      const r = new Reel(gaps(s, 0), mulberry(2));
+      let most = 0;
+      for (let k = 0; k < 60 * 10 && r.status === 'reeling'; k++) {
+        r.update(FIGHT_DT, !r.surging);
+        if (r.surging) most = Math.min(most, r.lineRate);
+      }
+      return -most;
+    };
+    expect(given(1)).toBeGreaterThan(1.5 * given(0));
+    expect(given(2)).toBeGreaterThan(1.5 * given(1));
   });
 
   it('two chances: one stretch of red frays the line once, however long it is held', () => {
     let entered = false;
-    const r = play(3.2, 6, (x) => {
+    const r = play(gaps(2, 0), 6, (x) => {
       if (x.tension > GOOD_MAX) entered = true;
       return !entered || x.tension > GOOD_MAX;
     }, 20);
@@ -85,126 +173,39 @@ describe('tension reel fight', () => {
   it('a part-filled fray mark drains back out of the red', () => {
     let red = 0;
     let peak = 0;
-    const r = play(2.5, 3, (x) => {
+    const r = play(gaps(2, 0), 3, (x) => {
       if (x.tension > GOOD_MAX) red++;
       peak = Math.max(peak, x.strain);
       return red < 12; // 0.2 s in the red, then let go
-    }, 3);
+    }, 8);
     expect(red).toBeGreaterThan(0);
     expect(r.wear.frays).toBe(0);
     expect(peak).toBeGreaterThan(0);
     expect(r.strain).toBeLessThan(peak / 2);
   });
 
-  it('a fish too strong for the gear pulls past the red in a surge, and says so', () => {
-    const peak = (d: number) => {
-      let out = false;
-      play(d, 12, (x) => {
-        if (x.outmatched) out = true;
-        return x.tension < GOOD_MAX - 0.05;
-      }, 30);
-      return out;
+  it('every fish tires, and tiring never takes a strong fish out of the red', () => {
+    let tired = false;
+    play(gaps(0, 2), 5, (x) => ((tired ||= x.tired), x.tension < 0.7));
+    expect(tired).toBe(true);
+    const nearlyOut = (s: number) => {
+      const r = new Reel(gaps(s, 0));
+      r.fightLeft = 0.01;
+      return r.surgePulls[1];
     };
-    expect(peak(1.75)).toBe(false);
-    expect(peak(3.6)).toBe(true);
-  });
-
-  it('a player who just follows the words lands top fish on matched gear, and fish a tier above the rod', () => {
-    const line = (t: number) => LINES[t - 1];
-    expect(botCell(reelDifficulty(byId(FISH, 'aurorapike'), byId(RODS, 'aurora'), line(5)), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
-    expect(botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'fiberglass'), line(3)), 0.25, 300, 1, [NAIVE]).land).toBeGreaterThan(0.9);
-  });
-
-  it('everyday pond fish stay easy for everyone, trophies included', () => {
-    const twig = byId(RODS, 'twig');
-    for (const id of ['bluegill', 'carp']) {
-      const f = byId(FISH, id);
-      const d = reelDifficulty(f, twig, LINES[0], false, f.maxSize);
-      for (const react of [0.25, 0.7]) {
-        expect(botCell(d, react, 200).land).toBeGreaterThanOrEqual(0.95);
-        expect(botCell(d, react, 200, 1, [NAIVE]).land).toBeGreaterThanOrEqual(0.95);
-      }
-    }
-  });
-
-  it('the rod ladder: a fish a tier above the rod is a long fight, two tiers above runs off (REELING.md)', () => {
-    const cell = (fish: string, rod: string, react: number, size?: number) => botCell(reelDifficulty(byId(FISH, fish), byId(RODS, rod), LINES[2], false, size), react, 200);
-    // Northern Pike (tier 3) on Fluoro Line (3) with the Graphite (3), Fiberglass (2) and Twig (1) rods.
-    const matched = cell('pike', 'graphite', 0.7);
-    const over = cell('pike', 'fiberglass', 0.7);
-    expect(matched.land).toBeGreaterThan(0.95);
-    expect(over.land).toBeGreaterThan(0.9);
-    expect(over.t / matched.t).toBeGreaterThan(1.3);
-    expect(over.t / matched.t).toBeLessThan(2.5);
-    for (const react of [0.25, 0.7]) {
-      const wall = cell('pike', 'twig', react);
-      expect(wall.land).toBeLessThan(0.05);
-      expect(wall.snaps).toBeLessThan(0.05);
-    }
-    // The smallest pike on the Twig Rod (two tiers over) is still past the cliff, and walks off within the time budget.
-    const small = botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'twig'), LINES[2], false, byId(FISH, 'pike').minSize), 0.25, 200);
-    expect(small.land).toBeLessThan(0.05);
-    expect(small.t).toBeLessThan(over.t);
-  });
-
-  it('the line ladder: a fish a tier above the line snaps it for a slow player, two tiers above for everyone', () => {
-    const cell = (line: number, react: number) => botCell(reelDifficulty(byId(FISH, 'pike'), byId(RODS, 'graphite'), LINES[line - 1]), react, 200);
-    expect(cell(3, 0.7).snaps).toBeLessThan(0.05);
-    expect(cell(2, 0.7).snaps).toBeGreaterThan(0.9);
-    expect(cell(2, 0.25).land).toBeLessThan(0.7);
-    expect(cell(1, 0.25).land).toBeLessThan(0.05);
-  });
-
-  it('holding the gauge truly green in a surge reels in fish the gear can handle; stronger ones drag line out', () => {
-    const surgeGain = (d: number) => {
-      let gain = 0;
-      let last = 0;
-      play(d, 7, (x) => {
-        if (x.surging && x.tension <= GOOD_MAX) gain += x.progress - last;
-        last = x.progress;
-        return x.surging ? x.tension < GOOD_MAX - 0.05 : x.progress < 0.6;
-      }, 20);
-      return gain;
-    };
-    expect(surgeGain(0.8)).toBeGreaterThan(0.02);
-    expect(surgeGain(1.5)).toBeGreaterThan(0.02);
-    expect(surgeGain(2.2)).toBeLessThan(0);
-  });
-
-  it('the green sweet spot shrinks as the fish outclasses the gear', () => {
-    const width = (d: number) => { const r = new Reel(d); return r.sweetMax - r.sweetMin; };
-    expect(width(0.6)).toBeGreaterThan(0.4);
-    expect(width(1.75)).toBeGreaterThan(0.2);
-    expect(width(3.2)).toBeLessThan(0.08);
-    expect(width(1.75)).toBeLessThan(width(0.6));
-    expect(new Reel(0.6).sweetMax).toBeLessThan(GOOD_MAX);
-    expect(new Reel(0.6).sweetMin).toBeLessThan(SWEET_MIN);
-  });
-
-  it('a surge builds up over a moment unless the fish is far above the gear', () => {
-    // How far a surge has built up 0.1 s after it starts.
-    const rampAt = (d: number) => {
-      let frames = 0;
-      let ramp = -1;
-      play(d, 3, (x) => {
-        if (x.surging && ramp < 0 && ++frames === 6) ramp = x.pull / x.surgePower;
-        return x.tension < 0.7;
-      }, 20);
-      return ramp;
-    };
-    expect(rampAt(2.9)).toBeLessThan(0.35);
-    expect(rampAt(4.2)).toBe(1);
+    expect(nearlyOut(0)).toBeLessThan(0.6 * new Reel(gaps(0, 0)).pullAt);
+    expect(nearlyOut(2)).toBeGreaterThan(GOOD_MAX);
   });
 
   it('reports the line a fight wore', () => {
-    const f = botFight(2.6, 0.7, STYLES[0], mulberry(4), mulberry(5));
+    const f = botFight(gaps(1, 1), 0.4, STYLES[0], mulberry(4), mulberry(5));
     expect(f.lineOut).toBeGreaterThan(0);
   });
 
   it('replays exactly from the same seed and inputs', () => {
     const run = () => {
       const trace: number[] = [];
-      play(2.3, 77, (r) => {
+      play(gaps(1.5, 1), 77, (r) => {
         trace.push(r.tension, r.progress, r.strain);
         return r.tension < 0.7;
       }, 40);
@@ -226,96 +227,9 @@ describe('tension reel fight', () => {
   });
 });
 
-describe('two-axis difficulty (REELING.md)', () => {
-  const M = 1.6; // a tier 3 fish on its own rod and line
-  const trace = (d: Difficulty, seed: number) => {
-    const out: number[] = [];
-    const r = new Reel(d, mulberry(seed));
-    for (let k = 0; k < 60 * 40 && r.status === 'reeling'; k++) {
-      r.update(1 / 60, r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6);
-      out.push(r.tension, r.progress, r.need, r.drag, r.strain);
-    }
-    return out;
-  };
-
-  it('a plain number is the same fight as all three axes alike, step for step', () => {
-    for (const [d, seed] of [[1.2, 3], [2.3, 77], [3.1, 9]]) {
-      expect(trace({ weight: d, strength: d, pace: d }, seed)).toEqual(trace(d, seed));
-      expect(axes(d)).toEqual({ weight: d, strength: d, pace: d });
-    }
-    expect(axes({ weight: 1, strength: 3 }).pace).toBe(2);
-  });
-
-  it('the skill levers follow the pace, not the gear: the sweet spot is as wide as the pace says', () => {
-    const width = (d: Difficulty) => { const r = new Reel(d); return r.sweetMax - r.sweetMin; };
-    expect(width({ weight: M, strength: 3.2, pace: M })).toBe(width(M));
-    expect(width({ weight: 3.2, strength: M, pace: M })).toBe(width(M));
-    expect(width({ weight: M, strength: M, pace: 3.2 })).toBe(width(3.2));
-  });
-
-  it('strength against the line is the hard wall: a strong fish pulls into the red and is lost to snaps', () => {
-    const strong = { weight: M, strength: 4.0, pace: M };
-    // Holding through: all but the laziest rolls of this fish pull past the red before the line goes.
-    let red = 0;
-    for (let seed = 1; seed <= 8; seed++) {
-      let out = false;
-      const r = play2(strong, seed, (x) => { if (x.outmatched) out = true; return true; }, 30);
-      expect(r.status).toBe('snapped');
-      if (out) red++;
-    }
-    expect(red).toBeGreaterThanOrEqual(6);
-    const slow = botCell(strong, 0.7, 100);
-    expect(slow.snaps).toBeGreaterThan(0.9);
-    const fast = botCell(strong, 0.25, 100);
-    expect(fast.land).toBeLessThan(0.6);
-    expect(fast.t).toBeLessThan(25);
-  });
-
-  it('weight against the rod is the soft wall: a heavy fish never reaches the red, takes longer, then runs off', () => {
-    const land = (dw: number, react: number) => botCell({ weight: dw, strength: M, pace: M }, react, 100);
-    for (const react of [0.25, 0.7]) {
-      const base = land(M, react);
-      const heavy = land(3.0, react);
-      const wall = land(12.0, react);
-      expect(base.land).toBeGreaterThan(0.95);
-      // One step heavier: still landed, about twice as long.
-      expect(heavy.land).toBeGreaterThan(0.85);
-      expect(heavy.t / base.t).toBeGreaterThan(1.5);
-      expect(heavy.t / base.t).toBeLessThan(3.5);
-      // Far heavier: the fish takes the line fast and with no snaps. The fight ends on its own, sooner than a landed one.
-      expect(wall.land).toBeLessThan(0.05);
-      expect(wall.snaps).toBeLessThan(0.03);
-      expect(wall.t).toBeLessThan(heavy.t);
-    }
-    const r = play2({ weight: 12.0, strength: M, pace: M }, 5, (x) => {
-      expect(x.outmatched).toBe(false);
-      return x.surging ? x.tension < Math.min(GOOD_MAX - 0.05, x.need + 0.1) : x.tension < 0.6;
-    }, 60);
-    expect(r.status).toBe('escaped');
-    expect(r.reason).toBe('ran');
-    expect(r.wear.frays).toBe(0);
-  });
-
-  it('prints the outcome matrix the bots play, for the ladder in slice 2', () => {
-    const steps: [string, number][] = [['match', M], ['x1.9', 3.0], ['x2.5', 4.0], ['x7.5', 12.0]];
-    const lines: string[] = [];
-    for (const react of [0.25, 0.7]) {
-      lines.push(`react ${react}s, pace ${M}: land/snap/ran %, mean s · strength down, weight across ${steps.map(([l]) => l).join(' ')}`);
-      for (const [sl, ds] of steps) {
-        lines.push(sl.padEnd(6) + steps.map(([, dw]) => {
-          const c = botCell({ weight: dw, strength: ds, pace: M }, react, 60);
-          return `${Math.round(c.land * 100)}/${Math.round(c.snaps * 100)}/${Math.round(Math.max(0, 1 - c.land - c.snaps) * 100)} ${c.t.toFixed(0)}s`.padStart(16);
-        }).join(''));
-      }
-    }
-    console.log(lines.join('\n'));
-    expect(lines.length).toBe(10);
-  });
-});
-
 describe('server-checked fights', () => {
   /** A bot fight with its button log, and the same fight replayed from the log. */
-  const recorded = (d: number, seed: number, react = 0.25, style = STYLES[0]) => {
+  const recorded = (d: Gaps, seed: number, react = 0.25, style = STYLES[0]) => {
     const log = new HoldLog();
     const live = botFight(d, react, style, mulberry(seed), mulberry(seed + 1), undefined, 600, log);
     return { live, log, replay: replayFight(d, seed, log.encode())! };
@@ -345,7 +259,7 @@ describe('server-checked fights', () => {
 
   it('a fight recorded on the client replays on the server to the same end, frays and line taken', () => {
     const ends = new Set<string>();
-    for (const d of [0.8, 1.5, 2.2, 2.7, 3.1, 3.6]) {
+    for (const d of [gaps(0, 0), gaps(0, 1), gaps(1, 1), gaps(2, 0), gaps(0, 3), gaps(3, 0)]) {
       for (let seed = 1; seed <= 8; seed++) {
         const { live, replay } = recorded(d, seed * 31, seed % 2 ? 0.25 : 0.7);
         ends.add(live.status);
@@ -362,7 +276,7 @@ describe('server-checked fights', () => {
   it('tampered button logs do not land a fish the real inputs lost', () => {
     let lost = 0;
     for (let seed = 1; lost < 12 && seed < 400; seed++) {
-      const { live, log } = recorded(2.9, seed, 0.7);
+      const { live, log } = recorded(gaps(2, 0), seed, 0.7);
       if (live.status === 'caught') continue;
       lost++;
       const h = decodeHolds(log.encode())!;
@@ -375,25 +289,27 @@ describe('server-checked fights', () => {
         }
         const enc = new HoldLog();
         for (let i = 0; i < log.steps; i++) enc.push(((bent[i >> 3] >> (i & 7)) & 1) === 1);
-        expect(replayFight(2.9, seed, enc.encode())!.status).not.toBe('caught');
+        expect(replayFight(gaps(2, 0), seed, enc.encode())!.status).not.toBe('caught');
       }
     }
     expect(lost).toBe(12);
   });
 
-  it('a log cut short leaves the fish on the line, and the wrong seed or difficulty does not replay a win', () => {
+  // The fish has no random spread (the seed only picks which way it swims), so the same buttons on the same gaps land
+  // the same fish; on other gaps they don't.
+  it('a log cut short leaves the fish on the line, and the wrong gaps do not replay the same fight', () => {
     let checked = 0;
     for (let seed = 1; checked < 10; seed++) {
-      const { live, log, replay } = recorded(2.2, seed);
+      const { live, log, replay } = recorded(gaps(0, 1), seed);
       if (live.status !== 'caught') continue;
       checked++;
       const half = new HoldLog();
       const bits = decodeHolds(log.encode())!;
       for (let i = 0; i < log.steps / 2; i++) half.push(((bits[i >> 3] >> (i & 7)) & 1) === 1);
-      expect(replayFight(2.2, seed, half.encode())!.status).toBe('reeling');
+      expect(replayFight(gaps(0, 1), seed, half.encode())!.status).toBe('reeling');
       expect(replay.status).toBe('caught');
       // Same buttons on another fish: the trace differs (it may still land, but not the same way).
-      const other = replayFight(2.2, seed + 1000, log.encode())!;
+      const other = replayFight(gaps(0.5, 1.5), seed, log.encode())!;
       expect([other.status, other.elapsed]).not.toEqual([replay.status, replay.elapsed]);
     }
   });
@@ -403,18 +319,37 @@ describe('server-checked fights', () => {
       for (const hold of [true, false]) {
         const log = new HoldLog();
         for (let i = 0; i < MAX_FIGHT_STEPS; i++) log.push(hold);
-        expect(replayFight(3.6, seed, log.encode())!.status).toBe(hold ? 'snapped' : 'escaped');
+        expect(replayFight(gaps(3, 0), seed, log.encode())!.status).toBe(hold ? 'snapped' : 'escaped');
       }
     }
   });
 
   it('replaying a fight costs the server well under a millisecond per fight-second', () => {
-    const logs = [1.2, 1.8, 2.4, 2.8].map((d) => ({ d, ...recorded(d, 5) }));
+    const logs = [gaps(0, 0), gaps(1, 0), gaps(0, 2), gaps(1, 1)].map((d) => ({ d, ...recorded(d, 5) }));
     const steps = logs.reduce((n, l) => n + l.log.steps, 0);
     const t0 = performance.now();
     for (let k = 0; k < 20; k++) for (const l of logs) replayFight(l.d, 5, l.log.encode());
     const perStep = (performance.now() - t0) / (20 * steps);
     console.log(`replay: ${(perStep * 1e6).toFixed(0)} ns per step, ${(perStep * 3600).toFixed(2)} ms for a 60 s fight`);
     expect(perStep / FIGHT_DT).toBeLessThan(1); // ms per fight-second
+  });
+});
+
+describe('gauge previews', () => {
+  it("the gauge's line rate in a surge is the line the fight wins or loses while holding, step for step", () => {
+    let checked = 0;
+    for (const d of [gaps(0, 0), gaps(1, 2), gaps(2.5, 1)]) {
+      const r = new Reel(d, mulberry(7));
+      for (let i = 0; i < 60 / FIGHT_DT && r.status === 'reeling'; i++) {
+        const before = r.progress;
+        const holding = Math.floor(i / 20) % 3 !== 0;
+        r.update(FIGHT_DT, holding);
+        // Held steps in a surge, not clamped at either end of the line.
+        if (!holding || !r.surging || r.progress <= 0 || r.progress >= 1) continue;
+        expect((r.progress - before) / FIGHT_DT).toBeCloseTo(r.surgeLineAt(r.tension) * r.build, 9);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(200);
   });
 });

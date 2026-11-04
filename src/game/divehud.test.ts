@@ -7,14 +7,15 @@ const view = (o: Partial<DiveView> = {}): DiveView => ({ id: 1, start: 10, depth
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
 describe('dive HUD', () => {
-  it("the fish's sticker keeps its pull and behaviour up all fight, and says when it's too strong for the line", () => {
-    expect(text(fishTagHtml({ b: 'thrasher', pull: 'strong', overLine: true }))).toBe('💪 Strong · 💥 Thrasher · too strong for your line');
-    expect(text(fishTagHtml({ b: 'runner', pull: 'light', overLine: false }))).toBe('🪶 Light · 🏃 Runner · long pulls that take line');
-    expect(text(fishTagHtml({ b: 'sounder', pull: null, overLine: false }))).toBe('⤵️ Sounder · dives with little warning');
-    expect(text(fishTagHtml({ b: null, pull: 'strong', overLine: false }))).toBe('💪 Strong');
-    expect(fishTagHtml({ b: null, pull: null, overLine: true })).toBe('Too strong for your line');
-    // A typical Shelf fish the line holds: no sticker.
-    expect(fishTagHtml({ b: null, pull: null, overLine: false })).toBe('');
+  it("the fish's sticker keeps its pull, behaviour and matchup with the gear up all fight", () => {
+    const none = { match: '', too: false };
+    expect(text(fishTagHtml({ b: 'thrasher', pull: 'strong', match: 'Too strong for your line', too: true }))).toBe('💪 Strong · 💥 Thrasher · too strong for your line');
+    expect(text(fishTagHtml({ b: 'runner', pull: 'light', ...none }))).toBe('🪶 Light · 🏃 Runner · long pulls that take line');
+    expect(text(fishTagHtml({ b: 'sounder', pull: null, ...none }))).toBe('⤵️ Sounder · dives with little warning');
+    expect(text(fishTagHtml({ b: null, pull: 'strong', ...none }))).toBe('💪 Strong');
+    expect(fishTagHtml({ b: null, pull: null, match: 'Strong for your line, heavy for your rod', too: false })).toBe('Strong for your line, heavy for your rod');
+    // A fish the gear handles: no sticker.
+    expect(fishTagHtml({ b: null, pull: null, ...none })).toBe('');
   });
 
   it('counts to the next marker, and past the one the boat is at', () => {
@@ -68,10 +69,10 @@ describe('dive HUD', () => {
     const t = text(html);
     expect(t).toMatch(/The Shelf Harbour start 5 marker 10 marker 15 marker The Drop-off 20 marker 25 marker/);
     expect(html).toContain('class="chip sel rec" data-act="divefrom" data-id="25"');
-    expect(t).toContain('Start at marker 25 in The Drop-off. Runners: long pulls that take line. 2 pearls a fish.');
+    expect(t).toContain('Start at marker 25 in The Drop-off. 2 pearls a fish.');
     expect(html).toContain('data-act="castoff" data-id="25"');
     expect(t).toContain('Furthest marker: 25');
-    expect(text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: true, pick: 0, open: true }))).toContain('Start at the harbour, into The Shelf. Steady fish, no tricks. 1 pearl a fish.');
+    expect(text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: true, pick: 0, open: true }))).toContain('Start at the harbour, into The Shelf. 1 pearl a fish.');
     const locked = text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: false, pick: 0, open: true }));
     expect(locked).toContain('need the Deep Sea Rod');
     expect(locked).toContain('stays on my boat');

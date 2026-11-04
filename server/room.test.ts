@@ -10,8 +10,8 @@ import { BOARD_MS, CLOCK_MS, Room } from './room';
 import * as smoke from '../src/game/smoke';
 import { SmokeStats } from './smokestats';
 import { mulberry } from '../src/game/env';
-import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, axes, type Difficulty, type ReelTune } from '../src/game/reel';
-import { fightTune, haulBonus } from '../src/game/dive';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type Gaps, type ReelTune } from '../src/game/reel';
+import { haulBonus } from '../src/game/dive';
 import { DIVE } from '../src/data/dive';
 import { HARBOUR } from '../src/data/maps';
 
@@ -22,8 +22,8 @@ const conn = () => {
 const last = <T extends ServerMsg['t']>(c: { log: ServerMsg[] }, t: T) =>
   [...c.log].reverse().find((m) => m.t === t) as Extract<ServerMsg, { t: T }>;
 
-/** Plays a fight with perfect reactions, staying in the green: the reel and the button log it wrote. */
-const playFight = (d: Difficulty, seed: number, hold = (r: Reel) => (r.surging ? r.tension < Math.min(GOOD_MAX - 0.05, r.need + 0.1) : r.tension < 0.6), tune?: ReelTune) => {
+/** Plays a fight with perfect reactions, riding high in the green in a surge: the reel and the button log it wrote. */
+const playFight = (d: Gaps, seed: number, hold = (r: Reel) => (r.surging ? r.tension < GOOD_MAX - 0.03 : r.tension < 0.6), tune?: ReelTune) => {
   const log = new HoldLog();
   const r = new Reel(d, mulberry(seed), tune);
   while (r.status === 'reeling' && log.steps < MAX_FIGHT_STEPS) {
@@ -36,7 +36,7 @@ const playFight = (d: Difficulty, seed: number, hold = (r: Reel) => (r.surging ?
 /** The `catch` message for the fish in the latest `castok`, fought by `playFight`. */
 const fought = (c: { log: ServerMsg[] }) => {
   const ok = last(c, 'castok');
-  return { t: 'catch', h: playFight(ok.d ?? 1, ok.seed ?? 0).h } as const;
+  return { t: 'catch', h: playFight(ok.d ?? { strength: 0, weight: 0 }, ok.seed ?? 0).h } as const;
 };
 
 const setup = () => {
@@ -264,6 +264,22 @@ describe('Room economy', () => {
     expect(fishCount()).toBe(1);
   });
 
+  it('replays a Quick-Reel Gloves fight with its faster reeling', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    a.acct.save.perks = ['gloves'];
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    const ok = last(a.c, 'castok');
+    expect(ok.tune).toEqual(eco.fightTune(a.acct.save));
+    const f = playFight(ok.d!, ok.seed!, undefined, ok.tune);
+    expect(f.reel.status).toBe('caught');
+    // The same fish fought without the gloves takes longer, so the server must replay with them.
+    expect(playFight(ok.d!, ok.seed!).ms).toBeGreaterThan(f.ms);
+    advance(ok.wait * 1000 + f.ms);
+    room.handle(a.id, { t: 'catch', h: f.h });
+    expect(a.acct.save.slots.filter((x) => x?.k === 'fish')).toHaveLength(1);
+  });
+
   it('replays the fight: refuses a lost fight, a fight faster than real time and a missing or broken log', () => {
     const { room, join, advance } = setup();
     const a = join('Ann');
@@ -274,7 +290,7 @@ describe('Room economy', () => {
     };
     let ok = cast();
     expect(ok.seed).toBeTypeOf('number');
-    expect(axes(ok.d!).weight).toBeGreaterThan(0);
+    expect(typeof ok.d!.weight).toBe('number');
     // Letting go the whole fight: the fish takes all the line.
     const lost = playFight(ok.d!, ok.seed!, () => false);
     expect(lost.reel.status).toBe('escaped');
@@ -1098,7 +1114,7 @@ describe('dives', () => {
   const fight = (t: ReturnType<typeof setup>, p: P, win = true) => {
     t.room.handle(p.id, { t: 'cast', x: 0, z: -8 });
     const ok = last(p.c, 'castok');
-    const f = playFight(ok.d!, ok.seed!, win ? undefined : () => false, fightTune(ok.b, ok.fishId));
+    const f = playFight(ok.d!, ok.seed!, win ? undefined : () => false);
     t.advance(ok.wait * 1000 + f.ms + 10);
     t.room.handle(p.id, win ? { t: 'catch', h: f.h } : { t: 'lost', h: f.h });
     return f;
@@ -1231,7 +1247,7 @@ describe('dives', () => {
     expect(s.location).toBe('sea');
   });
 
-  it('charges a lost fight its replay, a snap for a fish dropped mid-fight, and nothing for a missed bite', () => {
+  it('charges a lost fight its replay plus a lost fish, a lost fish for one dropped mid-fight, and nothing for a missed bite', () => {
     const t = setup();
     const a = diver(t);
     t.room.handle(a.id, { t: 'dive', from: 0 });
@@ -1239,8 +1255,7 @@ describe('dives', () => {
     expect(f.reel.status).toBe('escaped');
     const d = lastDive(a);
     expect(d.lost).toBe('ran');
-    expect(d.worn).toBeCloseTo(f.reel.wear.lineOut * DIVE.metresPerLine, 1);
-    expect(d.worn).toBeGreaterThan(0);
+    expect(d.worn).toBeCloseTo(f.reel.wear.lineOut * DIVE.metresPerLine + DIVE.lostMetres, 1);
     expect(d).toMatchObject({ depth: 0, fish: 0 });
     // Pulled in before the bite, or missed the strike: no fight, no line.
     const n = states(a).length;
@@ -1254,15 +1269,28 @@ describe('dives', () => {
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     t.advance(last(a.c, 'castok').wait * 1000 + 10_000);
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
-    expect(lastDive(a)).toMatchObject({ worn: DIVE.snapMetres, lost: 'gone' });
-    expect(lastDive(a).line).toBeCloseTo(d.line - DIVE.snapMetres, 1);
+    expect(lastDive(a)).toMatchObject({ worn: DIVE.lostMetres, lost: 'gone' });
+    expect(lastDive(a).line).toBeCloseTo(d.line - DIVE.lostMetres, 1);
     // A caught fish reported as lost still pays for its line, but isn't landed.
     t.advance(last(a.c, 'castok').wait * 1000);
     const ok = last(a.c, 'castok');
-    const won = playFight(ok.d!, ok.seed!, undefined, fightTune(ok.b, ok.fishId));
+    const won = playFight(ok.d!, ok.seed!, undefined);
     t.advance(won.ms);
     t.room.handle(a.id, { t: 'lost', h: won.h });
     expect(lastDive(a)).toMatchObject({ fish: 0, lost: 'gone' });
+  });
+
+  it('a sea fish lost over the gear is noted in the Fishdex as seen, one the gear handles is not', () => {
+    const t = setup();
+    const a = diver(t);
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    // At the harbour the gear matches the fish: a run-off there is the player's doing.
+    fight(t, a, false);
+    expect(a.acct.save.seen).toEqual([]);
+    // At marker 40 a sea fish is a step over both the Deep Sea Rod and Line.
+    a.acct.dive!.dive.depth = 40;
+    fight(t, a, false);
+    expect(a.acct.save.seen).toEqual([last(a.c, 'castok').fishId]);
   });
 
   it('sinks the haul when the line runs out, keeping the coins from the fish', () => {
@@ -1295,7 +1323,7 @@ describe('dives', () => {
     expect(a.acct.save.location).toBe('sea');
     const w = last(a.c, 'welcome');
     expect(w.dive).toMatchObject({ depth: 1, fish: 1, pearls: 1, lost: 'gone' });
-    expect(w.dive!.line).toBeCloseTo(line - DIVE.snapMetres, 1);
+    expect(w.dive!.line).toBeCloseTo(line - DIVE.lostMetres, 1);
     fight(t, a);
     expect(lastDive(a).depth).toBe(2);
     t.room.leave(a.id);

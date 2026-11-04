@@ -5,8 +5,8 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot, type FishTag } from '../src/game/progression';
-import { afterFight, fightTune, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
-import { replayFight, type Difficulty, type LossReason, type ReelWear } from '../src/game/reel';
+import { afterFight, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
+import { replayFight, type Gaps, type LossReason, type ReelTune, type ReelWear } from '../src/game/reel';
 import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type FurthestRow, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, WHEEL_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
@@ -32,15 +32,17 @@ interface Pending {
   fishId: string;
   size: number;
   shiny: boolean;
-  /** The fight's reel seed and difficulty, sent with `castok`. */
+  /** The fight's reel seed and gaps over the gear, sent with `castok`. */
   seed: number;
-  d: Difficulty;
+  d: Gaps;
   /** When the fish bites: a catch must come at least a whole fight after this. */
   biteAt: number;
-  /** A sea fish's behaviour, whose reel levers the replay uses. */
+  /** A sea fish's behaviour (not rolled while the foundation leaves variety off). */
   b?: Behaviour;
-  /** A Feisty or Brutish pond fish: worth more when landed. */
+  /** A Feisty or Brutish fish, pond or sea: worth more when landed. */
   tag?: FishTag;
+  /** The fight's levers over `P` (`Roll.tune`), for the replay. */
+  tune?: ReelTune;
 }
 
 interface Member {
@@ -418,7 +420,7 @@ export class Room {
         // On a dive, the line pays for the fight. At the pond a fish lost to a gear wall is noted in the Fishdex, but
         // only if the replayed log shows a fight that ended in a snap or a run-off: a cast reeled in early saw nothing.
         if (!this.runOf(m)) {
-          const fight = typeof msg.h === 'string' && msg.h ? replayFight(p.d, p.seed, msg.h) : null;
+          const fight = typeof msg.h === 'string' && msg.h ? replayFight(p.d, p.seed, msg.h, p.tune) : null;
           if (!fight || (fight.status !== 'snapped' && fight.status !== 'escaped') || !eco.recordSighting(s, byId(FISH, p.fishId))) return;
           changed = true;
           break;
@@ -741,10 +743,12 @@ export class Room {
    */
   private seaLost(m: Member, p: Pending, h: unknown): boolean {
     const run = this.runOf(m)!;
-    const fight = typeof h === 'string' && h ? replayFight(p.d, p.seed, h, fightTune(p.b, p.fishId)) : null;
+    const fight = typeof h === 'string' && h ? replayFight(p.d, p.seed, h, p.tune) : null;
     if (!fight && this.now() < p.biteAt + MISS_MS) return false;
     const ended = fight && (fight.status === 'snapped' || fight.status === 'escaped');
     this.fightOver(m, run, p, false, ended ? fight.wear : { ...GONE, lineOut: fight?.wear.lineOut ?? 0 }, ended ? fight.reason ?? 'gone' : 'gone');
+    // A fish lost over the gear in a fight the log shows is noted in the Fishdex, as at the pond.
+    if (ended) eco.recordSeaSighting(m.acct.save, byId(FISH, p.fishId), p.d);
     return true;
   }
 
@@ -902,7 +906,7 @@ export class Room {
       return false;
     }
     const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
-    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.tag ? { tag: roll.tag } : {}) } : null;
+    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
     return true;
@@ -923,7 +927,7 @@ export class Room {
     this.abandon(m);
     if (!this.runOf(m)) return true;
     const roll = eco.rollSeaCast(s, run.dive.depth, this.rng);
-    m.pending = { fishId: roll.fishId!, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.b ? { b: roll.b } : {}) };
+    m.pending = { fishId: roll.fishId!, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.b ? { b: roll.b } : {}), ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) };
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
     return true;
@@ -941,11 +945,11 @@ export class Room {
       return false;
     }
     const run = this.runOf(m);
-    const fight = typeof h === 'string' ? replayFight(p.d, p.seed, h, fightTune(p.b, p.fishId)) : null;
+    const fight = typeof h === 'string' ? replayFight(p.d, p.seed, h, p.tune) : null;
     const why = !fight ? 'bad log' : fight.status !== 'caught' ? `replay ${fight.status}`
       : this.now() < p.biteAt + fight.elapsed * 1000 - FIGHT_SLACK_MS ? 'too fast' : null;
     if (!fight || why) {
-      console.warn(`catch refused (${why}): ${m.acct.name}, ${p.fishId} at difficulty ${JSON.stringify(p.d)}`);
+      console.warn(`catch refused (${why}): ${m.acct.name}, ${p.fishId} at gaps ${JSON.stringify(p.d)}`);
       this.setAct(m, null);
       // On a dive, a fish that wasn't really landed still cost the line.
       if (run) this.fightOver(m, run, p, false, fight && fight.status !== 'reeling' && fight.status !== 'caught' ? fight.wear : { ...GONE, lineOut: fight?.wear.lineOut ?? 0 }, fight?.reason ?? 'gone');

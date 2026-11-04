@@ -57,7 +57,7 @@ const accounts = {
   maya: account('Maya', { color: 0xe86a5a, face: 'grin', hat: 'straw', shirt: 'striped', jewelry: 'shell' }),
   theo: account('Theo', { color: 0x4a8fd6, face: 'joy', hat: 'captain', shirt: 'vest', jewelry: null }),
   cam: account('Cam', { color: 0x7ac76a, face: 'smile' }),
-  reeler: account('Reeler', {}, { held: 0, rod: 'aurora', bait: 'pearl', slots: [{ k: 'rod', id: 'aurora' }, { k: 'bait', id: 'pearl', n: 20 }, null, null, null] }),
+  reeler: account('Reeler', {}, { held: 0, rod: 'aurora', line: 'moonsilk', bait: 'pearl', slots: [{ k: 'rod', id: 'aurora' }, { k: 'bait', id: 'pearl', n: 20 }, null, null, null] }),
   fishcam: account('Fishcam', {}),
   vegas: account('Vegas', {}, { location: 'casino' }),
   ivy: account('Ivy', { color: 0xf2c14e, face: 'wink', hat: 'crown', shirt: 'cloak', jewelry: 'diamond' }, { owned: COSMETICS.map((c) => c.id) }),
@@ -184,11 +184,11 @@ try {
       }
       if (phase !== 'bite') continue;
       await game(p, `G.press();`);
-      // Reel in pulses, keeping tension mid-range, until the fight is about half done.
+      // Reel in pulses, riding high in the green, until the fight is about half done.
       for (let i = 0; i < 400; i++) {
         const st = (await game(p, `return G.state();`)) as { phase: string; tension: number; progress: number; surging: boolean; warning: boolean };
         if (st.phase !== 'reeling') break;
-        await game(p, `G.hold(${st.tension < 0.55 && !st.surging && !st.warning});`);
+        await game(p, `G.hold(${st.tension < 0.7});`);
         if (st.progress > 0.45 && st.tension > 0.4 && st.tension < 0.7) {
           await shoot(p, 'reel');
           shot = true;

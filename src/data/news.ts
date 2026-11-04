@@ -19,6 +19,7 @@
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
+import reelFight from '../assets/images/news/reel-fight.jpg';
 
 export interface NewsEntry {
   /** Release number: unique, and higher than every entry below it. */
@@ -35,6 +36,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 4,
+    date: '2026-11-03',
+    title: 'A new reel fight',
+    image: reelFight,
+    alt: 'Reeling in a Moonstone Salmon at the pond: the reel gauge mid-surge, its black pull mark at the edge of the red, the needle in the blue, and the words RIDE HIGHER, in the blue it takes line',
+    body: [
+      "Every fish now fights you on two things: how <b>strong</b> it is for your <b>line</b> and how <b>heavy</b> it is for your <b>rod</b>, and the reel gauge shows both. The black mark is how hard a surge pulls: the nearer the red, the stronger the fish for your line, and holding in the red frays it. Hold in the <b>green</b> to win line back. In the <b>blue</b> the fish takes line even while you hold, so ride higher.",
+      "The <b>Hooked!</b> note says how a fish matches your gear: <b>Strong for your line</b> or <b>Heavy for your rod</b> one step over, <b>Too strong</b> or <b>Too heavy</b> from two, and <b>An easy one</b> once you've outgrown it. Lose one and the card says how it got away, <b>SNAP!</b> or <b>RAN OFF!</b>, and which line or rod to get next. Bait at <b>Marlow's stall</b> tells you the same before you buy.",
+      "On charters, every fish that gets away costs 25 m of line, and one that was too much for your gear is noted in your <b>Fishdex</b>. The <b>Deep Sea Rod</b> and <b>Deep Sea Line</b> show from which marker sea fish get heavy or strong for them. The <b>Quick-Reel Gloves</b> from the Prize Counter now reel fish in faster.",
+    ],
+  },
   {
     id: 3,
     date: '2026-11-02',

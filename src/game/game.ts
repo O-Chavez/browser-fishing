@@ -40,12 +40,13 @@ import casinoPreview from '../assets/images/casino-preview.jpg';
 import charterPreview from '../assets/images/charter-preview.jpg';
 import { NEWS, type NewsEntry } from '../data/news';
 import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
-import { charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
+import { baitWarning, charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { fightTune, rodLevelEase, seaOverGear } from './dive';
+import { markerOver } from './dive';
+import { drawFightGauge } from './fightgauge';
 import { Player } from './player';
 import {
   animateFish,
@@ -66,7 +67,8 @@ import {
   welcomeText,
   isFreshSave,
   sellValue,
-  difficultyLabel,
+  matchupWords,
+  underGear,
   xpForNextLevel,
   PERFECT_MIN,
   fishingSpot,
@@ -80,7 +82,7 @@ import {
   BUFF_ICON, DISHES, DISH_MAX_MINUTES, FREE_FISH, SELL_TIER, SMOKED_SELL, SMOKER_SPOTS, SMOKE_LEVEL, SNACKS, SNACK_MAX_MINUTES, SNACK_MINUTES, STAGES,
   dishById, smokeSeconds, stageById, type BuffKind, type Dish, type DishId, type StageId,
 } from '../data/smokehouse';
-import { FIGHT_DT, GOOD_MAX, GOOD_MIN, HoldLog, MAX_FIGHT_STEPS, Reel, type Difficulty, type ReelTune } from './reel';
+import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type Gaps, type ReelTune } from './reel';
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
@@ -114,10 +116,8 @@ const defaultLookWith = (color: number, face: string): Look => ({ color, face, h
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
 /** Milliseconds a player can't cast after a lost fight: time to read the loss card instead of throwing an unaimed cast. */
 const LOSS_CAST_DELAY_MS = 2000;
-/** How much lighter each Aurora Rod level makes sea fish, in percent. */
 /** The catch card's colour for everyday sea fish, which are tier 5 for gear; the zone legends keep the legendary gold. */
 const SEA_COLOR = '#5ec8e0';
-const PER_LEVEL = Math.round(rodLevelEase(1) * 100);
 /** "Graphite Rod" -> "Graphite": the hotbar already shows it's a rod. */
 const shortRod = (name: string) => name.replace(/ Rod$/, '');
 
@@ -196,19 +196,14 @@ export class Game {
   private held: FishModel | null = null;
   private carry: { key: string; obj: THREE.Object3D; model: FishModel | null } | null = null;
   private reel: Reel | null = null;
-  /** The hooked fish's fight, from the cast roll: the reel seed and difficulty the server replays the catch with. */
+  /** The hooked fish's fight, from the cast roll: the reel seed and gaps the server replays the catch with. */
   private fightSeed = 0;
-  private fightD: Difficulty = 1;
-  /** A sea fish's behaviour, as reel levers. */
-  private fightTune: ReelTune | undefined;
+  private fightD: Gaps = { strength: 0, weight: 0 };
   private fightB: Behaviour | undefined;
   /** A Feisty or Brutish pond fish, said at hook time. */
   private fightTag: FishTag | undefined;
-  /** A sea fish pulling well above or below its depth's norm. */
-  private fightPull: 'strong' | 'light' | undefined;
-  /** The hooked pond fish is above the rod's or the line's tier: the hook toast and the gauge's drag caption say so (REELING.md). */
-  private overRod = false;
-  private overLine = false;
+  /** The fight's levers over `P` from the cast roll (the gloves), as the server replays it. */
+  private fightTune: ReelTune | undefined;
   /** The dive on screen: the strip at sea, and the cards waiting for a quiet moment (`showDiveDue`). */
   private diveHud = new DiveHud($('divehud'), $('divetag'));
   private diveDue: 'marker' | 'diveend' | null = null;
@@ -1256,8 +1251,9 @@ export class Game {
       if (!eco.buyBait(s, id)) return this.toast('Your locker is full of that bait.');
       this.net.send({ t: 'buybait', id });
       this.toast(`Bought ${eco.BAIT_PACK} ${b.name}`);
-      // The line warning outranks the one-time bait tip, which waits for a buy that doesn't need it.
-      if (b.tier > eco.lineOf(s).tier) this.showGuide(`Your <b>${eco.lineOf(s).name}</b> can't hold most of what this bait attracts: <b>${LINES.find((l) => l.tier === b.tier)!.name}</b> does.`);
+      // The gear warning outranks the one-time bait tip, which waits for a buy that doesn't need it.
+      const warn = baitWarning(s, b, `${b.name}'s top fish`);
+      if (warn?.too) this.showGuide(warn.text);
       else if (b.tier > 1) this.guide('bait');
     }
     this.persist();
@@ -1287,7 +1283,7 @@ export class Game {
     if (!eco.levelRod(s)) return;
     this.net.send({ t: 'levelrod' });
     const glow = s.rodLevel % ROD_LEVEL.glowEvery === 0 ? ' · a new glow!' : '';
-    this.toast(`${eco.seaRodName(s)}: sea fish ${PER_LEVEL}% lighter${glow}`, 3);
+    this.toast(`${eco.seaRodName(s)}: sea fish are heavy for it from marker ${markerOver(DEEP_SEA_ROD.tier, s.rodLevel, 1)}${glow}`, 3);
     audio.jingle(glow ? 'legendary' : 'rare');
   }
 
@@ -1299,7 +1295,7 @@ export class Game {
     if (s.coins < cost.coins || s.pearls < cost.pearls) return this.toast(`+${s.seaLine + 1} needs ${cost.coins.toLocaleString()} 🪙 and ${cost.pearls} Black Pearls.`);
     if (!eco.levelSeaLine(s)) return;
     this.net.send({ t: 'levelline' });
-    this.toast(`${eco.seaLineName(s)}: sea fish pull ${PER_LEVEL}% weaker`, 3);
+    this.toast(`${eco.seaLineName(s)}: sea fish are strong for it from marker ${markerOver(DEEP_SEA_LINE.tier, s.seaLine, 1)}`, 3);
     audio.jingle('rare');
   }
 
@@ -2326,15 +2322,10 @@ export class Game {
     this.hookedShiny = !!roll.shiny && !!roll.fishId;
     this.waitTotal = roll.wait;
     this.fightSeed = roll.seed ?? 0;
-    this.fightD = roll.d ?? 1;
-    this.fightTune = fightTune(roll.b, roll.fishId);
+    this.fightD = roll.d ?? { strength: 0, weight: 0 };
     this.fightB = roll.b;
     this.fightTag = roll.tag;
-    this.fightPull = roll.pull;
-    // At sea the tracks are levels, not tiers: over the line when its surges reach the red, the rod when it's as heavy as fish get.
-    const sea = this.map.sea ? seaOverGear(this.fightD) : null;
-    this.overRod = !!this.hooked && (sea ? sea.rod : this.hooked.tier > byId(RODS, this.s.rod).tier);
-    this.overLine = !!this.hooked && (sea ? sea.line : this.hooked.tier > eco.lineOf(this.s).tier);
+    this.fightTune = roll.tune;
     this.elapsed = 0;
     this.nibbleCd = 1.2 + Math.random() * 1.5;
     this.approachAngle = Math.random() * Math.PI * 2;
@@ -2441,9 +2432,9 @@ export class Game {
     const w = this.world;
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
-    const hard = this.fightD;
-    this.reel = new Reel(hard, mulberry(this.fightSeed), this.fightTune);
-    this.diveHud.fight(this.map.sea ? { b: this.fightB, pull: this.fightPull, overLine: this.overLine } : null);
+    this.reel = new Reel(this.fightD, mulberry(this.fightSeed), this.fightTune);
+    const match = matchupWords(this.fightD);
+    this.diveHud.fight(this.map.sea ? { b: this.fightB, pull: null, match: match.words, too: match.too } : null);
     this.holds = new HoldLog();
     this.reelAcc = 0;
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
@@ -2461,14 +2452,12 @@ export class Game {
     w.addShake(0.8);
     w.fx.splash(w.bobber.position, 36, 1.4);
     audio.splash(1);
-    // The word comes from the fish's pace; the gear gap is said outright, since that is what decides the fight.
-    const tag = this.fightTag === 'feisty' ? 'A feisty one! ' : this.fightTag === 'brutish' ? 'A brutish one! ' : '';
-    const over = this.overRod && this.overLine ? ' Over your rod and line!' : this.overRod ? ' Heavy for your rod.' : this.overLine ? ' Too strong for your line!' : '';
-    // At sea the pace levels off with depth, so the word is the fish's own pull instead. Only the line is named here:
-    // sea fish reach their heaviest well short of the frontier, so the rod is named where it bites, on the drag caption.
-    const sea = this.fightPull === 'strong' ? 'A strong one!' : this.fightPull === 'light' ? 'A light one.' : 'A typical one.';
-    const seaOver = this.overLine ? ' Too strong for your line!' : '';
-    this.toast(this.map.sea ? `Hooked! ${sea}${seaOver}` : `Hooked! ${tag}${difficultyLabel(typeof hard === 'number' ? hard : hard.pace ?? hard.weight)} fight.${over}`, (this.map.sea ? seaOver : over) ? 3 : 2);
+    // The gear gap is said outright, since that is what decides the fight: "strong" or "heavy" a rung over the gear,
+    // "too" from two (`matchupWords`), and "an easy one" a rung under on both (`underGear`), so an upgrade is felt.
+    // Every fish's timing is the same now, so the old word for how hard a fight is went.
+    const tag = this.fightTag === 'feisty' ? ' A feisty one!' : this.fightTag === 'brutish' ? ' A brutish one!' : '';
+    const easy = underGear(this.fightD) ? ' An easy one.' : '';
+    this.toast(`Hooked!${tag}${easy}${match.words ? ` ${match.words}${match.too ? '!' : '.'}` : ''}`, match.words ? 3 : 2);
     this.showFishTag(this.fightTag);
   }
 
@@ -3033,7 +3022,7 @@ export class Game {
       this.lastSurges = r.surgeCount;
       w.fx.ripple(b, 3, 0, 1.2);
       audio.tick(0.5);
-      if (r.surgePower > 0.75 && Math.random() < 0.6) this.leapT = 0;
+      if (Math.random() < 0.6) this.leapT = 0;
     }
 
     const right = new THREE.Vector3(Math.cos(w.yaw), 0, -Math.sin(w.yaw));
@@ -3178,22 +3167,23 @@ export class Game {
   }
 
   /**
-   * A lost fight ends on one card: SNAP! or RAN OFF!, why, and the fix (REELING.md, "What the player feels"). A pond
-   * fish lost to a gear wall goes into the Fishdex as seen (the server does the same from the `lost` message).
+   * A lost fight ends on one card: SNAP! or RAN OFF!, why, and the fix (REELING.md, "What the player feels"). A fish
+   * lost over the gear, pond or sea, goes into the Fishdex as seen (the server does the same from the `lost` message).
    */
   private lose(end: LossEnd): void {
-    const fish = this.map.sea ? null : this.hooked;
-    const v = this.map.sea ? seaLossVerdict(end, this.s, { rod: this.overRod, line: this.overLine }, this.map.vendor.name) : lossVerdict(end, this.s, fish, this.map.vendor.name);
-    const seen = !!fish && eco.recordSighting(this.s, fish);
-    this.showVerdict(v.title, v.cause, seen ? `${v.fix} · noted in your Fishdex` : v.fix);
+    const fish = this.hooked;
+    const v = this.map.sea ? seaLossVerdict(end, this.s, this.fightD) : lossVerdict(end, this.s, fish);
+    const seen = !!fish && (this.map.sea ? eco.recordSeaSighting(this.s, fish, this.fightD) : eco.recordSighting(this.s, fish));
+    this.showVerdict(v.title, v.cause, v.fixes, seen ? 'Noted in your Fishdex' : '');
     this.castLockUntil = performance.now() + LOSS_CAST_DELAY_MS;
     this.reset('');
   }
 
-  private showVerdict(title: string, cause: string, fix: string): void {
+  /** The loss card: the big word, the cause when there is one, a line per fix, and a dim note. */
+  private showVerdict(title: string, cause: string | undefined, fixes: string[], note = ''): void {
     const el = $('verdict');
     el.classList.remove('hidden');
-    el.innerHTML = `${title}<small>${withCoins(cause)}</small><small class="fix">${withCoins(fix)}</small>`;
+    el.innerHTML = `${title}${cause ? `<small>${withCoins(cause)}</small>` : ''}${fixes.map((f) => `<small class="fix">${withCoins(f)}</small>`).join('')}${note ? `<small class="note">${note}</small>` : ''}`;
     el.style.animation = 'none';
     void el.offsetWidth;
     el.style.animation = '';
@@ -3235,7 +3225,12 @@ export class Game {
 
   private drawGauge(time: number): void {
     const ctx = this.gctx;
-    const W = this.gauge.width;
+    // Drawn in 420 gauge units (the canvas's CSS size), at the screen's pixel density so it stays crisp on Retina and phones.
+    const W = 420;
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const px = Math.round(W * dpr);
+    if (this.gauge.width !== px) this.gauge.width = this.gauge.height = px;
+    ctx.setTransform(px / W, 0, 0, px / W, 0, 0);
     const cx = W / 2;
     const cy = W / 2;
     ctx.clearRect(0, 0, W, W);
@@ -3272,146 +3267,10 @@ export class Game {
       return;
     }
 
-    const r = this.reel;
-    // Keep the gauge green: red frays the line, and below the fish's pull (the white marker in a surge) it takes line.
-    const red = r.tension > GOOD_MAX;
-    const surge = r.surging;
-    const taking = surge && r.losingLine;
-    const warn = !surge && r.warning;
-    const danger = red || r.outmatched;
-    const pulse = 0.5 + 0.5 * Math.sin(time * (danger ? 18 : 8));
-    const accent = red ? '#ff3b30' : taking || warn ? '#ffb020' : '#58e07a';
+    // The foundation's gauge (`drawFightGauge`), as played in the gauge lab; it shakes the screen when a fray mark is about to fill.
+    const danger = drawFightGauge(ctx, cx, cy, this.reel, time, { holding: this.holding, frayFlash: this.frayFlash });
     $('vignette').classList.toggle('surge', danger);
     this.gauge.classList.toggle('surge', danger);
-
-    if (danger || surge || warn) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, 112, 0, Math.PI * 2);
-      ctx.strokeStyle = danger
-        ? `rgba(255,59,48,${0.25 + 0.55 * pulse})`
-        : `rgba(255,176,32,${0.2 + 0.3 * pulse})`;
-      ctx.lineWidth = danger ? 10 + 8 * pulse : 6;
-      ctx.stroke();
-    }
-
-    arc(96, 0, 1, 'rgba(0,0,0,0.5)', 14);
-    arc(96, GOOD_MIN, GOOD_MAX, 'rgba(255,255,255,0.18)', 14);
-    arc(96, r.sweetMin, r.sweetMax, 'rgba(88,224,122,0.55)', 14);
-    arc(96, Math.max(0, GOOD_MAX), 1, 'rgba(255,59,48,0.45)', 14);
-    arc(
-      96,
-      0,
-      Math.max(0.01, r.tension),
-      red ? '#ff3b30' : r.tension < GOOD_MIN || taking ? '#ffd23a' : '#7dff8a',
-      7,
-    );
-    // The fish's pull in a surge: below this marker it takes line; past the red, the rod can't hold it.
-    if (surge && r.need > 0.02) {
-      const ma = a0 + Math.min(1, r.need) * sweep;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(ma) * 84, cy + Math.sin(ma) * 84);
-      ctx.lineTo(cx + Math.cos(ma) * 108, cy + Math.sin(ma) * 108);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'round';
-      ctx.stroke();
-    }
-    const na = a0 + r.tension * sweep;
-    ctx.beginPath();
-    ctx.arc(
-      cx + Math.cos(na) * 96,
-      cy + Math.sin(na) * 96,
-      8 + (red ? 3 * pulse : 0),
-      0,
-      Math.PI * 2,
-    );
-    ctx.fillStyle = red ? '#ff7a70' : '#fff';
-    ctx.fill();
-
-    arc(76, 0, 1, 'rgba(0,0,0,0.45)', 9);
-    arc(76, 0, Math.max(0.01, r.progress), '#58b6ff', 7);
-
-    // Fray marks: one half per fray (two snap the line). Holding in the red fills the next one up, blinking; a full
-    // one flashes white as it frays.
-    const halves: [number, number][] = [[0, 0.48], [0.52, 1]];
-    halves.forEach(([from, to], i) => {
-      const fill = Math.min(1, Math.max(0, r.strain * 2 - i));
-      const done = i < r.wear.frays;
-      const blink = 0.5 + 0.5 * Math.sin(time * 24);
-      const fresh = done && i === r.wear.frays - 1 && this.frayFlash > 0;
-      arc(62, from, to, 'rgba(0,0,0,0.4)', 5);
-      if (done) arc(62, from, to, fresh && blink > 0.5 ? '#ffffff' : '#ff3b30', 4);
-      else if (fill > 0) arc(62, from, from + (to - from) * fill, r.fraying ? `rgba(255,59,48,${0.55 + 0.45 * blink})` : 'rgba(255,59,48,0.7)', 4);
-    });
-
-    ctx.textAlign = 'center';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 6;
-    // Fight left (a sea fish): drains while it surges against a tight line; yellow once it's tired, empty once it's
-    // exhausted. The label stays FIGHT throughout, so "tired" can't read as the player (Oscar, 2026-11-01).
-    if (r.tires) {
-      const bw = 132, bh = 8, bx = cx - bw / 2, by = cy - 132;
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.beginPath();
-      ctx.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 6);
-      ctx.fill();
-      if (r.fightLeft > 0) {
-        // A soft glow in its own colour while the fish is wearing itself out in a surge against a tight line.
-        const colour = r.tired ? '#ffd23a' : '#ff9a3c';
-        ctx.fillStyle = colour;
-        if (r.tiring) {
-          ctx.shadowColor = colour;
-          ctx.shadowBlur = 8 + 4 * pulse;
-        }
-        ctx.beginPath();
-        ctx.roundRect(bx, by, Math.max(bh, bw * r.fightLeft), bh, 4);
-        ctx.fill();
-        ctx.shadowColor = '#000';
-        ctx.shadowBlur = 6;
-      }
-      ctx.font = '800 12px system-ui';
-      ctx.fillStyle = '#fff';
-      ctx.fillText('FIGHT', cx, by - 7);
-    }
-    ctx.fillStyle = r.exhausted && !surge && !red ? '#7dff8a' : accent;
-    ctx.font = `800 ${danger ? 34 + 4 * pulse : 28}px system-ui`;
-    const big = red
-      ? 'EASE OFF!'
-      : taking
-        ? 'TIGHTEN!'
-        : surge
-          ? 'KEEP IT GREEN'
-          : warn
-            ? 'SURGE!'
-            : r.exhausted
-              ? 'REEL IT IN!'
-              : this.holding
-                ? 'REELING'
-                : 'HOLD TO REEL';
-    ctx.fillText(big, cx, cy + 150);
-    ctx.font = '600 14px system-ui';
-    ctx.fillStyle = '#fff';
-    const small = r.outmatched
-      ? 'Too strong for your line!'
-      : red
-        ? 'The line is fraying'
-        : taking
-          ? 'The fish is taking line'
-          : r.dragging
-            // Strength first: a fish over the line is lost to the line, whatever its weight (REELING.md, "Both").
-            ? this.map.sea && this.overLine ? 'Too strong for your line: its surges reach the red'
-              : this.overRod ? 'Too heavy for your rod: it drags line even in the green' : 'Strong fish! Ride high in the green to give less line'
-            : surge
-              ? 'Stay between the marker and the red'
-            : warn
-              ? 'Get ready to ease off'
-              : r.exhausted
-                ? 'The fish has no fight left'
-              : r.inSweetSpot
-          ? 'Sweet spot — reeling fast!'
-          : '';
-    if (small) ctx.fillText(small, cx, cy + 172);
-    ctx.shadowBlur = 0;
   }
 
   private refreshHud(): void {
@@ -4285,7 +4144,7 @@ export class Game {
         name: l.name,
         tier: l.tier,
         body: this.meter('Holds', `Tier ${l.tier} fish`, l.tier / 5, l.tier) + `<div class="have">On your rod: <b>${cur.name}</b></div>`,
-        note: 'Line holds the fish: a fish above your line pulls into the red and snaps it. One spool at a time; a better one from the stall replaces it.',
+        note: 'Line holds the fish: a fish strong for your line pulls its surges up to the red, one too strong pulls them into it, and holding in the red frays the line. One spool at a time; a better one from the stall replaces it.',
         actions: action,
       });
     }
@@ -4304,7 +4163,7 @@ export class Game {
         name: b.name,
         tier: b.tier,
         body: this.meter('Luck', `×${b.luck}`, b.luck / 2, b.tier) + this.meter('Reaches', `Tier ${b.tier}`, b.tier / 5, b.tier) + `<div class="have">You have <b>${n}</b></div>`,
-        note: `Bait decides which fish can bite: this one hooks fish up to ${tierName(b.tier)}.` + (b.tier > eco.lineOf(s).tier ? ` ⚠ Your ${eco.lineOf(s).name} can't hold most of what this bait attracts: ${LINES.find((l) => l.tier === b.tier)!.name} does.` : ''),
+        note: `Bait decides which fish can bite: this one hooks fish up to ${tierName(b.tier)}.` + (baitWarning(s, b) ? ` ${baitWarning(s, b)!.text}` : ''),
         actions,
       });
     }
@@ -4424,7 +4283,12 @@ export class Game {
       const moon = f.night ? '<span class="moon" title="Only bites at night">🌙</span>' : '';
       const size = `${f.minSize}-${f.maxSize} cm`;
       if (e) return `<div class="fish" style="--c:var(--t${f.sea ? 3 : f.tier})">${moon}${fishIcon(f.id)}<b>${f.name}</b><p>${FISH_BLURB[f.id] ?? ''}</p><span>Caught ${e.count} · best ${e.best} cm</span></div>`;
-      if (f.sea) return `<div class="fish unknown" style="--c:var(--t3)">${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}</p><span>Out at sea, in ${(ZONES.find((z) => z.id === f.locations[0])?.name ?? 'the deep').replace(/^The /, 'the ')}</span></div>`;
+      if (f.sea) {
+        const zone = (ZONES.find((z) => z.id === f.locations[0])?.name ?? 'the deep').replace(/^The /, 'the ');
+        // A sea fish lost over the gear: its name, and a nudge rather than a level, since how hard it is depends on the marker.
+        if (this.s.seen.includes(f.id)) return `<div class="fish seen" style="--c:var(--t3)">${fishIcon(f.id, { hidden: true })}<b>${f.name}</b><p>${size}</p><span>Got away in ${zone}! A stronger Deep Sea Line or Rod lands it</span></div>`;
+        return `<div class="fish unknown" style="--c:var(--t3)">${fishIcon(f.id, { hidden: true })}<b>???</b><p>${size}</p><span>Out at sea, in ${zone}</span></div>`;
+      }
       if (this.s.seen.includes(f.id)) {
         const need = eco.gearNeeds(this.s, f);
         const parts = [need.line ? `the ${need.line.name} to hold it` : '', need.rod ? `a ${need.rod.name} to land it` : ''].filter(Boolean);
@@ -4641,7 +4505,7 @@ export class Game {
         name: l.name,
         tier: l.tier,
         body: this.meter('Holds', `Tier ${l.tier} fish`, l.tier / 5, l.tier) + `<div class="have">On your rod: <b>${cur.name}</b></div>`,
-        note: 'Line holds the fish: a fish above your line pulls into the red and snaps it. One spool at a time; a better one replaces it.',
+        note: 'Line holds the fish: a fish strong for your line pulls its surges up to the red, one too strong pulls them into it, and holding in the red frays the line. One spool at a time; a better one replaces it.',
         actions: action,
       });
     }
@@ -4659,7 +4523,7 @@ export class Game {
         name: b.name,
         tier: b.tier,
         body: this.meter('Luck', `×${b.luck}`, b.luck / 2, b.tier) + this.meter('Reaches', `Tier ${b.tier}`, b.tier / 5, b.tier) + `<div class="have">You have <b>${eco.baitCount(s, b.id)}</b></div>`,
-        note: `Hooks fish up to ${tierName(b.tier)}. Each cast uses one.` + (b.tier > eco.lineOf(s).tier ? ` ⚠ Your ${eco.lineOf(s).name} can't hold most of what this bait attracts: ${LINES.find((l) => l.tier === b.tier)!.name} does.` : ''),
+        note: `Hooks fish up to ${tierName(b.tier)}. Each cast uses one.` + (baitWarning(s, b) ? ` ${baitWarning(s, b)!.text}` : ''),
         actions: action,
       });
     }
@@ -4735,14 +4599,13 @@ export class Game {
 
   /**
    * The Deep Sea Rod's detail. Before it's bought: what it's for and its price (the Buy button only at the stall).
-   * Once owned: its levels, how much lighter sea fish are, the Black Pearls on hand and the next level's price (the
-   * Level up button only at the stall).
+   * Once owned: its levels, from which marker sea fish are heavy and too heavy for it (`seaReach`), the Black Pearls
+   * on hand and the next level's price (the Level up button only at the stall).
    */
   private seaRodDetail(atStall: boolean): string {
     const s = this.s;
     const r = DEEP_SEA_ROD;
     const vendor = this.map.vendor.name;
-    const easier = Math.round(rodLevelEase(s.rodLevel) * 100);
     const pearlsHave = `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`;
     if (!s.seaRod) {
       const lvl = s.level < r.unlockLevel;
@@ -4758,8 +4621,8 @@ export class Game {
         icon: seaRodIcon(0),
         name: r.name,
         tier: r.tier,
-        body: (s.rodLevel > 0 ? this.meter('Sea fish', `${easier}% lighter`, easier / 100, 5) : '') + pearlsHave,
-        note: `Charters with Captain Reed need it. It stays on his boat: he hands it to you when a charter casts off, with the Deep Sea Line spooled. Level it with Black Pearls to make sea fish lighter.${carried}`,
+        body: this.seaReach('heavy', r.tier, s.rodLevel) + pearlsHave,
+        note: `Charters with Captain Reed need it. It stays on his boat: he hands it to you when a charter casts off, with the Deep Sea Line spooled. Each level, bought with Black Pearls, takes it a marker further out.${carried}`,
         actions,
       });
     }
@@ -4771,10 +4634,19 @@ export class Game {
       icon: seaRodIcon(s.rodLevel),
       name: eco.seaRodName(s),
       tier: r.tier,
-      body: this.meter('Sea fish', `${easier}% lighter`, easier / 100, 5) + pearlsHave,
-      note: `+${s.rodLevel} → +${next}: sea fish ${PER_LEVEL}% lighter, so they take less line · ${price}. It waits on Captain Reed's boat between charters. Black Pearls come from charters.`,
+      body: this.seaReach('heavy', r.tier, s.rodLevel) + pearlsHave,
+      note: `+${s.rodLevel} → +${next}: a marker further out, heavy for it from marker ${markerOver(r.tier, next, 1)} · ${price}. It waits on Captain Reed's boat between charters. Black Pearls come from charters.`,
       actions: (atStall ? '' : this.btn("On Reed's boat ✓", '', 'ok', true)) + action,
     });
+  }
+
+  /**
+   * Where sea fish outgrow a Deep Sea Rod or Line at this level, in the hook toast's words (`matchupWords`): the first
+   * marker where a typical fish is heavy (or strong) for it, and too heavy, one marker further out each level.
+   */
+  private seaReach(word: 'heavy' | 'strong', tier: number, level: number): string {
+    const row = (label: string, rungs: number) => `<div class="stat"><div class="srow"><span>${label}</span><span>from marker ${markerOver(tier, level, rungs)}</span></div></div>`;
+    return row(`Sea fish ${word} for it`, 1) + row(`Too ${word}`, 2);
   }
 
   /** A stall Level up button, or what's still missing for it. */
@@ -4787,19 +4659,18 @@ export class Game {
   }
 
   /**
-   * The Deep Sea Line's detail, like the Deep Sea Rod's: how much weaker sea fish pull, the Black Pearls on hand and
-   * the next level's price. It comes on the rod, so it levels once the rod is bought; the Level up button only shows at
-   * the stall.
+   * The Deep Sea Line's detail, like the Deep Sea Rod's: from which marker sea fish are strong for it, the Black
+   * Pearls on hand and the next level's price. It comes on the rod, so it levels once the rod is bought; the Level up
+   * button only shows at the stall.
    */
   private seaLineDetail(atStall: boolean): string {
     const s = this.s;
     const next = s.seaLine + 1;
     const cost = eco.seaLineCost(next);
-    const weaker = Math.round(rodLevelEase(s.seaLine) * 100);
     const price = `${cost.coins.toLocaleString()} ${COIN} + ${cost.pearls.toLocaleString()} ${PEARL}`;
     const step = s.seaLine > 0
-      ? `+${s.seaLine} → +${next}: sea fish ${PER_LEVEL}% weaker, so they snap it less · ${price}.`
-      : `The line on the Deep Sea Rod, for charters only: each level makes sea fish pull ${PER_LEVEL}% weaker, so they snap it less · ${price}.`;
+      ? `+${s.seaLine} → +${next}: a marker further out, strong for it from marker ${markerOver(DEEP_SEA_LINE.tier, next, 1)} · ${price}.`
+      : `The line on the Deep Sea Rod, for charters only: each level takes it a marker further out · ${price}.`;
     const actions = !s.seaRod
       ? this.btn(`Comes on the ${DEEP_SEA_ROD.name}`, '', 'plain', true)
       : !atStall
@@ -4809,7 +4680,7 @@ export class Game {
       icon: '🧵',
       name: eco.seaLineName(s),
       tier: DEEP_SEA_LINE.tier,
-      body: this.meter('Sea fish', `${weaker}% weaker pull`, weaker / 100, 5) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`,
+      body: this.seaReach('strong', DEEP_SEA_LINE.tier, s.seaLine) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`,
       note: `${step} Black Pearls come from charters with Captain Reed.`,
       actions,
     });

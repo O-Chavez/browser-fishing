@@ -1,12 +1,12 @@
-// Charter economy sim (REELING.md, "Sea economy"): the reel bots fight rolled sea fish at every depth, then whole
-// charters are played from those fights for each start marker and head-home rule, and the best pearls an hour is
+// Charter economy sim (REELING.md, "Sea economy" and "The sea mapping"): the reference hands (`HANDS`) fight rolled
+// sea fish at every depth, then whole charters are played from those fights for each start marker and head-home rule, and the best pearls an hour is
 // reported with the coins it earns. Assumes every marker short of the frontier is charted.
 // Run: npx tsx scripts/seaeconomy.ts [rod level] [line level] [last depth, default 120] [fights a depth, default 80]
 import { DIVE } from '../src/data/dive';
-import { fightTune, haulBonus, isLedge, lineWorn, pearlsAt, rollSeaFish, seaDifficulty } from '../src/game/dive';
+import { haulBonus, isLedge, lineWorn, pearlsAt, rollSeaFish, seaGaps } from '../src/game/dive';
 import { mulberry } from '../src/game/env';
-import { rollSize, sellValue, sizeDifficulty } from '../src/game/progression';
-import { botFight, STYLES, type BotStyle } from '../src/game/reelbot';
+import { rollFishGaps, rollSize, sellValue } from '../src/game/progression';
+import { botFight, HANDS, type BotStyle, type Hand } from '../src/game/reelbot';
 
 const gear = { rod: Number(process.argv[2] ?? 0), line: Number(process.argv[3] ?? 0) };
 const last = Number(process.argv[4] ?? 120);
@@ -26,15 +26,17 @@ function pool(depth: number, react: number, styles: BotStyle[]): Fight[] {
     for (let i = 0; i < n; i++) {
       const bite = rollSeaFish(depth, rng);
       const size = rollSize(bite.fish, rng);
-      const d = seaDifficulty(depth, gear, bite.fish, bite.pull, sizeDifficulty(bite.fish, size));
+      // Each fish with its modifiers (tag and spread, `rollFishGaps`); PLAIN=1 fights the bare gaps.
+      const d = process.env.PLAIN ? seaGaps(depth, gear) : rollFishGaps(seaGaps(depth, gear), rng).d;
       const seed = Math.floor(rng() * 2 ** 31);
-      const f = botFight(d, react, style, mulberry(seed), mulberry(seed ^ 0x5bd1e995), fightTune(bite.behaviour, bite.fish.id));
+      const f = botFight(d, react, style, mulberry(seed), mulberry(seed ^ 0x5bd1e995));
       const landed = f.status === 'caught';
       const coins = landed ? Math.round(sellValue(bite.fish, size) * (f.frays === 0 ? 1.1 : 1)) : 0;
       fights.push({ t: f.t, landed, coins, metres: lineWorn({ lineOut: f.lineOut, frays: f.frays, snapped: f.status === 'snapped' }, landed) });
     }
-    const cost = fights.reduce((s, f) => s + f.metres, 0) / Math.max(1, fights.filter((f) => f.landed).length);
-    if (cost < bestCost) (best = fights), (bestCost = cost);
+    const landed = fights.filter((f) => f.landed).length;
+    const cost = landed ? fights.reduce((s, f) => s + f.metres, 0) / landed : Infinity;
+    if (!best || cost < bestCost) (best = fights), (bestCost = cost);
   }
   return best!;
 }
@@ -64,10 +66,7 @@ function charters(pools: Fight[][], start: number, home: number) {
   return { pearls: pearls / h, coins: coins / h, sunk: sunk / CHARTERS };
 }
 
-const players: { name: string; react: number; styles: BotStyle[] }[] = [
-  { name: 'fast', react: 0.25, styles: STYLES },
-  { name: 'careful', react: 0.3, styles: [{ lo: 0.05, hi: 0.2 }] },
-];
+const players = (process.env.HANDS ?? 'careful,skilled').split(',').map((h) => ({ name: h, ...HANDS[h as Hand] }));
 for (const p of players) {
   const pools: Fight[][] = [];
   for (let depth = 0; depth <= last; depth++) pools.push(pool(depth, p.react, p.styles));

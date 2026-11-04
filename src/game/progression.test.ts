@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAITS, FISH, LINES, POND_FISH, RODS, SEA_FISH, byId } from '../data/content';
 import { mulberry } from './env';
-import { FLAT_LEVEL, SHINY_DIFFICULTY, STRENGTH_STEP, TAG_BOOST, TIER_DOWN, WEIGHT_STEP, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, earnedXp, xpPastFlat, eligibleFish, grantRanks, levelGifts, nextGoal, pickFish, reelDifficulty, rollSize, rollTag, sellValue, welcomeText, xpForNextLevel } from './progression';
+import { FLAT_LEVEL, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, earnedXp, xpPastFlat, eligibleFish, fightGaps, grantRanks, levelGifts, matchupWords, nextGoal, overGear, underGear, pickFish, rollFishGaps, rollSize, rollTag, FISH_SPREAD, TAG_TIERS, sellValue, welcomeText, xpForNextLevel } from './progression';
 
 const twig = byId(RODS, 'twig');
 const graphite = byId(RODS, 'graphite');
@@ -100,82 +100,67 @@ describe('tier progression', () => {
     }
   });
   const lineOfTier = (t: number) => LINES[t - 1];
-  it('matched gear: the tiers climb gently, and the pace follows the fish', () => {
-    const matched = [1, 2, 3, 4, 5].map((t) => {
-      const fish = FISH.filter((x) => x.tier === t && !x.sea);
-      const rod = RODS.find((r) => r.tier === t)!;
-      const ds = fish.map((x) => reelDifficulty(x, rod, lineOfTier(t)));
-      for (const d of ds) {
-        expect(d.weight).toBe(d.pace);
-        expect(d.strength).toBe(d.pace);
-      }
-      return ds.reduce((a, x) => a + x.pace!, 0) / ds.length;
-    });
-    for (let i = 1; i < matched.length; i++) expect(matched[i]).toBeGreaterThan(matched[i - 1]);
-    expect(matched[4]).toBeLessThan(2.0);
+  it('a fish is its tier against the gear: one tier is one rung, the rod for weight and the line for strength', () => {
+    for (const f of POND_FISH) for (const rod of RODS) for (const line of LINES) {
+      expect(fightGaps(f, rod, line)).toEqual({ strength: f.tier - line.tier, weight: f.tier - rod.tier });
+    }
+    expect(overGear(fightGaps(byId(FISH, 'pike'), RODS[2], lineOfTier(3)))).toEqual({ rod: false, line: false });
+    expect(overGear(fightGaps(byId(FISH, 'pike'), RODS[1], lineOfTier(3)))).toEqual({ rod: true, line: false });
+    expect(overGear(fightGaps(byId(FISH, 'pike'), RODS[2], lineOfTier(2)))).toEqual({ rod: false, line: true });
   });
-  it('the rod moves only the weight axis, the line only the strength axis', () => {
-    const f = FISH.find((x) => x.tier === 3)!;
-    const base = reelDifficulty(f, RODS[2], lineOfTier(3));
-    const weakRod = reelDifficulty(f, RODS[0], lineOfTier(3));
-    expect(weakRod.weight).toBeCloseTo(base.weight * WEIGHT_STEP[2], 1);
-    expect(weakRod.strength).toBe(base.strength);
-    expect(weakRod.pace).toBe(base.pace);
-    const weakLine = reelDifficulty(f, RODS[2], lineOfTier(1));
-    expect(weakLine.strength).toBeCloseTo(base.strength * STRENGTH_STEP[2], 1);
-    expect(weakLine.weight).toBe(base.weight);
-    const strongRod = reelDifficulty(f, RODS[4], lineOfTier(3));
-    expect(strongRod.weight).toBeCloseTo(base.weight * TIER_DOWN * TIER_DOWN, 1);
-    expect(strongRod.strength).toBe(base.strength);
+  it("a pond fish's modifiers never change which gear it's over, so the loss card and Fishdex (by tier) agree with the fight", () => {
+    // The extremes a hooked fish can roll on an axis: its spread either way, and a tag on top of the most spread.
+    const extras = [-FISH_SPREAD, FISH_SPREAD, TAG_TIERS.feisty + FISH_SPREAD, TAG_TIERS.brutish + FISH_SPREAD];
+    for (let gap = -4; gap <= 4; gap++) for (const x of extras) {
+      const g = Math.round((gap + x) * 100) / 100;
+      expect(overGear({ strength: g, weight: g })).toEqual({ rod: gap >= 1, line: gap >= 1 });
+    }
+  });
+  it('an easy one is a rung or more under the gear on both axes, give or take its spread', () => {
+    expect(underGear({ strength: -1.15, weight: -0.85 })).toBe(true);
+    expect(underGear({ strength: -2, weight: -1 })).toBe(true);
+    expect(underGear({ strength: -1, weight: 0 })).toBe(false);
+    // A Feisty fish a tier under isn't easy: its tag reads instead.
+    expect(underGear({ strength: -1 + TAG_TIERS.feisty + FISH_SPREAD, weight: -1 })).toBe(false);
+  });
+  it('says the matchup by rung: strong or heavy one over, too strong or too heavy from two', () => {
+    expect(matchupWords({ strength: 0, weight: 0.8 })).toEqual({ words: '', too: false });
+    // A fish's spread doesn't change the words: a pond fish a tier over reads as one, however it rolled.
+    expect(matchupWords({ strength: 0.86, weight: 0 })).toEqual({ words: 'Strong for your line', too: false });
+    expect(matchupWords({ strength: 0, weight: 1.65 })).toEqual({ words: 'Heavy for your rod', too: false });
+    expect(matchupWords({ strength: 1, weight: 0 })).toEqual({ words: 'Strong for your line', too: false });
+    expect(matchupWords({ strength: 1.2, weight: 1.2 })).toEqual({ words: 'Strong for your line, heavy for your rod', too: false });
+    expect(matchupWords({ strength: 0, weight: 2 })).toEqual({ words: 'Too heavy for your rod', too: true });
+    expect(matchupWords({ strength: 2.5, weight: 1 })).toEqual({ words: 'Too strong for your line, heavy for your rod', too: true });
   });
   it('bait sets what you can hook; an under-tier rod makes the fight much longer', () => {
     expect(canCatch(FISH.find((f) => f.tier === 3)!, 'pond', RODS[0], BAITS[2])).toBe(true);
   });
-  it('bigger fish of a species are heavier, not stronger: x0.85 for the smallest up to x1.15 for the largest', () => {
-    const f = FISH.find((x) => x.id === 'aurorapike')!;
-    const rod = RODS.find((r) => r.id === 'aurora')!;
-    const mid = reelDifficulty(f, rod, lineOfTier(5));
-    const small = reelDifficulty(f, rod, lineOfTier(5), false, f.minSize);
-    const big = reelDifficulty(f, rod, lineOfTier(5), false, f.maxSize);
-    expect(small.weight).toBeCloseTo(mid.weight * 0.85, 1);
-    expect(big.weight).toBeCloseTo(mid.weight * 1.15, 1);
-    expect(small.strength).toBe(mid.strength);
-    expect(big.strength).toBe(mid.strength);
-    expect(reelDifficulty(f, rod, lineOfTier(5), false, (f.minSize + f.maxSize) / 2)).toEqual(mid);
+  it('tags roll one fish in eight, Feisty and Brutish alike, at the frontier too', () => {
+    const rng = mulberry(7);
+    const n = { feisty: 0, brutish: 0, none: 0 };
+    for (let i = 0; i < 4000; i++) n[rollTag(rng) ?? 'none']++;
+    expect(n.feisty + n.brutish).toBeGreaterThan(4000 / 8 * 0.8);
+    expect(n.feisty + n.brutish).toBeLessThan(4000 / 8 * 1.2);
+    expect(Math.abs(n.feisty - n.brutish)).toBeLessThan(120);
+    const far = mulberry(9);
+    let tagged = 0;
+    for (let i = 0; i < 400; i++) if (rollFishGaps({ strength: 2, weight: 2 }, far).tag) tagged++;
+    expect(tagged).toBeGreaterThan(0);
   });
-  it('a shiny or a tag lengthens a fight on gear that handles the fish, and never pushes it over a wall', () => {
-    const f = FISH.find((x) => x.id === 'pike')!;
-    const base = reelDifficulty(f, RODS[2], lineOfTier(3));
-    expect(reelDifficulty(f, RODS[2], lineOfTier(3), true).weight).toBeCloseTo(base.weight * SHINY_DIFFICULTY, 1);
-    expect(reelDifficulty(f, RODS[2], lineOfTier(3), true).strength).toBe(base.strength);
-    // Over the rod, a shiny fights like a plain fish of its size.
-    expect(reelDifficulty(f, RODS[1], lineOfTier(3), true)).toEqual(reelDifficulty(f, RODS[1], lineOfTier(3)));
-    expect(reelDifficulty(f, RODS[2], lineOfTier(3), false, undefined, 'brutish').weight).toBeCloseTo(base.weight * TAG_BOOST, 1);
-    expect(reelDifficulty(f, RODS[2], lineOfTier(3), false, undefined, 'feisty').strength).toBeCloseTo(base.strength * TAG_BOOST, 1);
-    expect(reelDifficulty(f, RODS[2], lineOfTier(3), false, undefined, 'feisty').weight).toBe(base.weight);
-    // The largest tier 5 fish a tier over the rod stays inside the long-fight band; a Feisty matched fish stays under the red.
-    const top = FISH.filter((x) => x.tier === 5 && !x.sea);
-    for (const t of top) {
-      expect(reelDifficulty(t, RODS[3], lineOfTier(5), true, t.maxSize).weight).toBeLessThan(3.5);
-      expect(reelDifficulty(t, RODS[4], lineOfTier(5), false, undefined, 'feisty').strength).toBeLessThan(2.5);
+  it('a hooked fish adds its tag and its own spread to the gaps', () => {
+    const rng = mulberry(3);
+    const base = { strength: 1, weight: 0 };
+    let tagged = 0;
+    for (let i = 0; i < 2000; i++) {
+      const m = rollFishGaps(base, rng);
+      const s = m.d.strength - base.strength - (m.tag === 'feisty' ? TAG_TIERS.feisty : 0);
+      const w = m.d.weight - base.weight - (m.tag === 'brutish' ? TAG_TIERS.brutish : 0);
+      expect(Math.abs(s)).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+      expect(Math.abs(w)).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+      if (m.tag) tagged++;
     }
-  });
-  it('tags roll one fish in eight, and only on an axis the gear already handles', () => {
-    const f = FISH.find((x) => x.id === 'pike')!;
-    const count = (rod: number, line: number) => {
-      const rng = mulberry(7);
-      const n = { feisty: 0, brutish: 0, none: 0 };
-      for (let i = 0; i < 4000; i++) n[rollTag(f, RODS[rod - 1], lineOfTier(line), rng) ?? 'none']++;
-      return n;
-    };
-    const matched = count(3, 3);
-    expect(matched.feisty + matched.brutish).toBeGreaterThan(4000 / 8 * 0.8);
-    expect(matched.feisty + matched.brutish).toBeLessThan(4000 / 8 * 1.2);
-    expect(Math.abs(matched.feisty - matched.brutish)).toBeLessThan(120);
-    expect(count(2, 3).brutish).toBe(0);
-    expect(count(2, 3).feisty).toBeGreaterThan(0);
-    expect(count(3, 2).feisty).toBe(0);
-    expect(count(3, 2).brutish).toBeGreaterThan(0);
+    expect(tagged).toBeGreaterThan(2000 / 8 * 0.8);
   });
 });
 
