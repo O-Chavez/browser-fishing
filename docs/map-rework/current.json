@@ -1,0 +1,72 @@
+{
+  "name": "CURRENT lakeside map (as built, 2026-11-04)",
+  "notes": "Lake at the origin; shore is a radial function of theta=atan2(x,z); town pad flattens z~35; gate at z=56.",
+  "shore": { "kind": "formula", "js": "52 - 42*Math.exp(-(t*t)/0.3) + 4*Math.sin(t*3) + 2*Math.sin(t*7+1)" },
+  "pad": { "x": 0, "z": 35, "r": 24, "h": 0.9 },
+  "square": { "x": 0, "z": 32, "r": 5.5 },
+  "docks": [
+    { "x0": -1.5, "x1": 1.5, "z0": -3.2, "z1": 17 },
+    { "x0": -5, "x1": 5, "z0": -6.4, "z1": -3.2 },
+    { "x0": 1.5, "x1": 8.5, "z0": 3.6, "z1": 5.4 },
+    { "x0": -8.5, "x1": -1.5, "z0": 3.6, "z1": 5.4 }
+  ],
+  "paths": [
+    { "from": [0, 11], "to": [0, 53.5], "w": 4.4 },
+    { "from": [-2, 25], "to": [-13.5, 25], "w": 1.6 },
+    { "from": [-12.9, 45.1], "to": [-1.5, 45.1], "w": 1.6 },
+    { "from": [12.9, 45.1], "to": [1.5, 45.1], "w": 1.6 },
+    { "from": [-6.9, 48.5], "to": [-1.5, 48.5], "w": 1.6 },
+    { "from": [6.9, 48.5], "to": [1.5, 48.5], "w": 1.6 },
+    { "from": [14, 28.7], "to": [1.5, 28.7], "w": 1.6 },
+    { "from": [-13.9, 33], "to": [-1.5, 33], "w": 1.6 }
+  ],
+  "houses": [
+    { "x": -15, "z": 43, "facing": 2.06, "sign": "Wren's Cottage", "roof": "#b5473a" },
+    { "x": 15, "z": 43, "facing": -2.06, "roof": "#3f6f8f" },
+    { "x": -9, "z": 51, "facing": 2.46, "roof": "#6b4a8a" },
+    { "x": 9, "z": 51, "facing": -2.46, "roof": "#8a5a2b" },
+    { "x": 17, "z": 28, "facing": -1.34, "sign": "Fishmonger", "roof": "#4a7a4a" },
+    { "x": -17, "z": 33, "facing": 1.57, "sign": "Net Mender", "roof": "#7a3f3f" }
+  ],
+  "spots": [
+    { "id": "spawn", "x": 0, "z": 2, "facing": 3.1416, "label": "SPAWN (looks -z)" },
+    { "id": "dock_end", "x": 0, "z": -5, "label": "T end" },
+    { "id": "shop", "x": 5.5, "z": 21, "facing": -1.5708, "label": "Marlow's BAIT & TACKLE" },
+    { "id": "smokehouse", "x": -5.8, "z": 21.9, "facing": 1.5708, "label": "Smokehouse (Mags)" },
+    { "id": "gate", "x": 0, "z": 56, "facing": 3.1416, "label": "CASINO GATE + 2 posters" },
+    { "id": "leaderboard", "x": 10.5, "z": 30, "facing": -1.9, "label": "Top Anglers + Thanks board" },
+    { "id": "mirror", "x": -8.5, "z": 40, "facing": -0.8, "label": "Wardrobe mirror" },
+    { "id": "campfire", "x": -15, "z": 24, "facing": 0, "label": "Campfire" },
+    { "id": "worms", "x": -8.5, "z": 10.5, "label": "Worm patch" },
+    { "id": "reed", "x": -15.1, "z": 13.9, "facing": 0.586, "label": "Capt. Reed" },
+    { "id": "plane", "x": -15.1, "z": 13.9, "label": "" },
+    { "id": "charters_sign", "x": -14.1, "z": 13.3, "label": "CHARTERS sign" },
+    { "id": "furthest", "x": -20.1, "z": 19.1, "facing": 1.03, "label": "Furthest Out board" }
+  ],
+  "props": [
+    { "kind": "custom", "x": -19.5, "z": 11.7, "w": 7, "d": 7, "facing": 0.586, "label": "seaplane" },
+    { "kind": "lamp", "x": -2.4, "z": 14 }, { "kind": "lamp", "x": 2.4, "z": 14 }, { "kind": "lit-lamp", "x": -2.4, "z": 18 }, { "kind": "lit-lamp", "x": 2.4, "z": 18 },
+    { "kind": "lamp", "x": -9, "z": 36 }, { "kind": "lamp", "x": 9, "z": 36 }, { "kind": "lit-lamp", "x": -12, "z": 26 }, { "kind": "lamp", "x": 13, "z": 26 }, { "kind": "lamp", "x": -2.4, "z": 30 }, { "kind": "lit-lamp", "x": 2.4, "z": 30 },
+    { "kind": "lit-lamp", "x": -2.6, "z": 39 }, { "kind": "lamp", "x": 2.6, "z": 39 }, { "kind": "lamp", "x": -2.6, "z": 45 }, { "kind": "lit-lamp", "x": 2.6, "z": 45 }, { "kind": "lit-lamp", "x": -2.6, "z": 51 }, { "kind": "lamp", "x": 2.6, "z": 51 }, { "kind": "lit-lamp", "x": 12, "z": 36 }, { "kind": "lamp", "x": -13, "z": 39 }, { "kind": "lamp", "x": 12, "z": 47 }, { "kind": "lamp", "x": -3, "z": 55 },
+    { "kind": "rack", "x": 12, "z": 16, "facing": 0.3 }, { "kind": "rack", "x": 16, "z": 19, "facing": -0.2 },
+    { "kind": "boat", "x": -13.5, "z": 8.5, "facing": 0.6 },
+    { "kind": "flowers", "x": -12.5, "z": 38.8, "w": 3 }, { "kind": "flowers", "x": 12.5, "z": 38.8, "w": 3 }, { "kind": "flowers", "x": -12.5, "z": 48.2 }, { "kind": "flowers", "x": 12.5, "z": 48.2 }, { "kind": "flowers", "x": 17, "z": 24, "w": 2.5 },
+    { "kind": "fence", "x0": -3.6, "z0": 36.5, "x1": -3.6, "z1": 47 }, { "kind": "fence", "x0": 3.6, "z0": 36.5, "x1": 3.6, "z1": 47 }, { "kind": "fence", "x0": -3.6, "z0": 47, "x1": -6.3, "z1": 47 }, { "kind": "fence", "x0": 3.6, "z0": 47, "x1": 6.3, "z1": 47 },
+    { "kind": "bench", "x": 4.6, "z": 32, "facing": 1.57 }, { "kind": "bench", "x": -4.6, "z": 32, "facing": -1.57 },
+    { "kind": "pot", "x": -3.6, "z": 29.5 }, { "kind": "pot", "x": 3.6, "z": 29.5 }, { "kind": "pot", "x": -3.6, "z": 34.5 }, { "kind": "pot", "x": 3.6, "z": 34.5 }, { "kind": "pot", "x": 8.2, "z": 40.5 }, { "kind": "pot", "x": 7.5, "z": 15.5 },
+    { "kind": "firepit", "x": 11, "z": 38.5 },
+    { "kind": "blanket", "x": 9, "z": 17 }, { "kind": "blanket", "x": -9.5, "z": 17.5 },
+    { "kind": "string-lights", "z": 49, "x0": -3.4, "x1": 3.4 }, { "kind": "string-lights", "z": 34.5, "x0": -4, "x1": 4 },
+    { "kind": "logs", "x": 20.2, "z": 46 }, { "kind": "logs", "x": -18.2, "z": 46 }, { "kind": "logs", "x": -12.6, "z": 33.2 },
+    { "kind": "rock", "x": 8.4, "z": 19.2, "r": 0.4, "label": "barrels" }, { "kind": "rock", "x": 8, "z": 23.8, "r": 0.5, "label": "crates" }
+  ],
+  "npcs": [
+    { "name": "Old Salty", "x": 4.2, "z": 15, "walk": [[0, 9], [0, -5], [0, 9]] },
+    { "name": "Pip", "x": 2.6, "z": 33.5, "walk": [[0, 34.3], [-2.3, 32], [0, 29.7], [0, 24], [1.2, 17], [9.3, 15.6], [1.2, 17], [0, 24], [0, 29.7]] },
+    { "name": "Granny Wren", "x": -10.5, "z": 44.5, "walk": [[-9.5, 41.5], [-5.4, 41.2], [-7, 46.3]] },
+    { "name": "Mags Cinder", "x": -6.55, "z": 21.9 },
+    { "name": "Capt. Reed", "x": -15.1, "z": 13.9 }
+  ],
+  "bottles": [ { "x": 13.5, "z": 16.5 }, { "x": -15, "z": 18 }, { "x": -20, "z": 31 }, { "x": 19, "z": 48 }, { "x": 13, "z": 54 }, { "x": -19, "z": 24 }, { "x": -4.4, "z": -5.2 } ],
+  "sightlines": [ { "from": [0, 2], "to": [0, 56] } ]
+}
