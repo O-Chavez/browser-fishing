@@ -744,15 +744,19 @@ export class World {
     let n = 0;
     let pines = 0;
     let leafy = 0;
+    // The headland pines first (docs/map-rework/harbour.json): the headland tips are too low for the
+    // forest's 0.8 m line, and these four make the cove's silhouette. [x, z, scale]
+    const headland: [number, number, number][] = [[19.5, -3.5, 1.25], [22, -0.5, 1.1], [-21, -3, 1.3], [-23.5, 1, 1.05]];
     for (let tries = 0; n < N && tries < 6000; tries++) {
+      const fixed = headland[n];
       const th = (rnd() * 2 - 1) * Math.PI;
       const r = innerRadius(th) + 6 + Math.pow(rnd(), 1.5) * 140;
-      if (r > 168) continue;
-      const x = Math.sin(th) * r;
-      const z = Math.cos(th) * r;
+      if (!fixed && r > 168) continue;
+      const x = fixed ? fixed[0] : Math.sin(th) * r;
+      const z = fixed ? fixed[1] : Math.cos(th) * r;
       const y = groundHeight(x, z);
-      if (y < 0.8 || Math.hypot(x - map.pad.x, z - map.pad.z) < clear) continue;
-      const s = 0.8 + rnd() * 1.6;
+      if (!fixed && (y < 0.8 || Math.hypot(x - map.pad.x, z - map.pad.z) < clear)) continue;
+      const s = fixed ? fixed[2] : 0.8 + rnd() * 1.6;
       this.trees.push({ x, z, r: 0.45 * s });
       q.setFromAxisAngle(up, rnd() * 6.28);
       trunk.setMatrixAt(n, m.compose(p.set(x, y - 0.1, z), q, sc.set(s, s, s)));
@@ -764,7 +768,7 @@ export class World {
           (rnd() - 0.5) * 0.1,
         );
       n++;
-      if (vr() < 0.26) {
+      if (vr() < 0.26 && !fixed) {
         // Two overlapping blobs in a warmer green
         blobs.forEach((b, k) => {
           const ox = k ? (vr() - 0.5) * 1.6 * s : 0;
@@ -822,7 +826,10 @@ export class World {
     reeds.count = rn;
     this.decor.add(reeds);
 
-    const RK = 46;
+    // The islet (docs/map-rework/harbour.json): three rocks 30 m past the T end, the eye's target from the
+    // pier. The lake bed is 8-9 m down there, so they stand at the surface rather than on the ground. [x, z, radius]
+    const islet: [number, number, number][] = [[-9, -36.5, 2.1], [-7.2, -38.2, 1.4], [-10.8, -38, 1.1]];
+    const RK = 46 + islet.length;
     // Lighter tops, darker undersides
     const rockGeo = new THREE.DodecahedronGeometry(1);
     const rp = rockGeo.getAttribute('position');
@@ -835,6 +842,10 @@ export class World {
       RK,
     );
     let kn = 0;
+    for (const [x, z, s] of islet) {
+      q.setFromEuler(new THREE.Euler(0.3, kn * 1.7, 0.2));
+      rocks.setMatrixAt(kn++, m.compose(p.set(x, 0.1 * s, z), q, sc.set(s, s * 1.4, s)));
+    }
     for (let tries = 0; kn < RK && tries < 800; tries++) {
       const th = (rnd() * 2 - 1) * Math.PI;
       const r = innerRadius(th) + (rnd() * 12 - 7);
@@ -985,7 +996,7 @@ export class World {
     this.decor.add(dock);
   }
 
-  /** A little boat tied up beside the west pier. */
+  /** A little boat tied up beside the west jetty. */
   private buildRowboat(): THREE.Group {
     const g = new THREE.Group();
     const hull = new THREE.Mesh(
@@ -1023,8 +1034,8 @@ export class World {
     oar.rotation.z = Math.PI / 2.3;
     oar.position.set(0.15, 0.1, 0.1);
     g.add(hull, rim, seat, oar);
-    g.position.set(-5.5, 0.38, 7);
-    g.rotation.y = Math.PI / 2 + 0.1;
+    g.position.set(-10.3, 0.38, 6.2);
+    g.rotation.y = 0.2;
     return g;
   }
 
@@ -1202,11 +1213,11 @@ export class World {
   }
 
   private static lanterns = [
-    [1.1, -2.8],
-    [-4.4, -5.9],
-    [4.4, -5.9],
-    [-1.35, 4.5],
-    [1.35, 10],
+    [1.1, -5.6],
+    [-4.4, -8.5],
+    [4.4, -8.5],
+    [-1.35, 1.5],
+    [1.35, 7.5],
   ];
 
   // The dock's crate, bucket, barrel, rope and lantern posts are decoration only: the dock is

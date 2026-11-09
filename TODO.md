@@ -6,6 +6,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
+- [ ] 🚧 📋 Lakeside map rework: build "Harbour crescent, hybrid, round 5" on branch `map-rework` (Oscar, 2026-11-08). The plan, the layout in the engine's terms and the build steps are in `docs/map-rework/HANDOFF.md`; step 2 (the greybox: shore, pad, quay and jetties, islet, headland pines) is built, the town and props are still in their old spots
 - [ ] Update the README with the newer features, a follow-up to the finished "Fill out readme" (DONE.md)
   - Add the deep sea charters (Reed's seaplane at the beach, the Shelf and Drop-off, Black Pearls, the Deep Sea Rod and its line and their levels, the Furthest Out board, the Kraken), the Lucky Wheel at the casino, and the rest of what's shipped since the last fill-out (check `NEWS` in `src/data/news.ts`). Then go over "About this game" and "Features at a glance" (`README.md:13-58`)
   - Fix what's out of date: the Smokehouse paragraph's "Coming soon: spices for deep-sea charters" (spices were shelved, `README.md:33`). Re-run `npm run screenshots` if a new shot (the harbour, a charter) is worth adding

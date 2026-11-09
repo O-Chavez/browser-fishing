@@ -158,7 +158,8 @@ export const MAPS: MapDef[] = [
     locationId: 'pond',
     name: 'Starter Pond',
     spawn: { x: 0, z: 2, yaw: 0 },
-    pad: { x: 0, z: 35, r: 24, h: 0.9 },
+    // The harbour's town pad (docs/map-rework/harbour.json): its bank carries dry ground down to the quay at z 14.5.
+    pad: { x: 0, z: 37, r: 21.5, h: 0.9 },
     vendor: {
       name: 'Marlow',
       face: 'joy',

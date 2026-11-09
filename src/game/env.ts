@@ -36,9 +36,32 @@ export const smooth = (a: number, b: number, x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-/** theta = atan2(x, z): 0 points at the shore behind the dock. */
+/**
+ * The shoreline, sampled every few degrees as [theta in degrees, radius] (docs/map-rework/harbour.json): a cove
+ * 19-25 m across at its back (the quay's water), two headlands at about ±110° and the open lake past them.
+ * Periodic and cosine-interpolated between samples, so the shore has no corners.
+ */
+const SHORE_SAMPLES: [number, number][] = [
+  [-180, 55], [-155, 54], [-140, 48], [-125, 37], [-115, 27], [-105, 21], [-95, 20], [-85, 19.5], [-75, 19.5],
+  [-65, 20], [-55, 21], [-45, 23.5], [-30, 23], [-15, 23],
+  [0, 25],
+  [15, 23], [30, 23], [45, 23.5], [55, 20.5], [65, 19.5], [75, 19], [85, 19], [95, 19.5], [105, 20], [115, 26],
+  [125, 36], [140, 47], [155, 54], [180, 55],
+];
+const SHORE = SHORE_SAMPLES.map(([d, r]) => [(d * Math.PI) / 180, r] as const);
+
+/** Radius of the shoreline. theta = atan2(x, z): 0 points at the quay behind the pier, ±π at the far side of the lake. */
 export function innerRadius(theta: number): number {
-  return 52 - 42 * Math.exp(-(theta * theta) / 0.3) + 4 * Math.sin(theta * 3) + 2 * Math.sin(theta * 7 + 1);
+  let t = theta;
+  while (t < -Math.PI) t += Math.PI * 2;
+  while (t > Math.PI) t -= Math.PI * 2;
+  let i = 1;
+  while (i < SHORE.length - 1 && SHORE[i][0] <= t) i++;
+  const [ta, ra] = SHORE[i - 1];
+  const [tb, rb] = SHORE[i];
+  const u = (t - ta) / (tb - ta);
+  const k = (1 - Math.cos(u * Math.PI)) / 2;
+  return ra + (rb - ra) * k;
 }
 
 export function padWeight(x: number, z: number): number {
@@ -68,13 +91,17 @@ function rawGroundHeight(x: number, z: number): number {
   return base + hills + noise * Math.min(1, dd / 10) * 2.5;
 }
 
-/** Walkable timber over the water: the main pier, the T-shaped end platform and two side piers. */
+/**
+ * Walkable timber over the water: the pier, its T end, the quay across the back of the cove that the pier
+ * runs out of, and a short jetty either side of the pier's root (docks in docs/map-rework/harbour.json).
+ */
 export interface DockRect { x0: number; x1: number; z0: number; z1: number }
 export const DOCK_RECTS: DockRect[] = [
-  { x0: -1.5, x1: 1.5, z0: -3.2, z1: 17 },
-  { x0: -5, x1: 5, z0: -6.4, z1: -3.2 },
-  { x0: 1.5, x1: 8.5, z0: 3.6, z1: 5.4 },
-  { x0: -8.5, x1: -1.5, z0: 3.6, z1: 5.4 },
+  { x0: -1.5, x1: 1.5, z0: -6, z1: 10 },
+  { x0: -5, x1: 5, z0: -9, z1: -6 },
+  { x0: -13, x1: 13, z0: 10, z1: 14.5 },
+  { x0: 6.25, x1: 8.75, z0: 4, z1: 10 },
+  { x0: -8.75, x1: -6.25, z0: 4, z1: 10 },
 ];
 
 export const onDock = (x: number, z: number, pad = 0): boolean =>
