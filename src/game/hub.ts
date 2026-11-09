@@ -387,8 +387,8 @@ export class Hub {
   private buildProps(): void {
     // Lamp posts on the quay and jetty, up the main street to the square, and one each at Reed's lane and the campfire
     // ramp (docs/map-rework/harbour.json; the village's own posts are in town.ts). Five carry a point light.
-    const lit = new Set(['-4,11.2', '4,11.2', '8.5,6.3', '3.6,27.5', '-19,5']);
-    const posts = [[-4, 11.2], [4, 11.2], [-9.5, 13.8], [9.8, 13.8], [8.5, 6.3], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19, 5], [18.5, 5.5]];
+    const lit = new Set(['-4,11.2', '4,11.2', '8.3,4.5', '3.6,27.5', '-19,5']);
+    const posts = [[-4, 11.2], [4, 11.2], [-9.5, 13.8], [9.8, 13.8], [8.3, 4.5], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19, 5], [18.5, 5.5]];
     for (const [x, z] of posts) {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
@@ -414,14 +414,14 @@ export class Hub {
       [[0.26, 0], [0.34, 0.2], [0.36, 0.45], [0.34, 0.7], [0.26, 0.9]].map(([x, y]) => new THREE.Vector2(x, y)),
       14,
     );
-    for (const [x, z, s] of [[-8, 13.6, 1], [-8.7, 13.9, 0.85], [12.6, 13.3, 1]]) {
+    for (const [x, z, s] of [[-8, 13.6, 1], [-8.7, 13.9, 0.85], [12.6, 12.4, 1]]) {
       const b = new THREE.Mesh(barrelGeo, mat(0x8a5a30));
       b.scale.setScalar(s);
       b.castShadow = true;
       this.place(b, { x, z, facing: 0 });
       this.fixed.push({ x, z, r: 0.38 * s });
     }
-    const crates = [[-6.5, 14.1, 0.4], [12.3, 13.9, 1.1], [11.9, 14.1, 0.2]] as const;
+    const crates = [[-6.5, 14.1, 0.4], [12.1, 11.7, 1.1]] as const;
     for (const [x, z, rot] of crates) {
       const c = rbox(0.8, 0.7, 0.8, 0x9c7a4a, 0.05);
       this.place(c, { x, z, facing: rot }, 0, 0, standHeight(x, z) + 0.35);

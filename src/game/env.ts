@@ -15,6 +15,27 @@ export const setPad = (p: Pad | null): void => {
 };
 
 /**
+ * Flat sand banks at height `h` over a rectangle, sloping down into the natural ground beyond its edges at
+ * `APRON_SLOPE` per metre: the quay's rear and ends stand on them, so the deck meets the sand flush and the lanes
+ * leave it without a step.
+ */
+export interface Apron { x0: number; x1: number; z0: number; z1: number; h: number }
+const APRON_SLOPE = 0.4;
+let aprons: Apron[] = [];
+export const setAprons = (a: Apron[]): void => {
+  aprons = a;
+};
+const apronHeight = (x: number, z: number): number => {
+  let h = -Infinity;
+  for (const a of aprons) {
+    const dx = Math.max(0, a.x0 - x, x - a.x1);
+    const dz = Math.max(0, a.z0 - z, z - a.z1);
+    h = Math.max(h, a.h - Math.hypot(dx, dz) * APRON_SLOPE);
+  }
+  return h;
+};
+
+/**
  * At sea the only ground is the charter boat's deck (`BOAT` in sea.ts): docks, standing and water
  * read it instead of the pond's shore and piers.
  */
@@ -78,7 +99,7 @@ export function groundHeight(x: number, z: number): number {
   const blended = raw + (pad.h - raw) * w;
   // Beyond the pad the bank slopes gently into the water instead of dropping off a cliff.
   const bank = pad.h - Math.max(0, Math.hypot(x - pad.x, z - pad.z) - pad.r) * BANK_SLOPE;
-  return Math.max(blended, bank);
+  return Math.max(blended, bank, apronHeight(x, z));
 }
 
 function rawGroundHeight(x: number, z: number): number {

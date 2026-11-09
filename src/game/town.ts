@@ -150,15 +150,25 @@ export class Town {
     // ground between them; the main street stops where it is laid, since it meets the quay deck.
     const over = w < 4 ? w / 2 : 0;
     const len = Math.hypot(bx - ax, bz - az) + 2 * over;
-    const geo = new THREE.PlaneGeometry(w, len).rotateX(-Math.PI / 2);
+    // Built in world space, a vertex every half metre along, each on the ground under it, so a lane down a
+    // slope lies on the sand instead of floating at one end and sinking at the other.
+    const geo = new THREE.PlaneGeometry(w, len, 1, Math.max(1, Math.ceil(len / 0.5))).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (w / 2.2), uv.getY(i) * (len / 2.2));
-    const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2 - layer, polygonOffsetUnits: -2 - layer }));
-    m.receiveShadow = true;
     const mx = (ax + bx) / 2;
     const mz = (az + bz) / 2;
-    m.position.set(mx, groundHeight(mx, mz) + 0.03 + layer * 0.012, mz);
-    m.rotation.y = Math.atan2(bx - ax, bz - az);
+    const ang = Math.atan2(bx - ax, bz - az);
+    const sin = Math.sin(ang);
+    const cos = Math.cos(ang);
+    const pos = geo.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      const x = mx + pos.getX(i) * cos + pos.getZ(i) * sin;
+      const z = mz - pos.getX(i) * sin + pos.getZ(i) * cos;
+      pos.setXYZ(i, x, groundHeight(x, z) + 0.03 + layer * 0.012, z);
+    }
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2 - layer, polygonOffsetUnits: -2 - layer }));
+    m.receiveShadow = true;
     this.group.add(m);
   }
 
@@ -513,10 +523,10 @@ export class Town {
     sign.mesh.position.set(0, LOW + 0.55, FRONT + 0.32);
     sign.mesh.rotation.x = -0.12;
     g.add(sign.mesh);
-    // The stone smoker stands behind the shack, its iron door and glowing coals turned to the side,
-    // and a tall pipe so the smoke rises over the roof.
-    const SX = 0.9;
-    const SZ = BACK - 0.75;
+    // The stone smoker stands beside the shack on its street side, where players see it, its iron door and
+    // glowing coals turned to the street, and a tall pipe so the smoke rises beside the roof.
+    const SX = W / 2 + 0.8;
+    const SZ = -0.6;
     const sm = new THREE.Group();
     const box = rbox(1.0, 1.2, 1.0, 0x8d6e63, 0.04);
     boxUV(box.geometry, 1.2);

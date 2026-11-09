@@ -8,16 +8,17 @@ import type { MapDef } from '../data/maps';
 import {
   DOCK_RECTS,
   type DockRect,
+  WATER_ORDER,
   groundHeight,
   innerRadius,
   isWater,
   mulberry,
   onDock,
   padWeight,
+  setAprons,
   setAtSea,
   setPad,
   smooth,
-  WATER_ORDER,
   waveHeight,
 } from './env';
 import { Hub } from './hub';
@@ -557,6 +558,7 @@ export class World {
   setLocation(loc: Location, map: MapDef): void {
     this.indoor = !!map.casino;
     setPad(map.pad);
+    setAprons(map.aprons ?? []);
     setAtSea(!!map.sea);
     this.sea = null;
     this.boat = null;

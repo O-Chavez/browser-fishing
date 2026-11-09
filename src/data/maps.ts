@@ -134,6 +134,8 @@ export interface MapDef {
   radius: number;
   /** Where the random forest and shore rocks stay out: lanes, beaches and the bare headland tips behind their pines. */
   clearings?: { x: number; z: number; r: number }[];
+  /** Flat sand banks (`Apron` in env.ts) the quay's rear and ends stand on, so the deck meets the ground flush. */
+  aprons?: { x0: number; x1: number; z0: number; z1: number; h: number }[];
   town: TownDef;
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
@@ -169,11 +171,11 @@ export const MAPS: MapDef[] = [
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
     gateArrival: { x: 0, z: 50.5, yaw: 0 },
-    // Top Anglers and Thanks stand on the quay deck east of the pier root, facing the water, so the leaderboard is
-    // the first thing passed after a catch (the plan had them at the east jetty's root, which they blocked).
-    leaderboard: { x: 6.9, z: 13.6, facing: Math.PI },
-    // The wardrobe mirror at the quay's east end by the bench jetty.
-    mirror: { x: 11.6, z: 13.3, facing: -2.36 },
+    // Top Anglers and Thanks stand along the quay deck's rear at its east end, facing the water: in full view from
+    // the pier without standing in front of the Smokehouse (which the plan's spot by the pier root did).
+    leaderboard: { x: 11, z: 13.6, facing: Math.PI },
+    // The wardrobe mirror at the quay's west corner by Reed's lane, facing along the deck toward the pier.
+    mirror: { x: -11.3, z: 13.2, facing: Math.PI / 2 },
     // The campfire on the east headland, seen across the water from the jetty bench.
     campfire: { x: 18, z: 2, facing: 0 },
     // Beside Reed's lane, at the top of his beach.
@@ -183,6 +185,12 @@ export const MAPS: MapDef[] = [
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], lines: ['twine', 'mono', 'fluoro', 'braid', 'moonsilk'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
+    aprons: [
+      // Along the quay's rear edge, and under its two ends where the lanes to Reed's beach and the campfire leave it.
+      { x0: -13.5, x1: 13.5, z0: 13.5, z1: 16.5, h: 0.72 },
+      { x0: -16, x1: -11, z0: 9.5, z1: 16.5, h: 0.72 },
+      { x0: 11, x1: 16, z0: 9.5, z1: 16.5, h: 0.72 },
+    ],
     clearings: [
       // Reed's beach and the landing spot, his lane, the campfire headland, and the two ring lanes down to the water.
       { x: -19.5, z: 4, r: 7 },
@@ -197,9 +205,10 @@ export const MAPS: MapDef[] = [
     town: {
       square: { x: 0, z: 32, r: 5.5 },
       houses: [
-        // The Fishmonger and Net Mender flank the stalls; Wren's, the blue house and two more stagger up the ring to the gate.
-        { x: -12, z: 22.5, facing: 2.3, wall: 0xe6c9c9, roof: 0x4a7a4a, sign: 'Fishmonger' },
-        { x: 13, z: 23.5, facing: -2.1, wall: 0xd9d2c5, roof: 0x7a3f3f, sign: 'Net Mender' },
+        // The Fishmonger and Net Mender flank the stalls, their doors to the main street like every house;
+        // Wren's, the blue house and two more stagger up the ring to the gate.
+        { x: -12, z: 22.5, facing: faceToward(-12, 22.5, -2.2, 23.5), wall: 0xe6c9c9, roof: 0x4a7a4a, sign: 'Fishmonger' },
+        { x: 13, z: 23.5, facing: faceToward(13, 23.5, 2.2, 24), wall: 0xd9d2c5, roof: 0x7a3f3f, sign: 'Net Mender' },
         { x: -15, z: 34, facing: 1.4, wall: 0xe8d7b0, roof: 0xb5473a, sign: "Wren's Cottage" },
         { x: 14.5, z: 38.5, facing: -1.9, wall: 0xc9d9e0, roof: 0x3f6f8f },
         { x: -10.5, z: 46, facing: 2.3, wall: 0xe0c3a0, roof: 0x6b4a8a },
@@ -292,7 +301,7 @@ export const MAPS: MapDef[] = [
         },
       ],
       bottles: [
-        { id: 'b1', x: 6.6, z: 5.8, note: 'Day 3. Caught nothing. Again. The pier is where I should have been.' },
+        { id: 'b1', x: 7.0, z: 7.2, note: 'Day 3. Caught nothing. Again. The pier is where I should have been.' },
         { id: 'b2', x: -21, z: -1, note: 'To whoever finds this: the best catch of my life was a tiny trout with a big heart.' },
         { id: 'b3', x: -19.5, z: 38, note: 'The Net Mender swears he mended a net that caught a ghost.' },
         { id: 'b4', x: 12.5, z: 58, note: 'Smoked fish keeps the winter at bay. Share the first of the season.' },
@@ -341,8 +350,8 @@ export const MAPS: MapDef[] = [
         { from: [18.5, 16], to: [15.5, 8.5], w: 1.6 },
       ],
       benches: [
-        // On the east jetty, looking across the water to the campfire headland.
-        { x: 7.5, z: 4.8, facing: Math.PI },
+        // Along the east jetty's edge, looking across the water to the campfire headland.
+        { x: 6.9, z: 7.2, facing: Math.PI / 2 },
         // The rest stop on the walk up, beside the main street in front of the Fishmonger.
         { x: -4.6, z: 24.5, facing: Math.PI / 2 },
       ],
@@ -374,6 +383,8 @@ MAPS.push({
   gateArrival: undefined,
   worms: undefined,
   smokehouse: undefined,
+  clearings: undefined,
+  aprons: undefined,
   casino: {
     hall: { x: 0, z: 43, w: 34, d: 34 },
     roulette: { x: -9, z: 43, facing: toward(-9, 43) },
@@ -439,5 +450,7 @@ MAPS.push({
   worms: undefined,
   smokehouse: undefined,
   harbour: undefined,
+  clearings: undefined,
+  aprons: undefined,
   town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [], paths: [], benches: [] },
 });

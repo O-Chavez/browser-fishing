@@ -29,13 +29,17 @@ export const VIEWS: Record<string, View> = {
   tend: { x: 0, z: -7.5, yaw: 0.3, note: 'T end looking out: open lake, mountains, the islet left of centre' },
   spawn: { x: 0, z: 1, yaw: Math.PI, note: 'spawn turned round: lanterns, boards at the root, stalls, harbour front, gate on the axis' },
   westjetty: { x: -7.5, z: 4.5, yaw: 0, note: 'west jetty: the rowboat alongside, Reed\'s beach, the Furthest Out board and the seaplane to the left' },
-  quaywest: { x: -12, z: 13, yaw: -0.5, note: 'quay west end: down Reed\'s lane past the worm patch to the board, the sign and the plane' },
+  quaywest: { x: -12.6, z: 12.2, yaw: -0.5, note: 'quay west end: down Reed\'s lane past the worm patch to the board, the sign and the plane' },
   westlane: { x: -16.5, z: 22, yaw: 0.6, note: 'west lane behind the Fishmonger looking down to the worm patch and the quay' },
   // The three views below are the plan's views turned to what their notes name: in the game's yaw, positive turns
   // toward -x, so the plan's yaws for the quay's west end and the west lane looked east, not down Reed's lane.
   westjetty2: { x: -7.5, z: 4.5, yaw: 0.55, note: 'west jetty turned left: the cove\'s west side, Reed\'s beach and where the seaplane will float' },
   quaylane: { x: -12, z: 13, yaw: 0.9, note: 'quay west end down Reed\'s lane: the worm patch, the board, the sign and the plane (all still in their old spots)' },
   westlane2: { x: -16.5, z: 22, yaw: -0.1, note: 'west lane looking down to the worm patch and the quay\'s west end' },
+  fishmonger: { x: -8.5, z: 13.5, yaw: 2.75, note: 'from the quay: the Fishmonger with its door to the main street, the bench and flower bed in front' },
+  netmender: { x: 8.5, z: 13.5, yaw: -2.72, note: 'from the quay: the Net Mender with its door to the main street, the racks behind the Smokehouse' },
+  smokehouse: { x: 0, z: 8.5, yaw: -2.55, note: 'pier root looking at the Smokehouse: the smoker beside it on the street side' },
+  jetty: { x: 7.5, z: 9.6, yaw: 0.15, note: 'east jetty from its root: the bench along the edge, the lamp at the end' },
   bench: { x: 7.5, z: 6, yaw: -1.34, note: 'jetty bench across the water to the campfire headland at dusk' },
   night: { x: 0, z: -7.5, yaw: Math.PI, note: 'T end at night: pier, three reflections, string lights, gate glow', times: { night: 0.72 } },
 };
