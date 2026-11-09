@@ -998,12 +998,12 @@ export class World {
     );
     bucket.position.set(-0.8, 0.85, 1.6);
     bucket.castShadow = true;
-    // Barrel and net stack out on the east pier, a coiled rope on the west.
+    // A barrel at the east jetty's end past the bench, a coiled rope on the west jetty.
     const barrel = new THREE.Mesh(
       new THREE.CylinderGeometry(0.3, 0.3, 0.7, 12),
       lambert(0x8a5a30),
     );
-    barrel.position.set(7.8, 1.05, 4.5);
+    barrel.position.set(8.2, 1.05, 8.6);
     barrel.castShadow = true;
     const rope = new THREE.Mesh(
       new THREE.TorusGeometry(0.22, 0.07, 6, 14),

@@ -347,11 +347,13 @@ The physical Top Anglers board is a hall of fame built from every account's best
 
 ## 26. The town
 
-The land hub is a small cozy fishing town: a cobbled main street from the pier to the Forest Lake gate, a plaza with a well, six cottages (Wren's Cottage, Smokehouse, Fishmonger, Net Mender and two homes) with lit windows at night, fish racks and a rowboat on the shore, flower beds and fences. Layout lives in `MapDef.town` (`src/data/maps.ts`), geometry in `src/game/town.ts`.
+The land hub is a small cozy fishing town wrapped around a cove like a harbour: two pine-topped headlands frame the water, a timber quay runs across the back of the cove, the pier runs out of the quay's middle to its T end with a short jetty either side of the root, and a rock islet 30 m past the T end is the eye's target. Marlow's stall and the Smokehouse stand behind the quay facing the water with the Fishmonger and Net Mender beside them; the boards stand on the deck by the pier root and the wardrobe mirror at the quay's east end by the bench jetty. A cobbled main street climbs from the quay to the well square, which is a junction: lanes run round the village (past Wren's Cottage down to the worm patch and the quay's west end, and past the Net Mender down to the campfire on the east headland), and three more cottages stagger up to the casino gate. The quay's west end is Captain Reed's corner: his lane runs down past the worm patch and the Furthest Out board to his beach, and his seaplane floats in the cove. Layout lives in `MapDef.town` (`src/data/maps.ts`), the shoreline and docks in `src/game/env.ts`, geometry in `src/game/town.ts` and `src/game/hub.ts`.
+
+- **Decision (2026-11-08)**: the map was reworked from the straight-shore layout to the "Harbour crescent" plan, the hybrid judged best of three options (37/40). The brief, the three plans and every round's scores are in `docs/map-rework/` (`JUDGING.md`, `harbour.md`); the greybox and build findings in `docs/map-rework/HANDOFF.md`.
 
 - **Townsfolk**: Old Salty (pier tips), Pip, Granny Wren and Captain Reed. Press E to talk; lines cycle and some change at night.
 - **Messages in bottles**: 7 hidden around town, shore and pier. Each pays 40 coins once; finding all 7 pays a 300 coin bonus. Found bottles are saved per account (`SaveData.bottles`); the server verifies the player is within 4 m.
-- **Coziness**: lantern posts line the street (some cast real light at night), benches and planters ring the plaza, string lights span the street, a log-seat fire pit sits by the Smokehouse, picnic blankets overlook the water, and firewood is stacked by the cottages. Bottles rest on the ground; the rowboat sits upright on the shore.
+- **Coziness**: lantern posts line the quay, the street and the lanes (eight cast real light at night), benches and planters ring the plaza, string lights span the quay's rear, the square and the gate, a bench on the east jetty looks across the water to the campfire, a picnic blanket overlooks Reed's lane, and firewood is stacked by Wren's Cottage. Bottles rest on the ground or the deck; the rowboat is moored beside the west jetty.
 
 ## 27. Night fishing
 

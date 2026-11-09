@@ -228,7 +228,7 @@ export const MAPS: MapDef[] = [
         },
         {
           name: 'Pip', face: 'tongue', x: 2.6, z: 33.5, facing: faceToward(2.6, 33.5, 0, 32), coat: 0xc2543d,
-          // Laps the well, then runs down the main path to the fish racks behind the Smokehouse.
+          // Laps the well, then runs down the main path and round to the fish racks behind the Smokehouse.
           walk: {
             speed: 2.2,
             wait: 3,
@@ -239,7 +239,8 @@ export const MAPS: MapDef[] = [
               { x: -1.63, z: 27.9 },
               { x: 0, z: 26.5 },
               { x: 3.5, z: 23 },
-              { x: 9, z: 18.5, wait: 4, face: faceToward(9, 18.5, 10.5, 16.8) },
+              // Round the Smokehouse's back to the racks, clear of the smoker behind it.
+              { x: 10.2, z: 22.6, wait: 4, face: faceToward(10.2, 22.6, 9, 20.2) },
               { x: 3.5, z: 23 },
               { x: 0, z: 26.5 },
               { x: 2.9, z: 31.1 },
