@@ -12,39 +12,32 @@ export interface Spot {
 /** Facing that points an object at a world position. */
 export const faceToward = (x: number, z: number, tx: number, tz: number): number => Math.atan2(tx - x, tz - z);
 
-/** Across the main path from Marlow's stall, facing it. */
-const SMOKEHOUSE: Spot = { x: -5.8, z: 21.9, facing: Math.PI / 2 };
+/**
+ * Mags's smoke shack on the quay's east side behind the deck, turned toward the pier root (docs/map-rework/harbour.json);
+ * Marlow's stall mirrors it on the west side.
+ */
+const SMOKEHOUSE: Spot = { x: 5.5, z: 17.5, facing: -2.4 };
 /** Where Mags stands: inside the shack, behind her counter. */
 const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOUSE.z - 0.75 * Math.cos(SMOKEHOUSE.facing) };
 
-/** Along the west beach, toward the town end, and straight out from it into the lake (unit vectors in x, z). */
-const SHORE = { x: -0.83, z: 0.55 };
-const OUT = { x: -0.55, z: -0.83 };
-const fromReed = (along: number, out: number, x = -15.1, z = 13.9) => ({ x: x + SHORE.x * along + OUT.x * out, z: z + SHORE.z * along + OUT.z * out });
-/** Facing from the lake toward the beach. */
-const INLAND = Math.atan2(-OUT.x, -OUT.z);
-
 /**
- * The harbour for the dives, on the west beach between the rowboat and the bottle at (-15, 18), away from
- * the east beach's racks (a placeholder; a map rework may move it): Captain Reed's seaplane floats in the
- * shallows with its nose toward the sand, Reed stands on the beach beside it by a CHARTERS signpost, and
- * players come back from a dive on the sand between them. The Furthest Out board stands on the sand past the plane's
- * town-side wingtip (`board`; its look and words are `FURTHEST_BOARD` in src/game/furthestboard.ts).
+ * Captain Reed's corner: his own beach under the west headland, at the foot of the lane from the quay's west end
+ * (docs/map-rework/harbour.json). The seaplane floats in the cove with its nose toward the sand, in view from the
+ * pier and both jetties; Reed stands on the beach by the CHARTERS signpost, players come back from a dive on the
+ * sand beside him, and the Furthest Out board stands at the top of his lane by the worm patch (its look and words
+ * are `FURTHEST_BOARD` in src/game/furthestboard.ts).
  */
 export const HARBOUR = {
-  /** Reed stands on the sand facing up the beach, the plane behind his right shoulder. */
-  stand: { ...fromReed(0, 0), facing: INLAND } as Spot,
-  /** The middle of the seaplane, between its floats; it faces the beach, its nose at the water's edge. */
-  plane: { ...fromReed(2.4, 4.3), facing: INLAND } as Spot,
-  /** The CHARTERS signpost, on Reed's other side, toward the pier. */
-  sign: { ...fromReed(-1.3, -0.2), facing: INLAND } as Spot,
-  /** Where players land back from a dive: on the sand between Reed and the plane, looking at it. */
-  diveStart: { ...fromReed(1.4, -0.6), yaw: 0 },
-  /**
-   * The Furthest Out board (D6): up the beach from the plane, toward town, set back on dry sand; it faces up the
-   * beach, turned a little (the `+ 0.45`) toward Reed and the landing spot. Play-test: the spot and the turn.
-   */
-  board: { ...fromReed(7.0, -1.6), facing: INLAND + 0.45 } as Spot,
+  /** Reed stands on the sand facing up the lane toward the quay. */
+  stand: { x: -20, z: 1, facing: 0.9 } as Spot,
+  /** The middle of the seaplane, between its floats, afloat in the cove with its nose toward the beach. */
+  plane: { x: -14.5, z: -2.5, facing: -1.35 } as Spot,
+  /** The CHARTERS signpost, between Reed and the lane. */
+  sign: { x: -18.8, z: 2.5, facing: 0.9 } as Spot,
+  /** Where players land back from a dive: on the sand beside Reed, looking at the plane. */
+  diveStart: { x: -21.5, z: 3.5, yaw: 0 },
+  /** The Furthest Out board, at the top of Reed's lane under its lamp, facing down the lane. Play-test: the spot and the turn. */
+  board: { x: -19.2, z: 8.2, facing: 1.2 } as Spot,
 };
 HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.plane.x - HARBOUR.diveStart.x), -(HARBOUR.plane.z - HARBOUR.diveStart.z));
 
@@ -107,6 +100,10 @@ export interface TownDef {
   boats: Spot[];
   /** Flower beds: centre and size. */
   flowers: { x: number; z: number; w: number; d: number }[];
+  /** Cobbled paths: the main street and the lanes, each a straight strip `w` wide. */
+  paths: { from: [number, number]; to: [number, number]; w: number }[];
+  /** Benches besides the square's own pair; on a dock they stand on the deck. */
+  benches: Spot[];
 }
 
 export interface MapDef {
@@ -135,6 +132,8 @@ export interface MapDef {
   next: { id: string; name: string } | null;
   /** Walkable radius from the map origin. */
   radius: number;
+  /** Where the random forest and shore rocks stay out: lanes, beaches and the bare headland tips behind their pines. */
+  clearings?: { x: number; z: number; r: number }[];
   town: TownDef;
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
@@ -157,98 +156,115 @@ export const MAPS: MapDef[] = [
     id: 'pond',
     locationId: 'pond',
     name: 'Starter Pond',
-    spawn: { x: 0, z: 2, yaw: 0 },
+    spawn: { x: 0, z: 1, yaw: 0 },
     // The harbour's town pad (docs/map-rework/harbour.json): its bank carries dry ground down to the quay at z 14.5.
     pad: { x: 0, z: 37, r: 21.5, h: 0.9 },
     vendor: {
       name: 'Marlow',
       face: 'joy',
-      shop: { x: 5.5, z: 21, facing: -Math.PI / 2 },
-      npc: { x: 6.9, z: 21, facing: -Math.PI / 2 },
+      // Behind the quay's west half, turned toward the pier root; Marlow stands behind the counter.
+      shop: { x: -5.5, z: 17.5, facing: 2.4 },
+      npc: { x: -5.5 - 1.4 * Math.sin(2.4), z: 17.5 - 1.4 * Math.cos(2.4), facing: 2.4 },
     },
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
     gateArrival: { x: 0, z: 50.5, yaw: 0 },
-    leaderboard: { x: 10.5, z: 30, facing: faceToward(10.5, 30, 2, 27) },
-    mirror: { x: -8.5, z: 40, facing: faceToward(-8.5, 40, 0, 32) },
-    campfire: { x: -15, z: 24, facing: 0 },
-    worms: { x: -8.5, z: 10.5 },
+    // Top Anglers and Thanks stand on the quay deck east of the pier root, facing the water, so the leaderboard is
+    // the first thing passed after a catch (the plan had them at the east jetty's root, which they blocked).
+    leaderboard: { x: 6.9, z: 13.6, facing: Math.PI },
+    // The wardrobe mirror at the quay's east end by the bench jetty.
+    mirror: { x: 11.6, z: 13.3, facing: -2.36 },
+    // The campfire on the east headland, seen across the water from the jetty bench.
+    campfire: { x: 18, z: 2, facing: 0 },
+    // Beside Reed's lane, at the top of his beach.
+    worms: { x: -18.6, z: 12 },
     smokehouse: SMOKEHOUSE,
     harbour: HARBOUR,
     stock: { rods: ['twig', 'fiberglass', 'graphite', 'carbon', 'aurora'], lines: ['twine', 'mono', 'fluoro', 'braid', 'moonsilk'], bait: ['worm', 'fly', 'minnow', 'lure', 'pearl'] },
     next: { id: 'casino', name: 'Casino Cove' },
     radius: 100,
+    clearings: [
+      // Reed's beach and the landing spot, his lane, the campfire headland, and the two ring lanes down to the water.
+      { x: -19.5, z: 4, r: 7 },
+      { x: -15, z: 11, r: 3.5 },
+      { x: 18, z: 2, r: 5 },
+      { x: -16.5, z: 18, r: 6 },
+      { x: 18, z: 20, r: 6 },
+      // The headland tips stay bare behind their four pines, so the pines stand against the sky. Play-test: the radius.
+      { x: 21, z: -2, r: 9 },
+      { x: -22.5, z: -1, r: 9 },
+    ],
     town: {
       square: { x: 0, z: 32, r: 5.5 },
       houses: [
-        { x: -15, z: 43, facing: faceToward(-15, 43, 0, 35), wall: 0xe8d7b0, roof: 0xb5473a, sign: "Wren's Cottage" },
-        { x: 15, z: 43, facing: faceToward(15, 43, 0, 35), wall: 0xc9d9e0, roof: 0x3f6f8f },
-        { x: -9, z: 51, facing: faceToward(-9, 51, 0, 40), wall: 0xe0c3a0, roof: 0x6b4a8a },
-        { x: 9, z: 51, facing: faceToward(9, 51, 0, 40), wall: 0xd8e0c0, roof: 0x8a5a2b },
-        { x: 17, z: 28, facing: faceToward(17, 28, 4, 31), wall: 0xe6c9c9, roof: 0x4a7a4a, sign: 'Fishmonger' },
-        { x: -17, z: 33, facing: faceToward(-17, 33, -2, 33), wall: 0xd9d2c5, roof: 0x7a3f3f, sign: 'Net Mender' },
+        // The Fishmonger and Net Mender flank the stalls; Wren's, the blue house and two more stagger up the ring to the gate.
+        { x: -12, z: 22.5, facing: 2.3, wall: 0xe6c9c9, roof: 0x4a7a4a, sign: 'Fishmonger' },
+        { x: 13, z: 23.5, facing: -2.1, wall: 0xd9d2c5, roof: 0x7a3f3f, sign: 'Net Mender' },
+        { x: -15, z: 34, facing: 1.4, wall: 0xe8d7b0, roof: 0xb5473a, sign: "Wren's Cottage" },
+        { x: 14.5, z: 38.5, facing: -1.9, wall: 0xc9d9e0, roof: 0x3f6f8f },
+        { x: -10.5, z: 46, facing: 2.3, wall: 0xe0c3a0, roof: 0x6b4a8a },
+        { x: 10.5, z: 50.5, facing: -2.6, wall: 0xd8e0c0, roof: 0x8a5a2b },
       ],
       npcs: [
         {
-          name: 'Old Salty', face: 'sleepy', x: 4.2, z: 15, facing: faceToward(4.2, 15, 0, 18), coat: 0x3d5a80, hat: 0xd9b84a,
+          // On the quay by the pier root; strolls out to the T end and back.
+          name: 'Old Salty', face: 'sleepy', x: 2.5, z: 12, facing: faceToward(2.5, 12, 0, 7), coat: 0x3d5a80, hat: 0xd9b84a,
           walk: {
             speed: 0.9,
             wait: 6,
             stops: [
-              { x: 0, z: 9 },
-              { x: 0, z: -5, wait: 8, face: Math.PI },
-              { x: 0, z: 9 },
+              { x: 0, z: 7 },
+              { x: 0, z: -7.5, wait: 8, face: Math.PI },
+              { x: 0, z: 7 },
             ],
           },
           lines: [
             'The far end of the pier is where the big ones bite. Stand out on the T and see.',
             "Nothing wrong with the shore, but the fish there are lazy and small. The pier's the thing.",
             'A gold-zone cast pulls better fish toward your bait. Practice your timing.',
-            'Run dry of bait and coin? Dig in the soft sand on the beach left of the pier. Worms aplenty.',
+            "Run dry of bait and coin? Dig in the soft sand at the top of Reed's lane, past the quay's west end. Worms aplenty.",
           ],
           nightLines: ['Fireflies on the water... best time of day. The quiet ones always bite after dark.'],
         },
         {
           name: 'Pip', face: 'tongue', x: 2.6, z: 33.5, facing: faceToward(2.6, 33.5, 0, 32), coat: 0xc2543d,
-          // Laps the well, then runs down to the fish racks where the first bottle hides.
+          // Laps the well, then runs down the main path to the fish racks behind the Smokehouse.
           walk: {
             speed: 2.2,
             wait: 3,
             stops: [
-              { x: 0, z: 34.3 },
-              { x: -1.63, z: 33.63 },
-              { x: -2.3, z: 32.0 },
-              { x: -1.63, z: 30.37 },
-              { x: 0, z: 29.7 },
-              { x: 0, z: 24 },
-              { x: 1.2, z: 17 },
-              { x: 9.3, z: 15.6, wait: 4, face: faceToward(9.3, 15.6, 12, 16) },
-              { x: 1.2, z: 17 },
-              { x: 0, z: 24 },
-              { x: 0, z: 29.7 },
+              { x: 0, z: 37.5 },
+              { x: -1.63, z: 36.8 },
+              { x: -2.3, z: 32 },
+              { x: -1.63, z: 27.9 },
+              { x: 0, z: 26.5 },
+              { x: 3.5, z: 23 },
+              { x: 9, z: 18.5, wait: 4, face: faceToward(9, 18.5, 10.5, 16.8) },
+              { x: 3.5, z: 23 },
+              { x: 0, z: 26.5 },
               { x: 2.9, z: 31.1 },
             ],
           },
           lines: [
-            'Psst! I found a message in a bottle behind the fish racks. There are more hidden around town!',
+            'Psst! I found a message in a bottle under the bench on the little jetty. There are more hidden around town!',
             'Better bait lets you hook rarer fish. A better rod makes the fight easier.',
             "Granny Wren says seven bottles are scattered around. I've only found two...",
           ],
         },
         {
-          name: 'Granny Wren', face: 'smile', x: -10.5, z: 44.5, facing: faceToward(-10.5, 44.5, -6, 40), coat: 0x7a4a8a, hat: 0xeeeeee,
+          name: 'Granny Wren', face: 'smile', x: -10.5, z: 33, facing: faceToward(-10.5, 33, -6, 32), coat: 0x7a4a8a, hat: 0xeeeeee,
           walk: {
             speed: 0.7,
             wait: 8,
             stops: [
-              { x: -9.5, z: 41.5 },
-              { x: -5.4, z: 41.2, wait: 5, face: Math.PI / 2 },
-              { x: -7, z: 46.3, wait: 3 },
+              { x: -10, z: 30.5 },
+              { x: -8, z: 34, wait: 5, face: Math.PI / 2 },
+              { x: -10.5, z: 37.5, wait: 3 },
             ],
           },
           lines: [
             "I've seen this town change. Folks used to leave notes in bottles for luck. They wash up in odd corners.",
-            'Sit by the campfire down the shore when you tire. Cozy there.',
+            'Sit by the campfire out on the headland when you tire. Cozy there, with the whole cove in front of you.',
             'Collect every bottle and the town will thank you handsomely.',
           ],
           nightLines: ['Mind the dark paths, dear. Follow the lamps.'],
@@ -275,25 +291,59 @@ export const MAPS: MapDef[] = [
         },
       ],
       bottles: [
-        { id: 'b1', x: 13.5, z: 16.5, note: 'Day 3. Caught nothing. Again. The pier is where I should have been.' },
-        { id: 'b2', x: -15, z: 18, note: 'To whoever finds this: the best catch of my life was a tiny trout with a big heart.' },
-        { id: 'b3', x: -20, z: 31, note: 'The Net Mender swears he mended a net that caught a ghost.' },
-        { id: 'b4', x: 19, z: 48, note: 'Smoked fish keeps the winter at bay. Share the first of the season.' },
-        { id: 'b5', x: 13, z: 54, note: 'A gate at the edge of town leads somewhere wonderful. Keep fishing.' },
-        { id: 'b6', x: -19, z: 24, note: 'Warm hands by the fire, cold water at my feet. Perfect.' },
-        { id: 'b7', x: -4.4, z: -5.2, note: 'You found the secret at the end of the pier. Well fished, friend.' },
+        { id: 'b1', x: 6.6, z: 5.8, note: 'Day 3. Caught nothing. Again. The pier is where I should have been.' },
+        { id: 'b2', x: -21, z: -1, note: 'To whoever finds this: the best catch of my life was a tiny trout with a big heart.' },
+        { id: 'b3', x: -19.5, z: 38, note: 'The Net Mender swears he mended a net that caught a ghost.' },
+        { id: 'b4', x: 12.5, z: 58, note: 'Smoked fish keeps the winter at bay. Share the first of the season.' },
+        { id: 'b5', x: -14.5, z: 51, note: 'A gate at the edge of town leads somewhere wonderful. Keep fishing.' },
+        { id: 'b6', x: 20, z: -2, note: 'Warm hands by the fire, cold water at my feet. Perfect.' },
+        { id: 'b7', x: -4.4, z: -8.3, note: 'You found the secret at the end of the pier. Well fished, friend.' },
       ],
       racks: [
-        { x: 12, z: 16, facing: 0.3 },
-        { x: 16, z: 19, facing: -0.2 },
+        { x: 10.5, z: 16.8, facing: 0.3 },
+        { x: 9, z: 20.2, facing: 1.2 },
       ],
-      boats: [{ x: -13.5, z: 8.5, facing: 0.6 }],
+      // Moored in the water beside the west jetty.
+      boats: [{ x: -10.3, z: 6.2, facing: 0.2 }],
       flowers: [
-        { x: -12.5, z: 38.8, w: 3, d: 0.8 },
-        { x: 12.5, z: 38.8, w: 3, d: 0.8 },
-        { x: -12.5, z: 48.2, w: 2, d: 0.8 },
-        { x: 12.5, z: 48.2, w: 2, d: 0.8 },
-        { x: 17, z: 24, w: 2.5, d: 0.8 },
+        { x: -11, z: 35.5, w: 2.5, d: 0.8 },
+        { x: -12.5, z: 38, w: 2.5, d: 0.8 },
+        { x: 12, z: 34.5, w: 2.5, d: 0.8 },
+        { x: 12.5, z: 42, w: 2.5, d: 0.8 },
+        { x: -6.5, z: 49.5, w: 2, d: 0.8 },
+        { x: 6.8, z: 47.5, w: 2, d: 0.8 },
+        // In front of the Fishmonger, by the bench on the walk up.
+        { x: -6.6, z: 22.6, w: 2.2, d: 0.8 },
+      ],
+      paths: [
+        // The main street from the quay's rear edge to the gate.
+        { from: [0, 14.5], to: [0, 54.5], w: 4.4 },
+        // Lanes off the square and the upper street to the houses' doors.
+        { from: [-2, 32], to: [-12, 32.5], w: 1.6 },
+        { from: [2, 32], to: [11.5, 36], w: 1.6 },
+        { from: [-1.5, 42], to: [-7.5, 43.5], w: 1.6 },
+        { from: [1.5, 42.5], to: [8, 47], w: 1.6 },
+        // Reed's lane, a street of the town, from the quay's west end down to his beach.
+        { from: [-13, 13.5], to: [-16.5, 9], w: 2.4 },
+        { from: [-16.5, 9], to: [-18.5, 3.5], w: 2.4 },
+        // The ramp from the quay's east end to the campfire headland.
+        { from: [12.5, 11], to: [16.5, 5.5], w: 1.6 },
+        // The village ring: west from the square past Wren's Cottage and behind the Fishmonger to the worm patch and the quay...
+        { from: [-9, 32.3], to: [-13.5, 28.5], w: 1.6 },
+        { from: [-13.5, 28.5], to: [-16.5, 22], w: 1.6 },
+        { from: [-16.5, 22], to: [-17, 15], w: 1.6 },
+        { from: [-17, 15], to: [-15.5, 11.2], w: 1.6 },
+        // ...and east past the blue house and behind the Net Mender down to the campfire path.
+        { from: [6, 33.7], to: [15.5, 31], w: 1.6 },
+        { from: [15.5, 31], to: [18.5, 24], w: 1.6 },
+        { from: [18.5, 24], to: [18.5, 16], w: 1.6 },
+        { from: [18.5, 16], to: [15.5, 8.5], w: 1.6 },
+      ],
+      benches: [
+        // On the east jetty, looking across the water to the campfire headland.
+        { x: 7.5, z: 4.8, facing: Math.PI },
+        // The rest stop on the walk up, beside the main street in front of the Fishmonger.
+        { x: -4.6, z: 24.5, facing: Math.PI / 2 },
       ],
     },
   },
@@ -362,6 +412,8 @@ MAPS.push({
     racks: [],
     boats: [],
     flowers: [],
+    paths: [],
+    benches: [],
   },
 });
 
@@ -386,5 +438,5 @@ MAPS.push({
   worms: undefined,
   smokehouse: undefined,
   harbour: undefined,
-  town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [] },
+  town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [], paths: [], benches: [] },
 });

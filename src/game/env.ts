@@ -38,14 +38,15 @@ export const smooth = (a: number, b: number, x: number): number => {
 
 /**
  * The shoreline, sampled every few degrees as [theta in degrees, radius] (docs/map-rework/harbour.json): a cove
- * 19-25 m across at its back (the quay's water), two headlands at about ±110° and the open lake past them.
+ * 19-25 m across at its back (the quay's water), two headlands at about ±110° and the open lake past them. The east
+ * side sits a metre closer than the plan's samples so the ramp from the quay to the campfire headland stays dry.
  * Periodic and cosine-interpolated between samples, so the shore has no corners.
  */
 const SHORE_SAMPLES: [number, number][] = [
   [-180, 55], [-155, 54], [-140, 48], [-125, 37], [-115, 27], [-105, 21], [-95, 20], [-85, 19.5], [-75, 19.5],
   [-65, 20], [-55, 21], [-45, 23.5], [-30, 23], [-15, 23],
   [0, 25],
-  [15, 23], [30, 23], [45, 23.5], [55, 20.5], [65, 19.5], [75, 19], [85, 19], [95, 19.5], [105, 20], [115, 26],
+  [15, 23], [30, 23], [45, 23], [55, 19.5], [65, 18.5], [75, 18.5], [85, 19], [95, 19.5], [105, 20], [115, 26],
   [125, 36], [140, 47], [155, 54], [180, 55],
 ];
 const SHORE = SHORE_SAMPLES.map(([d, r]) => [(d * Math.PI) / 180, r] as const);
