@@ -1,6 +1,6 @@
 {
- "name": "HARBOUR CRESCENT v3: the town wraps a cove, the pier threads its mouth",
- "notes": "Round 3 polish: Fishmonger's bench pocket on the axis between the stalls and the square; a three-rock islet 30 m past the T end as the eye's target; boards and mirror stand on the quay deck (0.7), quay rear edge meets the pad bank flush.",
+ "name": "HARBOUR CRESCENT v4 (hybrid): the cove with Boardwalk's hub",
+ "notes": "Round 4 hybrid: Top Anglers and Thanks moved to the pier root beside the Smokehouse; a village ring (square -> west lane -> worm patch -> quay -> east lane -> campfire -> square); a second jetty west of the pier with the rowboat moored beside it, so both jetties cast lakeward; islet, pocket and deck notes from round 3 kept.",
  "frame": {
   "x0": -34,
   "x1": 34,
@@ -159,6 +159,12 @@
    "x1": 8.75,
    "z0": 4,
    "z1": 10
+  },
+  {
+   "x0": -8.75,
+   "x1": -6.25,
+   "z0": 4,
+   "z1": 10
   }
  ],
  "paths": [
@@ -249,6 +255,94 @@
     5.5
    ],
    "w": 1.6
+  },
+  {
+   "from": [
+    -9,
+    32.3
+   ],
+   "to": [
+    -13.5,
+    28.5
+   ],
+   "w": 1.6
+  },
+  {
+   "from": [
+    -13.5,
+    28.5
+   ],
+   "to": [
+    -16.5,
+    22
+   ],
+   "w": 1.6
+  },
+  {
+   "from": [
+    -16.5,
+    22
+   ],
+   "to": [
+    -17,
+    15
+   ],
+   "w": 1.6
+  },
+  {
+   "from": [
+    -17,
+    15
+   ],
+   "to": [
+    -15.5,
+    11.2
+   ],
+   "w": 1.6
+  },
+  {
+   "from": [
+    6,
+    33.7
+   ],
+   "to": [
+    15.5,
+    31
+   ],
+   "w": 1.6
+  },
+  {
+   "from": [
+    15.5,
+    31
+   ],
+   "to": [
+    18.5,
+    24
+   ],
+   "w": 1.6
+  },
+  {
+   "from": [
+    18.5,
+    24
+   ],
+   "to": [
+    18.5,
+    16
+   ],
+   "w": 1.6
+  },
+  {
+   "from": [
+    18.5,
+    16
+   ],
+   "to": [
+    15.5,
+    8.5
+   ],
+   "w": 1.6
   }
  ],
  "houses": [
@@ -329,9 +423,9 @@
   },
   {
    "id": "leaderboard",
-   "x": 11.8,
-   "z": 13.4,
-   "facing": -2.36,
+   "x": 7.2,
+   "z": 12.8,
+   "facing": -1.95,
    "label": "Top Anglers + Thanks board"
   },
   {
@@ -357,8 +451,8 @@
   },
   {
    "id": "worms",
-   "x": -16.5,
-   "z": 12.5,
+   "x": -18.6,
+   "z": 12,
    "label": "Worm patch"
   },
   {
@@ -505,14 +599,15 @@
   },
   {
    "kind": "boat",
-   "x": -18,
-   "z": 14.5,
-   "facing": 0.6
+   "x": -10.3,
+   "z": 6.2,
+   "facing": 0.2,
+   "label": "rowboat, moored"
   },
   {
    "kind": "flowers",
-   "x": -12.5,
-   "z": 30.5,
+   "x": -11,
+   "z": 35.5,
    "w": 2.5
   },
   {
@@ -684,8 +779,8 @@
   },
   {
    "kind": "rock",
-   "x": 6.8,
-   "z": 14.1,
+   "x": 10.3,
+   "z": 12.4,
    "r": 0.5,
    "label": "crates"
   },
@@ -723,8 +818,8 @@
   },
   {
    "kind": "reeds",
-   "x": -9,
-   "z": 9,
+   "x": -11.5,
+   "z": 8,
    "r": 1.4
   },
   {
@@ -763,13 +858,23 @@
    "kind": "rock",
    "x": -7.2,
    "z": -38.2,
-   "r": 1.0
+   "r": 1
   },
   {
    "kind": "rock",
    "x": -10.8,
    "z": -38,
    "r": 0.8
+  },
+  {
+   "kind": "lamp",
+   "x": -17.6,
+   "z": 19.5
+  },
+  {
+   "kind": "lamp",
+   "x": 19.6,
+   "z": 20
   }
  ],
  "npcs": [
@@ -848,7 +953,7 @@
   },
   {
    "name": "Mags Cinder",
-   "x": 6.0,
+   "x": 6,
    "z": 18.05
   },
   {

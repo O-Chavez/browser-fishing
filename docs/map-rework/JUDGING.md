@@ -74,3 +74,12 @@ Harbour yard spaced (plane afloat, nose at the sand; landing, sign and Reed 3.7-
 
 ### Boardwalk and hillside v3 — 35/40, FINAL
 2 m clear between Marlow's awning and the boards; Furthest Out on the wing; islet 28 m past the T; a street stop at the purple house; Pip's lap off the ramps. No regressions. Accepted.
+
+## Round 4 (hybrid, judge's own edit, 2026-11-08)
+
+Oscar asked which of Harbour crescent and Boardwalk was best. Harbour, for the lake framing and sense of place; Boardwalk's advantage (two seconds on the loop, boards at the root) transplants. Three edits folded in by the judge without a new agent round: Top Anglers and Thanks to the pier root beside the Smokehouse (shop to leaderboard 13.5 m); a village ring, two lanes from the square down to the worm patch and the campfire headland; a second, west jetty with the rowboat moored beside it. The quay's end ramps already existed; headlands checked (tips 0.4-0.6 m, pines make the silhouette, never in the axis view).
+
+### Harbour crescent v4 (hybrid) — 37/40, RECOMMENDED
+Loop tightness 4 -> 5 (boards passed on the way off the pier; two cast spots besides the T). Everything else as v3; buildability unchanged (one more dock rect, same mesh kinds). Metrics: all spots dry or on deck, both jetties 5/5 corners over water, 22 lamps / 8 lit, 71 props, 5 dock rects, footprint x -22..18, z -8..56.
+
+Open questions that only an in-engine greybox can answer: the cove at a phone's field of view, whether the quay feels crowded with stalls, boards, crates and lanterns, how the headland pines read from the quay at dusk.
