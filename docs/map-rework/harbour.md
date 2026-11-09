@@ -1,16 +1,26 @@
-# Harbour crescent, round 4 (hybrid)
+# Harbour crescent, round 5 (hybrid)
 
 ## Summary for Oscar
 
 The town wraps a small cove like a fishing harbour: two pine-topped headlands frame the water and the pier runs straight out between them from a timber quay. The first cast looks at open lake, mountains and a rock islet; turning round shows the whole village along the waterfront.
 
-Where things went. Marlow's Bait & Tackle and the Smokehouse flank the pier's foot on the quay, facing the water, the Fishmonger and Net Mender beside them. Top Anglers and Thanks hang on the quay beside the Smokehouse, a few steps from the pier root, so the leaderboard is the first thing passed after a catch; Furthest Out stands at the quay's east end by the bench jetty, where the view across the cove earns the walk; the wardrobe mirror is at the west end by Marlow's. A second jetty west of the pier, the rowboat moored beside it, gives two lakeward casting spots off the main pier. The well square is the junction up the main path: lanes from it run west past Wren's Cottage down to the worm patch and the quay, and east past the Net Mender down to the campfire headland, so the village is a ring rather than a corridor; three more houses stagger up to the casino gate, which closes the path. Captain Reed, his Charters sign, the seaplane and the dive landing spot have their own beach under the west headland; worm patch and rowboat by the quay's west end. The campfire sits on the east headland, seen across the water from the jetty bench.
+Where things went. Marlow's Bait & Tackle and the Smokehouse flank the pier's foot on the quay, facing the water, the Fishmonger and Net Mender beside them. Top Anglers and Thanks hang on the quay beside the Smokehouse, a few steps from the pier root, so the leaderboard is the first thing passed after a catch; the wardrobe mirror is at the quay's east end by the bench jetty. Captain Reed's corner is the quay's west end: a wide lane runs down past the worm patch to his beach, the Furthest Out board stands at the top of it beside his lamp, and the seaplane floats in the cove in view from the pier and both jetties. A second jetty west of the pier, the rowboat moored beside it, gives two lakeward casting spots off the main pier. The well square is the junction up the main path: lanes from it run west past Wren's Cottage down to the worm patch and the quay, and east past the Net Mender down to the campfire headland, so the village is a ring rather than a corridor; three more houses stagger up to the casino gate, which closes the path. Reed, his Charters sign and the dive landing spot have their own beach under the west headland, five seconds from the shop; the rowboat is moored by the west jetty. The campfire sits on the east headland, seen across the water from the jetty bench.
 
 What is new. A cove with framing headlands, a working quay with crates and lanterns, two jetties, a far islet, a rest stop on the walk up, a village ring, and a loop that passes the boards at the pier root.
 
 Cost. Same houses, lamps (22) and point lights (8) as today; one more dock rectangle (5); about 17 more small props (rocks, reeds, pines, a bench). No new kinds of mesh.
 
 Risks. Boards and mirror stand on the quay deck; sideways casts inside the cove reach the headland beaches at about 15 m (the game shortens a cast until it lands in water), so long rods cast lakeward from the T end and the jetties; hill puddles from the noise terrain, as today.
+
+## What changed in round 5 (Reed's corner)
+
+Oscar worried that Reed's charters sat off the main loop and asked for the Furthest Out board by the activity it ranks. The walks to Reed were already as today's (22 m from the T end and the shop; 34 m and 43 m in the other two plans), so the fix was to make the quay's west end his corner rather than to move him:
+
+1. **Furthest Out on Reed's beach** at (−19.2,8.2), facing up the lane, under the lit lamp at (−19,5), with the worm patch (−18.6,12) beside it: the charter leaderboard stands where charters start, as it does today. Ground 0.61 m, dry.
+2. **Reed's lane widened** from 1.6 m to 2.4 m from the quay's west end (−13,13.5) to the Charters sign, so it reads as a street of the town, not a track.
+3. **The mirror to the east end** at (11.6,13.3) by the bench jetty, the crates to the deck corner (12.4,10.9). Shop to mirror is 17.6 m.
+
+Reed stays on his own beach: pulling him up against the quay is what crammed every round-one harbour. A sightline from the quay to the board is on the plan.
 
 ## What changed in round 4 (the hybrid, by the judge)
 
@@ -34,7 +44,8 @@ Checked and left alone: the quay's end ramps already existed as the paths to Ree
 (yaw as the plan legend: 0 toward the lake, π toward the gate)
 - `{x: 0, z: -7.5, yaw: 0.3, note: "T end looking out: open lake, mountains, the islet left of centre"}`
 - `{x: 0, z: 1, yaw: 3.14, note: "spawn turned round: lanterns, boards at the root, stalls, harbour front, gate on the axis"}`
-- `{x: -7.5, z: 4.5, yaw: 0, note: "west jetty: the rowboat alongside, Reed's beach and the seaplane to the left"}`
+- `{x: -7.5, z: 4.5, yaw: 0, note: "west jetty: the rowboat alongside, Reed's beach, the Furthest Out board and the seaplane to the left"}`
+- `{x: -12, z: 13, yaw: -0.5, note: "quay west end: down Reed's lane past the worm patch to the board, the sign and the plane"}`
 - `{x: -16.5, z: 22, yaw: 0.6, note: "west lane behind the Fishmonger looking down to the worm patch and the quay"}`
 - `{x: 7.5, z: 6, yaw: -1.34, note: "jetty bench across the water to the campfire headland at dusk"}`
 - `{x: 0, z: -7.5, yaw: 3.14, note: "T end at night: pier, three reflections, string lights, gate glow"}`

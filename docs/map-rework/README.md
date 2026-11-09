@@ -2,7 +2,7 @@
 
 Three reworked layouts of the main lakeside map, produced by mockup agents and judged over three rounds. Not implemented; nothing in `src/` changed. `review.html` is the review page (open it in a browser); `JUDGING.md` has the scores and notes per round; `BRIEF.md` is the brief the agents worked to.
 
-- `harbour.json` / `.md` / `.png` — Harbour crescent, hybrid with Boardwalk's hub (37/40, recommended; round 4 of 2026-11-08)
+- `harbour.json` / `.md` / `.png` — Harbour crescent, hybrid with Boardwalk's hub (37/40, recommended; rounds 4-5 of 2026-11-08)
 - `boardwalk.json` / `.md` / `.png` — Boardwalk and hillside (35/40)
 - `point.json` / `.md` / `.png` — The point (34/40)
 - `current.json` / `.png` — today's map in the same format, for comparison

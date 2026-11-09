@@ -1,6 +1,6 @@
 {
- "name": "HARBOUR CRESCENT v4 (hybrid): the cove with Boardwalk's hub",
- "notes": "Round 4 hybrid: Top Anglers and Thanks moved to the pier root beside the Smokehouse; a village ring (square -> west lane -> worm patch -> quay -> east lane -> campfire -> square); a second jetty west of the pier with the rowboat moored beside it, so both jetties cast lakeward; islet, pocket and deck notes from round 3 kept.",
+ "name": "HARBOUR CRESCENT v5 (hybrid): the cove with Boardwalk's hub, Reed's corner",
+ "notes": "Round 5: the Furthest Out board stands on Reed's beach at the top of his lane, the lane from the quay's west end widened to 2.4 m, the mirror moved to the quay's east end by the bench jetty. Round 4: Top Anglers and Thanks at the pier root, village ring, second jetty.",
  "frame": {
   "x0": -34,
   "x1": 34,
@@ -232,7 +232,7 @@
     -16.5,
     9
    ],
-   "w": 1.6
+   "w": 2.4
   },
   {
    "from": [
@@ -243,7 +243,7 @@
     -18.5,
     3.5
    ],
-   "w": 1.6
+   "w": 2.4
   },
   {
    "from": [
@@ -430,16 +430,16 @@
   },
   {
    "id": "furthest",
-   "x": 12.4,
-   "z": 10.9,
-   "facing": -1.5708,
+   "x": -19.2,
+   "z": 8.2,
+   "facing": 1.2,
    "label": "Furthest Out board"
   },
   {
    "id": "mirror",
-   "x": -11.5,
+   "x": 11.6,
    "z": 13.3,
-   "facing": 2.36,
+   "facing": -2.36,
    "label": "Wardrobe mirror"
   },
   {
@@ -779,8 +779,8 @@
   },
   {
    "kind": "rock",
-   "x": 10.3,
-   "z": 12.4,
+   "x": 12.4,
+   "z": 10.9,
    "r": 0.5,
    "label": "crates"
   },
@@ -1041,6 +1041,16 @@
    "to": [
     -9,
     -36.5
+   ]
+  },
+  {
+   "from": [
+    -6,
+    12
+   ],
+   "to": [
+    -19.2,
+    8.2
    ]
   }
  ]

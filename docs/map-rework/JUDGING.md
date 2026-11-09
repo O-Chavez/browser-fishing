@@ -83,3 +83,7 @@ Oscar asked which of Harbour crescent and Boardwalk was best. Harbour, for the l
 Loop tightness 4 -> 5 (boards passed on the way off the pier; two cast spots besides the T). Everything else as v3; buildability unchanged (one more dock rect, same mesh kinds). Metrics: all spots dry or on deck, both jetties 5/5 corners over water, 22 lamps / 8 lit, 71 props, 5 dock rects, footprint x -22..18, z -8..56.
 
 Open questions that only an in-engine greybox can answer: the cove at a phone's field of view, whether the quay feels crowded with stalls, boards, crates and lanterns, how the headland pines read from the quay at dusk.
+
+## Round 5 (Reed's corner, 2026-11-08)
+
+Oscar: Reed's outpost should be visible and on the main loop, with the Furthest Out board by his activity. Walks to Reed were already today's (22 m), so the quay's west end became his corner: Furthest Out at the top of his lane beside his lamp and the worm patch, the lane widened to 2.4 m, the mirror swapped to the east end by the bench jetty. Score unchanged at 37/40; hub legibility is better (the charter board points at the charter) and nothing else moved. Still RECOMMENDED; next step the in-engine greybox.
