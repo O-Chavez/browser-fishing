@@ -2,6 +2,7 @@
 // each view at a desktop and a phone-sized viewport, by day and at dusk (the night view at night).
 //
 //   npx tsx scripts/map-views.ts <out dir> [view ...]
+//   npx tsx scripts/map-views.ts <out dir> --walk [waypoint ...]   the routes players walk (`WALK`), desktop by day
 //
 // Runs the game offline (no server), so nothing is saved. The view names are the keys of VIEWS.
 import fs from 'node:fs';
@@ -43,12 +44,63 @@ export const VIEWS: Record<string, View> = {
   bench: { x: 7.5, z: 6, yaw: -1.34, note: 'jetty bench across the water to the campfire headland at dusk' },
   night: { x: 0, z: -7.5, yaw: Math.PI, note: 'T end at night: pier, three reflections, string lights, gate glow', times: { night: 0.72 } },
 };
-const unknown = only.filter((v) => !VIEWS[v]);
+/** Camera yaw that looks from (x, z) toward (tx, tz). */
+const yawTo = (x: number, z: number, tx: number, tz: number) => Math.atan2(-(tx - x), -(tz - z));
+const at = (x: number, z: number, tx: number, tz: number, note: string, times?: Record<string, number>): View => ({ x, z, yaw: yawTo(x, z, tx, tz), note, times });
+/**
+ * `--walk`: instead of the hero views, the waypoints of the routes players walk, each looking the way they would:
+ * the first minutes, Reed's loop and the east loop, with a few spots at night. Desktop only.
+ */
+export const WALK: Record<string, View> = {
+  w01_spawn: { x: 0, z: 1, yaw: 0, note: 'spawn: the first look, out along the pier' },
+  w02_tend: { x: 0, z: -7.5, yaw: 0, note: 'T end: the first cast' },
+  w03_tend_back: { x: 0, z: -7.5, yaw: Math.PI, note: 'T end turned round: the walk back' },
+  w04_pier: { x: 0, z: 4, yaw: Math.PI, note: 'halfway up the pier: the quay ahead' },
+  w05_root: { x: 0, z: 10.5, yaw: Math.PI, note: 'stepping onto the quay: the stalls and the street' },
+  w06_marlow: at(-3.9, 15.6, -5.5, 17.5, "at Marlow's counter"),
+  w07_mags: at(4.1, 16.1, 5.5, 17.5, "at the Smokehouse counter"),
+  w08_boards: at(11, 11.6, 11, 13.6, 'reading Top Anglers'),
+  w09_boards_back: at(11, 11.6, 0, 1, 'from the boards, turning back to the pier'),
+  w10_street: { x: 0, z: 19, yaw: Math.PI, note: 'up the main street from the quay' },
+  w11_square_in: { x: 0, z: 27, yaw: Math.PI, note: 'arriving at the square' },
+  w12_square_w: at(0, 32, -12, 32.5, 'the square looking west down the lane to Wren\'s'),
+  w13_square_e: at(0, 32, 11.5, 36, 'the square looking east down the lane to the blue house'),
+  w14_upper: { x: 0, z: 42, yaw: Math.PI, note: 'the upper street: fences, cottages, the gate' },
+  w15_gate: { x: 0, z: 52.5, yaw: Math.PI, note: 'at the gate' },
+  w16_gate_back: { x: 0, z: 52.5, yaw: 0, note: 'from the gate looking back down to the water' },
+  r01_quay_w: at(-9.5, 12.3, -16.5, 9, "quay west end, heading for Reed's lane"),
+  r02_lane: at(-15, 11, -19.2, 8.2, 'on the lane: the worm patch and the Furthest Out board ahead'),
+  r03_board: at(-17.3, 9.4, -19.2, 8.2, 'reading the Furthest Out board'),
+  r04_reed: at(-18.2, 1.6, -20, 1, 'talking to Reed'),
+  r05_landing: at(-21.5, 3.5, -14.5, -2.5, 'landing back from a charter, looking at the plane'),
+  r06_beach_back: at(-19.5, 3, -13, 13.5, "from Reed's beach looking back up the lane to the quay"),
+  r07_ring_w1: at(-17, 15, -16.5, 22, 'the west ring lane, going up behind the Fishmonger'),
+  r08_ring_w2: at(-16.5, 22, -13.5, 28.5, "the west ring lane toward Wren's"),
+  r09_ring_w3: at(-13.5, 28.5, -2, 32, 'arriving at the square from the west lane'),
+  e01_quay_e: at(11, 12, 16.5, 5.5, 'quay east end, heading down the campfire ramp'),
+  e02_ramp: at(14.5, 8.2, 18, 2, 'on the ramp: the campfire ahead'),
+  e03_camp: at(19.8, 2, 18, 2, 'sitting at the campfire'),
+  e04_camp_view: at(19.8, 2, -7.5, 7, 'from the campfire looking back across the cove to the west jetty'),
+  e05_ring_e1: at(18.5, 16, 18.5, 24, 'the east ring lane going up behind the Net Mender'),
+  e06_ring_e2: at(18.5, 24, 15.5, 31, 'the east ring lane toward the blue house'),
+  e07_ring_e3: at(15.5, 31, 2, 32, 'arriving at the square from the east lane'),
+  j01_west_jetty: { x: -7.5, z: 5, yaw: 0, note: 'casting from the west jetty' },
+  j02_east_jetty: { x: 7.5, z: 5, yaw: 0, note: 'casting from the east jetty' },
+  n01_root: { x: 0, z: 10.5, yaw: Math.PI, note: 'stepping onto the quay at night', times: { night: 0.72 } },
+  n02_square: { x: 0, z: 27, yaw: Math.PI, note: 'arriving at the square at night', times: { night: 0.72 } },
+  n03_lane: at(-15, 11, -19.2, 8.2, "Reed's lane at night", { night: 0.72 }),
+  n04_ramp: at(14.5, 8.2, 18, 2, 'the campfire ramp at night', { night: 0.72 }),
+  n05_ring_w: at(-16.5, 22, -13.5, 28.5, 'the west ring lane at night', { night: 0.72 }),
+};
+const walk = only[0] === '--walk';
+const TABLE = walk ? WALK : VIEWS;
+if (walk) only.shift();
+const unknown = only.filter((v) => !TABLE[v]);
 if (unknown.length) {
-  console.error(`Unknown view(s): ${unknown.join(', ')}. Choose from: ${Object.keys(VIEWS).join(', ')}`);
+  console.error(`Unknown view(s): ${unknown.join(', ')}. Choose from: ${Object.keys(TABLE).join(', ')}`);
   process.exit(2);
 }
-const views = Object.entries(VIEWS).filter(([k]) => !only.length || only.includes(k));
+const views = Object.entries(TABLE).filter(([k]) => !only.length || only.includes(k));
 
 const vite = await createServer({ server: { port: VITE_PORT, strictPort: true }, logLevel: 'error' });
 await vite.listen();
@@ -80,11 +132,11 @@ const game = (p: Page, js: string) => p.evaluate(`(() => { const G = window.__ga
 
 let failed = false;
 try {
-  for (const phone of [false, true]) {
+  for (const phone of walk ? [false] : [false, true]) {
     const page = await open(phone);
     await sleep(1500);
     for (const [name, v] of views) {
-      for (const [time, f] of Object.entries(v.times ?? DAY)) {
+      for (const [time, f] of Object.entries(v.times ?? (walk ? { day: DAY.day } : DAY))) {
         await game(page, `G.teleport(${v.x}, ${v.z}); G.look(${v.yaw}, ${v.pitch ?? -0.03}); G.day(${f});`);
         await sleep(1200);
         const file = `${name}-${phone ? 'phone' : 'desktop'}-${time}.jpg`;
