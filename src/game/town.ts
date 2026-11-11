@@ -17,6 +17,9 @@ const rnd = (seed: number) => () => {
 };
 
 /** Seamless-ish cobblestone texture, drawn once. */
+/** How far the cobbles lie above the ground. */
+const COBBLE_LIFT = 0.04;
+
 function cobbleTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
@@ -143,7 +146,7 @@ export class Town {
 
   /** Flat cobbled strip between two points, laid just above the ground. */
   private path(ax: number, az: number, bx: number, bz: number, w: number): void {
-    // Overlapping strips each get their own height and depth bias so their cobbles never z-fight.
+    // Overlapping strips each get their own depth bias so their cobbles never z-fight.
     const layer = this.pathLayers++;
     this.paths.push([ax, az, bx, bz, w / 2]);
     // Lanes run on past each end by half their width, so a bend's strips overlap instead of leaving a wedge of
@@ -154,7 +157,6 @@ export class Town {
     // down or across a slope lies on the ground instead of floating at one edge and sinking at the other.
     const geo = new THREE.PlaneGeometry(w, len, Math.max(1, Math.ceil(w / 0.55)), Math.max(1, Math.ceil(len / 0.5))).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (w / 2.2), uv.getY(i) * (len / 2.2));
     const mx = (ax + bx) / 2;
     const mz = (az + bz) / 2;
     const ang = Math.atan2(bx - ax, bz - az);
@@ -164,7 +166,10 @@ export class Town {
     for (let i = 0; i < pos.count; i++) {
       const x = mx + pos.getX(i) * cos + pos.getZ(i) * sin;
       const z = mz - pos.getX(i) * sin + pos.getZ(i) * cos;
-      pos.setXYZ(i, x, groundHeight(x, z) + 0.03 + layer * 0.012, z);
+      // Every strip and the square lie at one height and take their cobbles from the same world-space pattern, so
+      // where two overlap they show the same stones and read as one paved surface; only the depth bias differs.
+      pos.setXYZ(i, x, groundHeight(x, z) + COBBLE_LIFT, z);
+      uv.setXY(i, x / 2.2, z / 2.2);
     }
     geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2 - layer, polygonOffsetUnits: -2 - layer }));
@@ -180,10 +185,12 @@ export class Town {
   private buildSquare(s: { x: number; z: number; r: number }): void {
     const geo = new THREE.CircleGeometry(s.r, 40).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) - 0.5) * (s.r * 2) / 2.2, (uv.getY(i) - 0.5) * (s.r * 2) / 2.2);
+    const sp = geo.getAttribute('position');
+    // The same world-space cobbles as the paths (`path`), so the lanes run into the square without a seam.
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (s.x + sp.getX(i)) / 2.2, (s.z + sp.getZ(i)) / 2.2);
     const disc = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     disc.receiveShadow = true;
-    this.at(disc, s.x, s.z, 0, groundHeight(s.x, s.z) + 0.035);
+    this.at(disc, s.x, s.z, 0, groundHeight(s.x, s.z) + COBBLE_LIFT);
 
     // Well
     const well = new THREE.Group();
