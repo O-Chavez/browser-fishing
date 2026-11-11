@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BOAT, FAR_CUT, NEAR_CUT, WAVES, boatMotion, gloomAt, hullHalfWidth, lightningAt, seaHeight, stormAt, waveAmp, type BoatMotion } from '../data/sea';
+import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, WAVES, boatMotion, gloomAt, hullHalfWidth, lightningAt, seaHeight, stormAt, waveAmp, type BoatMotion } from '../data/sea';
 import { mulberry } from './env';
 
 /**
@@ -55,7 +55,7 @@ void main(){
 }`;
 
 const seaFrag = `
-uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift;
+uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift, uBoatGlow;
 uniform vec3 uShallow, uDeep, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol;
 uniform vec2 uWind;
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
@@ -63,10 +63,19 @@ float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); 
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
 void main(){
-  // A hole in the hull's outline (hullHalfWidth), up to the rails, so a swell can't show through the deck.
+  // A hole in the hull's shape (hullHalfWidth, hullSheer and hullChine in data/sea.ts), up past the rails, so a
+  // swell can't show through the deck and the water meets the planking instead of stopping short of it.
   float u = vWorld.x / ${BOAT.len.toFixed(1)} + 0.5;
-  float hw = u < 0.5 ? 0.92 + 0.08 * sin(u * ${Math.PI.toFixed(5)}) : cos((u - 0.5) * ${Math.PI.toFixed(5)}) * 0.97 + 0.03;
-  if (u > 0.0 && u < 1.0 && abs(vWorld.z) < ${BOAT.beam.toFixed(2)} * hw && vWorld.y < ${(BOAT.deck + 2.5).toFixed(2)}) discard;
+  float uc = clamp(u, 0.0, 1.0);
+  float hw = uc < 0.5 ? 0.92 + 0.08 * sin(uc * ${Math.PI.toFixed(5)}) : cos((uc - 0.5) * ${Math.PI.toFixed(5)}) * 0.97 + 0.03;
+  float sheer = 1.0 + 0.5 * pow(uc, 2.5);
+  float chine = ${CHINE.toFixed(2)} + (sheer - ${CHINE.toFixed(2)}) * 0.15 * uc * uc;
+  float keel = ${KEEL.toFixed(2)} * (1.0 - 0.6 * uc * uc * uc);
+  float hullW = ${BOAT.beam.toFixed(2)} * hw * (1.0 - 0.12 * clamp((sheer - vWorld.y) / (sheer - chine), 0.0, 1.0));
+  hullW *= clamp((vWorld.y - keel) / (chine - keel), 0.0, 1.0) * 0.999 + 0.001;
+  if (u > 0.0 && u < 1.0 && abs(vWorld.z) < hullW - 0.015 && vWorld.y < ${(BOAT.deck + 2.5).toFixed(2)}) discard;
+  // How far this water is from the hull, for the foam along it and the lamps' glow on the water.
+  float hd = length(vec2(max(abs(vWorld.z) - hullW, 0.0), max(abs(vWorld.x) - ${(BOAT.len / 2).toFixed(2)}, 0.0)));
   vec3 V = normalize(cameraPosition - vWorld);
   float dist = length(cameraPosition - vWorld);
   vec3 n = normalize(vN);
@@ -105,6 +114,15 @@ void main(){
     }
     col = mix(col, uFoamCol, f * mix(vAtt, 1.0, uStorm) * 0.92);
   }
+  // The sea laps along the hull: a band of foam that breathes with the chop, wider in rough water, with
+  // broken lace drifting off it.
+  float hn = noise(vec2(vWorld.x * 1.3 + uTime * 0.5, vWorld.z * 1.3 - uTime * 0.35));
+  float lap = (0.2 + 0.3 * hn + 0.1 * sin(uTime * 1.3 + vWorld.x * 0.9)) * (1.0 + uFoam);
+  float hull = 1.0 - smoothstep(lap * 0.5, lap, hd);
+  float lace = smoothstep(0.5, 0.72, noise(vWorld.xz * 2.6 + vec2(uTime * 0.25, 0.0))) * (1.0 - smoothstep(lap, lap + 0.5 + 0.9 * uFoam, hd));
+  col = mix(col, uFoamCol, max(hull * 0.9, lace * 0.55));
+  // After dark the deck lamps and lit windows glow on the water around the boat.
+  col += vec3(1.0, 0.72, 0.42) * uBoatGlow * exp(-hd * 0.55) * (0.06 + 0.14 * hn * crest);
   col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, dist));
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -271,6 +289,7 @@ const seaUniforms = (sky: SkyUniforms) => ({
   uFoamCol: { value: new THREE.Color() },
   uFoam: { value: 0 },
   uLift: { value: 1 },
+  uBoatGlow: { value: 0 },
 });
 const cloudUniforms = (sky: SkyUniforms) => ({ ...sky, uTop: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uShow: { value: 0 } });
 const landUniforms = (sky: SkyUniforms) => ({ ...sky, uFade: { value: 0 }, uNight: { value: 0 } });
@@ -520,6 +539,7 @@ export class Sea {
     u.uDeep.value.copy(base.deep).multiplyScalar(1 - 0.88 * n).lerp(NIGHT_SEA, 0.3 * n).lerp(dim(0x2a3a4e, 1 - 0.67 * n), Math.min(1, m * 1.4)).multiplyScalar(gloom);
     u.uFoamCol.value.set(0xf6f4f2).multiplyScalar(1 - 0.72 * n);
     u.uLift.value = 1 - 0.85 * n;
+    u.uBoatGlow.value = n;
     const cloud = new THREE.Color(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
     this.cloudU.uTop.value.copy(cloud).lerp(dim(0xc4bac6, 1 - 0.7 * n), m).multiplyScalar(gloom);
     this.cloudU.uBot.value.copy(cloud).multiplyScalar(0.93).lerp(dim(0x8a8094, 1 - 0.7 * n), m).multiplyScalar(gloom * gloom);

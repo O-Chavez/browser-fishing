@@ -207,11 +207,13 @@ export const BOAT = {
   spawn: { x: -1.6, z: 0.3, yaw: 0 },
   /** Middle of the wheelhouse along the boat; the open working deck runs aft of it to the net drum. */
   wheelhouse: 2.6,
-  /** Deck taken up by the wheelhouse, the fish boxes, the barrel and the net drum (x0, x1, z0, z1). */
+  /** Deck taken up by the wheelhouse, the fish boxes, the cooler, the barrel, the pots and the net drum (x0, x1, z0, z1). */
   blocked: [
     [1.5, 3.7, -1.1, 1.1],
     [-0.45, 0.85, 0.5, 1.5],
+    [-1.4, -0.45, 1.2, 2.3],
     [-5.1, -4.5, 1.1, 1.8],
+    [-4.5, -3.45, 1.1, 2.3],
     [-7, -5.4, -3, 3],
   ] as [number, number, number, number][],
 };
@@ -223,6 +225,12 @@ export function hullHalfWidth(x: number): number {
   const w = u < 0.5 ? 0.92 + 0.08 * Math.sin((u / 0.5) * Math.PI * 0.5) : Math.cos(((u - 0.5) / 0.5) * Math.PI * 0.5) * 0.97 + 0.03;
   return BOAT.beam * w;
 }
+
+/** The hull's side view, shared by the model (`boat.ts`) and the hole the sea's shader cuts for it: gunwale height (0 stern .. 1 bow), keel and chine depths. */
+export const hullSheer = (u: number): number => 1.0 + 0.5 * Math.pow(u, 2.5);
+export const KEEL = -0.9;
+export const CHINE = -0.1;
+export const hullChine = (u: number): number => CHINE + (hullSheer(u) - CHINE) * 0.15 * u * u;
 
 export function onDeck(x: number, z: number): boolean {
   if (Math.abs(x) > BOAT.len / 2 - BOAT.margin) return false;

@@ -1232,6 +1232,7 @@ export class World {
       // A change of depth rolls the weather in over about three seconds.
       this.mood += (this.moodTarget - this.mood) * Math.min(1, dt);
       this.sea.update(t, dt, this.mood);
+      this.boat?.update(t, this.mood);
     }
     this.updateDaylight(t);
     this.stars.position.copy(this.camera.position);
