@@ -63,8 +63,8 @@ export const WALK: Record<string, View> = {
   w09_boards_back: at(11, 11.6, 0, 1, 'from the boards, turning back to the pier'),
   w10_street: { x: 0, z: 19, yaw: Math.PI, note: 'up the main street from the quay' },
   w11_square_in: { x: 0, z: 27, yaw: Math.PI, note: 'arriving at the square' },
-  w12_square_w: at(0, 32, -12, 32.5, 'the square looking west down the lane to Wren\'s'),
-  w13_square_e: at(0, 32, 11.5, 36, 'the square looking east down the lane to the blue house'),
+  w12_square_w: at(0, 32, -11.5, 35.5, 'the square looking west down the lane to Wren\'s'),
+  w13_square_e: at(0, 32, 10.5, 38.5, 'the square looking east down the lane to the blue house'),
   w14_upper: { x: 0, z: 42, yaw: Math.PI, note: 'the upper street: fences, cottages, the gate' },
   w15_gate: { x: 0, z: 52.5, yaw: Math.PI, note: 'at the gate' },
   w16_gate_back: { x: 0, z: 52.5, yaw: 0, note: 'from the gate looking back down to the water' },
@@ -75,8 +75,8 @@ export const WALK: Record<string, View> = {
   r05_landing: at(-21.5, 3.5, -14.5, -2.5, 'landing back from a charter, looking at the plane'),
   r06_beach_back: at(-19.5, 3, -13, 13.5, "from Reed's beach looking back up the lane to the quay"),
   r07_ring_w1: at(-17, 15, -16.5, 22, 'the west ring lane, going up behind the Fishmonger'),
-  r08_ring_w2: at(-16.5, 22, -13.5, 28.5, "the west ring lane toward Wren's"),
-  r09_ring_w3: at(-13.5, 28.5, -2, 32, 'arriving at the square from the west lane'),
+  r08_ring_w2: at(-16.5, 22, -12.5, 28.6, "the west ring lane toward Wren's"),
+  r09_ring_w3: at(-12.5, 28.6, -2, 32, 'arriving at the square from the west lane'),
   e01_quay_e: at(11, 12, 16.5, 5.5, 'quay east end, heading down the campfire ramp'),
   e02_ramp: at(14.5, 8.2, 18, 2, 'on the ramp: the campfire ahead'),
   e03_camp: at(19.8, 2, 18, 2, 'sitting at the campfire'),
@@ -90,7 +90,7 @@ export const WALK: Record<string, View> = {
   n02_square: { x: 0, z: 27, yaw: Math.PI, note: 'arriving at the square at night', times: { night: 0.72 } },
   n03_lane: at(-15, 11, -19.2, 8.2, "Reed's lane at night", { night: 0.72 }),
   n04_ramp: at(14.5, 8.2, 18, 2, 'the campfire ramp at night', { night: 0.72 }),
-  n05_ring_w: at(-16.5, 22, -13.5, 28.5, 'the west ring lane at night', { night: 0.72 }),
+  n05_ring_w: at(-16.5, 22, -12.5, 28.6, 'the west ring lane at night', { night: 0.72 }),
 };
 const walk = only[0] === '--walk';
 const TABLE = walk ? WALK : VIEWS;

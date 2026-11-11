@@ -47,6 +47,8 @@ export interface HouseDef extends Spot {
   roof: number;
   /** Optional hanging sign by the door. */
   sign?: string;
+  /** A fenced garden beside the door, on the house's own +x side (1) or -x side (-1); its sign hangs on the -x side. */
+  yard?: 1 | -1;
 }
 
 export interface NpcDef extends Spot {
@@ -104,6 +106,8 @@ export interface TownDef {
   paths: { from: [number, number]; to: [number, number]; w: number }[];
   /** Benches besides the square's own pair; on a dock they stand on the deck. */
   benches: Spot[];
+  /** Trees inside the town, where the forest keeps out: leafy ones among the houses, pines round the edge. `s` is the scale. */
+  trees: { x: number; z: number; s: number; pine?: boolean }[];
 }
 
 export interface MapDef {
@@ -136,6 +140,8 @@ export interface MapDef {
   clearings?: { x: number; z: number; r: number }[];
   /** Flat sand banks (`Apron` in env.ts) the quay's rear and ends stand on, so the deck meets the ground flush. */
   aprons?: { x0: number; x1: number; z0: number; z1: number; h: number }[];
+  /** A rock islet with a tree and a lantern out in the lake: its centre and the radius casts stop short of. */
+  islet?: { x: number; z: number; r: number };
   town: TownDef;
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
@@ -174,8 +180,8 @@ export const MAPS: MapDef[] = [
     // Top Anglers and Thanks stand along the quay deck's rear at its east end, facing the water: in full view from
     // the pier without standing in front of the Smokehouse (which the plan's spot by the pier root did).
     leaderboard: { x: 11, z: 13.6, facing: Math.PI },
-    // The wardrobe mirror at the quay's west corner by Reed's lane, facing along the deck toward the pier.
-    mirror: { x: -11.3, z: 13.2, facing: Math.PI / 2 },
+    // The wardrobe mirror at the quay deck's front west corner, facing along the deck toward the pier and clear of Reed's lane.
+    mirror: { x: -12.2, z: 10.8, facing: Math.PI / 2 },
     // The campfire on the east headland, seen across the water from the jetty bench.
     campfire: { x: 18, z: 2, facing: 0 },
     // Beside Reed's lane, at the top of his beach.
@@ -191,6 +197,9 @@ export const MAPS: MapDef[] = [
       { x0: -16, x1: -11, z0: 9.5, z1: 16.5, h: 0.72 },
       { x0: 11, x1: 16, z0: 9.5, z1: 16.5, h: 0.72 },
     ],
+    // The eye's target from the pier: 30 m past the T end and a few metres left of the pier's line, so it sits in
+    // the first look without standing in front of the cast. Play-test: the spot.
+    islet: { x: -4.5, z: -39, r: 6.2 },
     clearings: [
       // Reed's beach and the landing spot, his lane, the campfire headland, and the two ring lanes down to the water.
       { x: -19.5, z: 4, r: 7 },
@@ -205,14 +214,15 @@ export const MAPS: MapDef[] = [
     town: {
       square: { x: 0, z: 32, r: 5.5 },
       houses: [
-        // The Fishmonger and Net Mender flank the stalls, their doors to the main street like every house;
-        // Wren's, the blue house and two more stagger up the ring to the gate.
-        { x: -12, z: 22.5, facing: faceToward(-12, 22.5, -2.2, 23.5), wall: 0xe6c9c9, roof: 0x4a7a4a, sign: 'Fishmonger' },
-        { x: 13, z: 23.5, facing: faceToward(13, 23.5, 2.2, 24), wall: 0xd9d2c5, roof: 0x7a3f3f, sign: 'Net Mender' },
-        { x: -15, z: 34, facing: 1.4, wall: 0xe8d7b0, roof: 0xb5473a, sign: "Wren's Cottage" },
-        { x: 14.5, z: 38.5, facing: -1.9, wall: 0xc9d9e0, roof: 0x3f6f8f },
-        { x: -10.5, z: 46, facing: 2.3, wall: 0xe0c3a0, roof: 0x6b4a8a },
-        { x: 10.5, z: 50.5, facing: -2.6, wall: 0xd8e0c0, roof: 0x8a5a2b },
+        // Close to the street, 4-5 m back from its edge, so the walk up is a village street and not a plain: the
+        // Fishmonger and Net Mender behind the stalls, Wren's and the blue house on the square, two more by the gate.
+        // Play-test: how close.
+        { x: -8.6, z: 23, facing: faceToward(-8.6, 23, -2.2, 23.5), wall: 0xe6c9c9, roof: 0x4a7a4a, sign: 'Fishmonger', yard: -1 },
+        { x: 9.2, z: 25.5, facing: faceToward(9.2, 25.5, 2.2, 26), wall: 0xd9d2c5, roof: 0x7a3f3f, sign: 'Net Mender', yard: 1 },
+        { x: -11.5, z: 35.5, facing: faceToward(-11.5, 35.5, -3, 33), wall: 0xe8d7b0, roof: 0xb5473a, sign: "Wren's Cottage", yard: 1 },
+        { x: 10.5, z: 38.5, facing: faceToward(10.5, 38.5, 3, 35), wall: 0xc9d9e0, roof: 0x3f6f8f, yard: 1 },
+        { x: -8.8, z: 45.6, facing: 2.3, wall: 0xe0c3a0, roof: 0x6b4a8a },
+        { x: 8.8, z: 49.6, facing: -2.6, wall: 0xd8e0c0, roof: 0x8a5a2b },
       ],
       npcs: [
         {
@@ -249,7 +259,7 @@ export const MAPS: MapDef[] = [
               { x: 0, z: 26.5 },
               { x: 3.5, z: 23 },
               // Round the Smokehouse's back to the racks, clear of the smoker behind it.
-              { x: 10.2, z: 22.6, wait: 4, face: faceToward(10.2, 22.6, 9, 20.2) },
+              { x: 10.6, z: 21.6, wait: 4, face: faceToward(10.6, 21.6, 9, 20.2) },
               { x: 3.5, z: 23 },
               { x: 0, z: 26.5 },
               { x: 2.9, z: 31.1 },
@@ -262,14 +272,14 @@ export const MAPS: MapDef[] = [
           ],
         },
         {
-          name: 'Granny Wren', face: 'smile', x: -10.5, z: 33, facing: faceToward(-10.5, 33, -6, 32), coat: 0x7a4a8a, hat: 0xeeeeee,
+          name: 'Granny Wren', face: 'smile', x: -6.8, z: 33, facing: faceToward(-6.8, 33, -3, 32), coat: 0x7a4a8a, hat: 0xeeeeee,
           walk: {
             speed: 0.7,
             wait: 8,
             stops: [
-              { x: -10, z: 30.5 },
-              { x: -8, z: 34, wait: 5, face: Math.PI / 2 },
-              { x: -10.5, z: 37.5, wait: 3 },
+              { x: -6.9, z: 30.9 },
+              { x: -6.4, z: 35.2, wait: 5, face: Math.PI / 2 },
+              { x: -7, z: 38.2, wait: 3 },
             ],
           },
           lines: [
@@ -316,35 +326,38 @@ export const MAPS: MapDef[] = [
       // Moored in the water beside the west jetty.
       boats: [{ x: -10.3, z: 6.2, facing: 0.2 }],
       flowers: [
-        { x: -11, z: 35.5, w: 2.5, d: 0.8 },
-        { x: -12.5, z: 38, w: 2.5, d: 0.8 },
+        // Wren's beds, by her gable and past her door; the blue house's either side of it.
+        { x: -13.4, z: 30.6, w: 2.5, d: 0.8 },
+        { x: -8.4, z: 39.2, w: 2.5, d: 0.8 },
         { x: 12, z: 34.5, w: 2.5, d: 0.8 },
-        { x: 12.5, z: 42, w: 2.5, d: 0.8 },
+        { x: 12.4, z: 42.8, w: 2.5, d: 0.8 },
         { x: -6.5, z: 49.5, w: 2, d: 0.8 },
-        { x: 6.8, z: 47.5, w: 2, d: 0.8 },
-        // In front of the Fishmonger, by the bench on the walk up.
-        { x: -6.6, z: 22.6, w: 2.2, d: 0.8 },
+        { x: 5.2, z: 47.3, w: 2, d: 0.8 },
+        // Under the Fishmonger's front window, by the bench on the walk up.
+        { x: -5.9, z: 21.3, w: 0.8, d: 2 },
       ],
       paths: [
         // The main street from the quay's rear edge to the gate.
         { from: [0, 14.5], to: [0, 54.5], w: 4.4 },
+        // The quay road: cobbles along the deck's rear edge in front of the two stalls, so the deck meets stone.
+        { from: [-8.4, 15.6], to: [8.4, 15.6], w: 2.2 },
         // Lanes off the square and the upper street to the houses' doors.
-        { from: [-2, 32], to: [-12, 32.5], w: 1.6 },
-        { from: [2, 32], to: [11.5, 36], w: 1.6 },
-        { from: [-1.5, 42], to: [-7.5, 43.5], w: 1.6 },
-        { from: [1.5, 42.5], to: [8, 47], w: 1.6 },
+        { from: [-2, 32], to: [-8.4, 34.5], w: 1.6 },
+        { from: [2, 32], to: [7.6, 36.9], w: 1.6 },
+        { from: [-1.5, 42], to: [-6.3, 43.5], w: 1.6 },
+        { from: [1.5, 42.5], to: [7, 46.9], w: 1.6 },
         // Reed's lane, a street of the town, from the quay's west end down to his beach.
         { from: [-13, 13.5], to: [-16.5, 9], w: 2.4 },
         { from: [-16.5, 9], to: [-18.5, 3.5], w: 2.4 },
         // The ramp from the quay's east end to the campfire headland.
         { from: [12.5, 11], to: [16.5, 5.5], w: 1.6 },
-        // The village ring: west from the square past Wren's Cottage and behind the Fishmonger to the worm patch and the quay...
-        { from: [-9, 32.3], to: [-13.5, 28.5], w: 1.6 },
-        { from: [-13.5, 28.5], to: [-16.5, 22], w: 1.6 },
+        // The village ring: west from the square between Wren's and the Fishmonger's garden, down past the worm patch to the quay...
+        { from: [-4.5, 30.5], to: [-12.5, 28.6], w: 1.6 },
+        { from: [-12.5, 28.6], to: [-16.5, 22], w: 1.6 },
         { from: [-16.5, 22], to: [-17, 15], w: 1.6 },
         { from: [-17, 15], to: [-15.5, 11.2], w: 1.6 },
-        // ...and east past the blue house and behind the Net Mender down to the campfire path.
-        { from: [6, 33.7], to: [15.5, 31], w: 1.6 },
+        // ...and east between the blue house and the Net Mender's garden, down to the campfire path.
+        { from: [4.8, 31.2], to: [15.5, 31], w: 1.6 },
         { from: [15.5, 31], to: [18.5, 24], w: 1.6 },
         { from: [18.5, 24], to: [18.5, 16], w: 1.6 },
         { from: [18.5, 16], to: [15.5, 8.5], w: 1.6 },
@@ -354,6 +367,17 @@ export const MAPS: MapDef[] = [
         { x: 6.9, z: 7.2, facing: Math.PI / 2 },
         // The rest stop on the walk up, beside the main street in front of the Fishmonger.
         { x: -4.6, z: 24.5, facing: Math.PI / 2 },
+      ],
+      trees: [
+        // Leafy ones by the Fishmonger's garden, behind the Net Mender, and one up each side of the upper street.
+        { x: -7.4, z: 27.7, s: 1.25 },
+        { x: 13.8, z: 27.5, s: 1.2 },
+        { x: -6.6, z: 40.2, s: 1.3 },
+        { x: 5, z: 42, s: 1.2 },
+        // Pines round the pad's edge, closing the town in.
+        { x: -16.5, z: 41.5, s: 1.2, pine: true },
+        { x: 16.2, z: 44, s: 1.1, pine: true },
+        { x: 14.4, z: 53.5, s: 1, pine: true },
       ],
     },
   },
@@ -385,6 +409,7 @@ MAPS.push({
   smokehouse: undefined,
   clearings: undefined,
   aprons: undefined,
+  islet: undefined,
   casino: {
     hall: { x: 0, z: 43, w: 34, d: 34 },
     roulette: { x: -9, z: 43, facing: toward(-9, 43) },
@@ -426,6 +451,7 @@ MAPS.push({
     flowers: [],
     paths: [],
     benches: [],
+    trees: [],
   },
 });
 
@@ -452,5 +478,6 @@ MAPS.push({
   harbour: undefined,
   clearings: undefined,
   aprons: undefined,
-  town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [], paths: [], benches: [] },
+  islet: undefined,
+  town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [], paths: [], benches: [], trees: [] },
 });

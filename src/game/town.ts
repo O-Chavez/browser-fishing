@@ -150,9 +150,9 @@ export class Town {
     // ground between them; the main street stops where it is laid, since it meets the quay deck.
     const over = w < 4 ? w / 2 : 0;
     const len = Math.hypot(bx - ax, bz - az) + 2 * over;
-    // Built in world space, a vertex every half metre along, each on the ground under it, so a lane down a
-    // slope lies on the sand instead of floating at one end and sinking at the other.
-    const geo = new THREE.PlaneGeometry(w, len, 1, Math.max(1, Math.ceil(len / 0.5))).rotateX(-Math.PI / 2);
+    // Built in world space, a vertex every half metre along and across, each on the ground under it, so a lane
+    // down or across a slope lies on the ground instead of floating at one edge and sinking at the other.
+    const geo = new THREE.PlaneGeometry(w, len, Math.max(1, Math.ceil(w / 0.55)), Math.max(1, Math.ceil(len / 0.5))).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (w / 2.2), uv.getY(i) * (len / 2.2));
     const mx = (ax + bx) / 2;
@@ -282,25 +282,35 @@ export class Town {
     const step = rbox(1.5, 0.15, 0.6, 0x8d877c, 0.03);
     step.position.set(0, 0.07, D / 2 + 0.3);
     g.add(door, knob, step);
-    for (const sx of [-1.65, 1.65]) {
+    // Two windows with flower boxes on the street side and two on the back, one on each gable: every side a
+    // lane passes has a face, and lights up at night. [x, z, turn]
+    const windows: [number, number, number][] = [
+      [-1.65, D / 2, 0], [1.65, D / 2, 0], [-1.65, -D / 2, Math.PI], [1.65, -D / 2, Math.PI],
+      [W / 2, 0, Math.PI / 2], [-W / 2, 0, -Math.PI / 2],
+    ];
+    windows.forEach(([wx, wz, turn], n) => {
+      const w = new THREE.Group();
       const frame = rbox(0.95, 0.85, 0.1, 0xf3ead2, 0.02);
-      frame.position.set(sx, 1.45, D / 2 + 0.03);
+      frame.position.set(0, 1.45, 0.03);
       const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.62), this.windowMat);
-      pane.position.set(sx, 1.45, D / 2 + 0.1);
+      pane.position.set(0, 1.45, 0.1);
       glowTag(pane, 0.8, 0.5);
       const bar = rbox(0.05, 0.64, 0.02, 0xf3ead2, 0.01);
-      bar.position.set(sx, 1.45, D / 2 + 0.11);
+      bar.position.set(0, 1.45, 0.11);
       const sill = rbox(1.1, 0.08, 0.28, 0x6b4a2b, 0.02);
-      sill.position.set(sx, 1.0, D / 2 + 0.14);
+      sill.position.set(0, 1.0, 0.14);
       const box = rbox(0.9, 0.16, 0.22, 0x7a5a38, 0.02);
-      box.position.set(sx, 1.12, D / 2 + 0.2);
-      g.add(frame, pane, bar, sill, box);
+      box.position.set(0, 1.12, 0.2);
+      w.add(frame, pane, bar, sill, box);
       for (let k = 0; k < 4; k++) {
-        const f = ball(0.07, [0xff6f91, 0xffd23a, 0xffffff, 0xc77dff][(k + i) % 4]);
-        f.position.set(sx - 0.33 + k * 0.22, 1.24, D / 2 + 0.22);
-        g.add(f);
+        const f = ball(0.07, [0xff6f91, 0xffd23a, 0xffffff, 0xc77dff][(k + i + n) % 4]);
+        f.position.set(-0.33 + k * 0.22, 1.24, 0.22);
+        w.add(f);
       }
-    }
+      w.position.set(wx, 0, wz);
+      w.rotation.y = turn;
+      g.add(w);
+    });
     // Porch lantern
     const lamp = ball(0.1, 0xffd27a);
     (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
@@ -331,6 +341,22 @@ export class Town {
       for (const lz of [-1.0, 1.0]) {
         this.solid(h.x + lx * cos + lz * sin, h.z - lx * sin + lz * cos, 1.25);
       }
+    }
+
+    // Behind the house: a woodpile under one window and a water barrel by the other.
+    const local = (lx: number, lz: number): [number, number] => [h.x + lx * cos + lz * sin, h.z - lx * sin + lz * cos];
+    this.woodpile(...local(1.5, -D / 2 - 0.5), h.facing);
+    const barrel = cyl(0.3, 0.26, 0.75, WOOD, 10);
+    const [bx, bz] = local(-0.3, -D / 2 - 0.5);
+    this.at(barrel, bx, bz, 0, groundHeight(bx, bz) + 0.37);
+    this.solid(bx, bz, 0.4);
+    // A fenced garden beside the door, open at the back.
+    if (h.yard) {
+      const a = local(h.yard * 0.95, D / 2 + 1.5);
+      const b = local(h.yard * (W / 2 + 1.3), D / 2 + 1.5);
+      const c = local(h.yard * (W / 2 + 1.3), -D / 2 + 0.3);
+      this.fence(a[0], a[1], b[0], b[1]);
+      this.fence(b[0], b[1], c[0], c[1]);
     }
 
     if (h.sign) {
@@ -791,32 +817,48 @@ export class Town {
     }
   }
 
+  /** A picket fence between two points. */
+  private fence(x0: number, z0: number, x1: number, z1: number): void {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const n = Math.floor(len / 0.8);
+    const ang = Math.atan2(x1 - x0, z1 - z0);
+    for (let i = 0; i <= n; i++) {
+      const x = x0 + ((x1 - x0) * i) / n;
+      const z = z0 + ((z1 - z0) * i) / n;
+      const p = rbox(0.1, 0.8, 0.06, 0xf3ead2, 0.02);
+      this.at(p, x, z, ang, groundHeight(x, z) + 0.4);
+    }
+    for (const y of [0.3, 0.6]) {
+      const rail = rbox(0.05, 0.06, len, 0xe3d9bf, 0.01);
+      const mx = (x0 + x1) / 2;
+      const mz = (z0 + z1) / 2;
+      this.at(rail, mx, mz, ang, groundHeight(mx, mz) + y);
+    }
+    for (let d = 0; d <= len; d += 1.8) {
+      this.solid(x0 + ((x1 - x0) * d) / len, z0 + ((z1 - z0) * d) / len, 0.3);
+    }
+  }
+
   private buildFences(): void {
     // A picket fence along each side of the main street's northern stretch and in front of the end cottages.
-    const run = (x0: number, z0: number, x1: number, z1: number) => {
-      const len = Math.hypot(x1 - x0, z1 - z0);
-      const n = Math.floor(len / 0.8);
-      const ang = Math.atan2(x1 - x0, z1 - z0);
-      for (let i = 0; i <= n; i++) {
-        const x = x0 + ((x1 - x0) * i) / n;
-        const z = z0 + ((z1 - z0) * i) / n;
-        const p = rbox(0.1, 0.8, 0.06, 0xf3ead2, 0.02);
-        this.at(p, x, z, ang, groundHeight(x, z) + 0.4);
+    this.fence(-3.6, 44, -3.6, 51.5);
+    this.fence(3.6, 44, 3.6, 51.5);
+    this.fence(-3.6, 51.5, -6.3, 51.5);
+    this.fence(3.6, 51.5, 6.3, 51.5);
+  }
+
+  /** A stack of split logs, three rows high. */
+  private woodpile(x: number, z: number, facing: number): void {
+    const g = new THREE.Group();
+    for (let r = 0; r < 3; r++) {
+      for (let i = 0; i < 4 - r; i++) {
+        const l = cyl(0.09, 0.09, 0.9, 0x7a5230, 6);
+        l.rotation.z = Math.PI / 2;
+        l.position.set((i - (3 - r) / 2) * 0.2, 0.1 + r * 0.17, 0);
+        g.add(l);
       }
-      for (const y of [0.3, 0.6]) {
-        const rail = rbox(0.05, 0.06, len, 0xe3d9bf, 0.01);
-        const mx = (x0 + x1) / 2;
-        const mz = (z0 + z1) / 2;
-        this.at(rail, mx, mz, ang, groundHeight(mx, mz) + y);
-      }
-      for (let d = 0; d <= len; d += 1.8) {
-        this.solid(x0 + ((x1 - x0) * d) / len, z0 + ((z1 - z0) * d) / len, 0.3);
-      }
-    };
-    run(-3.6, 44, -3.6, 51.5);
-    run(3.6, 44, 3.6, 51.5);
-    run(-3.6, 51.5, -6.3, 51.5);
-    run(3.6, 51.5, 6.3, 51.5);
+    }
+    this.at(g, x, z, facing);
   }
 
   private lampPost(x: number, z: number, light: boolean): void {
@@ -945,25 +987,14 @@ export class Town {
     this.pot(-3.6, 34.5);
     this.pot(3.6, 34.5);
     this.pot(-8.5, 19);
-    this.pot(8.8, 24);
+    this.pot(6.3, 23);
     // A picnic blanket on the slope above Reed's lane (the campfire headland is too narrow for a second one).
     this.blanket(-15, 16.5, -0.3);
     // String lights across the quay's rear in front of the stalls, over the square and at the gate.
     this.stringLights(-8, 8, 15.3, 3.3);
     this.stringLights(-4, 4, 32, 3.3);
     this.stringLights(-3.4, 3.4, 54.5, 3.1);
-    for (const [x, z, f] of [[-18.5, 31, 1.57]] as const) {
-      const g = new THREE.Group();
-      for (let r = 0; r < 3; r++) {
-        for (let i = 0; i < 4 - r; i++) {
-          const l = cyl(0.09, 0.09, 0.9, 0x7a5230, 6);
-          l.rotation.z = Math.PI / 2;
-          l.position.set((i - (3 - r) / 2) * 0.2, 0.1 + r * 0.17, 0);
-          g.add(l);
-        }
-      }
-      this.at(g, x, z, f);
-    }
+    this.woodpile(-18.5, 31, 1.57);
   }
 
   private buildBottles(): void {

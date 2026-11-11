@@ -16,6 +16,10 @@ import {
   onDock,
   padWeight,
   setAprons,
+  setIslet,
+  setWorn,
+  dirtWeight,
+  grassWeight,
   setAtSea,
   setPad,
   smooth,
@@ -163,6 +167,7 @@ export class World {
   private flyBase: { x: number; y: number; z: number; ph: number; sp: number }[] = [];
   private dockLights: THREE.PointLight[] = [];
   private dockGlow = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+  private islet: { x: number; z: number; r: number } | null = null;
   private base = { water: new THREE.Color(), deep: new THREE.Color(), sky: new THREE.Color(), top: new THREE.Color(), grass: new THREE.Color() };
   /** Set (0..1 of the day) to freeze the time of day; null follows the shared clock. */
   dayOverride: number | null = null;
@@ -559,6 +564,13 @@ export class World {
     this.indoor = !!map.casino;
     setPad(map.pad);
     setAprons(map.aprons ?? []);
+    setIslet(map.islet ?? null);
+    this.islet = map.islet ?? null;
+    // The town's ground is worn to dirt along its paths, round the square and in front of the two stalls.
+    setWorn(map.town.paths.length ? {
+      paths: map.town.paths,
+      discs: [{ ...map.town.square }, ...[map.vendor.shop, map.smokehouse].filter((s) => !!s).map((s) => ({ x: s!.x, z: s!.z, r: 2.6 }))],
+    } : null);
     setAtSea(!!map.sea);
     this.sea = null;
     this.boat = null;
@@ -685,11 +697,12 @@ export class World {
         const n =
           0.88 + 0.24 * (Math.sin(x * 0.4) * Math.cos(z * 0.37) * 0.5 + 0.5);
         c.copy(sand).multiplyScalar(0.65 + 0.35 * smooth(-1.2, 0.4, y));
-        const gm = smooth(0.3, 1.6, y);
+        // A town's pad is grass too, worn to dirt along its paths (`dirtWeight`).
+        const dw = dirtWeight(x, z);
+        const gm = dw < 1 ? grassWeight(x, z, y) / (1 - 0.85 * dw) : smooth(0.3, 1.6, y);
         c.lerp(tmp.copy(grass).multiplyScalar(n), gm);
         if (y > 12) c.lerp(rock, Math.min(1, (y - 12) / 14));
-        const pw = padWeight(x, z);
-        if (pw > 0) c.lerp(dirt, pw * 0.85);
+        if (dw > 0) c.lerp(dirt, dw * 0.85);
         col.push(c.r, c.g, c.b);
       }
     }
@@ -732,16 +745,23 @@ export class World {
       0,
     );
     const coneGeo = new THREE.ConeGeometry(2.0, 3.4, 7);
-    const trunk = new THREE.InstancedMesh(trunkGeo, lambert(0x6b4a2b), N);
+    // Placed by hand after the forest, from their own random stream so the forest keeps every spot: the town's
+    // trees and the islet's leafy tree, which stands out against the far shore's pines. `y` lifts a tree off the ground (the islet's stands on its rock).
+    const placed: { x: number; z: number; s: number; pine?: boolean; y?: number }[] = [
+      ...map.town.trees,
+      ...(map.islet ? [{ x: map.islet.x - 0.6, z: map.islet.z - 0.4, s: 1.5, y: 1.5 }] : []),
+    ];
+    const NP = N + placed.length;
+    const trunk = new THREE.InstancedMesh(trunkGeo, lambert(0x6b4a2b), NP);
     const leafMat = lambert(0xffffff);
     const layers = [0, 1, 2].map(
-      () => new THREE.InstancedMesh(coneGeo, leafMat, N),
+      () => new THREE.InstancedMesh(coneGeo, leafMat, NP),
     );
     // About a quarter of the trees are round and leafy. They pick from their own random stream, so
     // every tree keeps the spot it had when the forest was all pines.
     const vr = mulberry(77);
     const blobGeo = new THREE.IcosahedronGeometry(1.9, 0);
-    const blobs = [0, 1].map(() => new THREE.InstancedMesh(blobGeo, leafMat, N));
+    const blobs = [0, 1].map(() => new THREE.InstancedMesh(blobGeo, leafMat, NP));
     const lc = new THREE.Color();
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -753,7 +773,7 @@ export class World {
     let leafy = 0;
     // The headland pines first (docs/map-rework/harbour.json): the headland tips are too low for the
     // forest's 0.8 m line, and these four make the cove's silhouette. [x, z, scale]
-    const headland: [number, number, number][] = [[19.5, -3.5, 1.25], [22, -0.5, 1.1], [-21, -3, 1.3], [-23.5, 1, 1.05]];
+    const headland: [number, number, number][] = [[19.5, -3.5, 1.25], [22, -0.5, 1.1], [-22.5, -5, 1.3], [-23.5, 1, 1.05]];
     for (let tries = 0; n < N && tries < 6000; tries++) {
       const fixed = headland[n];
       const th = (rnd() * 2 - 1) * Math.PI;
@@ -801,6 +821,32 @@ export class World {
       });
       pines++;
     }
+    const pr = mulberry(911);
+    for (const t of placed) {
+      const { x, z, s } = t;
+      const y = t.y ?? groundHeight(x, z);
+      // The islet's tree is out of reach, so only trees on the ground block the way.
+      if (t.y === undefined) this.trees.push({ x, z, r: 0.45 * s });
+      q.setFromAxisAngle(up, pr() * 6.28);
+      trunk.setMatrixAt(n++, m.compose(p.set(x, y - 0.1, z), q, sc.set(s, s, s)));
+      col.set(loc.foliage).offsetHSL((pr() - 0.5) * 0.04, (pr() - 0.5) * 0.1, (pr() - 0.5) * 0.1);
+      if (t.pine) {
+        layers.forEach((l, k) => {
+          l.setMatrixAt(pines, m.compose(p.set(x, y + (2.2 + 1.7 * k) * s, z), q, sc.setScalar(s * (1 - 0.22 * k))));
+          l.setColorAt(pines, lc.copy(col).offsetHSL(0, 0, 0.035 * k));
+        });
+        pines++;
+      } else {
+        blobs.forEach((b, k) => {
+          const ox = k ? (pr() - 0.5) * 1.6 * s : 0;
+          const oz = k ? (pr() - 0.5) * 1.6 * s : 0;
+          const w = s * (k ? 0.75 : 1);
+          b.setMatrixAt(leafy, m.compose(p.set(x + ox, y + (k ? 2.8 : 3.3) * s, z + oz), q, sc.set(w, s * (k ? 0.65 : 0.85), w)));
+          b.setColorAt(leafy, lc.copy(col).offsetHSL(-0.035, 0.06, 0.06 + 0.04 * k));
+        });
+        leafy++;
+      }
+    }
     trunk.count = n;
     layers.forEach((l) => (l.count = pines));
     blobs.forEach((b) => (b.count = leafy));
@@ -840,9 +886,12 @@ export class World {
     reeds.count = rn;
     this.decor.add(reeds);
 
-    // The islet (docs/map-rework/harbour.json): three rocks 30 m past the T end, the eye's target from the
-    // pier. The lake bed is 8-9 m down there, so they stand at the surface rather than on the ground. [x, z, radius]
-    const islet: [number, number, number][] = [[-9, -36.5, 2.1], [-7.2, -38.2, 1.4], [-10.8, -38, 1.1]];
+    // The islet (`islet` in maps.ts): a low main rock with three round it, a leafy tree and a lantern on top. The lake
+    // bed is 8-9 m down there, so the rocks stand at the surface rather than on the ground. [x, z, radius, height]
+    const ic = map.islet;
+    const islet: [number, number, number, number][] = ic
+      ? [[ic.x, ic.z, 4.2, 0.5], [ic.x + 3.7, ic.z - 1.2, 2.2, 0.75], [ic.x - 3.3, ic.z - 1.6, 1.9, 0.85], [ic.x + 1.2, ic.z + 3.2, 1.4, 0.8]]
+      : [];
     // One rock on each headland tip, past the pines. [x, z, radius]
     const tips: [number, number, number][] = [[17.5, -6, 0.9], [-19, -7, 1.1]];
     const RK = 46 + islet.length + tips.length;
@@ -858,9 +907,9 @@ export class World {
       RK,
     );
     let kn = 0;
-    for (const [x, z, s] of islet) {
-      q.setFromEuler(new THREE.Euler(0.3, kn * 1.7, 0.2));
-      rocks.setMatrixAt(kn++, m.compose(p.set(x, 0.1 * s, z), q, sc.set(s, s * 1.4, s)));
+    for (const [x, z, s, hy] of islet) {
+      q.setFromEuler(new THREE.Euler(0.15, kn * 1.7, 0.1));
+      rocks.setMatrixAt(kn++, m.compose(p.set(x, 0.1 * s, z), q, sc.set(s, s * hy, s)));
     }
     for (const [x, z, s] of tips) {
       q.setFromEuler(new THREE.Euler(0.2, kn * 1.3, 0.1));
@@ -987,6 +1036,16 @@ export class World {
       glowTag(lantern, 0.75);
       dock.add(lantern, lanternPost);
     }
+    // The islet's lantern: a glow out on the water at night, without a light of its own.
+    if (this.islet) {
+      const { x, z } = this.islet;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 6), beamMat);
+      post.position.set(x + 2.2, 2.1, z + 1.4);
+      const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), glow);
+      lantern.position.set(x + 2.2, 2.95, z + 1.4);
+      glowTag(lantern, 1.1);
+      dock.add(lantern, post);
+    }
     const crate = new THREE.Mesh(
       new THREE.BoxGeometry(0.6, 0.45, 0.5),
       lambert(0x9c7a4a),
@@ -1082,7 +1141,7 @@ export class World {
     const free = (x: number, z: number): boolean => {
       const y = groundHeight(x, z);
       if (y > 14 || onDock(x, z, 1)) return false;
-      if (smooth(0.3, 1.6, y) * (1 - 0.85 * padWeight(x, z)) < 0.6) return false;
+      if (grassWeight(x, z, y) < 0.6) return false;
       if (town?.blocked(x, z)) return false;
       if (hub?.colliders.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + 0.6)) return false;
       return !this.trees.some((t) => Math.abs(t.x - x) < 0.8 && Math.abs(t.z - z) < 0.8);

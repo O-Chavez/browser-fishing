@@ -243,6 +243,17 @@ export class Hub {
       stall.add(m);
     }
 
+    // A lantern on each front post, lit at night like the lamp posts.
+    for (const lx of [-1.5, 1.5]) {
+      const lantern = ball(0.12, 0xffd27a);
+      const lm = lantern.material as THREE.MeshLambertMaterial;
+      lm.emissive.set(0xffb84a);
+      this.lampMats.push(lm);
+      lantern.position.set(lx, 2.05, 1.05);
+      glowTag(lantern, 0.75);
+      stall.add(lantern);
+    }
+
     const sign = textPlane(2.4, 0.6, 512);
     woodSign(sign.ctx, 'BAIT & TACKLE');
     sign.tex.needsUpdate = true;

@@ -36,6 +36,41 @@ const apronHeight = (x: number, z: number): number => {
 };
 
 /**
+ * Where a town's ground is worn to dirt: along its cobbled paths and round `discs` (the square, the stalls' yards).
+ * The rest of the pad is grass. A map without any (`null`) keeps a bare dirt pad.
+ */
+export interface Worn { paths: { from: [number, number]; to: [number, number]; w: number }[]; discs: { x: number; z: number; r: number }[] }
+let worn: Worn | null = null;
+export const setWorn = (w: Worn | null): void => {
+  worn = w;
+};
+/** 0..1, how bare the ground is at a spot on the pad. */
+export function dirtWeight(x: number, z: number): number {
+  const pw = padWeight(x, z);
+  if (!worn || pw === 0) return pw;
+  let d = 0;
+  for (const p of worn.paths) {
+    const dx = p.to[0] - p.from[0];
+    const dz = p.to[1] - p.from[1];
+    const t = Math.max(0, Math.min(1, ((x - p.from[0]) * dx + (z - p.from[1]) * dz) / (dx * dx + dz * dz || 1)));
+    const off = Math.hypot(x - p.from[0] - dx * t, z - p.from[1] - dz * t) - p.w / 2;
+    // A street wears a wider verge than a lane.
+    d = Math.max(d, 1 - smooth(0.3, p.w > 2 ? 2.8 : 1.7, off));
+  }
+  for (const c of worn.discs) d = Math.max(d, 1 - smooth(0.3, 2.8, Math.hypot(x - c.x, z - c.z) - c.r));
+  return pw * d;
+}
+/** 0..1, how grassy the ground is at height `y`: above the sand line or on a town's pad, less where it is worn to dirt. */
+export const grassWeight = (x: number, z: number, y: number): number =>
+  Math.max(smooth(0.3, 1.6, y), worn ? padWeight(x, z) : 0) * (1 - 0.85 * dirtWeight(x, z));
+
+/** A rock islet out in the lake: casts stop short of it. */
+let islet: { x: number; z: number; r: number } | null = null;
+export const setIslet = (i: { x: number; z: number; r: number } | null): void => {
+  islet = i;
+};
+
+/**
  * At sea the only ground is the charter boat's deck (`BOAT` in sea.ts): docks, standing and water
  * read it instead of the pond's shore and piers.
  */
@@ -136,7 +171,10 @@ export const standHeight = (x: number, z: number): number => {
   return onDock(x, z) ? Math.max(g, DOCK_TOP) : g;
 };
 
-export const isWater = (x: number, z: number): boolean => (atSea ? !inHull(x, z, 0.3) : groundHeight(x, z) < -0.25 && !onDock(x, z, 0.3));
+export const isWater = (x: number, z: number): boolean =>
+  atSea
+    ? !inHull(x, z, 0.3)
+    : groundHeight(x, z) < -0.25 && !onDock(x, z, 0.3) && !(islet && Math.hypot(x - islet.x, z - islet.z) < islet.r);
 
 export function mulberry(seed: number): () => number {
   return () => {

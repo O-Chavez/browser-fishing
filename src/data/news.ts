@@ -42,10 +42,10 @@ export const NEWS: NewsEntry[] = [
     date: '2026-11-08',
     title: 'The harbour',
     image: harbour,
-    alt: "Looking back at the harbour from the pier by day: the quay across the cove with a jetty either side, Top Anglers and the wardrobe mirror on the deck, Marlow's striped stall and the Smokehouse behind, and the main street up to the gate",
+    alt: "Looking back at the harbour from the pier by day: the quay across the cove, Top Anglers and the Thanks board on the deck, the Smokehouse and Marlow's striped stall behind a cobbled quay road, and the main street up through the trees to the gate",
     body: [
-      "The lakeside has a new shape. The town now wraps a small cove: a timber <b>quay</b> runs across the back of it, the pier runs out from the quay's middle to the T end, and a short <b>jetty</b> either side of the pier gives two more spots to cast from. Out past the T end, a rock islet marks the open lake.",
-      "Everything you know is along the waterfront. <b>Marlow's stall</b> and the <b>Smokehouse</b> stand behind the quay facing the water, <b>Top Anglers</b> stands on the deck at the quay's east end, and the <b>wardrobe mirror</b> is at the quay's west corner by Reed's lane. The well square up the main street is now a junction: lanes run round past the cottages, down to the campfire on the east headland and over to the worm patch.",
+      "The lakeside has a new shape. The town now wraps a small cove: a timber <b>quay</b> runs across the back of it, the pier runs out from the quay's middle to the T end, and a short <b>jetty</b> either side of the pier gives two more spots to cast from. Out past the T end, a rock islet with a tree and a lantern marks the open lake.",
+      "Everything you know is along the waterfront. <b>Marlow's stall</b> and the <b>Smokehouse</b> stand behind the quay facing the water, <b>Top Anglers</b> stands on the deck at the quay's east end, and the <b>wardrobe mirror</b> is at the quay's west corner by Reed's lane. The cottages stand close along the street with gardens, trees and grass between them. The well square up the main street is now a junction: lanes run round past the cottages, down to the campfire on the east headland and over to the worm patch.",
       "<b>Captain Reed's</b> corner is the quay's west end. His lane runs down past the worm patch and the <b>Furthest Out</b> board to his beach, and his seaplane floats in the cove in view from the pier. The messages in bottles have moved too: there are still seven to find.",
     ],
   },
