@@ -217,6 +217,17 @@ export const GULLS = { count: 7, size: 2.2, span: 1.3, radius: [9, 28] as [numbe
  */
 export const SHELF_FAR = { color: 0x1668a8, haze: 0.2, until: 0.6 };
 
+/**
+ * Kelp Deep's kelp (Oscar, 2026-11-10, picked from in-game mockups: rafts over the forest; the zone gets its
+ * character from things on the water, not from more green): how many rafts of torn kelp drift on the swell
+ * (0..1; 0.25 is sparse, 1 dense), how dark the patches are where the forest nears the surface (0..1), and the
+ * kelp's two tones (golden-brown blades and their shade). To tune after a play test.
+ */
+export const KELP = { rafts: 0.55, forest: 1, color: 0x7a5a1e, shade: 0x3d2e12 };
+
+/** How much of the kelp shows (0..1): it comes in over Kelp Deep's first markers and thins out before the Twilight's line (81). */
+export const kelpAt = (mood: number): number => smooth(seaMood(41), seaMood(49), mood) * (1 - smooth(seaMood(72), seaMood(81), mood));
+
 /** How often lightning strikes (0..1): from the Abyss's first depths (mood 1.85), more often the deeper. */
 export const lightningAt = (mood: number): number => smooth(1.8, 2.2, mood);
 export const screenSprayAt = (mood: number): number => Math.min(1, Math.max(0, (mood - SCREEN_SPRAY.from) / (SCREEN_SPRAY.to - SCREEN_SPRAY.from)));

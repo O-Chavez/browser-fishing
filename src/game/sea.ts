@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, SHELF_FAR, WAVES, boatMotion, hullHalfWidth, lightningAt, rainAt, seaHeight, stormAt, waveAmp, type BoatMotion, type DeepLook } from '../data/sea';
+import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, KELP, SHELF_FAR, WAVES, boatMotion, hullHalfWidth, lightningAt, kelpAt, rainAt, seaHeight, stormAt, waveAmp, type BoatMotion, type DeepLook } from '../data/sea';
 import { mulberry } from './env';
 import { Gulls, MarkerBuoy, Rain } from './seaatmo';
 
@@ -58,8 +58,8 @@ void main(){
 }`;
 
 const seaFrag = `
-uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift, uBoatGlow, uFarMix, uHaze;
-uniform vec3 uShallow, uDeep, uFar, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol;
+uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift, uBoatGlow, uFarMix, uHaze, uKelp, uKelpPatch;
+uniform vec3 uKelpCol, uKelpCol2, uShallow, uDeep, uFar, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol;
 uniform vec2 uWind;
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -106,6 +106,23 @@ void main(){
   // The moon's path on the water.
   float mp = max(dot(R, uMoonDir), 0.0);
   col += uMoonCol * (pow(mp, 260.0) * 1.6 + pow(mp, 24.0) * 0.12);
+  // Kelp Deep: the forest shows as darker water where it nears the surface, and rafts of torn kelp drift past
+  // on the swell, more of them over the forest. Foam breaks round the rafts, not over them.
+  float kelpMat = 0.0;
+  if (uKelp > 0.0 || uKelpPatch > 0.0) {
+    vec2 kp = vWorld.xz + vec2(uTime * 0.55, uTime * 0.1);
+    float forest = smoothstep(0.45, 0.56, noise(kp * 0.065) * 0.65 + noise(kp * 0.17 + 9.0) * 0.35);
+    col = mix(col, uDeep * 0.45 + uKelpCol2 * 0.35, forest * 0.8 * uKelpPatch);
+    float raft = noise(kp * 0.16 + 4.0) * 0.58 + noise(kp * 0.55) * 0.27 + noise(kp * 1.9) * 0.15;
+    float th = 0.76 - 0.2 * uKelp - 0.07 * forest * uKelpPatch;
+    kelpMat = smoothstep(th, th + 0.025, raft) * step(0.001, uKelp) * (1.0 - smoothstep(110.0, 200.0, dist));
+    // Blades lying across the raft in two tones, with a pale bulb here and there.
+    float blade = abs(noise(vec2(kp.x * 0.8, kp.y * 3.6) + 2.0) - 0.5) * 2.0;
+    vec3 kc = mix(uKelpCol2, uKelpCol, smoothstep(0.12, 0.42, blade));
+    float bulb = smoothstep(0.83, 0.88, noise(kp * 5.5));
+    kc = mix(kc, uKelpCol * 1.7, bulb);
+    col = mix(col, kc * (0.85 + 0.35 * crest), kelpMat * 0.96);
+  }
   if (uFoam > 0.0) {
     vec2 fp = vWorld.xz;
     vec2 s2 = vec2(fp.x * 0.35, fp.y * 1.3);
@@ -130,7 +147,7 @@ void main(){
       float streak = smoothstep(0.62, 0.82, noise(along * vec2(0.05, 0.7) - vec2(uTime * 0.3, 0.0))) * smoothstep(0.35, 0.7, noise(fp * 0.12 + 3.0));
       f = max(f, uStorm * max(max(cap, face * lace * 0.5), streak * lace * 0.4));
     }
-    col = mix(col, uFoamCol, f * mix(vAtt, 1.0, uStorm) * 0.92);
+    col = mix(col, uFoamCol, f * mix(vAtt, 1.0, uStorm) * 0.92 * (1.0 - kelpMat));
   }
   // The sea laps along the hull: a band of foam that breathes with the chop, wider in rough water, with
   // broken lace drifting off it.
@@ -366,6 +383,10 @@ const seaUniforms = (sky: SkyUniforms) => ({
   uFar: { value: new THREE.Color() },
   uFarMix: { value: 0 },
   uHaze: { value: 1 },
+  uKelp: { value: 0 },
+  uKelpPatch: { value: 0 },
+  uKelpCol: { value: new THREE.Color() },
+  uKelpCol2: { value: new THREE.Color() },
   uFoamCol: { value: new THREE.Color() },
   uFoam: { value: 0 },
   uLift: { value: 1 },
@@ -637,6 +658,9 @@ export class Sea {
     // The Shelf's far water: a deeper blue by day, dimmed with the rest at night.
     u.uFar.value.set(SHELF_FAR.color).multiplyScalar(1 - 0.88 * n).lerp(NIGHT_SEA, 0.3 * n);
     this.night = n;
+    // Kelp Deep's kelp, dimmed with the night like the water.
+    u.uKelpCol.value.set(KELP.color).multiplyScalar(1 - 0.85 * n);
+    u.uKelpCol2.value.set(KELP.shade).multiplyScalar(1 - 0.85 * n);
     this.lamps = lamps;
     u.uFoamCol.value.set(look.foam).lerp(new THREE.Color(0xf6f4f2), n).multiplyScalar(1 - 0.72 * n);
     u.uLift.value = 1 - 0.85 * n;
@@ -675,6 +699,9 @@ export class Sea {
     const shelf = 1 - smooth(0, SHELF_FAR.until, mood);
     u.uFarMix.value = shelf;
     u.uHaze.value = 1 - (1 - SHELF_FAR.haze) * shelf;
+    const kelp = kelpAt(mood);
+    u.uKelp.value = KELP.rafts * kelp;
+    u.uKelpPatch.value = KELP.forest * kelp;
 
     // Clear Shelf nights keep their stars; the low cloud rolls in toward the Drop-off.
     const show = smooth(0.35, 0.65, mood);
