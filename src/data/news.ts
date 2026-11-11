@@ -39,7 +39,7 @@ export interface NewsEntry {
 export const NEWS: NewsEntry[] = [
   {
     id: 5,
-    date: '2026-11-08',
+    date: '2026-11-10',
     title: 'The harbour',
     image: harbour,
     alt: "Looking back at the harbour from the pier by day: the quay across the cove, Top Anglers and the Thanks board on the deck, the Smokehouse and Marlow's striped stall behind a cobbled quay road, and the main street up through the trees to the gate",
