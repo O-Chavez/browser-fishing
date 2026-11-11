@@ -132,6 +132,8 @@ export class World {
   /** At sea: the swell, cloud and spray, and the charter boat everyone stands on. */
   sea: Sea | null = null;
   boat: Boat | null = null;
+  /** At sea: whether the boat is stopped at a marker, where its buoy rides alongside. */
+  atMarker = false;
   /** The sea's roughness (see `seaMood`), easing toward the current depth's. */
   mood = 0;
   private moodTarget = 0;
@@ -1266,6 +1268,7 @@ export class World {
     if (this.sea) {
       // A change of depth rolls the weather in over about three seconds.
       this.mood += (this.moodTarget - this.mood) * Math.min(1, dt);
+      this.sea.setMarker(this.atMarker);
       this.sea.update(t, dt, this.mood);
       this.boat?.update(t, this.mood);
     }

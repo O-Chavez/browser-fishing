@@ -433,6 +433,7 @@ export class Game {
       onDive: (d) => {
         this.seaDepth = d.depth;
         this.world.setDepth(d.depth);
+        this.world.atMarker = d.state === 'ledge';
         const at = d.state === 'ledge' && this.diveHud.view?.state !== 'ledge';
         this.diveHud.set(d);
         if (at) this.diveDue = 'marker';
@@ -442,6 +443,7 @@ export class Game {
       onDiveEnd: (end) => {
         this.diveEnd = end;
         this.diveLast = this.diveHud.view;
+        this.world.atMarker = false;
         this.diveHud.set(null);
         this.diveDue = 'diveend';
         if (this.menuOpen && (this.tab === 'marker' || this.tab === 'headhome')) this.closeMenu();

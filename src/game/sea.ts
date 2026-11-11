@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, WAVES, boatMotion, hullHalfWidth, lightningAt, seaHeight, stormAt, waveAmp, type BoatMotion, type DeepLook } from '../data/sea';
+import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, SHELF_FAR, WAVES, boatMotion, hullHalfWidth, lightningAt, rainAt, seaHeight, stormAt, waveAmp, type BoatMotion, type DeepLook } from '../data/sea';
 import { mulberry } from './env';
+import { Gulls, MarkerBuoy, Rain } from './seaatmo';
 
 /**
  * The open sea around the charter boat. The boat stays still at the origin and this whole frame (the
@@ -57,8 +58,8 @@ void main(){
 }`;
 
 const seaFrag = `
-uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift, uBoatGlow;
-uniform vec3 uShallow, uDeep, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol;
+uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift, uBoatGlow, uFarMix, uHaze;
+uniform vec3 uShallow, uDeep, uFar, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol;
 uniform vec2 uWind;
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -87,11 +88,16 @@ void main(){
   float crest = clamp(vHc / max(uAmpChop, 0.01) * 0.5 + 0.5, 0.0, 1.0);
   float swellCrest = clamp(vHs / max(uAmpSwell, 0.01) * 0.5 + 0.5, 0.0, 1.0);
   vec3 base = mix(uShallow, uDeep, smoothstep(4.0, 90.0, dist));
+  // The Shelf's water deepens to blue toward the horizon.
+  float farOut = uFarMix * smoothstep(10.0, 170.0, dist);
+  base = mix(base, uFar, farOut);
   // Crests catch the light; uLift dims that at night.
   float lit = max(smoothstep(0.55, 1.0, crest), smoothstep(0.6, 1.0, swellCrest) * uStorm);
   base = mix(base, base * 1.3 + vec3(0.02, 0.06, 0.06) * uLift, lit * 0.6);
   vec3 R = reflect(-V, n);
   vec3 sky = mix(uSkyH, uSkyT, pow(clamp(R.y, 0.0, 1.0), 0.6));
+  // Far off, the waves' faces mirror the sky higher up, not the pale haze at the horizon.
+  sky = mix(sky, uSkyT, farOut * 0.85);
   float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
   vec3 col = mix(base, sky, clamp(fres * 0.6 + 0.03, 0.0, 1.0));
   float sp = max(dot(R, uSunDir), 0.0);
@@ -104,18 +110,25 @@ void main(){
     vec2 fp = vWorld.xz;
     vec2 s2 = vec2(fp.x * 0.35, fp.y * 1.3);
     float nz = noise(s2 + vec2(uTime * 0.15, 0.0)) * 0.6 + noise(s2 * 3.1 - vec2(0.0, uTime * 0.3)) * 0.4;
-    float th = 1.0 - uFoam * 0.3;
+    float th = 1.0 - uFoam * 0.3 + 0.1 * uStorm;
     float f = smoothstep(th, th + 0.07, crest + (nz - 0.5) * 0.5) * smoothstep(0.3, 0.6, noise(vec2(fp.x * 1.2, fp.y * 4.0) + 7.0));
+    // In the deep zones' big seas the foam is torn lace, not a sheet: flat pale panels on the swells stood
+    // out against the dark water (worst in the Abyss). Only the whitecaps along the swell's crests stay solid.
+    float lace = smoothstep(0.5, 0.66, noise(fp * 1.9 + vec2(uTime * 0.22, 0.0)) * 0.55 + noise(fp * 5.3 - vec2(0.0, uTime * 0.3)) * 0.45);
+    f *= mix(1.0, lace * 0.75, uStorm);
     if (uStorm > 0.0) {
       // The storm: whitecaps breaking along the swell's crests, foam down its steep faces, and long
       // wind-blown streaks across the water.
       float slope = 1.0 - normalize(vN).y;
       float broken = smoothstep(0.42, 0.72, noise(fp * 0.45 + vec2(uTime * 0.2, 0.0)));
       float cap = smoothstep(0.9 - 0.12 * uStorm, 0.99, swellCrest + (nz - 0.5) * 0.3) * broken;
+      // Along the swell's crest the foam sits on the chop's own crests, with thin lace between them: the top of
+      // a 130 m swell is tens of metres wide, and solid foam across it was the biggest pale panel of all.
+      cap *= mix(0.25 * lace, 1.0, smoothstep(0.55, 0.9, crest)) * (0.35 + 0.65 * lace);
       float face = smoothstep(0.5 - 0.08 * uStorm, 0.7, slope + (nz - 0.5) * 0.2) * broken;
       vec2 along = vec2(dot(fp, uWind), dot(fp, vec2(-uWind.y, uWind.x)));
       float streak = smoothstep(0.62, 0.82, noise(along * vec2(0.05, 0.7) - vec2(uTime * 0.3, 0.0))) * smoothstep(0.35, 0.7, noise(fp * 0.12 + 3.0));
-      f = max(f, uStorm * max(max(cap, face * 0.85), streak * 0.55));
+      f = max(f, uStorm * max(max(cap, face * lace * 0.5), streak * lace * 0.4));
     }
     col = mix(col, uFoamCol, f * mix(vAtt, 1.0, uStorm) * 0.92);
   }
@@ -128,7 +141,7 @@ void main(){
   col = mix(col, uFoamCol, max(hull * 0.9, lace * 0.55));
   // After dark the deck lamps and lit windows glow on the water around the boat.
   col += vec3(1.0, 0.72, 0.42) * uBoatGlow * exp(-hd * 0.55) * (0.06 + 0.14 * hn * crest);
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, dist));
+  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, dist) * uHaze);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -350,6 +363,9 @@ const seaUniforms = (sky: SkyUniforms) => ({
   uWind: { value: new THREE.Vector2(Math.sin((35 * Math.PI) / 180), Math.cos((35 * Math.PI) / 180)) },
   uShallow: { value: new THREE.Color() },
   uDeep: { value: new THREE.Color() },
+  uFar: { value: new THREE.Color() },
+  uFarMix: { value: 0 },
+  uHaze: { value: 1 },
   uFoamCol: { value: new THREE.Color() },
   uFoam: { value: 0 },
   uLift: { value: 1 },
@@ -558,6 +574,11 @@ export class Sea {
   private spray = new Spray();
   private drift = new Spindrift(dotTexture());
   readonly lightning = new Lightning();
+  private rain: Rain;
+  private buoy = new MarkerBuoy();
+  private gulls = new Gulls();
+  private night = 0;
+  private lamps = 0;
   private lastBow = 0;
   /** How fast the bow is dropping into the water (m/s), for the spray on the screen. */
   slam = 0;
@@ -583,16 +604,23 @@ export class Sea {
     this.landU = landUniforms(sky);
     this.land = headland(this.landU);
     this.frame.matrixAutoUpdate = false;
-    this.frame.add(water, this.bank, this.clouds, this.land, this.drift.points, this.lightning.group);
-    this.onBoat.add(this.spray.points);
+    this.rain = new Rain(sky);
+    this.frame.add(water, this.bank, this.clouds, this.land, this.drift.points, this.lightning.group, this.buoy.group, this.gulls.mesh);
+    this.onBoat.add(this.spray.points, this.rain.mesh);
   }
 
   /** Spray is see-through overdraw near the eye; lite graphics drops it. */
   setLite(on: boolean): void {
     this.spray.points.visible = !on;
+    this.rain.setLite(on);
     this.lite = on;
   }
   private lite = false;
+
+  /** Whether the boat is stopped at a marker: its buoy drifts up alongside, and falls astern on sailing on. */
+  setMarker(on: boolean): void {
+    this.buoy.set(on);
+  }
 
   /**
    * Water, cloud and land colours for the time of day and mood. `n`: nightness, `tw`: twilight,
@@ -606,6 +634,10 @@ export class Sea {
     // A touch darker than the pond's water at night, for atmosphere out on open sea.
     u.uShallow.value.copy(base.water).multiplyScalar(1 - 0.9 * n).lerp(NIGHT_SEA, 0.45 * n).lerp(new THREE.Color(look.water).lerp(new THREE.Color(look.nightWater), n), Math.min(1, m * 1.4));
     u.uDeep.value.copy(base.deep).multiplyScalar(1 - 0.88 * n).lerp(NIGHT_SEA, 0.3 * n).lerp(new THREE.Color(look.deep).lerp(new THREE.Color(look.nightDeep), n), Math.min(1, m * 1.4));
+    // The Shelf's far water: a deeper blue by day, dimmed with the rest at night.
+    u.uFar.value.set(SHELF_FAR.color).multiplyScalar(1 - 0.88 * n).lerp(NIGHT_SEA, 0.3 * n);
+    this.night = n;
+    this.lamps = lamps;
     u.uFoamCol.value.set(look.foam).lerp(new THREE.Color(0xf6f4f2), n).multiplyScalar(1 - 0.72 * n);
     u.uLift.value = 1 - 0.85 * n;
     u.uBoatGlow.value = lamps;
@@ -640,6 +672,10 @@ export class Sea {
     u.uStorm.value = stormAt(mood);
     u.uFoam.value = 0.15 + 0.65 * Math.min(1, mood) + 0.2 * stormAt(mood);
 
+    const shelf = 1 - smooth(0, SHELF_FAR.until, mood);
+    u.uFarMix.value = shelf;
+    u.uHaze.value = 1 - (1 - SHELF_FAR.haze) * shelf;
+
     // Clear Shelf nights keep their stars; the low cloud rolls in toward the Drop-off.
     const show = smooth(0.35, 0.65, mood);
     this.cloudU.uShow.value = show;
@@ -673,6 +709,9 @@ export class Sea {
     this.drift.points.visible = storm > 0;
     if (storm > 0) this.drift.update(dt, t, mood, storm * (this.lite ? 0.5 : 1), 0.45 * swell + 0.3);
     this.lightning.update(dt, lightningAt(mood));
+    this.rain.update(t, rainAt(mood), storm, WIND, this.lamps);
+    this.buoy.update(t, dt, mood, Math.max(this.night, this.lamps));
+    this.gulls.update(t, dt, mood, this.night);
   }
 
   /** World height of the water at (x, z): the swell, carried by the sea's frame. */

@@ -183,6 +183,40 @@ export const SCREEN_SPRAY = { from: 0.75, to: 2 };
 /** How stormy the deep sea looks (0..1): foam on the swell's crests and faces, spindrift, streaks; from Kelp Deep to the Abyss. */
 export const stormAt = (mood: number): number => smooth(1, 2.15, mood);
 
+/**
+ * How hard it rains (0..1): from Kelp Deep's first markers (mood 1 is marker 40), a steady rain there, heavier in
+ * the Twilight and lashing in the Abyss.
+ */
+export const rainAt = (mood: number): number => 0.5 * smooth(1, 1.12, mood) + 0.5 * smooth(1.2, 2, mood);
+
+/**
+ * The rain's look, to tune after a play test: how many streaks at the heaviest, the box round the camera they
+ * fall through (m), a streak's width (m) and length (seconds of fall), how fast it falls and how fast the wind
+ * carries it sideways (m/s, in Kelp Deep and in the Abyss), and how solid a streak is.
+ */
+export const RAIN = { streaks: 1600, box: [34, 22, 34] as [number, number, number], width: 0.014, streak: 0.05, fall: 15, blow: [5, 13] as [number, number], opacity: 0.42 };
+
+/**
+ * The marker buoy: where it rides off the starboard side while the boat is stopped at a marker (`rest`, `z`),
+ * how far ahead it comes into view and how far astern it is gone, how quickly it drifts up, and its size, and its lamp's
+ * colour, height and flash (`period` seconds, lit for `duty` of it).
+ */
+export const BUOY = { rest: 3.5, z: -9.5, from: 60, gone: -90, ease: 0.45, lamp: 0xffc860, lampY: 2.08, size: 1.25, period: 2.4, duty: 0.6 };
+
+/**
+ * The Shelf's gulls: how many, how big (1 is life size; they read small at a distance), their wingspan (m), the
+ * circles they fly (radius and height, m; speed, m/s), the moods between which they peel away one by one
+ * (0.6 is the Drop-off's line), and how far into the night they go to roost.
+ */
+export const GULLS = { count: 7, size: 2.2, span: 1.3, radius: [9, 28] as [number, number], height: [4.5, 11] as [number, number], speed: 7, leave: [0.12, 0.5] as [number, number], roost: 0.55 };
+
+/**
+ * The Shelf's water further out: the colour it deepens to toward the horizon by day, and how much of the haze
+ * the far water keeps (1 is the old look, where the sea melted into the sky), so the horizon is a crisp line.
+ * Both ease out toward the Drop-off (gone by mood `until`), where the overcast and fog take over.
+ */
+export const SHELF_FAR = { color: 0x1668a8, haze: 0.2, until: 0.6 };
+
 /** How often lightning strikes (0..1): from the Abyss's first depths (mood 1.85), more often the deeper. */
 export const lightningAt = (mood: number): number => smooth(1.8, 2.2, mood);
 export const screenSprayAt = (mood: number): number => Math.min(1, Math.max(0, (mood - SCREEN_SPRAY.from) / (SCREEN_SPRAY.to - SCREEN_SPRAY.from)));
