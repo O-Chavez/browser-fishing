@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { FISH } from '../data/content';
 import type { MapDef, Spot } from '../data/maps';
-import { groundHeight } from './env';
+import { groundHeight, standHeight } from './env';
 import { mergeStatic } from './merge';
 import { glowTag } from './nightglow';
 import { buildFish } from './fishmodel';
@@ -196,7 +196,8 @@ export class Hub {
     const cos = Math.cos(spot.facing);
     const x = spot.x + lx * cos + lz * sin;
     const z = spot.z - lx * sin + lz * cos;
-    obj.position.set(x, y ?? groundHeight(x, z), z);
+    // On the quay and jetties things stand on the deck, not the lake bed under it.
+    obj.position.set(x, y ?? standHeight(x, z), z);
     obj.rotation.y = spot.facing;
     this.group.add(obj);
     return obj;
@@ -207,7 +208,7 @@ export class Hub {
     const cos = Math.cos(spot.facing);
     const x = spot.x + lx * cos + lz * sin;
     const z = spot.z - lx * sin + lz * cos;
-    return out.set(x, groundHeight(x, z), z);
+    return out.set(x, standHeight(x, z), z);
   }
 
   private buildStall(shop: Spot, npcSpot: Spot): void {
@@ -240,6 +241,17 @@ export class Hub {
       m.position.set(0, 2.45, -0.3);
       m.castShadow = true;
       stall.add(m);
+    }
+
+    // A lantern on each front post, lit at night like the lamp posts.
+    for (const lx of [-1.5, 1.5]) {
+      const lantern = ball(0.12, 0xffd27a);
+      const lm = lantern.material as THREE.MeshLambertMaterial;
+      lm.emissive.set(0xffb84a);
+      this.lampMats.push(lm);
+      lantern.position.set(lx, 2.05, 1.05);
+      glowTag(lantern, 0.75);
+      stall.add(lantern);
     }
 
     const sign = textPlane(2.4, 0.6, 512);
@@ -384,9 +396,10 @@ export class Hub {
   }
 
   private buildProps(): void {
-    // Lamp posts along the path from the dock, and around the wider plaza
-    const lit = new Set(['2.4,18', '-2.4,18', '2.4,30', '-12,26']);
-    const posts = [[-2.4, 14], [2.4, 14], [-2.4, 18], [2.4, 18], [-9, 36], [9, 36], [-12, 26], [13, 26], [-2.4, 30], [2.4, 30]];
+    // Lamp posts on the quay and jetty, up the main street to the square, and one each at Reed's lane and the campfire
+    // ramp (docs/map-rework/harbour.json; the village's own posts are in town.ts). Five carry a point light.
+    const lit = new Set(['-4,11.2', '4,11.2', '8.3,4.5', '3.6,27.5', '-19,5']);
+    const posts = [[-4, 11.2], [4, 11.2], [-9.5, 13.8], [9.8, 13.8], [8.3, 4.5], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19, 5], [18.5, 5.5]];
     for (const [x, z] of posts) {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
@@ -407,22 +420,22 @@ export class Hub {
       this.place(lamp, { x, z, facing: 0 });
       this.fixed.push({ x, z, r: 0.2 });
     }
-    // Barrels and crates around the stall
+    // Barrels and crates on the quay deck: a working waterfront, by the stall's end of the quay and at its east corner.
     const barrelGeo = new THREE.LatheGeometry(
       [[0.26, 0], [0.34, 0.2], [0.36, 0.45], [0.34, 0.7], [0.26, 0.9]].map(([x, y]) => new THREE.Vector2(x, y)),
       14,
     );
-    for (const [x, z, s] of [[8.4, 19.2, 1], [8.7, 20.3, 0.85], [3.3, 17.5, 1]]) {
+    for (const [x, z, s] of [[-8, 13.6, 1], [-8.7, 13.9, 0.85], [12.6, 12.4, 1]]) {
       const b = new THREE.Mesh(barrelGeo, mat(0x8a5a30));
       b.scale.setScalar(s);
       b.castShadow = true;
       this.place(b, { x, z, facing: 0 });
       this.fixed.push({ x, z, r: 0.38 * s });
     }
-    const crates = [[7.6, 23.6, 0.4], [8.3, 23.9, 1.1]] as const;
+    const crates = [[-6.5, 14.1, 0.4], [12.1, 11.7, 1.1]] as const;
     for (const [x, z, rot] of crates) {
       const c = rbox(0.8, 0.7, 0.8, 0x9c7a4a, 0.05);
-      this.place(c, { x, z, facing: rot }, 0, 0, groundHeight(x, z) + 0.35);
+      this.place(c, { x, z, facing: rot }, 0, 0, standHeight(x, z) + 0.35);
       this.fixed.push({ x, z, r: 0.55 });
     }
   }
@@ -627,8 +640,8 @@ export class Hub {
     g.add(this.fireLight);
     this.place(g, spot);
     this.fixed.push({ x: spot.x, z: spot.z, r: 0.8 });
-    // Benches around the fire, leaving the side facing the plaza open.
-    for (const a of [Math.PI, -Math.PI / 2, 0]) {
+    // Benches around the fire, leaving the side facing the water (-x, the cove) open.
+    for (const a of [Math.PI, Math.PI / 2, 0]) {
       const bx = spot.x + Math.sin(a) * 2.5;
       const bz = spot.z + Math.cos(a) * 2.5;
       const bench = new THREE.Group();

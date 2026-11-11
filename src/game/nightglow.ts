@@ -28,6 +28,8 @@ interface Source {
 
 /** Pool brightness per unit of light intensity, matched by eye to what the real light does to each surface. */
 const POOL_GAIN = { ground: 0.17, deck: 0.015 };
+/** How far a pool lies above the ground: clear of the cobbles (`COBBLE_LIFT` in town.ts), which sit on it too. */
+const POOL_LIFT = 0.09;
 
 const quad = (n: number, attrs: Record<string, number>): THREE.InstancedBufferGeometry => {
   const g = new THREE.InstancedBufferGeometry();
@@ -199,7 +201,7 @@ export class NightGlow {
           const x = c.x + u;
           const z = c.z + w;
           // Dock lights are clipped to the planks in the shader; ground lights stop at the water's edge.
-          pos.push(x, (deck ? DOCK_TOP : standHeight(x, z)) + 0.04, z);
+          pos.push(x, (deck ? DOCK_TOP : standHeight(x, z)) + POOL_LIFT, z);
           rel.push(u, w);
           idx.push(i);
           edge.push(deck || !isWater(x, z) ? 1 : 0);
@@ -229,8 +231,10 @@ export class NightGlow {
       { uAmp: { value: this.poolAmp }, uCol: { value: this.poolCol }, uShape: { value: this.poolShape }, uDock: { value: docks } },
     );
     m.polygonOffset = true;
-    m.polygonOffsetFactor = -2;
-    m.polygonOffsetUnits = -2;
+    // A little more depth bias than the cobbles' (town.ts): with the lift, the pool lies on them, and it stays
+    // small so the glow never shows through a post or a wall standing on the ground.
+    m.polygonOffsetFactor = -3;
+    m.polygonOffsetUnits = -3;
     return new THREE.Mesh(g, m);
   }
 

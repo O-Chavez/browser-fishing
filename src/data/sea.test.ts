@@ -118,13 +118,13 @@ describe('the deck', () => {
     expect(isWater(0, 0)).toBe(false);
     expect(inHull(0, 0)).toBe(true);
     // The pond's main pier, which overlaps the boat's spot, is gone.
-    expect(onDock(0, 10)).toBe(false);
+    expect(onDock(0, 5)).toBe(false);
   });
 
   it('gives back the pond when leaving the sea', () => {
     setAtSea(true);
     setAtSea(false);
-    expect(onDock(0, 10)).toBe(true);
+    expect(onDock(0, 5)).toBe(true);
   });
 
   it('spawns players on the deck of the sea map', () => {
