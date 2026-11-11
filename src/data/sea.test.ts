@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BOAT, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, onDeck, screenSprayAt, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
+import { BOAT, DEEP_LOOKS, deepLookAt, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, onDeck, screenSprayAt, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
 import { MAPS } from './maps';
 import { isWater, onDock, setAtSea, standHeight } from '../game/env';
 
@@ -131,5 +131,29 @@ describe('the deck', () => {
     const sea = MAPS.find((m) => m.sea)!;
     expect(onDeck(sea.spawn.x, sea.spawn.z)).toBe(true);
     expect(Math.hypot(BOAT.len / 2, BOAT.beam)).toBeLessThan(sea.radius);
+  });
+});
+
+describe('deep zone looks', () => {
+  it('keeps the Drop-off look up to its end and gives each zone its own in its middle', () => {
+    expect(deepLookAt(seaMood(1))).toBe(DEEP_LOOKS.dropoff);
+    expect(deepLookAt(seaMood(40))).toBe(DEEP_LOOKS.dropoff);
+    expect(deepLookAt(seaMood(60))).toBe(DEEP_LOOKS.kelp);
+    expect(deepLookAt(seaMood(110))).toBe(DEEP_LOOKS.twilight);
+    expect(deepLookAt(seaMood(200))).toBe(DEEP_LOOKS.abyss);
+    expect(deepLookAt(seaMood(350))).toBe(DEEP_LOOKS.abyss);
+  });
+  it('blends across a zone line', () => {
+    const l = deepLookAt(seaMood(151));
+    const { twilight, abyss } = DEEP_LOOKS;
+    expect(l.lamps).toBeGreaterThan(twilight.lamps);
+    expect(l.lamps).toBeLessThan(abyss.lamps);
+    expect(l.hemi).toBeLessThan(twilight.hemi);
+    expect(l.hemi).toBeGreaterThan(abyss.hemi);
+    for (const s of [16, 8, 0]) {
+      const ch = (h: number) => (h >> s) & 255;
+      expect(ch(l.skyH)).toBeGreaterThanOrEqual(Math.min(ch(twilight.skyH), ch(abyss.skyH)));
+      expect(ch(l.skyH)).toBeLessThanOrEqual(Math.max(ch(twilight.skyH), ch(abyss.skyH)));
+    }
   });
 });

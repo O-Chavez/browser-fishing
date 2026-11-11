@@ -21,6 +21,7 @@ import harbour from '../assets/images/news/harbour.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
 import reelFight from '../assets/images/news/reel-fight.jpg';
+import seaWeather from '../assets/images/news/sea-weather.jpg';
 
 export interface NewsEntry {
   /** Release number: unique, and higher than every entry below it. */
@@ -37,6 +38,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 6,
+    date: '2026-11-10',
+    title: 'Weather on the charters',
+    image: seaWeather,
+    alt: "Captain Reed's blue charter boat, the Pelican, on the Shelf at dusk: a red-and-white marker buoy with a lit lamp rides the swell beside it, gulls wheel overhead and the lighthouse stands on the far headland under a pink sky",
+    body: [
+      "The open sea has had a makeover. <b>Captain Reed's</b> boat has a name on her bows, a proper bridge with Reed at the wheel, a mast with running lights and a deck full of gear, and after dark her windows and lamps glow on the water. Overhead there's a moon with its path on the sea, brighter stars and banks of cloud on the horizon.",
+      "Every zone now looks like its own place. <b>The Shelf</b> is blue to a clear horizon, with gulls wheeling round the boat. Past <b>the Drop-off</b> the rain starts: <b>Kelp Deep</b> has rafts of golden kelp drifting by over the dark forest below, <b>the Twilight</b> is a standing dusk of rose and violet, and <b>the Abyss</b> is dark by day, with the boat's lamps lit against the storm.",
+      "At each <b>marker</b>, look to starboard: a red-and-white buoy with a flashing lamp comes alongside while you choose to <b>Head home</b> or <b>Sail on</b>.",
+    ],
+  },
   {
     id: 5,
     date: '2026-11-10',

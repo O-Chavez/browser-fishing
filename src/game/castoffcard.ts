@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { gloomAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
+import { deepLookAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
 import { nightness, twilight } from './daynight';
 
 /**
@@ -40,16 +40,12 @@ export function cardColours(place: Place, depth: number | null, f: number): Card
   if (depth !== null) {
     const mood = seaMood(depth);
     const m = Math.min(1, mood);
-    const gloom = gloomAt(mood);
-    const keep = nightSkyKeep(n, nightDarkAt(mood));
-    sky.lerp(c(0xc8bcc6).multiplyScalar(keep), m);
-    top.lerp(c(0x8c86a0).multiplyScalar(keep), m);
-    sky.multiplyScalar(1 - 0.4 * gloom);
-    top.multiplyScalar(1 - 0.45 * gloom);
-    const dim = (h: number, k: number) => c(h).multiplyScalar(k);
-    const seaGloom = 1 - 0.35 * gloom;
-    water.copy(c(place.water)).multiplyScalar(1 - 0.9 * n).lerp(c(0x07121f), 0.45 * n).lerp(dim(0x3f6674, 1 - 0.75 * n), Math.min(1, m * 1.4)).multiplyScalar(seaGloom);
-    deep.copy(c(place.deep)).multiplyScalar(1 - 0.88 * n).lerp(c(0x07121f), 0.3 * n).lerp(dim(0x2a3a4e, 1 - 0.67 * n), Math.min(1, m * 1.4)).multiplyScalar(seaGloom);
+    const look = deepLookAt(mood);
+    const keep = nightSkyKeep(n, nightDarkAt(mood)) * (1 + (look.nightLift - 1) * n);
+    sky.lerp(c(look.skyH).multiplyScalar(keep), m);
+    top.lerp(c(look.skyT).multiplyScalar(keep), m);
+    water.copy(c(place.water)).multiplyScalar(1 - 0.9 * n).lerp(c(0x07121f), 0.45 * n).lerp(c(look.water).lerp(c(look.nightWater), n), Math.min(1, m * 1.4));
+    deep.copy(c(place.deep)).multiplyScalar(1 - 0.88 * n).lerp(c(0x07121f), 0.3 * n).lerp(c(look.deep).lerp(c(look.nightDeep), n), Math.min(1, m * 1.4));
   }
   const { tint, nightLift } = CAST_OFF_CARD;
   const out = (mine: THREE.Color, day: number) =>
