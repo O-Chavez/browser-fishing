@@ -27,7 +27,7 @@ import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { Boat } from './boat';
 import { Sea } from './sea';
-import { gloomAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
+import { DEEP_LOOKS, deepLookAt, gloomAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
 import { FX } from './fx';
 import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
@@ -504,20 +504,18 @@ export class World {
     const nightT = new THREE.Color(0x050a19);
     u.uSkyH.value.copy(b.sky).lerp(nightH, n).lerp(new THREE.Color(0xff8a4a), tw * 0.7);
     u.uSkyT.value.copy(b.top).lerp(nightT, n).lerp(new THREE.Color(0x5a4a8a), tw * 0.35);
-    // At sea the mood brings in a warm lilac-grey overcast and closer fog (never cold steel grey).
+    // At sea the mood brings in a warm lilac-grey overcast and closer fog (never cold steel grey); past the
+    // Drop-off each deep zone has its own sky (DEEP_LOOKS).
     const m = this.sea ? Math.min(1, this.mood) : 0;
+    const look = deepLookAt(this.sea ? this.mood : 0);
     if (m > 0) {
       // Night out at sea darkens steeply with the league (SEA_NIGHT_DARK).
-      const keep = nightSkyKeep(n, nightDarkAt(this.mood));
-      u.uSkyH.value.lerp(new THREE.Color(0xc8bcc6).multiplyScalar(keep), m);
-      u.uSkyT.value.lerp(new THREE.Color(0x8c86a0).multiplyScalar(keep), m);
+      const keep = nightSkyKeep(n, nightDarkAt(this.mood)) * (1 + (look.nightLift - 1) * n);
+      u.uSkyH.value.lerp(new THREE.Color(look.skyH).multiplyScalar(keep), m);
+      u.uSkyT.value.lerp(new THREE.Color(look.skyT).multiplyScalar(keep), m);
     }
-    // Past the Drop-off the deep zones darken and the fog closes in.
+    // Past the Drop-off the fog closes in.
     const gloom = this.sea ? gloomAt(this.mood) : 0;
-    if (gloom > 0) {
-      u.uSkyH.value.multiplyScalar(1 - 0.4 * gloom);
-      u.uSkyT.value.multiplyScalar(1 - 0.45 * gloom);
-    }
     u.uSunVis.value = 1 - 0.85 * m;
     u.uFogNear.value = 30 - 18 * m - 6 * gloom;
     u.uFogFar.value = 280 - 90 * m - 70 * gloom;
@@ -538,16 +536,18 @@ export class World {
     u.uShallow.value.copy(b.water).multiplyScalar(1 - 0.75 * n);
     u.uDeep.value.copy(b.deep).multiplyScalar(1 - 0.67 * n);
     u.uSunCol.value.set(0xfff2d8).lerp(new THREE.Color(0xff9a55), tw).multiplyScalar(1 - n);
-    // No sun at all through the deep zones' storm cloud.
-    if (gloom > 0) u.uSunCol.value.multiplyScalar(1 - 0.9 * gloom);
+    // No sun glare through the deep zones' cloud.
+    u.uSunCol.value.multiplyScalar(look.glare);
     const el = 0.38 * (1 - n) + 0.13 * n + 0.1 * tw;
     u.uSunDir.value.set(SUN_DIR.x, el, SUN_DIR.z).normalize();
-    this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * (1 - 0.3 * gloom) + 2.5 * flash;
-    this.hemi.color.copy(b.top).lerp(new THREE.Color(0x8c86a0), m).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(0x7088cc), n);
+    // By day each deep zone sets its own light (as a share of the Drop-off's); nights dim with the gloom.
+    const dayK = (v: number, at1: number, nightK: number) => (1 - n) * (v / at1) + n * nightK;
+    this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * dayK(look.hemi, DEEP_LOOKS.dropoff.hemi, 1 - 0.3 * gloom) + 2.5 * flash;
+    this.hemi.color.copy(b.top).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(look.hemiCol), m).lerp(new THREE.Color(0x7088cc), n);
     // At sea the light bouncing up comes off the deck's warm planks, so the shaded inside of the rails reads warm, not grey.
     if (this.sea) this.hemi.groundColor.copy(b.water).multiplyScalar(0.5).lerp(new THREE.Color(0xb08458), 0.75).lerp(new THREE.Color(0x1d2a48), n);
     else this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(new THREE.Color(0x1d2a48), n);
-    this.sun.intensity = (3 * (1 - n) + 0.72 * n) * (1 - 0.55 * m) * (1 - 0.4 * gloom);
+    this.sun.intensity = (3 * (1 - n) + 0.72 * n) * (1 - 0.55 * m) * dayK(look.sun, DEEP_LOOKS.dropoff.sun, 1 - 0.4 * gloom);
     this.sun.color.set(0xfff0d6).lerp(new THREE.Color(0xff9a55), tw * 0.8).lerp(new THREE.Color(0x84a0ff), n);
     this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5).lerp(new THREE.Color(0xc4bac6).multiplyScalar(1 - 0.7 * n), m);
     // Clear nights at sea get the pond's full starfield; the overcast rolling in toward the Drop-off hides it.
@@ -559,8 +559,10 @@ export class World {
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
-    this.boat?.setNight(n);
-    this.sea?.setColors(n, tw, b);
+    // The dark zones light the boat's lamps by day.
+    const lamps = Math.max(n, look.lamps);
+    this.boat?.setNight(lamps);
+    this.sea?.setColors(n, tw, b, look, lamps);
     for (const mt of this.mtMats) mt.mat.color.copy(mt.base).multiplyScalar(1 - 0.75 * n).lerp(u.uSkyH.value, mt.haze);
 
     const fl = this.flies;

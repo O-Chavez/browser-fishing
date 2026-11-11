@@ -31,7 +31,7 @@ export const zoneAt = (depth: number): SeaZone => {
  * lines. Colours stop changing at 1, the end of the Drop-off; past it the swell, spray and roll keep
  * building: treacherous from the Twilight, insanity in the Abyss, which keeps climbing the deeper the
  * dive (Oscar, 2026-10-31: save the big seas for the deep zones, and make the Abyss crazy).
- * Kelp Deep and below keep the Drop-off palette until their own looks are decided.
+ * Past the Drop-off each zone has its own colours (`DEEP_LOOKS`).
  */
 export const MOOD_POINTS: [depth: number, mood: number][] = [
   [1, 0],
@@ -62,11 +62,87 @@ const smooth = (a: number, b: number, x: number): number => {
 };
 
 /**
- * Past mood 1, how far the deep zones have sunk into gloom (0..1, by mood 2): the sky, sea and fog
- * darken and close in. A first pass at the deep look (Oscar, 2026-10-31: "dark and gloomy, full of wave
- * sprays") until Kelp Deep, the Twilight and the Abyss get their own.
+ * Past mood 1, how far the deep zones have sunk into gloom (0..1, by mood 2): the fog closes in, the music
+ * ducks and the night light dims. The colours themselves come from `DEEP_LOOKS`.
  */
 export const gloomAt = (mood: number): number => Math.min(1, Math.max(0, mood - 1));
+
+/** A deep zone's daytime colours and light. Colours are sRGB hex. */
+export interface DeepLook {
+  /** Sky at the horizon (also the fog) and overhead. */
+  skyH: number;
+  skyT: number;
+  /** Water near the boat and far off. */
+  water: number;
+  deep: number;
+  /** The same two at full night, and how many times brighter than the day's colours the little night sky light is. */
+  nightWater: number;
+  nightDeep: number;
+  nightLift: number;
+  /** The cloud deck's lit tops and shaded undersides. */
+  cloudTop: number;
+  cloudBot: number;
+  foam: number;
+  /** The sky light's colour and strength, and the sun's strength, by day. */
+  hemiCol: number;
+  hemi: number;
+  sun: number;
+  /** How much of the sun's glare on the water is left (0..1). */
+  glare: number;
+  /** How far the boat's lamps are lit by day (0..1). */
+  lamps: number;
+}
+
+/**
+ * The deep zones' looks (Oscar, 2026-11-10, picked from in-game mockups): the Drop-off's lilac overcast carries on
+ * over Kelp Deep and only the water turns kelp green; the Twilight is a standing dusk, a rose horizon under indigo
+ * cloud over violet water; the Abyss is dark plum by day with the boat's lamps lit, and at night keeps enough light
+ * on the water to see the swell by (Oscar, 2026-11-10: its night was too dark to see much). `dropoff` is the look the
+ * Drop-off ends on (mood 1), which the Shelf's sky blends toward. One block to tweak after a play test.
+ */
+export const DEEP_LOOKS = {
+  dropoff: { skyH: 0xc8bcc6, skyT: 0x8c86a0, water: 0x3f6674, deep: 0x2a3a4e, nightWater: 0x10191d, nightDeep: 0x0e131a, nightLift: 1, cloudTop: 0xc4bac6, cloudBot: 0x8a8094, foam: 0xf6f4f2, hemiCol: 0xc6c3d0, hemi: 1.54, sun: 1.35, glare: 1, lamps: 0 },
+  kelp: { skyH: 0xc2bcc0, skyT: 0x7f8496, water: 0x256b58, deep: 0x0c3530, nightWater: 0x091b16, nightDeep: 0x041110, nightLift: 1, cloudTop: 0xbcb6ba, cloudBot: 0x7c7a88, foam: 0xf6f4f2, hemiCol: 0xc8c8d0, hemi: 1.45, sun: 1.15, glare: 0, lamps: 0 },
+  twilight: { skyH: 0xd79a8c, skyT: 0x4a3f78, water: 0x4a4f86, deep: 0x232450, nightWater: 0x121421, nightDeep: 0x0c0c1a, nightLift: 1, cloudTop: 0x9a7fa6, cloudBot: 0x4f456f, foam: 0xf6f4f2, hemiCol: 0xd0b8cc, hemi: 1.15, sun: 0.8, glare: 0, lamps: 0.5 },
+  abyss: { skyH: 0x3d2f4d, skyT: 0x0d0a16, water: 0x1a1b30, deep: 0x07070f, nightWater: 0x222c4c, nightDeep: 0x121830, nightLift: 8, cloudTop: 0x3a2f48, cloudBot: 0x17121f, foam: 0xb8b4c8, hemiCol: 0xa89cc8, hemi: 0.5, sun: 0.25, glare: 0, lamps: 1 },
+} satisfies Record<string, DeepLook>;
+
+/**
+ * Where each look is fully in, by marker; between two stops the looks blend, so a zone's colours ease in over the
+ * markers either side of its line (41, 81, 151) instead of snapping.
+ */
+export const DEEP_LOOK_STOPS: [depth: number, look: DeepLook][] = [
+  [40, DEEP_LOOKS.dropoff],
+  [52, DEEP_LOOKS.kelp],
+  [74, DEEP_LOOKS.kelp],
+  [92, DEEP_LOOKS.twilight],
+  [140, DEEP_LOOKS.twilight],
+  [162, DEEP_LOOKS.abyss],
+];
+
+const mixHex = (a: number, b: number, t: number): number => {
+  const ch = (s: number) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * t);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+};
+
+/** The deep look for a sea mood: the Drop-off's up to mood 1, then each zone's, blended between `DEEP_LOOK_STOPS`. */
+export function deepLookAt(mood: number): DeepLook {
+  const s = DEEP_LOOK_STOPS;
+  if (mood <= seaMood(s[0][0])) return s[0][1];
+  for (let i = 1; i < s.length; i++) {
+    const m1 = seaMood(s[i][0]);
+    if (mood > m1) continue;
+    const a = s[i - 1][1], b = s[i][1];
+    if (a === b) return a;
+    const m0 = seaMood(s[i - 1][0]);
+    const t = (mood - m0) / (m1 - m0);
+    const out = {} as DeepLook;
+    for (const k of Object.keys(a) as (keyof DeepLook)[])
+      out[k] = k === 'nightLift' || k === 'hemi' || k === 'sun' || k === 'glare' || k === 'lamps' ? a[k] + (b[k] - a[k]) * t : mixHex(a[k], b[k], t);
+    return out;
+  }
+  return s[s.length - 1][1];
+}
 
 /**
  * How dark the sky gets at night out at sea (Oscar, 2026-10-31: much darker the further out). One knob

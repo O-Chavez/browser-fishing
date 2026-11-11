@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, WAVES, boatMotion, gloomAt, hullHalfWidth, lightningAt, seaHeight, stormAt, waveAmp, type BoatMotion } from '../data/sea';
+import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, WAVES, boatMotion, hullHalfWidth, lightningAt, seaHeight, stormAt, waveAmp, type BoatMotion, type DeepLook } from '../data/sea';
 import { mulberry } from './env';
 
 /**
@@ -596,22 +596,22 @@ export class Sea {
 
   /**
    * Water, cloud and land colours for the time of day and mood. `n`: nightness, `tw`: twilight,
-   * `base`: the location's water and deep colours.
+   * `base`: the location's water and deep colours, `look`: the deep zone's colours for this mood,
+   * `lamps`: how far the boat's lamps are lit, for their glow on the water.
    */
-  setColors(n: number, tw: number, base: { water: THREE.Color; deep: THREE.Color }): void {
+  setColors(n: number, tw: number, base: { water: THREE.Color; deep: THREE.Color }, look: DeepLook, lamps: number): void {
     const m = Math.min(1, this.mood);
-    const gloom = 1 - 0.35 * gloomAt(this.mood);
     const u = this.u;
     const dim = (h: number, k: number) => new THREE.Color(h).multiplyScalar(k);
     // A touch darker than the pond's water at night, for atmosphere out on open sea.
-    u.uShallow.value.copy(base.water).multiplyScalar(1 - 0.9 * n).lerp(NIGHT_SEA, 0.45 * n).lerp(dim(0x3f6674, 1 - 0.75 * n), Math.min(1, m * 1.4)).multiplyScalar(gloom);
-    u.uDeep.value.copy(base.deep).multiplyScalar(1 - 0.88 * n).lerp(NIGHT_SEA, 0.3 * n).lerp(dim(0x2a3a4e, 1 - 0.67 * n), Math.min(1, m * 1.4)).multiplyScalar(gloom);
-    u.uFoamCol.value.set(0xf6f4f2).multiplyScalar(1 - 0.72 * n);
+    u.uShallow.value.copy(base.water).multiplyScalar(1 - 0.9 * n).lerp(NIGHT_SEA, 0.45 * n).lerp(new THREE.Color(look.water).lerp(new THREE.Color(look.nightWater), n), Math.min(1, m * 1.4));
+    u.uDeep.value.copy(base.deep).multiplyScalar(1 - 0.88 * n).lerp(NIGHT_SEA, 0.3 * n).lerp(new THREE.Color(look.deep).lerp(new THREE.Color(look.nightDeep), n), Math.min(1, m * 1.4));
+    u.uFoamCol.value.set(look.foam).lerp(new THREE.Color(0xf6f4f2), n).multiplyScalar(1 - 0.72 * n);
     u.uLift.value = 1 - 0.85 * n;
-    u.uBoatGlow.value = n;
+    u.uBoatGlow.value = lamps;
     const cloud = new THREE.Color(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
-    this.cloudU.uTop.value.copy(cloud).lerp(dim(0xc4bac6, 1 - 0.7 * n), m).multiplyScalar(gloom);
-    this.cloudU.uBot.value.copy(cloud).multiplyScalar(0.93).lerp(dim(0x8a8094, 1 - 0.7 * n), m).multiplyScalar(gloom * gloom);
+    this.cloudU.uTop.value.copy(cloud).lerp(dim(look.cloudTop, 1 - 0.7 * n), m);
+    this.cloudU.uBot.value.copy(cloud).multiplyScalar(0.93).lerp(dim(look.cloudBot, 1 - 0.7 * n), m);
     // The horizon's cumulus: white by day, peach at dusk, moonlit slate at night, its shaded side toward the sky's own colour.
     this.bankU.uTop.value.set(0xffffff).lerp(new THREE.Color(0x3a4668), n).lerp(new THREE.Color(0xffc09a), tw * 0.6);
     this.bankU.uBot.value.copy(this.bankU.uTop.value).multiplyScalar(0.78).lerp(u.uSkyT.value, 0.35);
