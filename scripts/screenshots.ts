@@ -147,11 +147,11 @@ try {
   // Two friends chatting on the pier head at sunset, seen by a third player.
   if (want('dock') || want('night')) {
     const [maya, theo, cam] = [await join('Maya', 'shots'), await join('Theo', 'shots'), await join('Cam', 'shots')];
-    const M = { x: -0.75, z: -5.2 }, T = { x: 0.75, z: -5.2 }, C = { x: 0.3, z: -1.6 };
+    const M = { x: -0.75, z: -7.8 }, T = { x: 0.75, z: -7.8 }, C = { x: 0.3, z: -4.2 };
     // Each faces halfway between the other and the camera, so both faces show.
     await game(maya, `G.teleport(${M.x}, ${M.z}); G.look(${yawTo(M.x, M.z, (T.x + C.x) / 2, (T.z + C.z) / 2)}, 0);`);
     await game(theo, `G.teleport(${T.x}, ${T.z}); G.look(${yawTo(T.x, T.z, (M.x + C.x) / 2, (M.z + C.z) / 2)}, 0);`);
-    await game(cam, `G.teleport(${C.x}, ${C.z}); G.look(${yawTo(C.x, C.z, 0, -5.2)}, 0.02); G.day(0.5);`);
+    await game(cam, `G.teleport(${C.x}, ${C.z}); G.look(${yawTo(C.x, C.z, 0, -7.8)}, 0.02); G.day(0.5);`);
     await sleep(1500);
     await maya.keyboard.press('Enter');
     await maya.keyboard.type('the pier at sunset never gets old');
@@ -170,7 +170,7 @@ try {
   // A real cast with top gear, caught mid-fight with the tension ring showing.
   if (want('reel')) {
     const p = await join('Reeler', 'reel');
-    await game(p, `G.teleport(0.2, -5.4); G.look(0.15, -0.12); G.day(0.44);`);
+    await game(p, `G.teleport(0.2, -8.4); G.look(0.15, -0.12); G.day(0.44);`);
     await sleep(800);
     let shot = false;
     for (let attempt = 0; attempt < 6 && !shot; attempt++) {
@@ -215,24 +215,24 @@ try {
     await leave(p);
   }
 
-  // Seven players in different outfits on the cross-pier, facing a camera on the main pier. The sun
-  // always sits toward -z, so looking +z lights them from the front.
+  // Seven players in different outfits along the quay behind the pier root, facing a camera on the main pier.
+  // The sun always sits toward -z, so looking +z lights them from the front.
   if (want('outfits')) {
     const names = ['Dee', 'Juno', 'Rex', 'Ivy', 'Nell', 'Kai', 'Pip'];
     const models: Page[] = [];
     for (const n of names) models.push(await join(n, 'outfits'));
     const cam = await join('Cam', 'outfits');
-    const C = { x: 0, z: 0.4 };
+    const C = { x: 0, z: 6.5 };
     for (let i = 0; i < names.length; i++) {
       // Looking +z puts +x on the left of the frame. A shallow arc keeps the ends from looking far away.
       const x = ((names.length - 1) / 2 - i) * 1.2;
-      const z = 4.6 - Math.abs(x) * 0.1;
+      const z = 12.2 - Math.abs(x) * 0.1;
       await game(models[i], `G.teleport(${x}, ${z}); G.look(${yawTo(x, z, C.x, C.z)}, 0);`);
     }
     await game(cam, `G.teleport(${C.x}, ${C.z}); G.look(Math.PI, -0.04); G.day(0.45);`);
     await sleep(2500);
     await hideHud(cam);
-    // Cropped above the dock's crate, which sits between the camera and the group.
+    // Cropped to the group and the harbour front behind it.
     await shoot(cam, 'outfits', { x: 0, y: 20, width: 1600, height: 715 });
     await leave(cam, ...models);
   }

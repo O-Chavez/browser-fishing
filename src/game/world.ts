@@ -8,16 +8,21 @@ import type { MapDef } from '../data/maps';
 import {
   DOCK_RECTS,
   type DockRect,
+  WATER_ORDER,
   groundHeight,
   innerRadius,
   isWater,
   mulberry,
   onDock,
   padWeight,
+  setAprons,
+  setIslet,
+  setWorn,
+  dirtWeight,
+  grassWeight,
   setAtSea,
   setPad,
   smooth,
-  WATER_ORDER,
   waveHeight,
 } from './env';
 import { Hub } from './hub';
@@ -177,6 +182,7 @@ export class World {
   private flyBase: { x: number; y: number; z: number; ph: number; sp: number }[] = [];
   private dockLights: THREE.PointLight[] = [];
   private dockGlow = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+  private islet: { x: number; z: number; r: number } | null = null;
   private base = { water: new THREE.Color(), deep: new THREE.Color(), sky: new THREE.Color(), top: new THREE.Color(), grass: new THREE.Color() };
   /** Set (0..1 of the day) to freeze the time of day; null follows the shared clock. */
   dayOverride: number | null = null;
@@ -594,6 +600,14 @@ export class World {
   setLocation(loc: Location, map: MapDef): void {
     this.indoor = !!map.casino;
     setPad(map.pad);
+    setAprons(map.aprons ?? []);
+    setIslet(map.islet ?? null);
+    this.islet = map.islet ?? null;
+    // The town's ground is worn to dirt along its paths, round the square and in front of the two stalls.
+    setWorn(map.town.paths.length ? {
+      paths: map.town.paths,
+      discs: [{ ...map.town.square }, ...[map.vendor.shop, map.smokehouse].filter((s) => !!s).map((s) => ({ x: s!.x, z: s!.z, r: 2.6 }))],
+    } : null);
     setAtSea(!!map.sea);
     this.sea = null;
     this.boat = null;
@@ -720,11 +734,12 @@ export class World {
         const n =
           0.88 + 0.24 * (Math.sin(x * 0.4) * Math.cos(z * 0.37) * 0.5 + 0.5);
         c.copy(sand).multiplyScalar(0.65 + 0.35 * smooth(-1.2, 0.4, y));
-        const gm = smooth(0.3, 1.6, y);
+        // A town's pad is grass too, worn to dirt along its paths (`dirtWeight`).
+        const dw = dirtWeight(x, z);
+        const gm = dw < 1 ? grassWeight(x, z, y) / (1 - 0.85 * dw) : smooth(0.3, 1.6, y);
         c.lerp(tmp.copy(grass).multiplyScalar(n), gm);
         if (y > 12) c.lerp(rock, Math.min(1, (y - 12) / 14));
-        const pw = padWeight(x, z);
-        if (pw > 0) c.lerp(dirt, pw * 0.85);
+        if (dw > 0) c.lerp(dirt, dw * 0.85);
         col.push(c.r, c.g, c.b);
       }
     }
@@ -754,6 +769,11 @@ export class World {
   private buildForest(loc: Location, map: MapDef): void {
     const rnd = mulberry(3);
     const clear = map.pad.r + 6;
+    const cleared = (x: number, z: number): boolean => (map.clearings ?? []).some((c) => Math.hypot(x - c.x, z - c.z) < c.r);
+    // The shore is sampled by angle; keeping a sample in proportion to the shore's radius there spreads rocks,
+    // reeds and lily pads evenly per metre of shoreline, so the cove's short shore isn't crowded.
+    const SHORE_MAX = 56;
+    const alongShore = (th: number): boolean => rnd() * SHORE_MAX < innerRadius(th);
     const N = 300;
     const up = new THREE.Vector3(0, 1, 0);
     const trunkGeo = new THREE.CylinderGeometry(0.25, 0.4, 3, 5).translate(
@@ -762,16 +782,23 @@ export class World {
       0,
     );
     const coneGeo = new THREE.ConeGeometry(2.0, 3.4, 7);
-    const trunk = new THREE.InstancedMesh(trunkGeo, lambert(0x6b4a2b), N);
+    // Placed by hand after the forest, from their own random stream so the forest keeps every spot: the town's
+    // trees and the islet's leafy tree, which stands out against the far shore's pines. `y` lifts a tree off the ground (the islet's stands on its rock).
+    const placed: { x: number; z: number; s: number; pine?: boolean; y?: number }[] = [
+      ...map.town.trees,
+      ...(map.islet ? [{ x: map.islet.x - 0.6, z: map.islet.z - 0.4, s: 1.5, y: 1.5 }] : []),
+    ];
+    const NP = N + placed.length;
+    const trunk = new THREE.InstancedMesh(trunkGeo, lambert(0x6b4a2b), NP);
     const leafMat = lambert(0xffffff);
     const layers = [0, 1, 2].map(
-      () => new THREE.InstancedMesh(coneGeo, leafMat, N),
+      () => new THREE.InstancedMesh(coneGeo, leafMat, NP),
     );
     // About a quarter of the trees are round and leafy. They pick from their own random stream, so
     // every tree keeps the spot it had when the forest was all pines.
     const vr = mulberry(77);
     const blobGeo = new THREE.IcosahedronGeometry(1.9, 0);
-    const blobs = [0, 1].map(() => new THREE.InstancedMesh(blobGeo, leafMat, N));
+    const blobs = [0, 1].map(() => new THREE.InstancedMesh(blobGeo, leafMat, NP));
     const lc = new THREE.Color();
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -781,15 +808,19 @@ export class World {
     let n = 0;
     let pines = 0;
     let leafy = 0;
+    // The headland pines first (docs/map-rework/harbour.json): the headland tips are too low for the
+    // forest's 0.8 m line, and these four make the cove's silhouette. [x, z, scale]
+    const headland: [number, number, number][] = [[19.5, -3.5, 1.25], [22, -0.5, 1.1], [-22.5, -5, 1.3], [-23.5, 1, 1.05]];
     for (let tries = 0; n < N && tries < 6000; tries++) {
+      const fixed = headland[n];
       const th = (rnd() * 2 - 1) * Math.PI;
       const r = innerRadius(th) + 6 + Math.pow(rnd(), 1.5) * 140;
-      if (r > 168) continue;
-      const x = Math.sin(th) * r;
-      const z = Math.cos(th) * r;
+      if (!fixed && r > 168) continue;
+      const x = fixed ? fixed[0] : Math.sin(th) * r;
+      const z = fixed ? fixed[1] : Math.cos(th) * r;
       const y = groundHeight(x, z);
-      if (y < 0.8 || Math.hypot(x - map.pad.x, z - map.pad.z) < clear) continue;
-      const s = 0.8 + rnd() * 1.6;
+      if (!fixed && (y < 0.8 || Math.hypot(x - map.pad.x, z - map.pad.z) < clear || cleared(x, z))) continue;
+      const s = fixed ? fixed[2] : 0.8 + rnd() * 1.6;
       this.trees.push({ x, z, r: 0.45 * s });
       q.setFromAxisAngle(up, rnd() * 6.28);
       trunk.setMatrixAt(n, m.compose(p.set(x, y - 0.1, z), q, sc.set(s, s, s)));
@@ -801,7 +832,7 @@ export class World {
           (rnd() - 0.5) * 0.1,
         );
       n++;
-      if (vr() < 0.26) {
+      if (vr() < 0.26 && !fixed) {
         // Two overlapping blobs in a warmer green
         blobs.forEach((b, k) => {
           const ox = k ? (vr() - 0.5) * 1.6 * s : 0;
@@ -827,6 +858,32 @@ export class World {
       });
       pines++;
     }
+    const pr = mulberry(911);
+    for (const t of placed) {
+      const { x, z, s } = t;
+      const y = t.y ?? groundHeight(x, z);
+      // The islet's tree is out of reach, so only trees on the ground block the way.
+      if (t.y === undefined) this.trees.push({ x, z, r: 0.45 * s });
+      q.setFromAxisAngle(up, pr() * 6.28);
+      trunk.setMatrixAt(n++, m.compose(p.set(x, y - 0.1, z), q, sc.set(s, s, s)));
+      col.set(loc.foliage).offsetHSL((pr() - 0.5) * 0.04, (pr() - 0.5) * 0.1, (pr() - 0.5) * 0.1);
+      if (t.pine) {
+        layers.forEach((l, k) => {
+          l.setMatrixAt(pines, m.compose(p.set(x, y + (2.2 + 1.7 * k) * s, z), q, sc.setScalar(s * (1 - 0.22 * k))));
+          l.setColorAt(pines, lc.copy(col).offsetHSL(0, 0, 0.035 * k));
+        });
+        pines++;
+      } else {
+        blobs.forEach((b, k) => {
+          const ox = k ? (pr() - 0.5) * 1.6 * s : 0;
+          const oz = k ? (pr() - 0.5) * 1.6 * s : 0;
+          const w = s * (k ? 0.75 : 1);
+          b.setMatrixAt(leafy, m.compose(p.set(x + ox, y + (k ? 2.8 : 3.3) * s, z + oz), q, sc.set(w, s * (k ? 0.65 : 0.85), w)));
+          b.setColorAt(leafy, lc.copy(col).offsetHSL(-0.035, 0.06, 0.06 + 0.04 * k));
+        });
+        leafy++;
+      }
+    }
     trunk.count = n;
     layers.forEach((l) => (l.count = pines));
     blobs.forEach((b) => (b.count = leafy));
@@ -843,13 +900,20 @@ export class World {
       R,
     );
     let rn = 0;
-    for (let tries = 0; rn < R && tries < 4000; tries++) {
+    // Reed beds beside the two jetties (docs/map-rework/harbour.json): [x, z, radius, count].
+    const beds: [number, number, number, number][] = [[-11.5, 8, 1.4, 22], [11.5, 8.8, 1.3, 20]];
+    for (let tries = 0; rn < R && tries < 9000; tries++) {
+      const bed = beds.find((b) => b[3] > 0);
       const th = (rnd() * 2 - 1) * Math.PI;
       const r = innerRadius(th) + (rnd() * 5 - 3.5);
-      const x = Math.sin(th) * r;
-      const z = Math.cos(th) * r;
+      const a = rnd() * 6.28;
+      const d = bed ? Math.sqrt(rnd()) * bed[2] : 0;
+      const x = bed ? bed[0] + Math.sin(a) * d : Math.sin(th) * r;
+      const z = bed ? bed[1] + Math.cos(a) * d : Math.cos(th) * r;
+      if (bed) bed[3]--;
+      else if (!alongShore(th)) continue;
       const y = groundHeight(x, z);
-      if (y < -0.5 || y > 0.4 || onDock(x, z, 1.2)) continue;
+      if (bed ? y > 0.4 || onDock(x, z, 0.6) : y < -0.5 || y > 0.4 || onDock(x, z, 1.2) || cleared(x, z)) continue;
       const s = 0.6 + rnd() * 0.9;
       q.setFromEuler(
         new THREE.Euler((rnd() - 0.5) * 0.3, rnd() * 6, (rnd() - 0.5) * 0.3),
@@ -859,7 +923,15 @@ export class World {
     reeds.count = rn;
     this.decor.add(reeds);
 
-    const RK = 46;
+    // The islet (`islet` in maps.ts): a low main rock with three round it, a leafy tree and a lantern on top. The lake
+    // bed is 8-9 m down there, so the rocks stand at the surface rather than on the ground. [x, z, radius, height]
+    const ic = map.islet;
+    const islet: [number, number, number, number][] = ic
+      ? [[ic.x, ic.z, 4.2, 0.5], [ic.x + 3.7, ic.z - 1.2, 2.2, 0.75], [ic.x - 3.3, ic.z - 1.6, 1.9, 0.85], [ic.x + 1.2, ic.z + 3.2, 1.4, 0.8]]
+      : [];
+    // One rock on each headland tip, past the pines. [x, z, radius]
+    const tips: [number, number, number][] = [[17.5, -6, 0.9], [-19, -7, 1.1]];
+    const RK = 46 + islet.length + tips.length;
     // Lighter tops, darker undersides
     const rockGeo = new THREE.DodecahedronGeometry(1);
     const rp = rockGeo.getAttribute('position');
@@ -872,14 +944,23 @@ export class World {
       RK,
     );
     let kn = 0;
-    for (let tries = 0; kn < RK && tries < 800; tries++) {
+    for (const [x, z, s, hy] of islet) {
+      q.setFromEuler(new THREE.Euler(0.15, kn * 1.7, 0.1));
+      rocks.setMatrixAt(kn++, m.compose(p.set(x, 0.1 * s, z), q, sc.set(s, s * hy, s)));
+    }
+    for (const [x, z, s] of tips) {
+      q.setFromEuler(new THREE.Euler(0.2, kn * 1.3, 0.1));
+      rocks.setMatrixAt(kn++, m.compose(p.set(x, groundHeight(x, z) + s * 0.2, z), q, sc.set(s, s * 0.7, s)));
+    }
+    for (let tries = 0; kn < RK && tries < 2000; tries++) {
       const th = (rnd() * 2 - 1) * Math.PI;
       const r = innerRadius(th) + (rnd() * 12 - 7);
       const x = Math.sin(th) * r;
       const z = Math.cos(th) * r;
-      if (onDock(x, z, 2) || Math.hypot(x - map.pad.x, z - map.pad.z) < clear)
+      if (!alongShore(th) || onDock(x, z, 2) || Math.hypot(x - map.pad.x, z - map.pad.z) < clear || cleared(x, z))
         continue;
-      const s = 0.4 + rnd() * 1.4;
+      // Boulders stay out of the cove (inside the headlands), where the quay sets the scale.
+      const s = (0.4 + rnd() * 1.4) * (Math.abs(th) < 2 ? 0.65 : 1);
       q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, rnd() * 3));
       rocks.setMatrixAt(
         kn++,
@@ -992,6 +1073,16 @@ export class World {
       glowTag(lantern, 0.75);
       dock.add(lantern, lanternPost);
     }
+    // The islet's lantern: a glow out on the water at night, without a light of its own.
+    if (this.islet) {
+      const { x, z } = this.islet;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 6), beamMat);
+      post.position.set(x + 2.2, 2.1, z + 1.4);
+      const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), glow);
+      lantern.position.set(x + 2.2, 2.95, z + 1.4);
+      glowTag(lantern, 1.1);
+      dock.add(lantern, post);
+    }
     const crate = new THREE.Mesh(
       new THREE.BoxGeometry(0.6, 0.45, 0.5),
       lambert(0x9c7a4a),
@@ -1005,12 +1096,12 @@ export class World {
     );
     bucket.position.set(-0.8, 0.85, 1.6);
     bucket.castShadow = true;
-    // Barrel and net stack out on the east pier, a coiled rope on the west.
+    // A barrel at the east jetty's end past the bench, a coiled rope on the west jetty.
     const barrel = new THREE.Mesh(
       new THREE.CylinderGeometry(0.3, 0.3, 0.7, 12),
       lambert(0x8a5a30),
     );
-    barrel.position.set(7.8, 1.05, 4.5);
+    barrel.position.set(8.2, 1.05, 8.6);
     barrel.castShadow = true;
     const rope = new THREE.Mesh(
       new THREE.TorusGeometry(0.22, 0.07, 6, 14),
@@ -1018,51 +1109,8 @@ export class World {
     );
     rope.rotation.x = Math.PI / 2;
     rope.position.set(-7.6, 0.75, 4.5);
-    dock.add(crate, bucket, barrel, rope, this.buildRowboat());
+    dock.add(crate, bucket, barrel, rope);
     this.decor.add(dock);
-  }
-
-  /** A little boat tied up beside the west pier. */
-  private buildRowboat(): THREE.Group {
-    const g = new THREE.Group();
-    const hull = new THREE.Mesh(
-      new THREE.SphereGeometry(
-        1,
-        16,
-        8,
-        0,
-        Math.PI * 2,
-        Math.PI / 2,
-        Math.PI / 2,
-      ),
-      new THREE.MeshLambertMaterial({
-        color: 0x8a5a30,
-        side: THREE.DoubleSide,
-      }),
-    );
-    hull.scale.set(0.6, 0.45, 1.5);
-    hull.castShadow = true;
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(1, 0.04, 6, 24),
-      lambert(0x5b4128),
-    );
-    rim.rotation.x = Math.PI / 2;
-    rim.scale.set(0.6, 1.5, 1);
-    const seat = new THREE.Mesh(
-      new THREE.BoxGeometry(1.1, 0.06, 0.25),
-      lambert(0x9b7248),
-    );
-    seat.position.y = -0.12;
-    const oar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.025, 1.6, 6),
-      lambert(0xc8b07a),
-    );
-    oar.rotation.z = Math.PI / 2.3;
-    oar.position.set(0.15, 0.1, 0.1);
-    g.add(hull, rim, seat, oar);
-    g.position.set(-5.5, 0.38, 7);
-    g.rotation.y = Math.PI / 2 + 0.1;
-    return g;
   }
 
   /**
@@ -1130,7 +1178,7 @@ export class World {
     const free = (x: number, z: number): boolean => {
       const y = groundHeight(x, z);
       if (y > 14 || onDock(x, z, 1)) return false;
-      if (smooth(0.3, 1.6, y) * (1 - 0.85 * padWeight(x, z)) < 0.6) return false;
+      if (grassWeight(x, z, y) < 0.6) return false;
       if (town?.blocked(x, z)) return false;
       if (hub?.colliders.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + 0.6)) return false;
       return !this.trees.some((t) => Math.abs(t.x - x) < 0.8 && Math.abs(t.z - z) < 0.8);
@@ -1205,8 +1253,9 @@ export class World {
     const blooms = new THREE.InstancedMesh(new THREE.ConeGeometry(0.11, 0.14, 6).translate(0, 0.07, 0), lambert(0xff9fc2), LN);
     let ln = 0;
     let bn = 0;
-    for (let tries = 0; ln < LN && tries < 400; tries++) {
+    for (let tries = 0; ln < LN && tries < 900; tries++) {
       const th = (rnd() * 2 - 1) * Math.PI;
+      if (rnd() * 56 > innerRadius(th)) continue;
       const r = innerRadius(th) - 1.5 - rnd() * 7;
       const k = 1 + Math.floor(rnd() * 5);
       for (let i = 0; i < k && ln < LN; i++) {
@@ -1239,11 +1288,11 @@ export class World {
   }
 
   private static lanterns = [
-    [1.1, -2.8],
-    [-4.4, -5.9],
-    [4.4, -5.9],
-    [-1.35, 4.5],
-    [1.35, 10],
+    [1.1, -5.6],
+    [-4.4, -8.5],
+    [4.4, -8.5],
+    [-1.35, 1.5],
+    [1.35, 7.5],
   ];
 
   // The dock's crate, bucket, barrel, rope and lantern posts are decoration only: the dock is

@@ -182,7 +182,8 @@ async function pondChecks(): Promise<void> {
   const blocked = await page.evaluate(() => {
     const cs = (window.__game.world as any).colliders as { x: number; z: number; r: number }[];
     const hit = (x: number, z: number) => cs.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.05);
-    return { bucket: hit(-0.8, 1.6), barrel: hit(7.8, 4.5), reed: hit(-15.1, 13.9), plane: hit(-18.19, 13.56), stallBarrel: hit(8.4, 19.2) };
+    // The pier's bucket, the east jetty's barrel, Reed on his beach, the seaplane's nose at the sand and a quay barrel.
+    return { bucket: hit(-0.8, 1.6), barrel: hit(8.2, 8.6), reed: hit(-20, 1), plane: hit(-16.74, -2.0), stallBarrel: hit(-8, 13.6) };
   });
   check('pond: dock props and NPCs can be walked through', !blocked.bucket && !blocked.barrel && !blocked.reed, JSON.stringify(blocked));
   check('pond: shore props still block, and so does the seaplane at the water\'s edge', blocked.stallBarrel && blocked.plane, JSON.stringify(blocked));
@@ -864,7 +865,8 @@ async function tripChecks(): Promise<void> {
   };
   await dev('/login smoke smoke-dev-pass');
   const toReed = async () => {
-    await page.evaluate(() => { window.__game.teleport(-15.93, 15.17); window.__game.look(-0.58, -0.05); });
+    // Two steps in front of Reed on his beach (`HARBOUR.stand`), looking at him.
+    await page.evaluate(() => { window.__game.teleport(-18.2, 1.6); window.__game.look(1.25, -0.05); });
     await sleep(600);
     await page.evaluate(() => window.__game.interact());
     await sleep(300);

@@ -66,6 +66,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Performance
 
+- The harbour town costs a little more than the old one (A/B bench against the pre-rework main, 2026-11-10): the town views render ~9% slower (2.7 -> 3.0 ms on an M1, day and night) and the lakeside map builds ~50 ms slower (163 -> 216 ms). Both came with the walkthrough pass: four more windows per house, garden fences, town trees, and grass tufts on the town pad. Profile the town build and the tuft count in town, and claw it back
 - 🎨 Fewer real point lights: cutting them from 8 to 4 was ~20% faster but visibly darkened night streets and the casino ceiling. Outdoors, the night glow pools (`src/game/nightglow.ts`) now stand in for far lamps, so a lower cap might look fine there; the casino chandeliers would need pools of their own
 - Building the pond map blocks for ~80 ms when travelling there; could be cached or split across frames
 - Per-frame garbage: `World.updateDaylight` allocates about 12 `THREE.Color`s a frame and the `World.colliders` getter rebuilds a ~500-entry array a frame. Cache both (benchmark before/after)
@@ -94,6 +95,8 @@ Finished items move to [DONE.md](DONE.md).
 - 🎨📋 Rework the Tackle Vest around the gear slots, a follow-up to the finished dedicated rod and bait slots (DONE.md): without the vest, the rod and bait sit in ordinary hotbar slots and share them with fish; buying the vest (`vest`, `src/data/casino.ts:42`, today "+2 hotbar slots") adds the two dedicated ROD / BAIT slots, so the perk is what makes the gear slots exist. Needs decisions first: whether a vest-less player can still carry only one rod and one bait stack in the bar, what happens to the 3-fish row and full-row cast refusal (`freeSlots`, `economy.ts`) before the vest, and how to migrate saves that already have the gear slots (`layoutSlots`, `slotCount` in `src/game/state.ts:17`)
 
 ### World, NPCs and visuals
+
+- 🎨 📋 Sloped harbour town: tilt the town pad so the main street climbs 2-3 m from the quay to the gate and the upper street looks over the roofs to the cove (today the pad is flat and the lake is hidden from the square and the gate). Every placed thing takes its height from the ground, so it needs a plan; comes after the map rework merges
 
 - 🎨 Townsfolk follow the day: head indoors at night (Granny Wren to her cottage) or gather at the campfire; their walks could take a different loop after dark (`nightLines` already exists for talk)
 - 🎨 Level 3 of the visual polish options (https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc): a soft foam line just offshore and lighter shallows (a baked shore-distance texture read by the water shader), small round bushes along the shore and hillsides, slightly richer greens. Each piece could ship on its own
