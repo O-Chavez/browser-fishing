@@ -37,6 +37,10 @@ import { groundTexture, plankTexture, speckleTexture } from './textures';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.38, -0.85).normalize();
+/** The moon rides over the water too, off to the sun's right, so its path on the water is in view from the pier and the boat's rail. */
+export const MOON_DIR = new THREE.Vector3(0.5, 0.4, -0.77).normalize();
+/** The moon's light at full night: its colour, and how bright its disc, halo and path on the water are. A default to play-test. */
+const MOON = { color: 0xdde6ff, path: 1 };
 const NO_TILT = new THREE.Quaternion();
 
 const WAVE_GLSL = `
@@ -60,7 +64,7 @@ void main(){
 }`;
 
 const waterFrag = `
-uniform float uTime; uniform vec3 uShallow, uDeep, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor;
+uniform float uTime; uniform vec3 uShallow, uDeep, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uMoonDir, uMoonCol;
 uniform float uFogNear, uFogFar; varying vec3 vWorld;
 ${WAVE_GLSL}
 void main(){
@@ -76,6 +80,8 @@ void main(){
   vec3 col = mix(base, sky, clamp(fres*0.8 + 0.03, 0.0, 1.0));
   float spec = pow(max(dot(R, uSunDir), 0.0), 350.0) * 4.0 + pow(max(dot(R, uSunDir), 0.0), 30.0) * 0.25;
   col += uSunCol * spec;
+  float mp = max(dot(R, uMoonDir), 0.0);
+  col += uMoonCol * (pow(mp, 400.0) * 0.6 + pow(mp, 30.0) * 0.04);
   col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, dist));
   gl_FragColor = vec4(col, clamp(0.55 + 0.45*smoothstep(3.0,45.0,dist) + fres*0.3, 0.0, 1.0));
   #include <tonemapping_fragment>
@@ -84,7 +90,8 @@ void main(){
 
 const skyVert = `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
 const skyFrag = `
-uniform vec3 uHorizon, uTop, uSunDir, uSunCol; uniform float uSunVis; varying vec3 vDir;
+uniform vec3 uHorizon, uTop, uSunDir, uSunCol, uMoonDir, uMoonCol; uniform float uSunVis; varying vec3 vDir;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main(){
   vec3 d = normalize(vDir);
   float h = max(d.y, 0.0);
@@ -93,9 +100,14 @@ void main(){
   // uSunVis < 1 hides the sun behind cloud (at sea), leaving a soft glow where it is.
   col += uSunCol * uSunVis * (pow(s, 900.0) * 6.0 + pow(s, 24.0) * 0.35 + pow(s, 4.0) * 0.08);
   col += uSunCol * (1.0 - uSunVis) * pow(s, 6.0) * 0.12;
+  // The moon: a soft-edged disc with a halo.
+  float m = max(dot(d, uMoonDir), 0.0);
+  col += uMoonCol * (smoothstep(0.99935, 0.9996, m) * 0.9 + pow(m, 700.0) * 0.22 + pow(m, 30.0) * 0.05);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  // A grain of noise hides the gradient's banding.
+  gl_FragColor.rgb += (hash(gl_FragCoord.xy) - 0.5) * (2.0 / 255.0);
 }`;
 
 const lambert = (
@@ -158,6 +170,7 @@ export class World {
   private clouds = new THREE.Group();
   private cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.92 });
   private stars!: THREE.Points;
+  private brightStars!: THREE.Points;
   private flies: THREE.Points | null = null;
   private flyBase: { x: number; y: number; z: number; ph: number; sp: number }[] = [];
   private dockLights: THREE.PointLight[] = [];
@@ -183,6 +196,8 @@ export class World {
     uFogNear: { value: 30 },
     uFogFar: { value: 280 },
     uSunVis: { value: 1 },
+    uMoonDir: { value: new THREE.Vector3().copy(MOON_DIR) },
+    uMoonCol: { value: new THREE.Color(0) },
   };
   /** Grass tufts and flowers: thousands of tiny instances, hidden in lite graphics. */
   private clutter: THREE.Object3D[] = [];
@@ -194,6 +209,8 @@ export class World {
     uSunDir: this.waterU.uSunDir,
     uSunCol: this.waterU.uSunCol,
     uSunVis: this.waterU.uSunVis,
+    uMoonDir: this.waterU.uMoonDir,
+    uMoonCol: this.waterU.uMoonCol,
   };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -400,22 +417,35 @@ export class World {
       this.clouds.add(c);
     }
 
-    const sp = new Float32Array(700 * 3);
-    for (let i = 0; i < 700; i++) {
-      const u = rnd() * 2 - 1;
-      const a = rnd() * Math.PI * 2;
-      const y = Math.abs(u) * 0.95 + 0.05;
-      const r = Math.sqrt(1 - y * y);
-      sp.set([Math.cos(a) * r * 850, y * 850, Math.sin(a) * r * 850], i * 3);
-    }
-    const sg = new THREE.BufferGeometry();
-    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-    this.stars = new THREE.Points(
-      sg,
-      new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0, depthWrite: false }),
-    );
-    this.stars.frustumCulled = false;
-    this.stars.renderOrder = -9;
+    // Mostly faint stars with a few bright ones, some a little warm or blue; a second, larger layer for the brightest.
+    const starField = (count: number, size: number, dim: number): THREE.Points => {
+      const sp = new Float32Array(count * 3);
+      const sc = new Float32Array(count * 3);
+      const tint = new THREE.Color();
+      for (let i = 0; i < count; i++) {
+        const u = rnd() * 2 - 1;
+        const a = rnd() * Math.PI * 2;
+        const y = Math.abs(u) * 0.95 + 0.05;
+        const r = Math.sqrt(1 - y * y);
+        sp.set([Math.cos(a) * r * 850, y * 850, Math.sin(a) * r * 850], i * 3);
+        const pick = rnd();
+        tint.set(pick < 0.12 ? 0xffe2c0 : pick < 0.26 ? 0xc6d8ff : 0xffffff).multiplyScalar(dim + (1 - dim) * Math.pow(rnd(), 2.2));
+        tint.toArray(sc, i * 3);
+      }
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+      sg.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+      const pts = new THREE.Points(
+        sg,
+        new THREE.PointsMaterial({ vertexColors: true, size, sizeAttenuation: false, fog: false, transparent: true, opacity: 0, depthWrite: false }),
+      );
+      pts.frustumCulled = false;
+      pts.renderOrder = -9;
+      return pts;
+    };
+    this.stars = starField(700, 2.2, 0.3);
+    this.brightStars = starField(45, 3.6, 0.75);
+    this.stars.add(this.brightStars);
     this.scene.add(this.stars);
   }
 
@@ -521,7 +551,10 @@ export class World {
     this.sun.color.set(0xfff0d6).lerp(new THREE.Color(0xff9a55), tw * 0.8).lerp(new THREE.Color(0x84a0ff), n);
     this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5).lerp(new THREE.Color(0xc4bac6).multiplyScalar(1 - 0.7 * n), m);
     // Clear nights at sea get the pond's full starfield; the overcast rolling in toward the Drop-off hides it.
-    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, (n - 0.4) / 0.6) * (1 - THREE.MathUtils.smoothstep(m, 0.35, 0.65));
+    const clearNight = Math.max(0, (n - 0.4) / 0.6) * (1 - THREE.MathUtils.smoothstep(m, 0.35, 0.65));
+    (this.stars.material as THREE.PointsMaterial).opacity = (this.brightStars.material as THREE.PointsMaterial).opacity = clearNight;
+    // The moon comes out with the stars, and goes behind the same overcast.
+    u.uMoonCol.value.set(MOON.color).multiplyScalar(clearNight * MOON.path);
     this.dockGlow.color.set(0x6a5a3a).lerp(new THREE.Color(0xffd27a), 0.35 + 0.65 * n);
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);

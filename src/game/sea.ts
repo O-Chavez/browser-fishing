@@ -22,6 +22,8 @@ export interface SkyUniforms {
   uFogNear: { value: number };
   uFogFar: { value: number };
   uSunVis: { value: number };
+  uMoonDir: { value: THREE.Vector3 };
+  uMoonCol: { value: THREE.Color };
 }
 
 const N = WAVES.length;
@@ -56,7 +58,7 @@ void main(){
 
 const seaFrag = `
 uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift, uBoatGlow;
-uniform vec3 uShallow, uDeep, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol;
+uniform vec3 uShallow, uDeep, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol;
 uniform vec2 uWind;
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -95,6 +97,9 @@ void main(){
   float sp = max(dot(R, uSunDir), 0.0);
   col += uSunCol * uSunVis * (pow(sp, 350.0) * 4.0 + pow(sp, 30.0) * 0.15);
   col += uSunCol * (1.0 - uSunVis) * pow(sp, 8.0) * 0.08;
+  // The moon's path on the water.
+  float mp = max(dot(R, uMoonDir), 0.0);
+  col += uMoonCol * (pow(mp, 260.0) * 1.6 + pow(mp, 24.0) * 0.12);
   if (uFoam > 0.0) {
     vec2 fp = vWorld.xz;
     vec2 s2 = vec2(fp.x * 0.35, fp.y * 1.3);
@@ -179,6 +184,7 @@ function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value
     const d = 60 + rnd() * 240;
     const cx = Math.cos(a) * d, cz = Math.sin(a) * d, cy = 30 + rnd() * 25;
     const size = 1.6;
+    const tone = Math.floor(rnd() * 3);
     for (let k = 0; k < n; k++) {
       const geo = new THREE.IcosahedronGeometry(1, 0).toNonIndexed();
       const sx = (10 + rnd() * 12) * size, sy = (4 + rnd() * 4) * size, sz = (8 + rnd() * 6) * size;
@@ -190,8 +196,8 @@ function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value
         const lx = pos.getX(v) * sx + ox, lz = pos.getZ(v) * sz + oz;
         pos.setXYZ(v, cx + lx * Math.cos(turn) - lz * Math.sin(turn), cy + y * sy + oy, cz + lx * Math.sin(turn) + lz * Math.cos(turn));
       }
-      // 0 at the flat underside, 1 at the top.
-      parts.push(bare(geo, 'shade', (y) => THREE.MathUtils.clamp((y - cy + flat * sy) / ((1 + flat) * sy + 3), 0, 1)));
+      // 0 at the flat underside, 1 at the top; each cloud a tone of its own (stored in the whole part), so the deck reads in layers.
+      parts.push(bare(geo, 'shade', (y) => tone + THREE.MathUtils.clamp((y - cy + flat * sy) / ((1 + flat) * sy + 3), 0, 0.999)));
     }
   }
   const mat = new THREE.ShaderMaterial({
@@ -199,13 +205,71 @@ function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value
     vertexShader: `attribute float shade; varying float vShade; varying vec3 vWorld;
       void main(){ vShade = shade; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `uniform vec3 uTop, uBot, uFogColor; uniform float uShow, uFogNear, uFogFar; varying float vShade; varying vec3 vWorld;
-      void main(){ vec3 col = mix(uFogColor, mix(uBot, uTop, pow(max(vShade, 0.0), 0.7)), uShow); ${fogGLSL}
+      void main(){
+        // Three tones of cloud (the whole part of vShade), and facets a touch lighter where they face up.
+        float tone = floor(vShade + 0.0005);
+        vec3 fn = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+        vec3 lit = mix(uBot, uTop, pow(clamp(vShade - tone, 0.0, 1.0), 0.7)) * (0.86 + 0.09 * tone) * (0.95 + 0.07 * abs(fn.y));
+        vec3 col = mix(uFogColor, lit, uShow); ${fogGLSL}
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
   });
   return new THREE.Mesh(mergeGeometries(parts)!, mat);
+}
+
+/**
+ * Fair-weather cumulus standing on the horizon all around: flat-based towers far past the fog, so their haze
+ * is baked in (bases melt into the horizon, tops catch the light). They take the day's colours, and sink
+ * into the overcast as it rolls in toward the Drop-off. One draw (~8k triangles).
+ */
+function horizonCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value: THREE.Color }; uShow: { value: number } }): THREE.Mesh {
+  const rnd = mulberry(29);
+  const parts: THREE.BufferGeometry[] = [];
+  const N = 15;
+  for (let i = 0; i < N; i++) {
+    // Uneven gaps, and a clear stretch where the headland stands.
+    const a = ((i + (rnd() - 0.5) * 0.7) / N) * Math.PI * 2;
+    const d = 640 + rnd() * 160;
+    const big = 0.6 + rnd() * 0.9;
+    const n = 4 + Math.floor(rnd() * 4);
+    const cx = Math.cos(a) * d, cz = Math.sin(a) * d, base = 5 + rnd() * 6;
+    const turn = a + Math.PI / 2;
+    for (let k = 0; k < n; k++) {
+      const geo = new THREE.IcosahedronGeometry(1, 1).toNonIndexed();
+      const mid = 1 - Math.abs((k + 0.5) / n - 0.5) * 1.4;
+      const sx = (38 + rnd() * 26) * big, sy = (22 + rnd() * 30) * big * (0.45 + 0.75 * mid), sz = (26 + rnd() * 14) * big;
+      const ox = ((k + 0.5) / n - 0.5) * n * 34 * big + (rnd() - 0.5) * 14, oz = (rnd() - 0.5) * 20;
+      const pos = geo.getAttribute('position');
+      for (let v = 0; v < pos.count; v++) {
+        // Flat underneath, like the low cloud.
+        const y = Math.max(pos.getY(v), -0.25);
+        const lx = pos.getX(v) * sx + ox, lz = pos.getZ(v) * sz + oz;
+        pos.setXYZ(v, cx + lx * Math.cos(turn) - lz * Math.sin(turn), base + (y + 0.25) * sy, cz + lx * Math.sin(turn) + lz * Math.cos(turn));
+      }
+      parts.push(bare(geo, 'shade', (y) => THREE.MathUtils.clamp((y - base) / (70 * big), 0, 1)));
+    }
+  }
+  const mat = new THREE.ShaderMaterial({
+    uniforms: u as unknown as Record<string, THREE.IUniform>,
+    vertexShader: `attribute float shade; varying float vShade; varying vec3 vWorld;
+      void main(){ vShade = shade; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 uTop, uBot, uFogColor, uSunDir; uniform float uShow; varying float vShade; varying vec3 vWorld;
+      void main(){
+        // Facets facing the sun and the sky are lighter; the haze thickens toward the base.
+        vec3 fn = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+        float lit = 0.5 + 0.3 * max(dot(fn, uSunDir), 0.0) + 0.2 * max(fn.y, 0.0);
+        vec3 col = mix(uBot, uTop, clamp(lit * (0.55 + 0.6 * vShade), 0.0, 1.0));
+        col = mix(uFogColor, col, uShow * mix(0.4, 0.92, smoothstep(0.0, 0.5, vShade)));
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(mergeGeometries(parts)!, mat);
+  mesh.frustumCulled = false;
+  return mesh;
 }
 
 /** The Shelf's distant headland and lighthouse, off the starboard bow; it fades into the haze as the dive goes deeper. */
@@ -488,6 +552,8 @@ export class Sea {
   private cloudU: ReturnType<typeof cloudUniforms>;
   private landU: ReturnType<typeof landUniforms>;
   private clouds: THREE.Mesh;
+  private bankU: ReturnType<typeof cloudUniforms>;
+  private bank: THREE.Mesh;
   private land: THREE.Mesh;
   private spray = new Spray();
   private drift = new Spindrift(dotTexture());
@@ -501,6 +567,7 @@ export class Sea {
   private tmp = new THREE.Vector3();
   private mood = 0;
   private t = 0;
+  private cloudTurn = 0;
 
   constructor(sky: SkyUniforms) {
     this.u = seaUniforms(sky);
@@ -511,10 +578,12 @@ export class Sea {
     water.frustumCulled = false;
     this.cloudU = cloudUniforms(sky);
     this.clouds = lowCloud(this.cloudU);
+    this.bankU = cloudUniforms(sky);
+    this.bank = horizonCloud(this.bankU);
     this.landU = landUniforms(sky);
     this.land = headland(this.landU);
     this.frame.matrixAutoUpdate = false;
-    this.frame.add(water, this.clouds, this.land, this.drift.points, this.lightning.group);
+    this.frame.add(water, this.bank, this.clouds, this.land, this.drift.points, this.lightning.group);
     this.onBoat.add(this.spray.points);
   }
 
@@ -543,6 +612,9 @@ export class Sea {
     const cloud = new THREE.Color(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
     this.cloudU.uTop.value.copy(cloud).lerp(dim(0xc4bac6, 1 - 0.7 * n), m).multiplyScalar(gloom);
     this.cloudU.uBot.value.copy(cloud).multiplyScalar(0.93).lerp(dim(0x8a8094, 1 - 0.7 * n), m).multiplyScalar(gloom * gloom);
+    // The horizon's cumulus: white by day, peach at dusk, moonlit slate at night, its shaded side toward the sky's own colour.
+    this.bankU.uTop.value.set(0xffffff).lerp(new THREE.Color(0x3a4668), n).lerp(new THREE.Color(0xffc09a), tw * 0.6);
+    this.bankU.uBot.value.copy(this.bankU.uTop.value).multiplyScalar(0.78).lerp(u.uSkyT.value, 0.35);
     this.landU.uNight.value = n;
   }
 
@@ -572,7 +644,12 @@ export class Sea {
     const show = smooth(0.35, 0.65, mood);
     this.cloudU.uShow.value = show;
     this.clouds.visible = show > 0;
-    this.clouds.rotation.y = t * 0.002;
+    // The deck drifts round on the wind, faster in the deep zones' weather.
+    this.cloudTurn += dt * (0.003 + 0.004 * Math.min(2, mood));
+    this.clouds.rotation.y = this.cloudTurn;
+    const bank = 1 - smooth(0.25, 0.6, mood);
+    this.bankU.uShow.value = bank;
+    this.bank.visible = bank > 0;
     const fade = smooth(0, 0.35, mood);
     this.landU.uFade.value = fade;
     this.land.visible = fade < 1;

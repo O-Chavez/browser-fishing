@@ -416,7 +416,7 @@ export class Boat {
       // Rod holders between the fishing spots, leaning outboard; the port ones carry spare rods.
       for (const x of [-3.95, -2.65, -1.35, -0.05]) {
         const c = capZ(x);
-        parts.push([cyl(0.045, 0.045, 0.3, 6, [x, c.y + 0.1, c.z + sg * 0.03], [sg * 0.35, 0, 0]), COL.metal]);
+        parts.push([cyl(0.04, 0.04, 0.2, 8, [x, c.y + 0.07, c.z + sg * 0.02], [sg * 0.35, 0, 0]), COL.iron]);
         if (sg > 0 && x < -1) parts.push([bar([x, c.y + 0.05, c.z], [x, c.y + 2.2, c.z + 0.8], 0.016, 4), COL.iron], [bar([x, c.y + 0.05, c.z], [x, c.y + 0.5, c.z + 0.18], 0.028, 5), COL.cap]);
       }
       // Cleats, the starboard ones with a coil of rope hung inside the bulwark.
