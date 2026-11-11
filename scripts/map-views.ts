@@ -90,6 +90,9 @@ export const WALK: Record<string, View> = {
   n02_square: { x: 0, z: 27, yaw: Math.PI, note: 'arriving at the square at night', times: { night: 0.72 } },
   n03_lane: at(-15, 11, -19.2, 8.2, "Reed's lane at night", { night: 0.72 }),
   n04_ramp: at(14.5, 8.2, 18, 2, 'the campfire ramp at night', { night: 0.72 }),
+  n06_street: { x: 0, z: 17, yaw: Math.PI, note: 'the main street at night from the quay road: far lamps light the cobbles', times: { night: 0.72 } },
+  n08_pier: { x: 0, z: 6, yaw: Math.PI, note: 'from the pier at night: the street lamp is far enough to be a light pool, which must lie on the cobbles', times: { night: 0.72 } },
+  n07_upper: { x: 0, z: 40, yaw: Math.PI, note: 'the upper street at night', times: { night: 0.72 } },
   n05_ring_w: at(-16.5, 22, -12.5, 28.6, 'the west ring lane at night', { night: 0.72 }),
 };
 const walk = only[0] === '--walk';

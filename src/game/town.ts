@@ -142,12 +142,8 @@ export class Town {
     this.colliders.push({ x, z, r });
   }
 
-  private pathLayers = 1;
-
   /** Flat cobbled strip between two points, laid just above the ground. */
   private path(ax: number, az: number, bx: number, bz: number, w: number): void {
-    // Overlapping strips each get their own depth bias so their cobbles never z-fight.
-    const layer = this.pathLayers++;
     this.paths.push([ax, az, bx, bz, w / 2]);
     // Lanes run on past each end by half their width, so a bend's strips overlap instead of leaving a wedge of
     // ground between them; the main street stops where it is laid, since it meets the quay deck.
@@ -166,13 +162,13 @@ export class Town {
     for (let i = 0; i < pos.count; i++) {
       const x = mx + pos.getX(i) * cos + pos.getZ(i) * sin;
       const z = mz - pos.getX(i) * sin + pos.getZ(i) * cos;
-      // Every strip and the square lie at one height and take their cobbles from the same world-space pattern, so
-      // where two overlap they show the same stones and read as one paved surface; only the depth bias differs.
+      // Every strip and the square lie at one height with one depth bias and take their cobbles from the same
+      // world-space pattern, so where two overlap they show the same stones and read as one paved surface.
       pos.setXYZ(i, x, groundHeight(x, z) + COBBLE_LIFT, z);
       uv.setXY(i, x / 2.2, z / 2.2);
     }
     geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2 - layer, polygonOffsetUnits: -2 - layer }));
+    const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     m.receiveShadow = true;
     this.group.add(m);
   }
