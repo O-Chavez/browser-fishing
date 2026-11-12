@@ -145,6 +145,27 @@ Built from "The gauge is the ladder" after a headless sim (`scripts/gaugesim.ts`
 - **The line's panel** says "a fish strong for your line pulls its surges up to the red, one too strong pulls them into it, and holding in the red frays the line" (it said a fish above the line snaps it).
 - **The hook toast** says "An easy one" for a fish a rung or more under the gear on both axes, give or take its spread (Oscar: upgrades should feel rewarded); the Easy-to-Brutal word stays gone.
 
+### The edge pays (2026-11-11, branch `charter-edge`, not play-tested)
+
+Oscar found the Abyss out of reach and the charter still an "early idea". Measured on the reference hands first: a level on both tracks took about 50 minutes at every stage and moved the wall one marker, so the Abyss (marker 151) needed about +22 / +22, 17-20 hours; the best pearls an hour came from a five-marker run that ended 5-30 fish short of the wall, its first markers fought only for the haul's +50%; and the stall's panels listed rod and line apart ("too heavy from marker 60") though the gaps add up, so they overstated a player's reach by 15-20 fish.
+
+- **What Oscar asked for:** reward stretching your luck; farming early markers must not be the best income, and they should be easy and fast once the gear is levelled; about 8-10 hours of charters to first reach the Abyss, a new zone every 2-3 hours; the endless ladder only in the Abyss; running out of line costs the haul's bonus, not the haul.
+- **Zones closer in:** 0 / 16 / 36 / 61 / 91 (were 0 / 16 / 41 / 81 / 151), in `ZONES` and `SEA_ZONES`, with the sea's look retimed to them. Fights are untouched: a tier every 30 fish, a level a sixth of a tier. The Shelf to the Twilight are a journey with an end; the Abyss goes on.
+- **Pearl water** (`edgeSteps`, `inPearlWater`, `pearlsAt`, dive.ts): water where a typical fish at least matches the rod and line together. Before it, fish pay coins and no pearls. In it, a fish pays the marker's base (1 + a pearl every 20 fish) doubled for each combined rung over the gear (`PEARLS.step`, about a quarter more a marker on even levels). Each level moves pearl water half a marker out.
+- **The haul's bonus** (`haulBonus`, `Dive.grown`): 25% more, compounding and uncapped, at each marker reached in pearl water (`DIVE.haulGrow`, `haulCap`); easy markers add nothing. Heading home at a marker banks the haul with it.
+- **Out of line costs the bonus only:** the charter ends and the pearls in the haul come home without the bonus, as do heading home between markers and the boat's wait running out. Only heading home at a marker charts it.
+- **Start at any marker up to the furthest** (`canStartAt`): Reed's panel suggests the marker where pearl water starts, so a charter opens at the edge instead of with easy markers. It used to be only the markers headed home from, which sit at the far end of a charter.
+- **The screens say the reach of rod and line together** (`reach`, `seaMatchupWords`): where pearl water starts, where it gets hard (two combined rungs) and where it's too much (three); a fish three combined rungs over reads "Too much for your rod and line" in red, where it read "Strong for your line, heavy for your rod" on a fish no one lands.
+- **Prices:** a level is 750 + 130·N Black Pearls on each track (was 100 + 24·N) and a quarter fewer coins; unspent pearls in older saves count sixfold (`pearlsV`).
+- **Bands on the reference hands** (careful / skilled at +0, +8 and +16 a track; a scratch sim like `scripts/seaeconomy.ts`):
+  - The best charter starts where pearl water starts and ends 0-5 fish short of the wall: 16 / 22 minutes, 4-12% / 1-4% of charters out of line.
+  - Farming 20 or more fish short of the wall earns 14-38% / 35-43% of the best rate (63-100% before); one-marker hops at the edge 37-46% / 22-25%; never heading home 28-35% / 19-23%.
+  - Skilled hands earn 2.1-2.5 times careful ones (1.1 times before). A cap of five markers on the bonus narrows that to about 1.5 and shortens charters to 15-17 minutes, but a skilled hand that stays four markers short of its wall then earns about three quarters of the best rate. Left uncapped for the play test.
+  - At these prices a level takes about 40 / 18 minutes, and the Abyss about +13 / +10 on each track: about 18 / 6 hours at the best rate (`scripts/seaeconomy.ts`: 1,094 / 2,676 pearls an hour at +0, 2,626 / 5,949 at +8, 4,026 / 8,928 at +16).
+  - Coins: edge fights are longer, so charter fish earn less an hour than farming did (205-541k / 211-539k from +0 to +16). The levels' coins came down a quarter with it (the rod 55,000 + 4,500·N, the line half), which keeps them at about 55-75% of a skilled hand's charter coins.
+- **Tried and dropped:** double and triple pearls by the hook toast's words alone (careful hands gained 2-15% and the best start stayed 30-45 fish short of the wall); steep pay with no haul growth (one-marker hops at the edge earn 88-100% of the best rate); uncapped haul growth on every marker (the best charter starts at the harbour and grinds every easy marker).
+- **Not in this build** (TODO): a twist and a first-time reward for each zone, legends as events, boat upgrades as the coin sink, three-fish markers, chat lines for zones and legends.
+
 
 
 The two pairs must *feel* different, or the player can't tell them apart. The rule:

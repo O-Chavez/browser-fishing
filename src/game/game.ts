@@ -43,9 +43,9 @@ import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
 import { baitWarning, charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
-import { DiveHud, endHtml, headHomeHtml, markerHtml, nextMarker, reedHtml, startText } from './divehud';
+import { DiveHud, endHtml, fromMarker, headHomeHtml, markerHtml, nextMarker, reedHtml, reedStart, startText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { markerOver } from './dive';
+import { markerOver, reach, seaMatchupWords } from './dive';
 import { drawFightGauge } from './fightgauge';
 import { Player } from './player';
 import {
@@ -1285,7 +1285,7 @@ export class Game {
     if (!eco.levelRod(s)) return;
     this.net.send({ t: 'levelrod' });
     const glow = s.rodLevel % ROD_LEVEL.glowEvery === 0 ? ' · a new glow!' : '';
-    this.toast(`${eco.seaRodName(s)}: sea fish are heavy for it from marker ${markerOver(DEEP_SEA_ROD.tier, s.rodLevel, 1)}${glow}`, 3);
+    this.toast(`${eco.seaRodName(s)}: sea fish are heavy for it from marker ${markerOver(DEEP_SEA_ROD.tier, s.rodLevel, 1)} · pearl water from ${fromMarker(reach(eco.seaGear(s)).pearl)}${glow}`, 3);
     audio.jingle(glow ? 'legendary' : 'rare');
   }
 
@@ -1297,7 +1297,7 @@ export class Game {
     if (s.coins < cost.coins || s.pearls < cost.pearls) return this.toast(`+${s.seaLine + 1} needs ${cost.coins.toLocaleString()} 🪙 and ${cost.pearls} Black Pearls.`);
     if (!eco.levelSeaLine(s)) return;
     this.net.send({ t: 'levelline' });
-    this.toast(`${eco.seaLineName(s)}: sea fish are strong for it from marker ${markerOver(DEEP_SEA_LINE.tier, s.seaLine, 1)}`, 3);
+    this.toast(`${eco.seaLineName(s)}: sea fish are strong for it from marker ${markerOver(DEEP_SEA_LINE.tier, s.seaLine, 1)} · pearl water from ${fromMarker(reach(eco.seaGear(s)).pearl)}`, 3);
     audio.jingle('rare');
   }
 
@@ -1698,10 +1698,9 @@ export class Game {
     this.openMenu('reed');
   }
 
-  /** The start Reed's panel shows: the one picked, else the furthest charted marker. */
+  /** The start Reed's panel shows: the one picked, else where pearl water starts for the gear (up to the furthest marker). */
   private reedPick(): number {
-    const { ledges, record } = this.s.sea;
-    return this.divePick !== null && (this.divePick === 0 || ledges.includes(this.divePick)) ? this.divePick : ledges.includes(record) ? record : 0;
+    return reedStart(this.s.sea, eco.seaGear(this.s), this.divePick);
   }
 
   private castOffFrom(from: number): void {
@@ -1728,7 +1727,7 @@ export class Game {
     const btn = v.state === 'ledge'
       ? `<button class="btn" data-tab="marker">🚩 Marker ${v.depth}: choose</button>`
       : `<button class="btn bad" data-act="askhome"${this.phase === 'idle' ? '' : ' disabled'}>Head home</button>`;
-    return `<div class="seastrip"><span>⛵ Charter · ${zoneAt(v.depth).name}. ${v.state === 'ledge' ? 'At a marker, heading home banks the haul.' : `Heading home before marker ${nextMarker(v.depth)} sinks the haul.`}</span>${btn}</div>`;
+    return `<div class="seastrip"><span>⛵ Charter · ${zoneAt(v.depth).name}. ${v.state === 'ledge' ? 'At a marker, heading home banks the haul with its bonus.' : v.grown ? `Heading home before marker ${nextMarker(v.depth)} loses the haul's bonus.` : `Heading home before marker ${nextMarker(v.depth)} keeps the haul's pearls.`}</span>${btn}</div>`;
   }
 
   /** Opens a marker's choice or the end card once nothing else is on screen: no catch card, menu or "Casting off". */
@@ -2435,7 +2434,7 @@ export class Game {
     this.phase = 'reeling';
     $('alert').classList.add('hidden');
     this.reel = new Reel(this.fightD, mulberry(this.fightSeed), this.fightTune);
-    const match = matchupWords(this.fightD);
+    const match = this.map.sea ? seaMatchupWords(this.fightD) : matchupWords(this.fightD);
     this.diveHud.fight(this.map.sea ? { b: this.fightB, pull: null, match: match.words, too: match.too } : null);
     this.holds = new HoldLog();
     this.reelAcc = 0;
@@ -3372,7 +3371,7 @@ export class Game {
         el.innerHTML = newsHtml(this.newsGlance ?? NEWS, !!this.newsGlance);
         break;
       case 'reed':
-        el.innerHTML = reedHtml({ say: this.reedSay, chart: this.s.sea, pearls: this.s.pearls, ownsRod: eco.ownsSeaRod(this.s), pick: this.reedPick(), open: DIVES_OPEN });
+        el.innerHTML = reedHtml({ say: this.reedSay, chart: this.s.sea, pearls: this.s.pearls, ownsRod: eco.ownsSeaRod(this.s), pick: this.reedPick(), open: DIVES_OPEN, gear: eco.seaGear(this.s) });
         break;
       case 'marker':
         el.innerHTML = this.diveHud.view ? markerHtml(this.diveHud.view) : '';
@@ -4269,7 +4268,8 @@ export class Game {
           : `<p class="peek-lock">🎣 Get the ${rod.name} at Marlow's stall (${rod.price.toLocaleString()} ${COIN}), then find Captain Reed on the west beach</p>`;
     return `<div class="peek"><img src="${charterPreview}" alt="The Kraken rearing out of the storm waves far out at sea">
       <div class="peek-text"><h3>Sail out to the deep sea</h3>
-        <p>Captain Reed flies you out to sea from the west beach. Every ${DIVE.ledgeEvery} fish you land, you reach a marker: <b>Head home</b> to bank your haul of Black Pearls, or <b>Sail on</b> for a bigger one, if your one spool of line holds out.</p>
+        <p>Captain Reed flies you out to sea from the west beach. Every ${DIVE.ledgeEvery} fish you land, you reach a marker: <b>Head home</b> to bank your haul of Black Pearls, or <b>Sail on</b> to grow its bonus, if your one spool of line holds out.</p>
+        <p>Fish that match your rod and line pay Black Pearls: that's pearl water, and the bonus grows at each marker you reach in it. Run out of line and you keep the pearls but lose the bonus.</p>
         <p>The further out you sail, the stranger the fish: Kelp Deep, the Twilight and the Abyss each have their own, and legends you'll never see in the pond.</p>
         <p>Black Pearls level up your ${rod.name} and Deep Sea Line, so every charter can take you further out.</p>
         ${status}</div></div>`;
@@ -4624,7 +4624,7 @@ export class Game {
         name: r.name,
         tier: r.tier,
         body: this.seaReach('heavy', r.tier, s.rodLevel) + pearlsHave,
-        note: `Charters with Captain Reed need it. It stays on his boat: he hands it to you when a charter casts off, with the Deep Sea Line spooled. Each level, bought with Black Pearls, takes it a marker further out.${carried}`,
+        note: `Charters with Captain Reed need it. Each level, bought with Black Pearls, takes it a marker further out.${carried}`,
         actions,
       });
     }
@@ -4637,18 +4637,22 @@ export class Game {
       name: eco.seaRodName(s),
       tier: r.tier,
       body: this.seaReach('heavy', r.tier, s.rodLevel) + pearlsHave,
-      note: `+${s.rodLevel} → +${next}: a marker further out, heavy for it from marker ${markerOver(r.tier, next, 1)} · ${price}. It waits on Captain Reed's boat between charters. Black Pearls come from charters.`,
+      note: `+${s.rodLevel} → +${next}: a marker further out, heavy for it from marker ${markerOver(r.tier, next, 1)} · ${price}.`,
       actions: (atStall ? '' : this.btn("On Reed's boat ✓", '', 'ok', true)) + action,
     });
   }
 
   /**
    * Where sea fish outgrow a Deep Sea Rod or Line at this level, in the hook toast's words (`matchupWords`): the first
-   * marker where a typical fish is heavy (or strong) for it, and too heavy, one marker further out each level.
+   * marker where a typical fish is heavy (or strong) for it, one marker further out each level; then, for rod and line
+   * together, where pearl water starts and where fish are too much for them (`reach`).
    */
   private seaReach(word: 'heavy' | 'strong', tier: number, level: number): string {
-    const row = (label: string, rungs: number) => `<div class="stat"><div class="srow"><span>${label}</span><span>from marker ${markerOver(tier, level, rungs)}</span></div></div>`;
-    return row(`Sea fish ${word} for it`, 1) + row(`Too ${word}`, 2);
+    const row = (label: string, from: string) => `<div class="stat"><div class="srow"><span>${label}</span><span>from ${from}</span></div></div>`;
+    const both = reach(eco.seaGear(this.s));
+    // The two rows for rod and line together sit under a small label naming the other piece, so they read as the pair's.
+    const pair = `<div class="lbl">With your ${word === 'heavy' ? 'line' : 'rod'}</div>`;
+    return row(`Sea fish ${word} for it`, `marker ${markerOver(tier, level, 1)}`) + pair + row('Pearl water', fromMarker(both.pearl)) + row('Too much', fromMarker(both.over));
   }
 
   /** A stall Level up button, or what's still missing for it. */
@@ -4683,7 +4687,8 @@ export class Game {
       name: eco.seaLineName(s),
       tier: DEEP_SEA_LINE.tier,
       body: this.seaReach('strong', DEEP_SEA_LINE.tier, s.seaLine) + `<div class="have">You have <b>${s.pearls.toLocaleString()}</b> ${PEARL} Black Pearls</div>`,
-      note: `${step} Black Pearls come from charters with Captain Reed.`,
+      // The text under the tiles already says where Black Pearls come from; a levelled line's note stays short so the button fits.
+      note: s.seaLine > 0 ? step : `${step} Black Pearls come from charters with Captain Reed.`,
       actions,
     });
   }

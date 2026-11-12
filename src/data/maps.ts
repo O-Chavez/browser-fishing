@@ -305,8 +305,9 @@ export const MAPS: MapDef[] = [
           // Talking to Reed opens his charter panel (`reedHtml`, src/game/divehud.ts), which leads with his next line.
           lines: [
             'Every five fish you land, we reach a marker: head home with the haul, or sail on.',
-            'One spool of line a charter. Run it out and the haul goes over the side.',
-            "Chart a marker and I'll fly you straight back out to it next time.",
+            'One spool of line a charter. Run it out and you keep your pearls, but the bonus is gone.',
+            "I'll fly you straight out to any marker up to your furthest.",
+            'Pearls come from fish that test your rod and line. The easy ones are just supper.',
           ],
         },
       ],

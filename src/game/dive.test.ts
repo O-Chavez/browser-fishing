@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
-import { DIVE, SEA_TIERS, ZONES, type Behaviour } from '../data/dive';
+import { DIVE, PEARLS, SEA_TIERS, ZONES, type Behaviour } from '../data/dive';
 import {
-  afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, markerOver, pearlsAt, powInt, rollSeaFish, seaGaps, startDive, surface, zoneAt,
-  type Chart, type SeaGear,
+  afterFight, behaviourOdds, canStartAt, diveOn, edgeSteps, haulBonus, inPearlWater, lineWorn, markerOver, pearlsAt, powInt, reach, rollSeaFish,
+  seaGaps, seaMatchupWords, startDive, surface, zoneAt, type Chart, type Dive, type SeaGear,
 } from './dive';
 import { rollSeaCast } from './economy';
 import { mulberry } from './env';
-import { FISH_SPREAD, overGear, TAG_TIERS } from './progression';
+import { FISH_SPREAD, matchupWords, overGear, TAG_TIERS } from './progression';
 import { GOOD_MAX, Reel, type Gaps, type ReelWear } from './reel';
 import { STYLES, botFight } from './reelbot';
 import { newSave } from './state';
@@ -17,7 +17,7 @@ const wear = (lineOut: number, frays = 0, snapped = false): ReelWear => ({ lineO
 const none: SeaGear = { rod: 0, line: 0 };
 
 /** Lands `n` fish with no wear. */
-function land(dive: ReturnType<typeof startDive>, n: number) {
+function land(dive: Dive, n: number) {
   for (let i = 0; i < n; i++) {
     afterFight(dive, 'pewtercod', true, clean);
     if (dive.state === 'ledge' && i < n - 1) diveOn(dive);
@@ -60,9 +60,9 @@ describe('sea fight gaps', () => {
 });
 
 describe('sea zones and bites', () => {
-  it('runs Shelf 1-15, Drop-off 16-40, Kelp Deep 41-80, Twilight 81-150, Abyss 151+', () => {
+  it('runs Shelf 1-15, Drop-off 16-35, Kelp Deep 36-60, Twilight 61-90, Abyss 91+', () => {
     const z = (d: number) => zoneAt(d).id;
-    expect([0, 15, 16, 40, 41, 80, 81, 150, 151, 900].map(z)).toEqual(
+    expect([0, 15, 16, 35, 36, 60, 61, 90, 91, 900].map(z)).toEqual(
       ['shelf', 'shelf', 'dropoff', 'dropoff', 'kelp', 'kelp', 'twilight', 'twilight', 'abyss', 'abyss'],
     );
   });
@@ -106,7 +106,7 @@ describe('sea zones and bites', () => {
     };
     expect(seen(35)).toEqual(['runner']);
     expect(seen(60)).toEqual(['thrasher']);
-    expect(seen(100)).toEqual(['sounder']);
+    expect(seen(80)).toEqual(['sounder']);
     expect(seen(200)).toEqual(['runner', 'sounder', 'thrasher']);
   });
 
@@ -116,9 +116,9 @@ describe('sea zones and bites', () => {
     expect([16, 20, 25, 30].map((d) => share(d, 'runner'))).toEqual([0.25, 0.5, 0.75, 1]);
     expect(share(19, 'runner')).toBe(0.25);
     expect(share(16, null)).toBe(0.75);
-    expect([41, 45, 50, 55].map((d) => share(d, 'runner'))).toEqual([0.75, 0.5, 0.25, 0]);
-    expect(share(151, 'thrasher')).toBeCloseTo(0.25 / 3 + 0.75 * 0);
-    expect(share(151, 'sounder')).toBeCloseTo(0.25 / 3 + 0.75);
+    expect([36, 40, 45, 50].map((d) => share(d, 'runner'))).toEqual([0.75, 0.5, 0.25, 0]);
+    expect(share(91, 'thrasher')).toBeCloseTo(0.25 / 3 + 0.75 * 0);
+    expect(share(91, 'sounder')).toBeCloseTo(0.25 / 3 + 0.75);
     for (let depth = 0; depth < 300; depth += 3) expect(behaviourOdds(depth).reduce((a, [, p]) => a + p, 0)).toBeCloseTo(1, 9);
     // And the rolls follow the odds.
     const rng = mulberry(2);
@@ -274,19 +274,27 @@ describe('sea gear messages', () => {
 });
 
 describe('the dive', () => {
-  it('each landed fish goes one depth deeper and adds 1 + floor(depth / 20) pearls', () => {
-    expect([0, 19, 20, 39, 40, 85].map(pearlsAt)).toEqual([1, 1, 2, 2, 3, 5]);
-    const d = startDive(20);
+  it('each landed fish goes one depth deeper and adds its pearls', () => {
+    const d = startDive(20, none);
     afterFight(d, 'galemackerel', true, clean);
     expect(d.depth).toBe(21);
-    expect(d.pearls).toBe(2);
+    expect(d.pearls).toBe(5);
     afterFight(d, 'galemackerel', false, wear(0.5));
     expect(d.depth).toBe(21);
-    expect(d.pearls).toBe(2);
+    expect(d.pearls).toBe(5);
+  });
+
+  it('knows its gear from the start, and fishes with it', () => {
+    const gear = { rod: 3, line: 3 };
+    const d = startDive(15, gear);
+    gear.rod = 9; // levels can't change at sea: the dive keeps its own copy
+    expect(d).toMatchObject({ start: 15, depth: 15, ledges: 0, grown: 0, pearls: 0, gear: { rod: 3, line: 3 } });
+    afterFight(d, 'galemackerel', true, clean);
+    expect(d.pearls).toBe(pearlsAt(15, { rod: 3, line: 3 }));
   });
 
   it('stops at a ledge every 5 depths for the choice', () => {
-    const d = land(startDive(0), 4);
+    const d = land(startDive(0, none), 4);
     expect(d.state).toBe('fishing');
     afterFight(d, 'snapper', true, clean);
     expect(d.state).toBe('ledge');
@@ -297,6 +305,7 @@ describe('the dive', () => {
     land(d, 5);
     expect(d.state).toBe('ledge');
     expect(d.ledges).toBe(2);
+    expect(d.grown).toBe(2);
   });
 
   it('the spool wears by the line taken, 25 m a fish lost (snapped or ran off) and 5 m a fray left on a landed fish', () => {
@@ -304,47 +313,56 @@ describe('the dive', () => {
     expect(lineWorn(wear(0.5, 1), true)).toBe(0.5 * DIVE.metresPerLine + 5);
     expect(lineWorn(wear(0.2, 2, true), false)).toBe(0.2 * DIVE.metresPerLine + 25);
     expect(lineWorn(wear(0.9), false)).toBe(0.9 * DIVE.metresPerLine + 25);
-    const d = startDive(0);
+    const d = startDive(0, none);
     afterFight(d, 'snapper', false, wear(0, 2, true));
     expect(d.line).toBe(DIVE.spool - 25);
   });
 
-  it('running out of line sinks the unbanked haul, but the fish still come home', () => {
-    const d = land(startDive(0), 7);
+  it('running out of line ends the dive: the haul keeps its pearls, and the fish still come home', () => {
+    const d = land(startDive(0, none), 7);
     diveOn(d);
     expect(d.pearls).toBe(7);
     for (let i = 0; i < 12; i++) afterFight(d, 'snapper', false, wear(0, 2, true));
     expect(d.state).toBe('sunk');
     expect(d.line).toBe(0);
-    expect(d.pearls).toBe(0);
+    expect(d.pearls).toBe(7);
     expect(d.fish.length).toBe(7);
     const chart: Chart = { ledges: [], record: 0 };
     expect(surface(d, chart)).toBeNull();
     expect(chart).toEqual({ ledges: [], record: 0 });
   });
 
-  it('a fish landed with the last of the line comes home, but the haul sinks', () => {
-    const d = startDive(0);
+  it('a fish landed with the last of the line comes home, and its pearls with the haul', () => {
+    const d = startDive(0, none);
     d.line = 3;
     afterFight(d, 'grouper', true, wear(0, 1));
     expect(d.state).toBe('sunk');
     expect(d.fish).toEqual(['grouper']);
-    expect(d.pearls).toBe(0);
+    expect(d.pearls).toBe(1);
   });
 
-  it('surfacing banks the haul, +10% for each ledge reached this dive, up to +50%', () => {
-    expect([0, 1, 3, 5, 9].map(haulBonus)).toEqual([1, 1.1, 1.3, 1.5, 1.5]);
+  it('a fish landed with the last of the line onto a marker ends the dive there, without growing the bonus', () => {
+    const d = land(startDive(0, none), 4);
+    d.line = 3;
+    afterFight(d, 'grouper', true, wear(0, 1));
+    expect(d).toMatchObject({ state: 'sunk', depth: 5, ledges: 0, grown: 0, pearls: 5 });
+  });
+
+  it('surfacing banks the haul with its bonus: +25% compounding, uncapped, for each pearl-water marker reached', () => {
+    expect([0, 1, 2, 3].map(haulBonus)).toEqual([1, 1.25, 1.5625, 1.953125]);
+    expect(haulBonus(12)).toBeCloseTo(1.25 ** 12, 9);
     const chart: Chart = { ledges: [], record: 0 };
-    const d = land(startDive(0), 10);
+    const d = land(startDive(0, none), 10);
     expect(d.pearls).toBe(10);
+    expect(d.grown).toBe(2);
     const got = surface(d, chart)!;
-    expect(got.pearls).toBe(12);
+    expect(got.pearls).toBe(16);
     expect(got.fish.length).toBe(10);
     expect(d.state).toBe('surfaced');
   });
 
   it('can only surface at a ledge', () => {
-    const d = land(startDive(0), 3);
+    const d = land(startDive(0, none), 3);
     expect(surface(d, { ledges: [], record: 0 })).toBeNull();
     expect(d.state).toBe('fishing');
   });
@@ -353,13 +371,15 @@ describe('the dive', () => {
     const chart: Chart = { ledges: [], record: 0 };
     expect(canStartAt(chart, 0)).toBe(true);
     expect(canStartAt(chart, 10)).toBe(false);
-    expect(surface(land(startDive(0), 10), chart)!.record).toBe(true);
+    expect(surface(land(startDive(0, none), 10), chart)!.record).toBe(true);
     expect(chart).toEqual({ ledges: [10], record: 10 });
     expect(canStartAt(chart, 10)).toBe(true);
-    const deeper = land(startDive(10), 10);
+    // Any marker up to the record, charted or not; none past it or between markers.
+    expect([canStartAt(chart, 5), canStartAt(chart, 15), canStartAt(chart, 7), canStartAt(chart, -5)]).toEqual([true, false, false, false]);
+    const deeper = land(startDive(10, none), 10);
     expect(deeper.depth).toBe(20);
     expect(surface(deeper, chart)!.record).toBe(true);
-    const shallow = surface(land(startDive(0), 5), chart)!;
+    const shallow = surface(land(startDive(0, none), 5), chart)!;
     expect(shallow.record).toBe(false);
     expect(chart.ledges.sort((a, b) => a - b)).toEqual([5, 10, 20]);
     expect(chart.record).toBe(20);
@@ -367,7 +387,7 @@ describe('the dive', () => {
 
   it('a bot can dive the Shelf with the real reel', () => {
     const rng = mulberry(11), brng = mulberry(12);
-    const d = startDive(0);
+    const d = startDive(0, none);
     while (d.state === 'fishing') {
       const bite = rollSeaFish(d.depth, rng);
       const f = botFight(seaGaps(d.depth, none), 0.25, STYLES[0], rng, brng);
@@ -376,5 +396,85 @@ describe('the dive', () => {
     expect(d.state).toBe('ledge');
     expect(d.depth).toBe(5);
     expect(d.line).toBeGreaterThan(DIVE.spool - 30);
+  });
+});
+
+describe('pearls at the edge of the gear', () => {
+  it('counts how far a typical fish is over the gear in levels: 0 at the harbour, 2 more a marker, 1 less a level', () => {
+    expect([0, 4, 5, 10, 30, 45].map((d) => edgeSteps(d, none))).toEqual([0, 0, 2, 4, 12, 18]);
+    expect(edgeSteps(30, { rod: 1, line: 0 })).toBe(11);
+    expect(edgeSteps(30, { rod: 0, line: 1 })).toBe(11);
+    expect(edgeSteps(30, { rod: 4, line: 5 })).toBe(3);
+    expect(edgeSteps(0, { rod: 3, line: 3 })).toBe(-6);
+    for (let depth = 0; depth < 300; depth += 5) {
+      const g = seaGaps(depth, { rod: 2, line: 7 });
+      expect(edgeSteps(depth, { rod: 2, line: 7 })).toBe(Math.round((g.strength + g.weight) / SEA_TIERS.level));
+    }
+  });
+
+  it('pays from pearl water on, doubling for each combined rung over the gear', () => {
+    expect(PEARLS.from).toBe(0);
+    expect([0, 10, 20, 30, 40, 45].map((d) => pearlsAt(d, none))).toEqual([1, 2, 5, 8, 19, 24]);
+    const three = { rod: 3, line: 3 };
+    for (let d = 0; d < 15; d++) {
+      expect(pearlsAt(d, three), `depth ${d}`).toBe(0);
+      expect(inPearlWater(d, three)).toBe(false);
+    }
+    expect(inPearlWater(15, three)).toBe(true);
+    expect(pearlsAt(15, three)).toBe(1);
+    // One level short of matching the harbour's fish is easy water.
+    expect(pearlsAt(0, { rod: 1, line: 0 })).toBe(0);
+    expect(pearlsAt(5, { rod: 1, line: 0 })).toBe(1);
+    // Each combined rung (six levels) over the gear doubles the pay.
+    expect(pearlsAt(80, { rod: 10, line: 10 })).toBe(20);
+    expect(pearlsAt(80, { rod: 13, line: 13 })).toBe(10);
+  });
+
+  it('grows the bonus only at markers reached from pearl water, compounding', () => {
+    const three = { rod: 3, line: 3 };
+    const d = land(startDive(0, three), 15);
+    // Markers 5, 10 and 15 were reached from easy water.
+    expect(d).toMatchObject({ depth: 15, ledges: 3, grown: 0, pearls: 0 });
+    diveOn(d);
+    land(d, 10);
+    expect(d).toMatchObject({ depth: 25, ledges: 5, grown: 2 });
+    const chart: Chart = { ledges: [], record: 0 };
+    const pearls = d.pearls;
+    expect(surface(d, chart)!.pearls).toBe(Math.round(pearls * 1.25 * 1.25));
+  });
+
+  it('keeps its sums the same in every engine: no Math.pow', () => {
+    expect(haulBonus(5)).toBe(powInt(1.25, 5));
+    expect(pearlsAt(45, none)).toBe(Math.round(3 * powInt(PEARLS.step, 18)));
+  });
+});
+
+describe('reach', () => {
+  it('names the first markers where the gear is in pearl water, two combined rungs under, and three', () => {
+    expect(reach(none)).toEqual({ pearl: 0, hard: 30, over: 45 });
+    expect(reach({ rod: 8, line: 8 })).toEqual({ pearl: 40, hard: 70, over: 85 });
+    expect(reach({ rod: 3, line: 3 })).toEqual({ pearl: 15, hard: 45, over: 60 });
+    // An odd level on one track rounds up to the next marker.
+    expect(reach({ rod: 1, line: 0 })).toEqual({ pearl: 5, hard: 35, over: 50 });
+    for (const gear of [none, { rod: 5, line: 2 }, { rod: 12, line: 11 }]) {
+      const r = reach(gear);
+      for (const m of [r.pearl, r.hard, r.over]) expect(m % DIVE.ledgeEvery).toBe(0);
+      expect(inPearlWater(r.pearl, gear)).toBe(true);
+      if (r.pearl > 0) expect(inPearlWater(r.pearl - DIVE.ledgeEvery, gear)).toBe(false);
+    }
+  });
+});
+
+describe('a sea fish\'s matchup', () => {
+  it('is the pond\'s, except that three combined rungs over is too much even when neither gap alone is two', () => {
+    expect(seaMatchupWords({ strength: 1.4, weight: 1.5 })).toEqual({ words: 'Too much for your rod and line', too: true });
+    for (const g of [
+      { strength: 0, weight: 0 },
+      { strength: 1, weight: 1 },
+      { strength: 1.2, weight: 1.3 },
+      { strength: 2, weight: 1.5 },
+      { strength: -1, weight: 2.5 },
+      { strength: 0.5, weight: 1.8 },
+    ]) expect(seaMatchupWords(g), JSON.stringify(g)).toEqual(matchupWords(g));
   });
 });

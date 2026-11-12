@@ -8,10 +8,12 @@ describe('sea zones', () => {
     expect(zoneAt(1).id).toBe('shelf');
     expect(zoneAt(15).id).toBe('shelf');
     expect(zoneAt(16).id).toBe('dropoff');
-    expect(zoneAt(40).id).toBe('dropoff');
-    expect(zoneAt(41).id).toBe('kelp');
-    expect(zoneAt(81).id).toBe('twilight');
-    expect(zoneAt(151).id).toBe('abyss');
+    expect(zoneAt(35).id).toBe('dropoff');
+    expect(zoneAt(36).id).toBe('kelp');
+    expect(zoneAt(60).id).toBe('kelp');
+    expect(zoneAt(61).id).toBe('twilight');
+    expect(zoneAt(90).id).toBe('twilight');
+    expect(zoneAt(91).id).toBe('abyss');
     expect(zoneAt(999).id).toBe('abyss');
   });
 });
@@ -23,33 +25,33 @@ describe('sea mood', () => {
   });
 
   it('keeps building past the Drop-off, for the deep zones', () => {
-    expect(seaMood(40)).toBeCloseTo(1);
-    expect(seaMood(80)).toBeGreaterThan(seaMood(40));
-    expect(seaMood(250)).toBeGreaterThan(seaMood(150));
+    expect(seaMood(35)).toBeCloseTo(1);
+    expect(seaMood(60)).toBeGreaterThan(seaMood(35));
+    expect(seaMood(150)).toBeGreaterThan(seaMood(90));
   });
 
-  it('throws spray on the screen from about depth 30, harder deeper', () => {
-    expect(screenSprayAt(seaMood(25))).toBe(0);
-    expect(screenSprayAt(seaMood(32))).toBeGreaterThan(0);
-    expect(screenSprayAt(seaMood(80))).toBeGreaterThan(screenSprayAt(seaMood(40)));
-    expect(screenSprayAt(seaMood(250))).toBe(1);
+  it('throws spray on the screen from about depth 25, harder deeper', () => {
+    expect(screenSprayAt(seaMood(20))).toBe(0);
+    expect(screenSprayAt(seaMood(28))).toBeGreaterThan(0);
+    expect(screenSprayAt(seaMood(60))).toBeGreaterThan(screenSprayAt(seaMood(35)));
+    expect(screenSprayAt(seaMood(150))).toBe(1);
   });
 
   it('keeps the Shelf and Drop-off bright and darkens only the deep zones', () => {
-    expect(gloomAt(seaMood(40))).toBe(0);
-    expect(gloomAt(seaMood(80))).toBeGreaterThan(0);
-    expect(gloomAt(seaMood(250))).toBe(1);
+    expect(gloomAt(seaMood(35))).toBe(0);
+    expect(gloomAt(seaMood(60))).toBeGreaterThan(0);
+    expect(gloomAt(seaMood(150))).toBe(1);
   });
 
   it('gets rougher steadily with depth, without jumps, up to a cap', () => {
     let last = seaMood(1);
-    for (let d = 2; d <= 400; d++) {
+    for (let d = 2; d <= 250; d++) {
       const m = seaMood(d);
       expect(m).toBeGreaterThanOrEqual(last);
       expect(m - last).toBeLessThan(0.05);
       last = m;
     }
-    expect(seaMood(10_000)).toBe(seaMood(400));
+    expect(seaMood(10_000)).toBe(seaMood(250));
   });
 });
 
@@ -70,8 +72,8 @@ describe('the swell', () => {
   it('rises into huge seas from the Twilight down', () => {
     const height = (d: number) => WAVES.reduce((s, w) => s + waveAmp(w, seaMood(d)), 0);
     // Kelp Deep's end is clearly bigger than its start, and the Abyss about three times the Drop-off.
-    expect(height(80)).toBeGreaterThan(1.6 * height(41));
-    expect(height(250)).toBeGreaterThan(3 * height(40));
+    expect(height(60)).toBeGreaterThan(1.6 * height(36));
+    expect(height(150)).toBeGreaterThan(3 * height(35));
   });
 
   it('rocks the boat gently near shore and hard in the deep zones', () => {
@@ -82,14 +84,14 @@ describe('the swell', () => {
       return r * deg;
     };
     const shelf = maxRoll(seaMood(1));
-    const dropoff = maxRoll(seaMood(40));
-    const abyss = maxRoll(seaMood(250));
+    const dropoff = maxRoll(seaMood(35));
+    const abyss = maxRoll(seaMood(150));
     // Noticeable but gentle near shore, an epic storm by the Abyss.
     expect(shelf).toBeLessThan(2);
     expect(dropoff).toBeGreaterThan(shelf);
     expect(dropoff).toBeLessThan(3.5);
     expect(abyss).toBeGreaterThan(2.5 * dropoff);
-    expect(abyss).toBeLessThanOrEqual(tiltAt(seaMood(250)).max * deg);
+    expect(abyss).toBeLessThanOrEqual(tiltAt(seaMood(150)).max * deg);
   });
 });
 
@@ -137,14 +139,14 @@ describe('the deck', () => {
 describe('deep zone looks', () => {
   it('keeps the Drop-off look up to its end and gives each zone its own in its middle', () => {
     expect(deepLookAt(seaMood(1))).toBe(DEEP_LOOKS.dropoff);
-    expect(deepLookAt(seaMood(40))).toBe(DEEP_LOOKS.dropoff);
-    expect(deepLookAt(seaMood(60))).toBe(DEEP_LOOKS.kelp);
-    expect(deepLookAt(seaMood(110))).toBe(DEEP_LOOKS.twilight);
-    expect(deepLookAt(seaMood(200))).toBe(DEEP_LOOKS.abyss);
-    expect(deepLookAt(seaMood(350))).toBe(DEEP_LOOKS.abyss);
+    expect(deepLookAt(seaMood(35))).toBe(DEEP_LOOKS.dropoff);
+    expect(deepLookAt(seaMood(48))).toBe(DEEP_LOOKS.kelp);
+    expect(deepLookAt(seaMood(75))).toBe(DEEP_LOOKS.twilight);
+    expect(deepLookAt(seaMood(120))).toBe(DEEP_LOOKS.abyss);
+    expect(deepLookAt(seaMood(210))).toBe(DEEP_LOOKS.abyss);
   });
   it('blends across a zone line', () => {
-    const l = deepLookAt(seaMood(151));
+    const l = deepLookAt(seaMood(92));
     const { twilight, abyss } = DEEP_LOOKS;
     expect(l.lamps).toBeGreaterThan(twilight.lamps);
     expect(l.lamps).toBeLessThan(abyss.lamps);

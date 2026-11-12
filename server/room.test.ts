@@ -11,7 +11,7 @@ import * as smoke from '../src/game/smoke';
 import { SmokeStats } from './smokestats';
 import { mulberry } from '../src/game/env';
 import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type Gaps, type ReelTune } from '../src/game/reel';
-import { haulBonus } from '../src/game/dive';
+import { haulBonus, type Dive } from '../src/game/dive';
 import { DIVE } from '../src/data/dive';
 import { HARBOUR } from '../src/data/maps';
 
@@ -179,7 +179,7 @@ describe('Room economy', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
     const s = a.acct.save;
-    Object.assign(s, { level: 20, coins: 100_000, pearls: 200 });
+    Object.assign(s, { level: 20, coins: 100_000, pearls: 1000 });
     // The Aurora Rod doesn't level any more.
     s.locker.rods.push('aurora');
     atShop(a);
@@ -191,8 +191,8 @@ describe('Room economy', () => {
     expect(s.rodLevel).toBe(0);
     atShop(a);
     room.handle(a.id, { t: 'levelrod' });
-    expect(s).toMatchObject({ rodLevel: 1, pearls: 76, coins: 19_000 });
-    expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 76 });
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 120, coins: 40_500 });
+    expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 120 });
     room.handle(a.id, { t: 'levelrod' });
     expect(s.rodLevel).toBe(1);
   });
@@ -201,13 +201,13 @@ describe('Room economy', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
     const s = a.acct.save;
-    Object.assign(s, { level: 20, coins: 100_000, pearls: 200, seaRod: true });
+    Object.assign(s, { level: 20, coins: 100_000, pearls: 1000, seaRod: true });
     room.handle(a.id, { t: 'levelline' });
     expect(s.seaLine).toBe(0);
     atShop(a);
     room.handle(a.id, { t: 'levelline' });
-    expect(s).toMatchObject({ seaLine: 1, pearls: 76, coins: 59_500 });
-    expect(last(a.c, 'state').save).toMatchObject({ seaLine: 1, pearls: 76 });
+    expect(s).toMatchObject({ seaLine: 1, pearls: 120, coins: 70_250 });
+    expect(last(a.c, 'state').save).toMatchObject({ seaLine: 1, pearls: 120 });
     room.handle(a.id, { t: 'levelline' });
     expect(s.seaLine).toBe(1);
   });
@@ -1148,9 +1148,12 @@ describe('dives', () => {
     expect(last(a.c, 'notice').msg).toBe('Charters need the Deep Sea Rod.');
     a.acct.save.seaRod = true;
     t.room.handle(a.id, { t: 'dive', from: 5 });
-    expect(last(a.c, 'notice').msg).toMatch(/charted/);
+    expect(last(a.c, 'notice').msg).toMatch(/furthest/);
     expect(a.acct.save.location).toBe('pond');
-    a.acct.save.sea.ledges.push(5);
+    // An uncharted marker below the record is fine; one above it is not.
+    a.acct.save.sea.record = 10;
+    t.room.handle(a.id, { t: 'dive', from: 15 });
+    expect(a.acct.save.location).toBe('pond');
     t.room.handle(a.id, { t: 'dive', from: 5 });
     expect(a.acct.save.location).toBe('sea');
     // The dive's depth arrives before the save that takes the player to sea.
@@ -1196,29 +1199,58 @@ describe('dives', () => {
     expect(d1).toMatchObject({ depth: 1, fish: 1, pearls: 1, state: 'fishing' });
     expect(d1.line).toBeCloseTo(DIVE.spool - d1.worn!, 1);
     for (let i = 0; i < 4; i++) fight(t, a);
-    expect(lastDive(a)).toMatchObject({ depth: 5, fish: 5, pearls: 5, state: 'ledge', ledges: 1 });
+    expect(lastDive(a)).toMatchObject({ depth: 5, fish: 5, pearls: 5, state: 'ledge', ledges: 1, grown: 1, gear: { rod: 0, line: 0 } });
     // At a ledge the player chooses before fishing again.
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     expect(last(a.c, 'castfail').msg).toMatch(/marker/);
     t.room.handle(a.id, { t: 'ledge', a: 'on' });
     expect(lastDive(a).state).toBe('fishing');
     for (let i = 0; i < 5; i++) fight(t, a);
-    expect(lastDive(a)).toMatchObject({ depth: 10, pearls: 10, state: 'ledge', ledges: 2 });
+    expect(lastDive(a)).toMatchObject({ depth: 10, pearls: 10, state: 'ledge', ledges: 2, grown: 2 });
     t.room.handle(a.id, { t: 'ledge', a: 'surface' });
-    // Banked with two ledges' growth, charted, a new record, and back by the seaplane.
+    // Banked with two pearl-water markers' bonus, charted, a new record, and back by the seaplane.
     expect(s.pearls).toBe(Math.round(10 * haulBonus(2)));
+    expect(s.pearls).toBe(16);
     // The record keeps what the charter banked, the same numbers as its "Home safe!" card, for the Furthest Out board.
-    expect(s.sea).toEqual({ ledges: [10], record: 10, haul: { pearls: 12, fish: 10, coins: s.coins - coins } });
-    expect(last(a.c, 'diveend').end).toEqual({ result: 'surfaced', ledge: 10, pearls: 12, record: true, fish: 10, coins: s.coins - coins });
+    expect(s.sea).toEqual({ ledges: [10], record: 10, haul: { pearls: 16, fish: 10, coins: s.coins - coins } });
+    expect(last(a.c, 'diveend').end).toEqual({ result: 'surfaced', ledge: 10, pearls: 16, record: true, fish: 10, coins: s.coins - coins });
     expect(s.coins - coins).toBeGreaterThan(10_000);
     expect(s.location).toBe('pond');
     expect(last(a.c, 'state').save.location).toBe('pond');
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     t.room.handle(a.id, { t: 'ledge', a: 'surface' });
-    expect(s.pearls).toBe(12);
+    expect(s.pearls).toBe(16);
   });
 
-  it('heads home between ledges, sinking the haul, but not mid-cast or at a ledge', () => {
+  it('fishes with the gear it set out with, and fish under the gear pay no pearls or bonus', () => {
+    const t = setup();
+    const a = diver(t);
+    const s = a.acct.save;
+    Object.assign(s, { rodLevel: 3, seaLine: 3 });
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    expect(lastDive(a)).toMatchObject({ gear: { rod: 3, line: 3 }, grown: 0 });
+    expect(a.acct.dive!.dive.gear).toEqual({ rod: 3, line: 3 });
+    for (let i = 0; i < 5; i++) fight(t, a);
+    // The Shelf's first fish are well under a +3/+3 rod and line: easy water.
+    expect(lastDive(a)).toMatchObject({ depth: 5, fish: 5, pearls: 0, state: 'ledge', ledges: 1, grown: 0 });
+    t.room.handle(a.id, { t: 'ledge', a: 'surface' });
+    expect(last(a.c, 'diveend').end).toMatchObject({ result: 'surfaced', ledge: 5, pearls: 0 });
+    expect(s.pearls).toBe(0);
+  });
+
+  it('a run kept from before dives knew their gear fishes with the levels the diver has', () => {
+    const t = setup();
+    const a = diver(t);
+    a.acct.save.seaLine = 2;
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    const d: Partial<Dive> = a.acct.dive!.dive;
+    delete d.gear;
+    delete d.grown;
+    fight(t, a);
+    expect(lastDive(a)).toMatchObject({ depth: 1, gear: { rod: 0, line: 2 }, grown: 0, pearls: 0 });
+  });
+
+  it('heads home between ledges, keeping the haul without its bonus, but not mid-cast or at a ledge', () => {
     const t = setup();
     const a = diver(t);
     const s = a.acct.save;
@@ -1234,9 +1266,10 @@ describe('dives', () => {
     t.advance(last(a.c, 'castok').wait * 1000 + 100);
     t.room.handle(a.id, { t: 'lost' });
     t.room.handle(a.id, { t: 'headhome' });
-    expect(last(a.c, 'diveend').end).toEqual({ result: 'sunk', why: 'home', depth: 2, pearls: 2, fish: 2, coins: s.coins - coins });
+    expect(last(a.c, 'diveend').end).toEqual({ result: 'sunk', why: 'home', depth: 2, pearls: 2, bonus: 0, fish: 2, coins: s.coins - coins });
     expect(s.location).toBe('pond');
-    expect(s.pearls).toBe(0);
+    expect(s.pearls).toBe(2);
+    expect(last(a.c, 'state').save.pearls).toBe(2);
     expect(s.sea).toEqual({ ledges: [], record: 0 });
     // At a ledge the choice is head home with the haul (`ledge`), so `headhome` does nothing there.
     t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
@@ -1293,7 +1326,7 @@ describe('dives', () => {
     expect(a.acct.save.seen).toEqual([last(a.c, 'castok').fishId]);
   });
 
-  it('sinks the haul when the line runs out, keeping the coins from the fish', () => {
+  it('ends the charter when the line runs out, keeping the haul without its bonus and the coins from the fish', () => {
     const t = setup();
     const a = diver(t);
     t.room.handle(a.id, { t: 'dive', from: 0 });
@@ -1303,12 +1336,28 @@ describe('dives', () => {
     a.acct.dive!.dive.line = 1;
     fight(t, a, false);
     const end = last(a.c, 'diveend').end;
-    expect(end).toMatchObject({ result: 'sunk', why: 'line', depth: 2, pearls: 2, fish: 2 });
-    expect(a.acct.save).toMatchObject({ coins, pearls: 0, location: 'pond', sea: { ledges: [], record: 0 } });
+    expect(end).toMatchObject({ result: 'sunk', why: 'line', depth: 2, pearls: 2, bonus: 0, fish: 2 });
+    expect(a.acct.save).toMatchObject({ coins, pearls: 2, location: 'pond', sea: { ledges: [], record: 0 } });
+    expect(last(a.c, 'state').save.pearls).toBe(2);
     expect(a.acct.dive).toBeUndefined();
   });
 
-  it('waits two minutes for a diver who drops out, then the haul sinks', () => {
+  it('running out of line past a pearl-water marker loses only the bonus', () => {
+    const t = setup();
+    const a = diver(t);
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    for (let i = 0; i < 5; i++) fight(t, a);
+    t.room.handle(a.id, { t: 'ledge', a: 'on' });
+    fight(t, a);
+    expect(lastDive(a)).toMatchObject({ depth: 6, pearls: 6, ledges: 1, grown: 1 });
+    a.acct.dive!.dive.line = 1;
+    fight(t, a, false);
+    // 6 pearls with a +25% bonus would have banked 8 at a marker.
+    expect(last(a.c, 'diveend').end).toMatchObject({ result: 'sunk', why: 'line', depth: 6, pearls: 6, bonus: 2 });
+    expect(a.acct.save).toMatchObject({ pearls: 6, sea: { ledges: [], record: 0 } });
+  });
+
+  it('waits two minutes for a diver who drops out, then heads home with the haul without its bonus', () => {
     const t = setup();
     let a = diver(t);
     t.room.handle(a.id, { t: 'dive', from: 0 });
@@ -1331,7 +1380,10 @@ describe('dives', () => {
     a = t.join('Ann');
     expect(a.acct.save.location).toBe('pond');
     expect(last(a.c, 'welcome').dive).toBeUndefined();
-    expect(last(a.c, 'diveend').end).toMatchObject({ result: 'sunk', why: 'away', depth: 2, pearls: 2 });
+    expect(last(a.c, 'diveend').end).toMatchObject({ result: 'sunk', why: 'away', depth: 2, pearls: 2, bonus: 0 });
+    expect(a.acct.save.pearls).toBe(2);
+    expect(last(a.c, 'welcome').save.pearls).toBe(2);
+    expect(a.acct.save.sea).toEqual({ ledges: [], record: 0 });
   });
 
   it('keeps each dive to itself: divers on other dives never see each other move or jump', () => {

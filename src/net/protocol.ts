@@ -5,7 +5,7 @@ import type { DishId, StageId } from '../data/smokehouse';
 import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 import type { Behaviour } from '../data/dive';
-import type { DiveState } from '../game/dive';
+import type { DiveState, SeaGear } from '../game/dive';
 import type { Gaps, LossReason, ReelTune } from '../game/reel';
 import type { FishTag } from '../game/progression';
 
@@ -40,9 +40,13 @@ export interface DiveView {
   /** Metres of line left. */
   line: number;
   state: DiveState;
+  /** Markers reached this dive, and those of them whose stretch was pearl water, which grew the haul's bonus. */
   ledges: number;
-  /** Pearls in the haul, before its growth (`haulBonus(ledges)`). */
+  grown: number;
+  /** Pearls in the haul, before its bonus (`haulBonus(grown)`). */
   pearls: number;
+  /** The Deep Sea Rod and Line levels the dive fishes with, as the server applies them. */
+  gear: SeaGear;
   /** Fish landed this dive, and the coins they sold for. */
   fish: number;
   coins: number;
@@ -52,13 +56,14 @@ export interface DiveView {
 }
 
 /**
- * How a dive ended. Surfaced: the haul banked with its growth, and the ledge charted. Sunk: the line ran out (`line`),
+ * How a dive ended. Surfaced: the haul banked with its bonus, and the ledge charted. Sunk: the line ran out (`line`),
  * the player was away longer than the dive waits (`away`), headed home between ledges (`home`), or reset their
- * account (`quit`); the fish were sold as they were landed either way, for `coins`.
+ * account (`quit`); the haul's `pearls` were kept without its bonus, and `bonus` is the pearls of bonus lost. The fish
+ * were sold as they were landed either way, for `coins`.
  */
 export type DiveEnd =
   | { result: 'surfaced'; ledge: number; pearls: number; record: boolean; fish: number; coins: number }
-  | { result: 'sunk'; why: 'line' | 'away' | 'home' | 'quit'; depth: number; pearls: number; fish: number; coins: number; lost?: LossReason | 'gone' };
+  | { result: 'sunk'; why: 'line' | 'away' | 'home' | 'quit'; depth: number; pearls: number; bonus: number; fish: number; coins: number; lost?: LossReason | 'gone' };
 
 export type Activity =
   | { a: 'cast'; x: number; z: number }
@@ -108,7 +113,7 @@ export type ClientMsg =
   | { t: 'dive'; from: number }
   /** At a ledge: dive on, or surface with the haul. */
   | { t: 'ledge'; a: 'on' | 'surface' }
-  /** Head home between ledges: the dive ends and its haul sinks. */
+  /** Head home between ledges: the dive ends and its haul keeps its pearls without the bonus. */
   | { t: 'headhome' }
   /** Spin the Lucky Wheel with the fish in hotbar slot i. */
   | { t: 'wheel'; i: number }

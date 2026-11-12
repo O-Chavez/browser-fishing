@@ -171,7 +171,7 @@ const FISH_DEFS: FishDef[] = [
   { id: 'aurorapike', name: 'Aurora Pike', tier: 5, locations: ['pond', 'lake'], minSize: 200, maxSize: 270, maxWeight: 90, baseValue: 100, stamina: 2.5, color: 0x2fe0c0 },
   { id: 'constellation', name: 'Starweaver Eel', tier: 5, night: true, locations: ['pond', 'lake'], minSize: 220, maxSize: 320, maxWeight: 70, baseValue: 120, stamina: 2.5, color: 0x2a1b6e },
 
-  // Sea · Shelf (depths 1-15) and Drop-off (16-40). Tier 5 for rods and bait, but plain-looking, worth `SEA_VALUE`
+  // Sea · Shelf (depths 1-15) and Drop-off (16-35). Tier 5 for rods and bait, but plain-looking, worth `SEA_VALUE`
   // times their base value, and never rolled in the pond. The dive (D1/D3) catches them by location.
   { id: 'pewtercod', name: 'Pewter Cod', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 190, maxWeight: 60, baseValue: 140, stamina: 2.55, color: 0x8a9ba8 },
   { id: 'snapper', name: 'Copper Snapper', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 180, maxWeight: 45, baseValue: 155, stamina: 2.6, color: 0xd9763c },
@@ -180,7 +180,7 @@ const FISH_DEFS: FishDef[] = [
   { id: 'irontuna', name: 'Ironside Tuna', tier: 5, sea: true, locations: ['dropoff'], minSize: 190, maxSize: 280, maxWeight: 200, baseValue: 195, stamina: 2.7, color: 0x2a4f8a },
   { id: 'marlin', name: 'Squall Marlin', tier: 5, sea: true, legend: true, locations: ['dropoff'], minSize: 260, maxSize: 320, maxWeight: 300, baseValue: 560, stamina: 2.8, color: 0x1d5fb0 },
 
-  // Sea · Kelp Deep (41-80), the Twilight (81-150) and the Abyss (151+): stranger and dearer the further out (the
+  // Sea · Kelp Deep (36-60), the Twilight (61-90) and the Abyss (91+): stranger and dearer the further out (the
   // Deep Sea Fish Options page, Oscar 2026-11-01). Stamina stays in the Drop-off's band; for now a
   // sea fish's fight comes from how far out it is only (`seaGaps`).
   { id: 'frondback', name: 'Frondback Seadragon', tier: 5, sea: true, locations: ['kelp'], minSize: 160, maxSize: 240, maxWeight: 50, baseValue: 240, stamina: 2.6, color: 0x8a8a2e },

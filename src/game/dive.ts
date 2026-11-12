@@ -1,9 +1,10 @@
 // Sea dive rules (Endgame Gameplan, "The challenge: charter dives"): depth sets the fight, one spool of line lasts the
-// dive, and the haul is only safe once the player surfaces at a ledge.
+// dive. Fish at the edge of the gear pay Black Pearls; heading home at a ledge banks them with the haul's bonus, and a
+// dive that ends any other way keeps them without it.
 // Pure logic for the server (D2) and the dive HUD (D3); no Math.pow, so the server and the client agree.
 import { byId, DEEP_SEA_LINE, DEEP_SEA_ROD, FISH, type Fish } from '../data/content';
-import { DIVE, SEA_FIGHT, SEA_TIERS, ZONES, type Behaviour, type Zone } from '../data/dive';
-import { gapsOf, type FishTiers, type GearTiers } from './progression';
+import { DIVE, PEARLS, REACH_RUNGS, SEA_FIGHT, SEA_TIERS, ZONES, type Behaviour, type Zone } from '../data/dive';
+import { gapsOf, matchupWords, rungsOver, type FishTiers, type GearTiers } from './progression';
 import type { Gaps, ReelWear } from './reel';
 
 /** base^n for a whole n ≥ 0, by repeated multiplication (same result in every JS engine, unlike `Math.pow`). */
@@ -105,11 +106,54 @@ export function rollSeaFish(depth: number, rng: () => number): SeaBite {
   return { fish, behaviour };
 }
 
-/** Pearls a fish landed at this depth adds to the haul. */
-export const pearlsAt = (depth: number): number => 1 + Math.floor(depth / DIVE.pearlStep);
+/**
+ * How far a typical fish at this depth is over the gear on both gaps together, in levels (`SEA_TIERS.level`), with no
+ * per-fish rolls: 0 at the harbour with +0/+0, 2 more each marker, 1 less for each level on either track. Can be negative.
+ */
+export function edgeSteps(depth: number, gear: SeaGear): number {
+  const f = seaFishTiers(depth), g = seaGearTiers(gear);
+  return Math.round((f.strength - g.line + (f.weight - g.rod)) / SEA_TIERS.level);
+}
 
-/** The haul's multiplier on surfacing after reaching this many ledges this dive. */
-export const haulBonus = (ledges: number): number => 1 + Math.min(DIVE.haulCap, DIVE.haulPerLedge * ledges);
+/** Pearl water (`PEARLS`): the fish at this depth at least match the gear, so landing them pays pearls. */
+export const inPearlWater = (depth: number, gear: SeaGear): boolean => edgeSteps(depth, gear) >= PEARLS.from;
+
+/**
+ * Pearls a fish landed at this depth adds to the haul: none before pearl water; in it 1 + floor(depth / pearlStep),
+ * times `PEARLS.step` for each level the fish is over the gear (doubling for each combined rung), at least 1.
+ */
+export function pearlsAt(depth: number, gear: SeaGear): number {
+  const steps = edgeSteps(depth, gear);
+  if (steps < PEARLS.from) return 0;
+  return Math.max(1, Math.round((1 + Math.floor(depth / DIVE.pearlStep)) * powInt(PEARLS.step, steps)));
+}
+
+/** The haul's multiplier on heading home at a marker, after its bonus grew at this many markers (`Dive.grown`): +25% compounding. */
+export const haulBonus = (grown: number): number => powInt(1 + DIVE.haulGrow, Math.min(grown, DIVE.haulCap));
+
+/**
+ * Where charters get hard for this gear, by the first marker (from 0) where a typical fish is: in pearl water, two
+ * combined rungs over the rod and line (`REACH_RUNGS.hard`, the edge of what a player can land), and three (`over`).
+ */
+export function reach(gear: SeaGear): { pearl: number; hard: number; over: number } {
+  const first = (steps: number) => {
+    let m = 0;
+    while (edgeSteps(m, gear) < steps) m += DIVE.ledgeEvery;
+    return m;
+  };
+  const rungs = (n: number) => Math.round(n / SEA_TIERS.level);
+  return { pearl: first(PEARLS.from), hard: first(rungs(REACH_RUNGS.hard)), over: first(rungs(REACH_RUNGS.over)) };
+}
+
+/**
+ * The hook card's matchup for a sea fish: the pond's (`matchupWords`), except that a fish whose two gaps together are
+ * three rungs or more over (unlandable) reads as too much even when neither gap alone is two over.
+ */
+export function seaMatchupWords(g: Gaps): { words: string; too: boolean } {
+  const m = matchupWords(g);
+  if (!m.too && rungsOver(g.strength + g.weight) >= REACH_RUNGS.over) return { words: 'Too much for your rod and line', too: true };
+  return m;
+}
 
 /** Metres of line a fight wore: the line the fish took, plus a length if it got away, or each fray left on a landed fish. */
 export function lineWorn(wear: ReelWear, landed: boolean): number {
@@ -125,11 +169,15 @@ export interface Dive {
   /** Metres of line left on the spool. */
   line: number;
   state: DiveState;
-  /** Ledges reached this dive, for the haul's growth. */
+  /** Ledges reached this dive. */
   ledges: number;
-  /** Pearls in the haul, lost if the line runs out before surfacing. */
+  /** Ledges reached whose stretch was pearl water: the haul's bonus grew at each (`haulBonus`). */
+  grown: number;
+  /** Pearls in the haul, without its bonus: kept however the dive ends; heading home at a ledge adds the bonus. */
   pearls: number;
-  /** Ids of the fish landed this dive; these come home even if the haul sinks. */
+  /** The Deep Sea Rod and Line levels the dive fishes with; levels can't change at sea. */
+  gear: SeaGear;
+  /** Ids of the fish landed this dive; these come home however the dive ends. */
   fish: string[];
 }
 
@@ -141,32 +189,40 @@ export interface Chart {
 
 export const isLedge = (depth: number): boolean => depth > 0 && depth % DIVE.ledgeEvery === 0;
 
-/** Where a new dive may start: the harbour or a charted ledge. */
-export const canStartAt = (chart: Chart, start: number): boolean => start === 0 || chart.ledges.includes(start);
+/** Where a new dive may start: the harbour, or any ledge up to the record (the furthest one surfaced from), charted or not. */
+export const canStartAt = (chart: Chart, start: number): boolean =>
+  start === 0 || (Number.isInteger(start) && start > 0 && start % DIVE.ledgeEvery === 0 && start <= chart.record);
 
-export function startDive(start: number): Dive {
-  return { start, depth: start, line: DIVE.spool, state: 'fishing', ledges: 0, pearls: 0, fish: [] };
+const NO_GEAR: SeaGear = { rod: 0, line: 0 };
+
+/** The gear a dive fishes with; a dive kept from before dives knew theirs fishes as +0/+0. */
+export const diveGear = (dive: Dive): SeaGear => dive.gear ?? NO_GEAR;
+
+export function startDive(start: number, gear: SeaGear): Dive {
+  return { start, depth: start, line: DIVE.spool, state: 'fishing', ledges: 0, grown: 0, pearls: 0, gear: { rod: gear.rod, line: gear.line }, fish: [] };
 }
 
 /**
  * Applies a finished fight. A landed fish joins the dive's catch, adds its pearls and takes the boat a depth
- * deeper, stopping at each ledge for the player's choice. If the line runs out, the dive ends and the haul sinks
- * (the landed fish, the last one included, still come home).
+ * deeper, stopping at each ledge for the player's choice; a ledge reached from pearl water grows the haul's bonus.
+ * If the line runs out, the dive ends ('sunk'): the haul keeps its pearls but not its bonus, and the landed fish,
+ * the last one included, still come home.
  */
 export function afterFight(dive: Dive, fishId: string, landed: boolean, wear: ReelWear): Dive {
   if (dive.state !== 'fishing') return dive;
+  const gear = diveGear(dive);
   dive.line = Math.max(0, dive.line - lineWorn(wear, landed));
   if (landed) {
     dive.fish.push(fishId);
-    dive.pearls += pearlsAt(dive.depth);
+    dive.pearls += pearlsAt(dive.depth, gear);
     dive.depth++;
   }
   if (dive.line <= 0) {
     dive.state = 'sunk';
-    dive.pearls = 0;
   } else if (landed && isLedge(dive.depth)) {
     dive.state = 'ledge';
     dive.ledges++;
+    if (inPearlWater(dive.depth - 1, gear)) dive.grown = (dive.grown ?? 0) + 1;
   }
   return dive;
 }
@@ -178,7 +234,7 @@ export function diveOn(dive: Dive): Dive {
 }
 
 export interface Surfaced {
-  /** Pearls banked: the haul with its growth. */
+  /** Pearls banked: the haul with its bonus. */
   pearls: number;
   fish: string[];
   /** The ledge surfaced from, now charted. */
@@ -187,7 +243,7 @@ export interface Surfaced {
   record: boolean;
 }
 
-/** At a ledge: surface. Banks the haul with its growth, charts the ledge and updates the record. */
+/** At a ledge: surface. Banks the haul with its bonus, charts the ledge and updates the record. */
 export function surface(dive: Dive, chart: Chart): Surfaced | null {
   if (dive.state !== 'ledge') return null;
   dive.state = 'surfaced';
@@ -195,5 +251,5 @@ export function surface(dive: Dive, chart: Chart): Surfaced | null {
   if (!chart.ledges.includes(ledge)) chart.ledges.push(ledge);
   const record = ledge > chart.record;
   if (record) chart.record = ledge;
-  return { pearls: Math.round(dive.pearls * haulBonus(dive.ledges)), fish: dive.fish.slice(), ledge, record };
+  return { pearls: Math.round(dive.pearls * haulBonus(dive.grown ?? 0)), fish: dive.fish.slice(), ledge, record };
 }

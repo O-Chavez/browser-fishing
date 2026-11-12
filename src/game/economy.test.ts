@@ -761,31 +761,31 @@ describe('rod levels', () => {
     return s;
   };
 
-  it('costs 100 + 24N Black Pearls and 75k + 6k·N coins, the coins capped at 400k', () => {
-    expect(eco.rodLevelCost(1)).toEqual({ coins: 81_000, pearls: 124 });
-    expect(eco.rodLevelCost(10)).toEqual({ coins: 135_000, pearls: 340 });
-    expect(eco.rodLevelCost(40)).toEqual({ coins: 315_000, pearls: 1060 });
-    expect(eco.rodLevelCost(60)).toEqual({ coins: 400_000, pearls: 1540 });
+  it('costs 750 + 130N Black Pearls and 55k + 4.5k·N coins, the coins capped at 300k', () => {
+    expect(eco.rodLevelCost(1)).toEqual({ coins: 59_500, pearls: 880 });
+    expect(eco.rodLevelCost(10)).toEqual({ coins: 100_000, pearls: 2050 });
+    expect(eco.rodLevelCost(40)).toEqual({ coins: 235_000, pearls: 5950 });
+    expect(eco.rodLevelCost(60)).toEqual({ coins: 300_000, pearls: 8550 });
   });
 
   it('levels the Deep Sea Rod for coins and pearls, and coins alone are never enough', () => {
     const s = owner();
     s.coins = 10_000_000;
     expect(eco.levelRod(s)).toBe(false);
-    s.pearls = 124;
+    s.pearls = 880;
     expect(eco.levelRod(s)).toBe(true);
-    expect(s).toMatchObject({ rodLevel: 1, pearls: 0, coins: 10_000_000 - 81_000 });
-    s.pearls = 147;
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 0, coins: 10_000_000 - 59_500 });
+    s.pearls = 1009;
     expect(eco.levelRod(s)).toBe(false);
-    s.coins = 86_999;
-    s.pearls = 1000;
+    s.coins = 63_999;
+    s.pearls = 10_000;
     expect(eco.levelRod(s)).toBe(false);
     expect(s.rodLevel).toBe(1);
   });
 
   it('needs the Deep Sea Rod: the Aurora Rod no longer levels', () => {
     const s = newSave();
-    Object.assign(s, { level: 20, coins: 1e6, pearls: 1000 });
+    Object.assign(s, { level: 20, coins: 1e6, pearls: 10_000 });
     s.locker.rods.push('aurora');
     eco.equipRod(s, 'aurora');
     expect(eco.levelRod(s)).toBe(false);
@@ -815,6 +815,21 @@ describe('rod levels', () => {
     expect(migrate({ ...newSave(), pearls: -5, rodLevel: 'x', seaRod: 'yes' })).toMatchObject({ pearls: 0, rodLevel: 0, seaRod: false });
     expect(migrate({ ...newSave(), pearls: 41.7, rodLevel: 12, seaRod: true })).toMatchObject({ pearls: 41, rodLevel: 12, seaRod: true });
   });
+
+  it('multiplies the unspent pearls of saves from before the edge-of-the-gear economy by 6, once', () => {
+    expect(newSave().pearlsV).toBe(2);
+    const old = { ...newSave(), pearls: 350 } as Partial<SaveData>;
+    delete old.pearlsV;
+    const once = migrate(old);
+    expect(once).toMatchObject({ pearls: 2100, pearlsV: 2 });
+    // The clean-up runs on the server and the client, again and again: the version stops a second rescale.
+    expect(migrate(once)).toMatchObject({ pearls: 2100, pearlsV: 2 });
+    expect(migrate(JSON.parse(JSON.stringify(migrate(once))))).toMatchObject({ pearls: 2100, pearlsV: 2 });
+    // A save already counted in the new pearls is left alone.
+    expect(migrate({ ...newSave(), pearls: 350 })).toMatchObject({ pearls: 350, pearlsV: 2 });
+    // The input isn't changed in place.
+    expect(old.pearls).toBe(350);
+  });
 });
 
 describe('the Deep Sea Line', () => {
@@ -826,9 +841,9 @@ describe('the Deep Sea Line', () => {
     return s;
   };
 
-  it("costs the rod's pearls and half its coins: 100 + 24N Black Pearls and 37.5k + 3k·N coins, capped at 200k", () => {
-    expect(eco.seaLineCost(1)).toEqual({ coins: 40_500, pearls: 124 });
-    expect(eco.seaLineCost(10)).toEqual({ coins: 67_500, pearls: 340 });
+  it("costs the rod's pearls and half its coins: 750 + 130N Black Pearls and 27.5k + 2.25k·N coins, capped at 150k", () => {
+    expect(eco.seaLineCost(1)).toEqual({ coins: 29_750, pearls: 880 });
+    expect(eco.seaLineCost(10)).toEqual({ coins: 50_000, pearls: 2050 });
     for (const n of [1, 5, 20, 40, 60]) {
       expect(eco.seaLineCost(n).pearls).toBe(eco.rodLevelCost(n).pearls);
       expect(eco.seaLineCost(n).coins).toBe(eco.rodLevelCost(n).coins / 2);
@@ -837,16 +852,16 @@ describe('the Deep Sea Line', () => {
 
   it('levels for coins and pearls with the Deep Sea Rod, and coins alone are never enough', () => {
     const none = newSave();
-    Object.assign(none, { coins: 1e6, pearls: 1000 });
+    Object.assign(none, { coins: 1e6, pearls: 10_000 });
     none.locker.rods.push('aurora');
     expect(eco.levelSeaLine(none)).toBe(false);
     const s = owner();
     s.coins = 10_000_000;
     expect(eco.levelSeaLine(s)).toBe(false);
-    s.pearls = 124;
+    s.pearls = 880;
     expect(eco.levelSeaLine(s)).toBe(true);
-    expect(s).toMatchObject({ seaLine: 1, pearls: 0, coins: 10_000_000 - 40_500 });
-    s.pearls = 147;
+    expect(s).toMatchObject({ seaLine: 1, pearls: 0, coins: 10_000_000 - 29_750 });
+    s.pearls = 1009;
     expect(eco.levelSeaLine(s)).toBe(false);
     expect(s.seaLine).toBe(1);
   });

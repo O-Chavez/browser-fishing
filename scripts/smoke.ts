@@ -739,7 +739,7 @@ async function seaChecks(): Promise<void> {
   });
   check('sea: /sea takes you to the open sea, with the boat and no pond hub', trip.sea && trip.boat && !trip.hub, JSON.stringify(trip));
   check('sea: the "Casting off" card covers the trip, names the zone, then clears', trip.shown.includes('Casting off') && trip.shown.includes('The Drop-off') && trip.gone, trip.shown);
-  check('sea: depth 20 sets the Drop-off mood', Math.abs(trip.mood - 2 / 3) < 0.01, String(trip.mood));
+  check('sea: depth 20 sets the Drop-off mood', Math.abs(trip.mood - 0.6842) < 0.01, String(trip.mood));
   if (!trip.sea) return void (await ctx.close());
 
   // Walk toward the rail and beyond: the deck holds you.
@@ -920,7 +920,7 @@ async function tripChecks(): Promise<void> {
   const lit = await page.evaluate(() => document.querySelectorAll('#divehud .trail i.on').length);
   check('charter: a landed fish lights a fish on the strip', seen.includes('reeling') && lit === 1 && after.includes('4 fish to marker 5'), `${seen.join(',')} · ${after}`);
 
-  // Head home between markers, from the Bag: the haul sinks and the card says so.
+  // Head home between markers, from the Bag: the card says the pearls are kept.
   await page.evaluate(() => window.__game.openMenu('inventory'));
   await sleep(200);
   await page.click('#menu [data-act="askhome"]');
@@ -929,8 +929,8 @@ async function tripChecks(): Promise<void> {
   await page.click('#menu [data-act="headhome"]');
   await arrived(false);
   await sleep(800);
-  const sank = await tab();
-  check('charter: heading home between markers asks first, then brings you back with the "Headed home" card', ask.includes('tab-headhome') && sank.includes('Headed home') && sank.includes('Fish sold along the way'), `${ask.slice(0, 60)} | ${sank.slice(0, 120)}`);
+  const early = await tab();
+  check('charter: heading home between markers asks first, then brings you back with the "Headed home" card', ask.includes('tab-headhome') && early.includes('Headed home') && early.includes('Fish sold along the way') && !/sank|sunk/i.test(early), `${ask.slice(0, 60)} | ${early.slice(0, 120)}`);
   await page.click('#menu [data-act="close"]');
   await page.keyboard.press('Digit1');
   await sleep(300);

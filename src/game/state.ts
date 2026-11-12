@@ -98,6 +98,11 @@ export interface SaveData {
   /** Black Pearls, banked from sea dives and spent on rod levels. Never sold anywhere. */
   pearls: number;
   /**
+   * Which pearl economy `pearls` is counted in (`PEARLS_VERSION`): saves from before charters paid for fishing at the
+   * edge of the gear have none, and their unspent pearls are multiplied by `PEARLS_RESCALE` once in `migrate`.
+   */
+  pearlsV: number;
+  /**
    * The Deep Sea Rod (`DEEP_SEA_ROD`) is bought: charters are open to this player. It's no bag item; it stays on Reed's
    * boat and is in hand at sea.
    */
@@ -153,6 +158,14 @@ export interface BestCatch {
 
 const KEY = 'fishing-game-save';
 
+/**
+ * The pearl economy saves are counted in (`SaveData.pearlsV`). 2 came with charters paying for fishing at the edge of
+ * the gear and dearer levels (Oscar, 2026-11-11): unspent pearls from before were multiplied by `PEARLS_RESCALE` so
+ * they buy about what they did.
+ */
+export const PEARLS_VERSION = 2;
+export const PEARLS_RESCALE = 6;
+
 export const newSave = (): SaveData => ({
   version: 1,
   level: 1,
@@ -173,6 +186,7 @@ export const newSave = (): SaveData => ({
   bottles: [],
   chips: 0,
   pearls: 0,
+  pearlsV: PEARLS_VERSION,
   seaRod: false,
   rodLevel: 0,
   seaLine: 0,
@@ -357,6 +371,10 @@ export function migrate(raw: object): SaveData {
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
   out.pearls = Number.isFinite(out.pearls) ? Math.max(0, Math.floor(out.pearls)) : 0;
+  // Pearls from before the edge-of-the-gear economy are rescaled once; the version keeps it from happening again.
+  const pv = typeof data.pearlsV === 'number' && Number.isFinite(data.pearlsV) ? data.pearlsV : 1;
+  if (pv < PEARLS_VERSION) out.pearls *= PEARLS_RESCALE;
+  out.pearlsV = Math.max(pv, PEARLS_VERSION);
   out.rodLevel = Number.isFinite(out.rodLevel) ? Math.max(0, Math.floor(out.rodLevel)) : 0;
   out.seaLine = Number.isFinite(out.seaLine) ? Math.max(0, Math.floor(out.seaLine)) : 0;
   out.seaRod = out.seaRod === true;

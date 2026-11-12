@@ -5,7 +5,7 @@
 import { DEEP_SEA_ROD } from '../data/content';
 import { BEHAVIOURS, DIVE, ZONES, type Behaviour } from '../data/dive';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { haulBonus, pearlsAt, zoneAt, type Chart } from './dive';
+import { canStartAt, haulBonus, inPearlWater, pearlsAt, reach, zoneAt, type Chart, type SeaGear } from './dive';
 import type { LossReason } from './reel';
 import { COIN, PEARL } from './format';
 
@@ -34,7 +34,10 @@ export function zoneMarkers(depth: number): number[] {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
-const pct = (bonus: number) => `+${Math.round((bonus - 1) * 100)}%`;
+/** A haul bonus as a multiplier, for the strip, the cards and the buttons: ×1.56. */
+export const times = (bonus: number): string => `×${bonus.toFixed(2)}`;
+/** Where a stretch of sea starts, in the words the panels use. */
+export const fromMarker = (m: number): string => (m > 0 ? `marker ${m}` : 'the harbour');
 
 /** The next marker past this depth (at a marker, the one after it). */
 export const nextMarker = (depth: number): number => (Math.floor(depth / DIVE.ledgeEvery) + 1) * DIVE.ledgeEvery;
@@ -44,7 +47,7 @@ export const startText = (depth: number): string =>
   `${zoneAt(depth).name} · ${depth === 0 ? 'from the harbour' : depth % DIVE.ledgeEvery === 0 ? `from marker ${depth}` : `partway to marker ${nextMarker(depth)}`}`;
 
 /** Pearls the haul banks if the player heads home now (at a marker), as `surface` works it out. */
-export const banked = (v: Pick<DiveView, 'pearls' | 'ledges'>): number => Math.round(v.pearls * haulBonus(v.ledges));
+export const banked = (v: Pick<DiveView, 'pearls' | 'grown'>): number => Math.round(v.pearls * haulBonus(v.grown));
 
 export const lineLevel = (metres: number): 'ok' | 'low' | 'danger' => (metres <= LINE_DANGER ? 'danger' : metres <= LINE_LOW ? 'low' : 'ok');
 
@@ -83,11 +86,13 @@ export function hudHtml(v: DiveView, worn: boolean, pop = -1): string {
   const full = Math.max(0, Math.min(100, (v.line / DIVE.spool) * 100));
   // Easy fights barely touch the spool; the cost shows once it's a metre or more.
   const cost = worn && v.worn && v.worn >= 0.5 ? `<span class="worn">−${Math.round(v.worn)} m</span>` : '';
-  const grow = v.ledges ? `<span class="grow">${pct(haulBonus(v.ledges))}</span>` : '';
+  const grow = v.grown ? `<span class="grow">${times(haulBonus(v.grown))}</span>` : '';
+  // What a fish pays right now: pearls in pearl water, else when the pearls start.
+  const pay = inPearlWater(v.depth, v.gear) ? `${PEARL} ${pearlsAt(v.depth, v.gear)} a fish` : `easy water · pearls from ${fromMarker(reach(v.gear).pearl)}`;
   return `<div><span class="zone">${z.name}</span>${last ? `<span class="at">Marker ${last}</span>` : ''}</div>
     <div>${marker}</div>
     <div class="line ${lineLevel(v.line)}"><span class="lab">Line</span><span class="linerow"><span class="bar"><i style="width:${full.toFixed(1)}%"></i></span><span class="m">${Math.floor(v.line)} m</span>${cost}</span></div>
-    <div><span class="lab">Haul</span><span class="haul">${PEARL}${v.pearls}${grow}<span class="dcoins">${COIN} ${v.coins.toLocaleString()}</span></span></div>`;
+    <div><span class="lab">Haul <span class="pay">${pay}</span></span><span class="haul">${PEARL}${v.pearls}${grow}<span class="dcoins">${COIN} ${v.coins.toLocaleString()}</span></span></div>`;
 }
 
 /** The dive strip at the top of the screen, and the hooked sea fish's behaviour under it. */
@@ -160,76 +165,101 @@ export function fishTagHtml(f: SeaFightTag): string {
   return `${parts.join(' · ')}${hint ? ` <span>· ${hint}</span>` : ''}`;
 }
 
-/**
- * What the water at this depth pays, for Reed's panel and the marker card. The zones' ways of fighting are left out
- * until the deep sea mechanics pass fleshes them out (Oscar, 2026-11-03).
- */
-function waterText(depth: number): string {
-  return `${plural(pearlsAt(depth), 'pearl')} a fish.`;
-}
+/** The start Reed's panel opens on: where pearl water starts for the gear, up to the furthest marker (the harbour if that is 0). */
+export const defaultStart = (chart: Chart, gear: SeaGear): number => Math.min(reach(gear).pearl, chart.record);
+
+/** The start to show: the one the player picked if a charter can start there, else `defaultStart`. */
+export const reedStart = (chart: Chart, gear: SeaGear, picked: number | null): number =>
+  picked !== null && canStartAt(chart, picked) ? picked : defaultStart(chart, gear);
 
 /**
- * Captain Reed's panel: where to start a charter from (the harbour or a charted marker), or what a charter needs.
- * While charters are closed (`DIVES_OPEN`), what a charter is and that his seaplane isn't ready yet.
+ * Captain Reed's panel: where to start a charter (the harbour or any marker up to the furthest), the rod and line's
+ * reach, or what a charter needs. While charters are closed (`DIVES_OPEN`), what a charter is and that his seaplane
+ * isn't ready yet.
  */
-export function reedHtml(o: { say: string; chart: Chart; pearls: number; ownsRod: boolean; pick: number; open: boolean }): string {
+export function reedHtml(o: { say: string; chart: Chart; pearls: number; ownsRod: boolean; pick: number; open: boolean; gear: SeaGear }): string {
+  const keep = 'Run out of line and you keep the pearls but lose the bonus.';
   if (!o.open) {
     const rod = DEEP_SEA_ROD;
     return `<div class="reed"><p class="say">"Still tinkering with the old girl's engine. She'll be flying again soon, I promise."</p>
-      <div class="detail"><b>Charters are coming soon.</b> Reed flies you out to sea. Every ${DIVE.ledgeEvery} fish you land, you reach a marker: head home with your haul, or sail on for a bigger one. The haul is only safe once you head home at a marker. Charters will need the ${rod.name}${o.ownsRod ? ', and you have one.' : `, which Marlow sells from level ${rod.unlockLevel}.`}</div>
+      <div class="detail"><p><b>Charters are coming soon.</b> Reed flies you out to sea. Every ${DIVE.ledgeEvery} fish you land, you reach a marker: head home with your haul, or sail on to grow its bonus.</p>
+      <p>Head home at a marker to bank the haul with its bonus. ${keep}</p>
+      <p>Charters will need the ${rod.name}${o.ownsRod ? ', and you have one.' : `, which Marlow sells from level ${rod.unlockLevel}.`}</p></div>
       <div class="btns"><button class="btn plain" data-act="close">OK</button></div></div>`;
   }
   if (!o.ownsRod) {
     const rod = DEEP_SEA_ROD;
     return `<div class="reed"><p class="say">"The open sea snaps lake rods like reeds. No offence to me. Get yourself a proper rod and I'll keep it aboard for you."</p>
-      <div class="detail"><b>Charters need the ${rod.name}.</b> Marlow sells it from level ${rod.unlockLevel} for ${rod.price.toLocaleString('en-US')} ${COIN}, and it stays on my boat between charters. Every ${DIVE.ledgeEvery} fish you land, you reach a marker, where you can head home with the haul.</div>
+      <div class="detail"><p><b>Charters need the ${rod.name}.</b> Marlow sells it from level ${rod.unlockLevel} for ${rod.price.toLocaleString('en-US')} ${COIN}, and it stays on my boat between charters.</p>
+      <p>Every ${DIVE.ledgeEvery} fish you land, you reach a marker, where you can head home and bank the haul with its bonus. ${keep}</p></div>
       <div class="btns"><button class="btn plain" data-act="close">OK</button></div></div>`;
   }
-  const starts = [0, ...o.chart.ledges];
-  const groups = new Map<string, number[]>();
-  for (const d of starts) {
-    const name = zoneAt(d).name;
-    groups.set(name, [...(groups.get(name) ?? []), d]);
-  }
-  const chips = [...groups].map(([name, ds]) => `<div class="zlab">${name}</div><div class="chips">${ds.map((d) =>
-    `<button class="chip${d === o.pick ? ' sel' : ''}${d && d === o.chart.record ? ' rec' : ''}" data-act="divefrom" data-id="${d}">${d ? d : 'Harbour'}<small>${d ? 'marker' : 'start'}</small></button>`).join('')}</div>`).join('');
-  const where = o.pick ? `marker ${o.pick} in ${zoneAt(o.pick).name}` : `the harbour, into ${zoneAt(0).name}`;
+  const { pearl, hard, over } = reach(o.gear);
+  const rec = o.chart.record;
+  const chip = (d: number, name: string, small: string, extra = '') =>
+    `<button class="chip${d === o.pick ? ' sel' : ''}${extra}" data-act="divefrom" data-id="${d}">${name}<small>${small}</small></button>`;
+  const chips = [
+    chip(0, 'Harbour', 'start'),
+    pearl > 0 && pearl <= rec ? chip(pearl, 'Pearl water', `marker ${pearl}`) : '',
+    rec > 0 ? chip(rec, 'Furthest', `marker ${rec}`, ' rec') : '',
+  ].join('');
+  const step = (d: number, label: string, off: boolean) =>
+    `<button class="chip step" data-act="divefrom" data-id="${d}" aria-label="${label}"${off ? ' disabled' : ''}>${label === 'Earlier marker' ? '◀' : '▶'}</button>`;
+  const stepper = `<div class="stepper">${step(Math.max(0, o.pick - DIVE.ledgeEvery), 'Earlier marker', o.pick <= 0)}<span class="at"><b>${o.pick ? `Marker ${o.pick}` : 'Harbour'}</b><small>${zoneAt(o.pick).name}</small></span>${step(Math.min(rec, o.pick + DIVE.ledgeEvery), 'Later marker', o.pick >= rec)}</div>`;
+  const row = (label: string, m: number) => `<div class="row">${label}<b>from ${fromMarker(m)}</b></div>`;
+  const where = o.pick ? `marker ${o.pick} in ${lower(zoneAt(o.pick).name)}` : `the harbour, into ${lower(zoneAt(0).name)}`;
+  const pay = inPearlWater(o.pick, o.gear)
+    ? `${PEARL} ${pearlsAt(o.pick, o.gear)} a fish here, more each marker out.`
+    : `Easy water for your gear: quick fights and coins, no pearls until ${fromMarker(pearl)}.`;
   return `<div class="reed"><p class="say">"${o.say}"</p>
-    ${chips}
-    <div class="detail"><b>Start at ${where}.</b> ${waterText(o.pick)} One ${DIVE.spool} m spool of line a charter; head home at any marker to bank the haul.</div>
+    <div class="chips">${chips}</div>
+    ${stepper}
+    <div class="zlab">Your rod and line</div>
+    <div class="rows">${row('Pearl water', pearl)}${row('Hard going', hard)}${row('Too much', over)}</div>
+    <div class="detail"><p><b>Start at ${where}.</b> ${pay}</p>
+      <p>Head home at a marker to bank the haul with its bonus. ${keep}</p></div>
     <div class="btns"><button class="btn plain" data-act="close">Not now</button><button class="btn ok" data-act="castoff" data-id="${o.pick}">⚓ Cast off</button></div>
-    <div class="foot"><span>${o.chart.record ? `Furthest marker: ${o.chart.record}` : 'No markers charted yet'}</span><span>${PEARL} ${plural(o.pearls, 'Black Pearl')}</span></div></div>`;
+    <div class="foot"><span>${rec ? `Furthest marker: ${rec}` : 'No markers charted yet'}</span><span>${PEARL} ${plural(o.pearls, 'Black Pearl')}</span></div></div>`;
 }
 
-/** At a marker: head home with the haul, or sail on for a bigger one. */
+/** At a marker: head home with the haul and its bonus, or sail on. What sailing on means is told for the next stretch. */
 export function markerHtml(v: DiveView): string {
-  const now = haulBonus(v.ledges);
-  const then = haulBonus(v.ledges + 1);
   const next = nextMarker(v.depth);
+  const now = haulBonus(v.grown);
+  const pearlWater = inPearlWater(v.depth, v.gear);
+  // The bonus only grows at the next marker if its stretch is pearl water.
+  const then = pearlWater ? haulBonus(v.grown + 1) : now;
   const full = Math.max(0, Math.min(100, (v.line / DIVE.spool) * 100));
-  const ahead = zoneAt(next - 1).name !== zoneAt(v.depth).name ? ` Past marker ${v.depth}: ${zoneAt(next - 1).name}. ${waterText(next - 1)}` : '';
-  const stake = then > now
-    ? `Sail on and the haul grows to ${pct(then)} at marker ${next}, but if the line runs out it sinks.`
-    : `The haul is at its best (${pct(now)}). Sail on and it still sinks if the line runs out.`;
+  const ahead = zoneAt(next - 1).name !== zoneAt(v.depth).name ? ` Past marker ${v.depth}: ${zoneAt(next - 1).name}.` : '';
+  const sail = pearlWater
+    ? `Sail on: ${PEARL} ${pearlsAt(v.depth, v.gear)} a fish to marker ${next}, and the bonus grows to ${times(then)} there.`
+    : `Sail on: easy water to marker ${next}, no pearls yet. Pearl water starts at ${fromMarker(reach(v.gear).pearl)}.`;
+  const keeps = !v.pearls ? '' : now > 1
+    ? `Run out of line and you keep the ${plural(v.pearls, 'pearl')} but lose the bonus.`
+    : `Run out of line and you keep the ${plural(v.pearls, 'pearl')}.`;
   return `<div class="dcard"><h2>🚩 Marker ${v.depth}</h2>
     <div class="sub">${zoneAt(v.depth).name} · ${v.coins.toLocaleString()} ${COIN} from fish this charter</div>
     <div class="rows">
       <div class="row ${lineLevel(v.line)}">Line left <span class="bar"><i style="width:${full.toFixed(1)}%"></i></span><b>${Math.floor(v.line)} m</b></div>
-      <div class="row">Haul <span>${PEARL} <b>${v.pearls}</b> × ${now.toFixed(1)} = <b>${banked(v)}</b></span></div>
+      <div class="row">Haul <span>${PEARL} <b>${v.pearls}</b> ${times(now)} = <b>${banked(v)}</b></span></div>
     </div>
-    <p class="note">${stake}${ahead}</p>
+    <p class="note">${sail}${ahead}${keeps ? `<br>${keeps}` : ''}</p>
     <div class="btns">
       <button class="btn ok" data-act="markerhome"><span><kbd>1</kbd>Head home</span><small>bank ${banked(v)} · chart marker ${v.depth}</small></button>
-      <button class="btn" data-act="markeron"><span><kbd>2</kbd>Sail on</span><small>${then > now ? `${pct(then)} at marker ${next}` : `next: marker ${next}`}</small></button>
+      <button class="btn" data-act="markeron"><span><kbd>2</kbd>Sail on</span><small>${then > now ? `${times(then)} at marker ${next}` : `next: marker ${next}`}</small></button>
     </div></div>`;
 }
 
-/** Between markers: heading home now sinks the haul. */
+/** Between markers: heading home now keeps the pearls and loses the haul's bonus. */
 export function headHomeHtml(v: DiveView): string {
   const next = nextMarker(v.depth);
+  const bonus = banked(v) - v.pearls;
+  const why = bonus > 0
+    ? `Head home now and you keep the ${plural(v.pearls, 'pearl')} but lose the ${times(haulBonus(v.grown))} bonus (${plural(bonus, 'pearl')}).`
+    : v.pearls ? `You keep the ${plural(v.pearls, 'pearl')}.` : 'Nothing in the haul yet, so nothing is lost.';
   return `<div class="dcard"><h2 class="blue">Head home?</h2>
     <div class="sub">${zoneAt(v.depth).name} · ${plural(next - v.depth, 'fish', 'fish')} to marker ${next}</div>
-    <div class="why">${v.pearls ? `The haul of ${plural(v.pearls, 'pearl')} sinks if you head home now.` : 'Nothing in the haul yet, so nothing is lost.'}</div>
+    <div class="why">${why}</div>
     <p class="note">${v.coins ? `You keep the ${v.coins.toLocaleString()} ${COIN} from fish sold so far. ` : ''}Markers you've charted stay charted.</p>
     <div class="btns"><button class="btn plain" data-act="close">Stay out</button><button class="btn bad" data-act="headhome">Head home</button></div></div>`;
 }
@@ -243,7 +273,7 @@ const soldRow = (fish: number, coins: number, kept = false) =>
  */
 export function endHtml(e: DiveEnd, last: DiveView | null, pearls: number, record: number): string {
   if (e.result === 'surfaced') {
-    const how = last && last.ledges ? `${last.pearls} pearls × ${haulBonus(last.ledges).toFixed(1)} for ${plural(last.ledges, 'marker')} · ` : '';
+    const how = last && last.grown ? `${last.pearls} pearls ${times(haulBonus(last.grown))} for ${plural(last.grown, 'marker')} in pearl water · ` : '';
     return `<div class="dcard"><h2>Home safe!</h2>
       <div><span class="ribbon">Marker ${e.ledge} charted</span>${e.record ? '<span class="ribbon gold">★ New record</span>' : ''}</div>
       <div class="big">${PEARL}+${e.pearls}</div>
@@ -253,14 +283,17 @@ export function endHtml(e: DiveEnd, last: DiveView | null, pearls: number, recor
   }
   const z = zoneAt(e.depth).name;
   const [title, sub, why] =
-    e.why === 'home' ? ['Headed home', `Turned back between markers · ${z}`, 'You headed home between markers, so the haul sank.']
-    : e.why === 'away' ? ['The haul sank', `Left between markers · ${z}`, `The boat waited ${Math.round(DIVE.holdMs / 60000)} minutes for you, then turned back without the haul.`]
-    : e.why === 'line' ? ['The haul sank', `Out of line before marker ${nextMarker(e.depth)} · ${z}`, e.lost ? `The last fish ${lossText(e.lost)}.` : 'The last fight took the last of the line.']
-    : ['The charter ended', `Between markers · ${z}`, 'The haul sank.'];
+    e.why === 'home' ? ['Headed home', `Turned back between markers · ${z}`, 'You headed home between markers.']
+    : e.why === 'away' ? ['The charter ended', `Left between markers · ${z}`, `The boat waited ${Math.round(DIVE.holdMs / 60000)} minutes for you, then turned back.`]
+    : e.why === 'line' ? ['Out of line', `Before marker ${nextMarker(e.depth)} · ${z}`, e.lost ? `The last fish ${lossText(e.lost)}.` : 'The last fight took the last of the line.']
+    : ['The charter ended', `Between markers · ${z}`, ''];
+  // The bonus's multiplier: exact from the dive's growth when known, else worked back from the pearls.
+  const mult = last && last.grown ? haulBonus(last.grown) : (e.pearls + e.bonus) / Math.max(1, e.pearls);
   return `<div class="dcard"><h2 class="blue">${title}</h2>
     <div class="sub">${sub}</div>
-    <div class="why">${why}</div>
-    ${e.pearls ? `<div class="big lost">${PEARL}${e.pearls}</div>` : ''}
+    ${why ? `<div class="why">${why}</div>` : ''}
+    ${e.pearls ? `<div class="big">${PEARL}+${e.pearls}</div>` : ''}
+    ${e.bonus > 0 ? `<p class="note">The ${times(mult)} bonus (${plural(e.bonus, 'pearl')}) was lost. Head home at a marker to bank it.</p>` : ''}
     <div class="rows">${soldRow(e.fish, e.coins, true)}${record ? `<div class="row">Furthest charted marker <b>${record}</b></div>` : ''}</div>
     <p class="note">${e.why === 'line' ? 'Head home sooner when the line runs low. ' : ''}Markers you've charted stay charted.</p>
     <div class="btns"><button class="btn" data-act="close">OK</button></div></div>`;

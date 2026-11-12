@@ -17,7 +17,7 @@ import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
-import { diveView, expired, newRun, sunkEnd, type DiveRun } from './dive';
+import { diveView, expired, healRun, newRun, sinkRun, type DiveRun } from './dive';
 import type { SmokeStats } from './smokestats';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
@@ -179,13 +179,14 @@ export class Room {
   join(conn: Conn, acct: Account, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, int(color));
     const id = this.nextId++;
-    // A dive waits a while for a player who dropped out; after that its haul has sunk.
-    let run = acct.dive ?? null;
+    // A dive waits a while for a player who dropped out; after that it has ended, keeping the haul without its bonus.
+    let run = acct.dive ? healRun(acct.dive, eco.seaGear(acct.save)) : null;
     let sunk: DiveEnd | null = null;
     if (run && expired(run, this.now())) {
-      sunk = sunkEnd(run, 'away');
+      sunk = sinkRun(run, acct.save, 'away');
       acct.dive = undefined;
       run = null;
+      this.onChange();
     }
     const saved = this.maps[acct.save.location];
     // The sea is only for a dive: without one, come back at the pond.
@@ -379,7 +380,7 @@ export class Room {
         break;
       case 'reset':
         m.pending = null;
-        if (this.runOf(m)) this.endDive(m, sunkEnd(m.acct.dive!, 'quit'));
+        if (this.runOf(m)) this.endDive(m, sinkRun(m.acct.dive!, m.acct.save, 'quit'));
         this.resetAccount(m);
         changed = true;
         break;
@@ -661,7 +662,7 @@ export class Room {
   /** The dive this member is on, if any. */
   private runOf(m: Member): DiveRun | null {
     const run = m.acct.dive;
-    return run && m.info.dive === run.id ? run : null;
+    return run && m.info.dive === run.id ? healRun(run, eco.seaGear(m.acct.save)) : null;
   }
 
   /** Starts a dive at Captain Reed's seaplane, from the harbour or a charted ledge, for a player who owns the Deep Sea Rod. */
@@ -673,7 +674,7 @@ export class Room {
     if (!this.chartersOpen) return this.deny(m, "Reed's still working on his seaplane. Charters open soon!");
     if (!eco.ownsSeaRod(s)) return this.deny(m, `Charters need the ${DEEP_SEA_ROD.name}.`);
     const start = int(from);
-    if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, "Reed sails from the harbour or a marker you've charted.");
+    if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, "Reed sails from the harbour or any marker up to your furthest.");
     return this.launch(m, start);
   }
 
@@ -681,7 +682,7 @@ export class Room {
   private launch(m: Member, start: number): boolean {
     const sea = this.seaMap();
     if (!sea) return false;
-    const run = newRun(start, m.acct.name);
+    const run = newRun(start, m.acct.name, eco.seaGear(m.acct.save));
     m.acct.dive = run;
     m.info.dive = run.id;
     this.setAct(m, null);
@@ -709,11 +710,11 @@ export class Room {
     return true;
   }
 
-  /** Between ledges: give up and head home. The haul sinks; the fish were already sold. Not mid-cast. */
+  /** Between ledges: give up and head home, keeping the haul without its bonus; the fish were already sold. Not mid-cast. */
   private headHome(m: Member): boolean {
     const run = this.runOf(m);
     if (!run || run.dive.state !== 'fishing' || m.pending) return false;
-    this.endDive(m, sunkEnd(run, 'home'));
+    this.endDive(m, sinkRun(run, m.acct.save, 'home'));
     return true;
   }
 
@@ -727,14 +728,13 @@ export class Room {
     this.onChange();
   }
 
-  /** Applies a finished fight to the dive: the line it wore, the fish and its pearls; sinks the dive if the line ran out. */
+  /** Applies a finished fight to the dive: the line it wore, the fish and its pearls; ends the dive if the line ran out, keeping the haul without its bonus. */
   private fightOver(m: Member, run: DiveRun, p: Pending, landed: boolean, wear: ReelWear, lost?: LossReason | 'gone'): void {
-    const pearls = run.dive.pearls;
     afterFight(run.dive, p.fishId, landed, wear);
     run.worn = lineWorn(wear, landed);
     run.lost = lost;
     m.conn.send({ t: 'divestate', dive: diveView(run) });
-    if (run.dive.state === 'sunk') this.endDive(m, sunkEnd(run, 'line', pearls, lost));
+    if (run.dive.state === 'sunk') this.endDive(m, sinkRun(run, m.acct.save, 'line', lost));
   }
 
   /**

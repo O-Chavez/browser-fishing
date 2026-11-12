@@ -76,7 +76,7 @@ try {
     };
   });
   type Pal = { skyH: number; skyT: number; shallow: number; deep: number; cloudTop: number; cloudBot: number; hemi: number; sun: number; hemiCol?: number; foam?: number; lamps?: number; fog?: [number, number] };
-  const ZONES: [string, number][] = [['dropoff', 30], ['kelp', 60], ['twilight', 110], ['abyss', 200], ['line41', 46], ['line81', 83], ['line151', 151]];
+  const ZONES: [string, number][] = [['dropoff', 30], ['kelp', 45], ['twilight', 75], ['abyss', 120], ['line36', 41], ['line61', 63], ['line91', 91]];
   const PALS: Record<string, Record<string, Pal> | null> = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
   const only = process.argv[4]?.split(',');
   const views: { v: string; day: number; tp?: [number, number]; look: [number, number]; flash?: boolean; zones?: string[] }[] = [
