@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
 import { DIVE, PEARLS, SEA_TIERS, ZONES, type Behaviour } from '../data/dive';
 import {
-  afterFight, behaviourOdds, canStartAt, diveOn, edgeSteps, haulBonus, inPearlWater, lineWorn, markerOver, pearlsAt, powInt, reach, rollSeaFish,
+  afterFight, behaviourOdds, canStartAt, diveOn, edgeSteps, haulBonus, inPearlWater, lineWorn, markerOver, pearlMult, pearlsAt, pearlsFor, powInt, reach, rollSeaFish,
   seaGaps, seaMatchupWords, startDive, surface, zoneAt, type Chart, type Dive, type SeaGear,
 } from './dive';
 import { rollSeaCast } from './economy';
@@ -335,16 +335,16 @@ describe('the dive', () => {
   it('a fish landed with the last of the line comes home, and its pearls with the haul', () => {
     const d = startDive(0, none);
     d.line = 3;
-    afterFight(d, 'grouper', true, wear(0, 1));
+    afterFight(d, 'snapper', true, wear(0, 1));
     expect(d.state).toBe('sunk');
-    expect(d.fish).toEqual(['grouper']);
+    expect(d.fish).toEqual(['snapper']);
     expect(d.pearls).toBe(1);
   });
 
   it('a fish landed with the last of the line onto a marker ends the dive there, without growing the bonus', () => {
     const d = land(startDive(0, none), 4);
     d.line = 3;
-    afterFight(d, 'grouper', true, wear(0, 1));
+    afterFight(d, 'snapper', true, wear(0, 1));
     expect(d).toMatchObject({ state: 'sunk', depth: 5, ledges: 0, grown: 0, pearls: 5 });
   });
 
@@ -441,6 +441,41 @@ describe('pearls at the edge of the gear', () => {
     const chart: Chart = { ledges: [], record: 0 };
     const pearls = d.pearls;
     expect(surface(d, chart)!.pearls).toBe(Math.round(pearls * 1.25 * 1.25));
+  });
+
+  it('pays a Feisty or Brutish fish double and a legend five times, both multiplying, and none before pearl water', () => {
+    expect(PEARLS).toMatchObject({ tag: 2, legend: 5 });
+    expect([pearlMult({}), pearlMult({ tag: null }), pearlMult({ tag: 'feisty' }), pearlMult({ tag: 'brutish' })]).toEqual([1, 1, 2, 2]);
+    expect([pearlMult({ legend: true }), pearlMult({ tag: 'brutish', legend: true })]).toEqual([5, 10]);
+    const at = pearlsAt(40, none);
+    expect(at).toBe(19);
+    expect(pearlsFor(40, none, {})).toBe(at);
+    expect(pearlsFor(40, none, { tag: null, legend: false })).toBe(at);
+    expect(pearlsFor(40, none, { tag: 'feisty' })).toBe(2 * at);
+    expect(pearlsFor(40, none, { legend: true })).toBe(5 * at);
+    expect(pearlsFor(40, none, { tag: 'brutish', legend: true })).toBe(10 * at);
+    const three = { rod: 3, line: 3 };
+    for (const fish of [{}, { tag: 'feisty' as const }, { legend: true }, { tag: 'brutish' as const, legend: true }]) {
+      expect(pearlsFor(10, three, fish)).toBe(0);
+      expect(Number.isInteger(pearlsFor(85, { rod: 5, line: 2 }, fish))).toBe(true);
+    }
+  });
+
+  it('credits a landed fish its tag and whether it is a legend', () => {
+    const d = startDive(40, none);
+    afterFight(d, 'frondback', true, clean);
+    expect(d.pearls).toBe(pearlsAt(40, none));
+    afterFight(d, 'frondback', true, clean, 'feisty');
+    expect(d.pearls).toBe(pearlsAt(40, none) + 2 * pearlsAt(41, none));
+    const legend = startDive(40, none);
+    expect(byId(FISH, 'kelpbeard').legend).toBe(true);
+    afterFight(legend, 'kelpbeard', true, clean);
+    expect(legend.pearls).toBe(5 * pearlsAt(40, none));
+    afterFight(legend, 'kelpwyrm', true, clean, 'brutish');
+    expect(legend.pearls).toBe(5 * pearlsAt(40, none) + 10 * pearlsAt(41, none));
+    // A lost fish pays nothing, tag or not.
+    afterFight(legend, 'kelpwyrm', false, wear(0.5), 'feisty');
+    expect(legend.pearls).toBe(5 * pearlsAt(40, none) + 10 * pearlsAt(41, none));
   });
 
   it('keeps its sums the same in every engine: no Math.pow', () => {

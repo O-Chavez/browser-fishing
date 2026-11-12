@@ -5,7 +5,7 @@
 import { DEEP_SEA_ROD } from '../data/content';
 import { BEHAVIOURS, DIVE, ZONES, type Behaviour } from '../data/dive';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { canStartAt, haulBonus, inPearlWater, pearlsAt, reach, zoneAt, type Chart, type SeaGear } from './dive';
+import { canStartAt, haulBonus, inPearlWater, pearlMult, pearlsAt, pearlsFor, reach, zoneAt, type Chart, type PearlFish, type SeaGear } from './dive';
 import type { LossReason } from './reel';
 import { COIN, PEARL } from './format';
 
@@ -15,6 +15,22 @@ export const LINE_DANGER = 25;
 /** How long the last fight's line cost shows beside the bar (ms). */
 const WORN_MS = 4000;
 const POP_MS = 700;
+/** How long the pearls a fish just paid show beside the haul (ms). */
+const GAIN_MS = 4000;
+
+/**
+ * The pearls line on a sea fish's catch card: what it paid and why, or "Easy water · no pearls" before pearl water.
+ * `depth` is where the fish was landed, `gear` the charter's.
+ */
+export function catchPearlsHtml(depth: number, gear: SeaGear, fish: PearlFish): string {
+  if (!inPearlWater(depth, gear)) return '<div class="muted pearls">Easy water · no pearls</div>';
+  const m = pearlMult(fish);
+  const tag = fish.tag === 'feisty' ? 'Feisty' : fish.tag === 'brutish' ? 'Brutish' : '';
+  const why = m <= 1 ? '' : fish.legend
+    ? `${m === 5 ? 'five' : m === 10 ? 'ten' : `${m}`} times: ${tag ? `${tag} ` : ''}legend`
+    : `double: ${tag}`;
+  return `<div class="pearls">${PEARL} +${pearlsFor(depth, gear, fish)}${why ? `<small class="credit">${why}</small>` : ''}</div>`;
+}
 
 /**
  * The "next marker" row: one icon per fish between markers, then the flag. Tweak the icons and count here; the
@@ -65,7 +81,7 @@ export function lossText(lost: LossReason | 'gone'): string {
 export const lastMarker = (depth: number): number => Math.floor(depth / DIVE.ledgeEvery) * DIVE.ledgeEvery;
 
 /** The strip's contents: the zone and last marker, the fish and marker rows, the line and the haul. `pop` is the trail icon that just lit. */
-export function hudHtml(v: DiveView, worn: boolean, pop = -1): string {
+export function hudHtml(v: DiveView, worn: boolean, pop = -1, gain = 0): string {
   const z = zoneAt(v.depth);
   const at = v.state === 'ledge';
   const next = nextMarker(v.depth);
@@ -86,13 +102,14 @@ export function hudHtml(v: DiveView, worn: boolean, pop = -1): string {
   const full = Math.max(0, Math.min(100, (v.line / DIVE.spool) * 100));
   // Easy fights barely touch the spool; the cost shows once it's a metre or more.
   const cost = worn && v.worn && v.worn >= 0.5 ? `<span class="worn">−${Math.round(v.worn)} m</span>` : '';
+  const earned = gain > 0 ? `<span class="gain">+${gain}</span>` : '';
   const grow = v.grown ? `<span class="grow">${times(haulBonus(v.grown))}</span>` : '';
   // What a fish pays right now: pearls in pearl water, else when the pearls start.
   const pay = inPearlWater(v.depth, v.gear) ? `${PEARL} ${pearlsAt(v.depth, v.gear)} a fish` : `easy water · pearls from ${fromMarker(reach(v.gear).pearl)}`;
   return `<div><span class="zone">${z.name}</span>${last ? `<span class="at">Marker ${last}</span>` : ''}</div>
     <div>${marker}</div>
     <div class="line ${lineLevel(v.line)}"><span class="lab">Line</span><span class="linerow"><span class="bar"><i style="width:${full.toFixed(1)}%"></i></span><span class="m">${Math.floor(v.line)} m</span>${cost}</span></div>
-    <div><span class="lab">Haul <span class="pay">${pay}</span></span><span class="haul">${PEARL}${v.pearls}${grow}<span class="dcoins">${COIN} ${v.coins.toLocaleString()}</span></span></div>`;
+    <div><span class="lab">Haul <span class="pay">${pay}</span></span><span class="haul"><span class="pnum${gain > 0 && pop >= 0 ? ' pop' : ''}">${PEARL}${v.pearls}</span>${earned}${grow}<span class="dcoins">${COIN} ${v.coins.toLocaleString()}</span></span></div>`;
 }
 
 /** The dive strip at the top of the screen, and the hooked sea fish's behaviour under it. */
@@ -102,6 +119,8 @@ export class DiveHud {
   private timer = 0;
   private popUntil = 0;
   private pop = -1;
+  private gainUntil = 0;
+  private gain = 0;
 
   constructor(private readonly el: HTMLElement, private readonly tag: HTMLElement) {}
 
@@ -114,6 +133,9 @@ export class DiveHud {
       // The fish just landed: pop its icon (the flag too if that was the marker).
       this.pop = v.state === 'ledge' ? TRAIL.count : (v.depth % DIVE.ledgeEvery) - 1;
       this.popUntil = performance.now() + POP_MS;
+      // Pearls the fish paid, if any, show beside the haul for a few seconds.
+      this.gain = v.gain ?? 0;
+      this.gainUntil = this.gain > 0 ? performance.now() + GAIN_MS : 0;
     }
     this.render();
   }
@@ -125,10 +147,11 @@ export class DiveHud {
     const now = performance.now();
     const worn = now < this.wornUntil;
     const popping = now < this.popUntil;
-    this.el.innerHTML = hudHtml(v, worn, popping ? this.pop : -1);
+    const gaining = now < this.gainUntil;
+    this.el.innerHTML = hudHtml(v, worn, popping ? this.pop : -1, gaining ? this.gain : 0);
     clearTimeout(this.timer);
     // Re-render when the cost note or the pop is due to end (a re-render mid-pop must not restart it, so keep the pop going).
-    const due = Math.max(worn ? this.wornUntil : 0, popping ? this.popUntil : 0);
+    const due = Math.max(worn ? this.wornUntil : 0, popping ? this.popUntil : 0, gaining ? this.gainUntil : 0);
     if (due) this.timer = window.setTimeout(() => this.render(), due - now + 20);
   }
 

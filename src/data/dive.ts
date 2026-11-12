@@ -113,6 +113,13 @@ export const PEARLS = {
   from: 0,
   /** Pay grows by this for each level over the gear: about 2^(1/6), so it doubles for each combined rung over. */
   step: 1.1225,
+  /**
+   * A Feisty or Brutish fish (`rollTag`, one in 8) pays this many times what the marker pays, and a legend (one bite in
+   * 20) `legend` times; both multiply (Oscar, 2026-11-11), so a tagged fish at the edge of the gear is worth its harder
+   * fight and a legend is an event. Before pearl water they still pay none (`pearlsFor`).
+   */
+  tag: 2,
+  legend: 5,
 };
 
 /** Combined rungs over the gear (strength gap plus weight gap) for `reach`: the edge of what a player can land, and past it. */
@@ -130,8 +137,9 @@ export const DIVES_OPEN = true;
  * stall with no cap, each level making sea fish lighter (`SEA_TIERS.level` of a tier); pond fights don't change. (The Aurora Rod
  * levelled until the Deep Sea Rod came, 2026-11-01; its levels carried over.) A level costs coins plus Black Pearls, which only come from dives and are never sold, so a coin stockpile can't skip the climb.
  * The Deep Sea Line (`SEA_LINE`) is the second track. The pearls are sized for charters that pay for fishing at the
- * edge of the gear (`PEARLS`; Oscar, 2026-11-11): at the best rate a level takes roughly 20 minutes for a quick player
- * and 40 for a careful one, and the climb reaches the Abyss at about +10 to +13 on both tracks. The coins keep rising
+ * edge of the gear (`PEARLS`; Oscar, 2026-11-11): the curve starts low so the first levels come quickly (about 25
+ * minutes for a careful player and 10 for a quick one at the best rate), and the climb reaches the Abyss at about +10
+ * to +13 on both tracks in roughly 5 hours for a quick player and 16 for a careful one. The coins keep rising
  * with the level, as charter income does with the deeper zones' dearer fish (REELING.md, "Sea economy"; Oscar,
  * 2026-11-01).
  */
@@ -139,16 +147,16 @@ export const ROD_LEVEL = {
   /** The rod that levels (`DEEP_SEA_ROD`). */
   rod: 'searod',
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls ... */
-  pearls: 750,
-  pearlsPer: 130,
+  pearls: 400,
+  pearlsPer: 235,
   /**
-   * ... and min(coinCap, coins + coinsPer·N) coins; the cap is only a safety net, reached past +54. A quarter under
-   * the 75,000 + 6,000·N from before pearls paid for fishing at the edge (2026-11-11): edge fights are longer, so
-   * charter fish earn fewer coins an hour, and this keeps the levels at about 55-75% of a quick player's charter coins.
+   * ... and min(coinCap, coins + coinsPer·N) coins; the cap is only a safety net, reached past +52. They start low for
+   * the same reason as the pearls, so the first levels come quickly, and are about 55-75% of a quick player's charter
+   * coins (edge fights are longer, so charter fish earn fewer coins an hour).
    */
-  coins: 55_000,
-  coinsPer: 4_500,
-  coinCap: 300_000,
+  coins: 30_000,
+  coinsPer: 7_000,
+  coinCap: 400_000,
   /** The rod's tip glow changes colour every this many levels (`GLOW_STEPS`). */
   glowEvery: 5,
 };
@@ -160,12 +168,12 @@ export const ROD_LEVEL = {
  */
 export const SEA_LINE = {
   /** Going from +N-1 to +N costs pearls + pearlsPer·N Black Pearls, the same as the rod's ... */
-  pearls: 750,
-  pearlsPer: 130,
+  pearls: 400,
+  pearlsPer: 235,
   /** ... and min(coinCap, coins + coinsPer·N) coins: half the rod's at every level. */
-  coins: 27_500,
-  coinsPer: 2_250,
-  coinCap: 150_000,
+  coins: 15_000,
+  coinsPer: 3_500,
+  coinCap: 200_000,
 };
 
 /**

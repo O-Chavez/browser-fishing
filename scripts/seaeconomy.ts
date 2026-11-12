@@ -5,9 +5,9 @@
 // (charters of one marker) and never heading home (fishing until the line runs out). Assumes every marker is charted.
 // Run: npx tsx scripts/seaeconomy.ts [rod level] [line level] [last depth, default 120] [fights a depth, default 80]
 import { DIVE } from '../src/data/dive';
-import { haulBonus, inPearlWater, isLedge, lineWorn, pearlsAt, rollSeaFish, seaGaps } from '../src/game/dive';
+import { haulBonus, inPearlWater, isLedge, lineWorn, pearlsFor, rollSeaFish, seaGaps } from '../src/game/dive';
 import { mulberry } from '../src/game/env';
-import { rollFishGaps, rollSize, sellValue } from '../src/game/progression';
+import { rollFishGaps, rollSize, sellValue, type FishTag } from '../src/game/progression';
 import { botFight, HANDS, type BotStyle, type Hand } from '../src/game/reelbot';
 
 const gear = { rod: Number(process.argv[2] ?? 0), line: Number(process.argv[3] ?? 0) };
@@ -17,7 +17,8 @@ const n = Number(process.argv[5] ?? 80);
 const BITE = 4.5, AROUND = 4, CHARTER = 45;
 const CHARTERS = 300;
 
-interface Fight { t: number; metres: number; landed: boolean; coins: number }
+/** One fought fish; its tag and whether it's a legend set its pearls beside its marker's (`pearlsFor`). */
+interface Fight { t: number; metres: number; landed: boolean; coins: number; tag: FishTag | null; legend: boolean }
 
 /** `n` rolled fish at a depth, fought by one player with the style that costs the least spool there. */
 function pool(depth: number, react: number, styles: BotStyle[]): Fight[] {
@@ -29,12 +30,12 @@ function pool(depth: number, react: number, styles: BotStyle[]): Fight[] {
       const bite = rollSeaFish(depth, rng);
       const size = rollSize(bite.fish, rng);
       // Each fish with its modifiers (tag and spread, `rollFishGaps`); PLAIN=1 fights the bare gaps.
-      const d = process.env.PLAIN ? seaGaps(depth, gear) : rollFishGaps(seaGaps(depth, gear), rng).d;
+      const m = process.env.PLAIN ? { d: seaGaps(depth, gear), tag: null } : rollFishGaps(seaGaps(depth, gear), rng);
       const seed = Math.floor(rng() * 2 ** 31);
-      const f = botFight(d, react, style, mulberry(seed), mulberry(seed ^ 0x5bd1e995));
+      const f = botFight(m.d, react, style, mulberry(seed), mulberry(seed ^ 0x5bd1e995));
       const landed = f.status === 'caught';
       const coins = landed ? Math.round(sellValue(bite.fish, size) * (f.frays === 0 ? 1.1 : 1)) : 0;
-      fights.push({ t: f.t, landed, coins, metres: lineWorn({ lineOut: f.lineOut, frays: f.frays, snapped: f.status === 'snapped' }, landed) });
+      fights.push({ t: f.t, landed, coins, tag: m.tag, legend: !!bite.fish.legend, metres: lineWorn({ lineOut: f.lineOut, frays: f.frays, snapped: f.status === 'snapped' }, landed) });
     }
     const landed = fights.filter((f) => f.landed).length;
     const cost = landed ? fights.reduce((s, f) => s + f.metres, 0) / landed : Infinity;
@@ -57,7 +58,7 @@ function charters(pools: Fight[][], start: number, home: number) {
       fights++;
       line -= f.metres;
       coins += f.coins;
-      if (f.landed) haul += pearlsAt(depth++, gear);
+      if (f.landed) haul += pearlsFor(depth++, gear, f);
       // Out of line: the haul comes home without its bonus.
       if (line <= 0) { sunk++; pearls += haul; break; }
       if (f.landed && isLedge(depth)) {

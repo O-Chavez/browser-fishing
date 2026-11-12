@@ -161,10 +161,10 @@ const KEY = 'fishing-game-save';
 /**
  * The pearl economy saves are counted in (`SaveData.pearlsV`). 2 came with charters paying for fishing at the edge of
  * the gear and dearer levels (Oscar, 2026-11-11): unspent pearls from before were multiplied by `PEARLS_RESCALE` so
- * they buy about what they did.
+ * they buy about what they did (prices rose about seven to eight times at typical levels).
  */
 export const PEARLS_VERSION = 2;
-export const PEARLS_RESCALE = 6;
+export const PEARLS_RESCALE = 7;
 
 export const newSave = (): SaveData => ({
   version: 1,

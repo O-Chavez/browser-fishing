@@ -728,9 +728,11 @@ export class Room {
     this.onChange();
   }
 
-  /** Applies a finished fight to the dive: the line it wore, the fish and its pearls; ends the dive if the line ran out, keeping the haul without its bonus. */
+  /** Applies a finished fight to the dive: the line it wore, the fish and its pearls (`pearlsFor`, with its tag), kept as `gain` for the HUD; ends the dive if the line ran out, keeping the haul without its bonus. */
   private fightOver(m: Member, run: DiveRun, p: Pending, landed: boolean, wear: ReelWear, lost?: LossReason | 'gone'): void {
-    afterFight(run.dive, p.fishId, landed, wear);
+    const before = run.dive.pearls;
+    afterFight(run.dive, p.fishId, landed, wear, p.tag ?? null);
+    run.gain = landed ? run.dive.pearls - before : undefined;
     run.worn = lineWorn(wear, landed);
     run.lost = lost;
     m.conn.send({ t: 'divestate', dive: diveView(run) });

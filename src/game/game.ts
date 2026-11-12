@@ -43,9 +43,9 @@ import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
 import { baitWarning, charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
-import { DiveHud, endHtml, fromMarker, headHomeHtml, markerHtml, nextMarker, reedHtml, reedStart, startText } from './divehud';
+import { DiveHud, catchPearlsHtml, endHtml, fromMarker, headHomeHtml, markerHtml, nextMarker, reedHtml, reedStart, startText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { markerOver, reach, seaMatchupWords } from './dive';
+import { inPearlWater, markerOver, reach, seaMatchupWords, type SeaGear } from './dive';
 import { drawFightGauge } from './fightgauge';
 import { Player } from './player';
 import {
@@ -202,6 +202,8 @@ export class Game {
   private fightB: Behaviour | undefined;
   /** A Feisty or Brutish pond fish, said at hook time. */
   private fightTag: FishTag | undefined;
+  /** Where the charter stood when this sea fish was hooked (its marker and gear), for the pearls it pays. */
+  private fightAt: { depth: number; gear: SeaGear } | null = null;
   /** The fight's levers over `P` from the cast roll (the gloves), as the server replays it. */
   private fightTune: ReelTune | undefined;
   /** The dive on screen: the strip at sea, and the cards waiting for a quiet moment (`showDiveDue`). */
@@ -2364,6 +2366,8 @@ export class Game {
    * tier 5, only a zone's legend gets it, and landing one gets the gold LEGEND LANDED! with its name.
    */
   private topTierBanner(fish: { tier: number; legend?: boolean; name?: string }, verb: string, shiny: boolean): void {
+    // A legend hooked in pearl water says what it pays.
+    const focus = this.map.sea && fish.legend && this.pearlWaterNow() ? 'Five times the pearls. Stay focused...' : 'Stay focused...';
     if (this.map.sea ? !fish.legend : fish.tier !== this.bait.tier) return;
     const el = $('banner');
     el.classList.remove('welcome', 'rank', 'legend');
@@ -2373,7 +2377,7 @@ export class Game {
     el.style.color = this.map.sea ? '' : this.tierColor(fish.tier);
     el.innerHTML = legendLanded
       ? `${shiny ? '✨ ' : ''}LEGEND LANDED!<small>${escapeHtml(fish.name ?? '')}</small>`
-      : `${shiny ? '✨ Shiny ' : ''}${name} ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
+      : `${shiny ? '✨ Shiny ' : ''}${name} ${verb}!${verb === 'hooked' ? `<small>${focus}</small>` : ''}`;
     el.classList.remove('hidden');
     el.style.animation = 'none';
     void el.offsetWidth;
@@ -2429,6 +2433,12 @@ export class Game {
     }
   }
 
+  /** Whether the fish on the line pays pearls: the charter's current marker and gear are pearl water. */
+  private pearlWaterNow(): boolean {
+    const v = this.diveHud.view;
+    return !!v && inPearlWater(v.depth, v.gear);
+  }
+
   private startReel(): void {
     const w = this.world;
     this.phase = 'reeling';
@@ -2456,10 +2466,12 @@ export class Game {
     // The gear gap is said outright, since that is what decides the fight: "strong" or "heavy" a rung over the gear,
     // "too" from two (`matchupWords`), and "an easy one" a rung under on both (`underGear`), so an upgrade is felt.
     // Every fish's timing is the same now, so the old word for how hard a fight is went.
-    const tag = this.fightTag === 'feisty' ? ' A feisty one!' : this.fightTag === 'brutish' ? ' A brutish one!' : '';
+    this.fightAt = this.diveHud.view ? { depth: this.diveHud.view.depth, gear: this.diveHud.view.gear } : null;
+    const double = this.map.sea && this.fightTag && this.pearlWaterNow() ? ' Double pearls.' : '';
+    const tag = (this.fightTag === 'feisty' ? ' A feisty one!' : this.fightTag === 'brutish' ? ' A brutish one!' : '') + double;
     const easy = underGear(this.fightD) ? ' An easy one.' : '';
     this.toast(`Hooked!${tag}${easy}${match.words ? ` ${match.words}${match.too ? '!' : '.'}` : ''}`, match.words ? 3 : 2);
-    this.showFishTag(this.fightTag);
+    this.showFishTag(this.fightTag, !!double);
   }
 
   private startLanding(): void {
@@ -2540,6 +2552,8 @@ export class Game {
     el.style.setProperty('--glow', color);
     el.dataset.tier = String(fish.sea && !legend ? 4 : fish.tier);
     el.classList.toggle('legend', legend);
+    // A sea fish's card has a pearls line; on a phone it's set a little tighter to clear the charter strip (style.css).
+    el.classList.toggle('sea', !!fish.sea);
     const shiny = this.hookedShiny;
     this.rankCard = rankUp(ranks);
     el.innerHTML = `${legend ? '<div class="legend-tag">★ LEGEND ★</div>' : ''}<div class="muted">${shiny ? `<b style="color:#ffd23a">✨ SHINY! ✨</b>${shinyFrom ? ` <span class="credit">✨ ${shinyFrom}</span>` : ''} ` : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
@@ -2547,6 +2561,7 @@ export class Game {
       <h2 style="color:${color}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
       <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean ${this.fightTag}">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
+      ${fish.sea && this.fightAt ? catchPearlsHtml(this.fightAt.depth, this.fightAt.gear, { tag: this.fightTag, legend }) : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
@@ -3193,10 +3208,10 @@ export class Game {
   }
 
   /** The Feisty or Brutish badge by the gauge, for the whole fight. */
-  private showFishTag(tag: FishTag | undefined): void {
+  private showFishTag(tag: FishTag | undefined, pearls = false): void {
     const el = $('fishtag');
     el.className = tag ?? 'hidden';
-    if (tag) el.innerHTML = tag === 'feisty' ? '<i>⚡</i><b>Feisty<small>pulls harder · +15%</small></b>' : '<i>⚓</i><b>Brutish<small>drags more line · +15%</small></b>';
+    if (tag) el.innerHTML = tag === 'feisty' ? `<i>⚡</i><b>Feisty<small>pulls harder · ${pearls ? 'double pearls' : '+15%'}</small></b>` : `<i>⚓</i><b>Brutish<small>drags more line · ${pearls ? 'double pearls' : '+15%'}</small></b>`;
   }
 
   /** Once a session, after a lost or long fight: a snap points at the next line up, the rest at the next rod. */
@@ -4269,7 +4284,7 @@ export class Game {
     return `<div class="peek"><img src="${charterPreview}" alt="The Kraken rearing out of the storm waves far out at sea">
       <div class="peek-text"><h3>Sail out to the deep sea</h3>
         <p>Captain Reed flies you out to sea from the west beach. Every ${DIVE.ledgeEvery} fish you land, you reach a marker: <b>Head home</b> to bank your haul of Black Pearls, or <b>Sail on</b> to grow its bonus, if your one spool of line holds out.</p>
-        <p>Fish that match your rod and line pay Black Pearls: that's pearl water, and the bonus grows at each marker you reach in it. Run out of line and you keep the pearls but lose the bonus.</p>
+        <p>Fish that match your rod and line pay Black Pearls: that's pearl water, and the bonus grows at each marker you reach in it. Run out of line and you keep the pearls but lose the bonus. Feisty and Brutish fish pay double, legends five times.</p>
         <p>The further out you sail, the stranger the fish: Kelp Deep, the Twilight and the Abyss each have their own, and legends you'll never see in the pond.</p>
         <p>Black Pearls level up your ${rod.name} and Deep Sea Line, so every charter can take you further out.</p>
         ${status}</div></div>`;

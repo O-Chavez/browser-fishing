@@ -4,7 +4,7 @@
 // Pure logic for the server (D2) and the dive HUD (D3); no Math.pow, so the server and the client agree.
 import { byId, DEEP_SEA_LINE, DEEP_SEA_ROD, FISH, type Fish } from '../data/content';
 import { DIVE, PEARLS, REACH_RUNGS, SEA_FIGHT, SEA_TIERS, ZONES, type Behaviour, type Zone } from '../data/dive';
-import { gapsOf, matchupWords, rungsOver, type FishTiers, type GearTiers } from './progression';
+import { gapsOf, matchupWords, rungsOver, type FishTag, type FishTiers, type GearTiers } from './progression';
 import type { Gaps, ReelWear } from './reel';
 
 /** base^n for a whole n ≥ 0, by repeated multiplication (same result in every JS engine, unlike `Math.pow`). */
@@ -119,14 +119,30 @@ export function edgeSteps(depth: number, gear: SeaGear): number {
 export const inPearlWater = (depth: number, gear: SeaGear): boolean => edgeSteps(depth, gear) >= PEARLS.from;
 
 /**
- * Pearls a fish landed at this depth adds to the haul: none before pearl water; in it 1 + floor(depth / pearlStep),
- * times `PEARLS.step` for each level the fish is over the gear (doubling for each combined rung), at least 1.
+ * Pearls a typical fish landed at this depth adds to the haul (a tagged fish or a legend pays more, `pearlsFor`):
+ * none before pearl water; in it 1 + floor(depth / pearlStep), times `PEARLS.step` for each level the fish is over the
+ * gear (doubling for each combined rung), at least 1.
  */
 export function pearlsAt(depth: number, gear: SeaGear): number {
   const steps = edgeSteps(depth, gear);
   if (steps < PEARLS.from) return 0;
   return Math.max(1, Math.round((1 + Math.floor(depth / DIVE.pearlStep)) * powInt(PEARLS.step, steps)));
 }
+
+/** What sets one landed fish's pearls beside its marker: a Feisty or Brutish tag, and whether it's a legend. */
+export interface PearlFish {
+  tag?: FishTag | null;
+  legend?: boolean;
+}
+
+/**
+ * How many times a typical fish's pearls (`pearlsAt`) this fish pays: `PEARLS.tag` for a Feisty or Brutish fish,
+ * `PEARLS.legend` for a legend, both multiplying; 1 for any other fish.
+ */
+export const pearlMult = (fish: PearlFish): number => (fish.tag ? PEARLS.tag : 1) * (fish.legend ? PEARLS.legend : 1);
+
+/** Pearls this fish adds to the haul landed at this depth: the marker's pay (`pearlsAt`, 0 before pearl water) times `pearlMult`. */
+export const pearlsFor = (depth: number, gear: SeaGear, fish: PearlFish): number => pearlsAt(depth, gear) * pearlMult(fish);
 
 /** The haul's multiplier on heading home at a marker, after its bonus grew at this many markers (`Dive.grown`): +25% compounding. */
 export const haulBonus = (grown: number): number => powInt(1 + DIVE.haulGrow, Math.min(grown, DIVE.haulCap));
@@ -203,18 +219,18 @@ export function startDive(start: number, gear: SeaGear): Dive {
 }
 
 /**
- * Applies a finished fight. A landed fish joins the dive's catch, adds its pearls and takes the boat a depth
- * deeper, stopping at each ledge for the player's choice; a ledge reached from pearl water grows the haul's bonus.
- * If the line runs out, the dive ends ('sunk'): the haul keeps its pearls but not its bonus, and the landed fish,
+ * Applies a finished fight. A landed fish joins the dive's catch, adds its pearls (`pearlsFor`, with its `tag` and
+ * whether it's a legend) and takes the boat a depth deeper, stopping at each ledge for the player's choice; a ledge
+ * reached from pearl water grows the haul's bonus. If the line runs out, the dive ends ('sunk'): the haul keeps its pearls but not its bonus, and the landed fish,
  * the last one included, still come home.
  */
-export function afterFight(dive: Dive, fishId: string, landed: boolean, wear: ReelWear): Dive {
+export function afterFight(dive: Dive, fishId: string, landed: boolean, wear: ReelWear, tag: FishTag | null = null): Dive {
   if (dive.state !== 'fishing') return dive;
   const gear = diveGear(dive);
   dive.line = Math.max(0, dive.line - lineWorn(wear, landed));
   if (landed) {
     dive.fish.push(fishId);
-    dive.pearls += pearlsAt(dive.depth, gear);
+    dive.pearls += pearlsFor(dive.depth, gear, { tag, legend: !!FISH.find((f) => f.id === fishId)?.legend });
     dive.depth++;
   }
   if (dive.line <= 0) {

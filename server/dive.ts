@@ -21,6 +21,8 @@ export interface DiveRun {
   /** The last fight's line cost and loss reason, for the HUD. */
   worn?: number;
   lost?: LossReason | 'gone';
+  /** Pearls the last fight added to the haul: set (maybe 0) after a landed fish, unset after a lost one. */
+  gain?: number;
 }
 
 let nextId = 1;
@@ -53,6 +55,7 @@ export function diveView(run: DiveRun): DiveView {
   };
   if (run.worn !== undefined) v.worn = Math.round(run.worn * 10) / 10;
   if (run.lost) v.lost = run.lost;
+  if (run.gain !== undefined) v.gain = run.gain;
   return v;
 }
 

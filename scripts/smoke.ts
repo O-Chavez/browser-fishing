@@ -851,6 +851,7 @@ async function tripChecks(): Promise<void> {
     }
     g.hold(false);
     await new Promise((r) => setTimeout(r, 1500));
+    (window as any).__card = document.getElementById('catch')!.textContent!.replace(/\s+/g, ' ');
     if (g.state().phase === 'result') g.press();
     g.release();
     await new Promise((r) => setTimeout(r, 1200));
@@ -919,6 +920,9 @@ async function tripChecks(): Promise<void> {
   const after = await page.evaluate(() => document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' '));
   const lit = await page.evaluate(() => document.querySelectorAll('#divehud .trail i.on').length);
   check('charter: a landed fish lights a fish on the strip', seen.includes('reeling') && lit === 1 && after.includes('4 fish to marker 5'), `${seen.join(',')} · ${after}`);
+
+  const card: string = await page.evaluate(() => (window as any).__card);
+  check('charter: a landed sea fish in pearl water shows its pearls on the catch card', /Sea fish · sold on the spot/.test(card) && /\+\d+/.test(card) && card.includes('XP') && !/undefined|NaN|no pearls/.test(card), card);
 
   // Head home between markers, from the Bag: the card says the pearls are kept.
   await page.evaluate(() => window.__game.openMenu('inventory'));

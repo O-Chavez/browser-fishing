@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { banked, defaultStart, endHtml, fishTagHtml, headHomeHtml, hudHtml, lastMarker, lineLevel, lossText, zoneMarkers, markerHtml, nextMarker, reedHtml, reedStart, startText } from './divehud';
-import { surface, type Dive } from './dive';
+import { DiveHud, banked, catchPearlsHtml, defaultStart, endHtml, fishTagHtml, headHomeHtml, hudHtml, lastMarker, lineLevel, lossText, zoneMarkers, markerHtml, nextMarker, reedHtml, reedStart, startText } from './divehud';
+import { pearlsAt, surface, type Dive } from './dive';
 
 const view = (o: Partial<DiveView> = {}): DiveView => ({ id: 1, start: 10, depth: 23, line: 214, state: 'fishing', ledges: 2, grown: 2, pearls: 16, gear: { rod: 0, line: 0 }, fish: 13, coins: 24000, ...o });
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -211,5 +211,53 @@ describe('dive HUD', () => {
     for (const h of [line, headed, away, none, empty]) expect(h).not.toMatch(/\bsink|\bsank|\bsunk/i);
     expect(lossText('held-surge')).toContain('through a surge');
     expect([startText(0), startText(20), startText(24)]).toEqual(['The Shelf · from the harbour', 'The Drop-off · from marker 20', 'The Drop-off · partway to marker 25']);
+  });
+
+  it("shows a landing's pearls beside the haul for a while, only when the fish paid", () => {
+    expect(text(hudHtml(view(), false, 2, 8))).toContain('16 +8');
+    expect(hudHtml(view(), false, 2, 8)).toContain('pnum pop');
+    expect(hudHtml(view(), false, -1, 8)).not.toContain('pnum pop');
+    expect(text(hudHtml(view(), false, 2, 0))).not.toContain('+');
+    expect(hudHtml(view(), false)).not.toContain('class="gain"');
+  });
+
+  it('the strip notes a gain after a landing, not on a later view at the same marker, and not for 0', () => {
+    const el = { classList: { toggle() {} }, innerHTML: '' } as unknown as HTMLElement;
+    const tag = { classList: { toggle() {}, add() {}, remove() {} }, innerHTML: '' } as unknown as HTMLElement;
+    const g = globalThis as any;
+    const had = 'window' in g;
+    g.window = { setTimeout: () => 0 };
+    try {
+      const hud = new DiveHud(el, tag);
+      hud.set(view({ depth: 3, pearls: 0 }));
+      hud.set(view({ depth: 4, pearls: 3, gain: 3 }));
+      expect(text(el.innerHTML)).toContain('3 +3');
+      hud.set(view({ depth: 4, pearls: 3, gain: 3, worn: 5 }));
+      hud.set(view({ depth: 4, pearls: 3, gain: 3, line: 100 }));
+      expect(text(el.innerHTML)).toContain('3 +3');
+      // A view that arrives with a gain but no landing (a reconnect, the same marker) starts no note.
+      const late = new DiveHud(el, tag);
+      late.set(view({ depth: 4, pearls: 3, gain: 3 }));
+      late.set(view({ depth: 4, pearls: 3, gain: 3, line: 90 }));
+      expect(text(el.innerHTML)).not.toContain('+');
+      hud.set(view({ depth: 5, pearls: 3, gain: 0 }));
+      expect(text(el.innerHTML)).not.toContain('+');
+      hud.set(view({ depth: 5, pearls: 3, gain: 0, line: 90 }));
+      expect(text(el.innerHTML)).not.toContain('+');
+    } finally {
+      if (!had) delete g.window;
+    }
+  });
+
+  it("writes a sea fish's pearls for the catch card, with why when it paid more, or that it was easy water", () => {
+    const gear = { rod: 0, line: 0 };
+    const at5 = pearlsAt(5, gear);
+    expect(text(catchPearlsHtml(5, gear, {}))).toBe(`+${at5}`);
+    expect(text(catchPearlsHtml(5, gear, { tag: 'feisty' }))).toBe(`+${at5 * 2} double: Feisty`);
+    expect(text(catchPearlsHtml(5, gear, { tag: 'brutish' }))).toBe(`+${at5 * 2} double: Brutish`);
+    expect(text(catchPearlsHtml(5, gear, { legend: true }))).toBe(`+${at5 * 5} five times: legend`);
+    expect(text(catchPearlsHtml(5, gear, { tag: 'brutish', legend: true }))).toBe(`+${at5 * 10} ten times: Brutish legend`);
+    expect(text(catchPearlsHtml(5, { rod: 10, line: 10 }, { tag: 'feisty' }))).toBe('Easy water · no pearls');
+    expect(catchPearlsHtml(5, gear, {})).toContain('bpearl');
   });
 });

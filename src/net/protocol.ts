@@ -53,6 +53,11 @@ export interface DiveView {
   /** Metres the last fight wore off the spool, and why it was lost if it was. */
   worn?: number;
   lost?: LossReason | 'gone';
+  /**
+   * Pearls the last fight added to the haul (`pearlsFor`: doubled for a Feisty or Brutish fish, five times for a
+   * legend): present, maybe 0, after a landed fish; absent after a lost fish and on a fresh charter.
+   */
+  gain?: number;
 }
 
 /**
@@ -174,7 +179,7 @@ export type ServerMsg =
   | { t: 'state'; save: SaveData }
   | { t: 'drops'; list: Drop[] }
   /** With a fish, `seed` and `d`, its gaps over the gear, set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
-  /** `b`: a sea fish's behaviour, `tag`: a Feisty or Brutish pond fish; neither is rolled while the foundation leaves variety off. */
+  /** `b`: a sea fish's behaviour (not rolled while the foundation leaves variety off); `tag`: a Feisty or Brutish fish, pond or sea. */
   | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Gaps; b?: Behaviour; tag?: FishTag; tune?: ReelTune }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; wedge: number; factor: number; ms: number }

@@ -191,8 +191,8 @@ describe('Room economy', () => {
     expect(s.rodLevel).toBe(0);
     atShop(a);
     room.handle(a.id, { t: 'levelrod' });
-    expect(s).toMatchObject({ rodLevel: 1, pearls: 120, coins: 40_500 });
-    expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 120 });
+    expect(s).toMatchObject({ rodLevel: 1, pearls: 365, coins: 63_000 });
+    expect(last(a.c, 'state').save).toMatchObject({ rodLevel: 1, pearls: 365 });
     room.handle(a.id, { t: 'levelrod' });
     expect(s.rodLevel).toBe(1);
   });
@@ -206,8 +206,8 @@ describe('Room economy', () => {
     expect(s.seaLine).toBe(0);
     atShop(a);
     room.handle(a.id, { t: 'levelline' });
-    expect(s).toMatchObject({ seaLine: 1, pearls: 120, coins: 70_250 });
-    expect(last(a.c, 'state').save).toMatchObject({ seaLine: 1, pearls: 120 });
+    expect(s).toMatchObject({ seaLine: 1, pearls: 365, coins: 81_500 });
+    expect(last(a.c, 'state').save).toMatchObject({ seaLine: 1, pearls: 365 });
     room.handle(a.id, { t: 'levelline' });
     expect(s.seaLine).toBe(1);
   });
@@ -1220,6 +1220,39 @@ describe('dives', () => {
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     t.room.handle(a.id, { t: 'ledge', a: 'surface' });
     expect(s.pearls).toBe(16);
+  });
+
+  it('pays a Feisty or Brutish fish double and a legend five times, and tells the HUD what each landed fish paid', () => {
+    const t = setup();
+    const a = diver(t);
+    t.room.handle(a.id, { t: 'dive', from: 0 });
+    // A fresh charter has paid nothing yet.
+    expect(lastDive(a).gain).toBeUndefined();
+    // Under 1 in 8 rolls a tag, and 1 in 20 or more is no legend: a Feisty everyday fish.
+    t.setRoll(0.1);
+    fight(t, a);
+    expect(last(a.c, 'castok')).toMatchObject({ tag: 'feisty' });
+    expect(FISH.find((f) => f.id === last(a.c, 'castok').fishId)?.legend).toBeFalsy();
+    expect(lastDive(a)).toMatchObject({ depth: 1, fish: 1, pearls: 2, gain: 2 });
+    t.setRoll(0.5);
+    fight(t, a);
+    expect(last(a.c, 'castok').tag).toBeUndefined();
+    expect(lastDive(a)).toMatchObject({ depth: 2, pearls: 3, gain: 1 });
+    // Under 1 in 20 is the zone's legend, tagged too: ten times.
+    t.setRoll(0.01);
+    fight(t, a);
+    expect(FISH.find((f) => f.id === last(a.c, 'castok').fishId)?.legend).toBe(true);
+    expect(lastDive(a)).toMatchObject({ depth: 3, pearls: 13, gain: 10 });
+    // A lost fish pays nothing and sends no gain.
+    t.setRoll(0.1);
+    fight(t, a, false);
+    expect(lastDive(a)).toMatchObject({ depth: 3, pearls: 13 });
+    expect(lastDive(a).gain).toBeUndefined();
+    expect(lastDive(a).lost).toBeTruthy();
+    // Heading home keeps the haul once: no fish is credited twice.
+    t.room.handle(a.id, { t: 'headhome' });
+    expect(last(a.c, 'diveend').end).toMatchObject({ result: 'sunk', why: 'home', depth: 3, pearls: 13 });
+    expect(a.acct.save.pearls).toBe(13);
   });
 
   it('fishes with the gear it set out with, and fish under the gear pay no pearls or bonus', () => {
