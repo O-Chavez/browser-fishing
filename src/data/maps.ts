@@ -42,8 +42,8 @@ export const HARBOUR = {
 HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.plane.x - HARBOUR.diveStart.x), -(HARBOUR.plane.z - HARBOUR.diveStart.z));
 
 /**
- * The campfire on the east headland, the town's meeting place: a cobbled circle at the foot of the ramp from the
- * quay's east end, benches on its lake and quay sides, string lights over it, and Top Anglers and Thanks behind
+ * The campfire on the east headland, the town's meeting place: a cobbled circle at the foot of the campfire lane
+ * from the quay's east corner, benches on its lake and quay sides, string lights over it, and Top Anglers and Thanks behind
  * the fire on the hill side, turned to the fire, so the fire lights them at night and the cove sees them from the
  * pier and the east jetty. The water side stays open. Play-test: the spots, the turns and the circle's size.
  */
@@ -338,7 +338,8 @@ export const MAPS: MapDef[] = [
         { id: 'b7', x: -4.4, z: -8.3, note: 'You found the secret at the end of the pier. Well fished, friend.' },
       ],
       racks: [
-        { x: 10.5, z: 16.8, facing: 0.3 },
+        // Behind the quay road's east end, clear of its cobbles.
+        { x: 11, z: 17.8, facing: 0.3 },
         { x: 9, z: 20.2, facing: 1.2 },
       ],
       // Moored in the water beside the west jetty.
@@ -357,24 +358,32 @@ export const MAPS: MapDef[] = [
       paths: [
         // The main street from the quay's rear edge to the gate.
         { from: [0, 14.5], to: [0, 54.5], w: 4.4 },
-        // The quay road: cobbles along the deck's rear edge in front of the two stalls, so the deck meets stone.
-        { from: [-8.4, 15.6], to: [8.4, 15.6], w: 2.2 },
+        // The quay road: cobbles along the deck's rear edge in front of the two stalls, so the deck meets stone. It
+        // runs the deck's whole length, wraps round each of its rear corners and carries on down as a lane, so one
+        // cobbled way leads from the square to Reed's beach and to the campfire. Each bend is two gentle turns.
+        { from: [-11.6, 15.6], to: [11.6, 15.6], w: 2.2 },
         // Lanes off the square and the upper street to the houses' doors.
         { from: [-2, 32], to: [-8.4, 34.5], w: 1.6 },
         { from: [2, 32], to: [7.6, 36.9], w: 1.6 },
         { from: [-1.5, 42], to: [-6.3, 43.5], w: 1.6 },
         { from: [1.5, 42.5], to: [7, 46.9], w: 1.6 },
-        // Reed's lane, a street of the town, from the quay's west end down to his beach.
-        { from: [-13, 13.5], to: [-16.5, 9], w: 2.4 },
-        { from: [-16.5, 9], to: [-18.5, 3.5], w: 2.4 },
-        // The ramp from the quay's east end down into the campfire's circle (`circles`).
-        { from: [12.5, 11], to: [17.1, 4.68], w: 1.6 },
-        // The village ring: west from the square between Wren's and the Fishmonger's garden, down past the worm patch to the quay...
+        // Reed's lane: the quay road's west arm, round the deck's corner and down to his beach.
+        { from: [-11.6, 15.6], to: [-13.7, 14.5], w: 2.2 },
+        { from: [-13.7, 14.5], to: [-14.8, 12.6], w: 2.2 },
+        { from: [-14.8, 12.6], to: [-16.5, 9], w: 2.2 },
+        { from: [-16.5, 9], to: [-18.5, 3.5], w: 2.2 },
+        // The campfire lane: its east arm, round the deck's other corner and down into the campfire's circle
+        // (`circles`). The village ring's east lane joins it at (15.5, 8.5).
+        { from: [11.6, 15.6], to: [13.7, 14.5], w: 2.2 },
+        { from: [13.7, 14.5], to: [14.6, 12.2], w: 2.2 },
+        { from: [14.6, 12.2], to: [15.5, 8.5], w: 2.2 },
+        { from: [15.5, 8.5], to: [17.1, 4.68], w: 2.2 },
+        // The village ring: west from the square between Wren's and the Fishmonger's garden, down past the worm patch into Reed's lane...
         { from: [-4.5, 30.5], to: [-12.5, 28.6], w: 1.6 },
         { from: [-12.5, 28.6], to: [-16.5, 22], w: 1.6 },
         { from: [-16.5, 22], to: [-17, 15], w: 1.6 },
         { from: [-17, 15], to: [-15.5, 11.2], w: 1.6 },
-        // ...and east between the blue house and the Net Mender's garden, down to the campfire path.
+        // ...and east between the blue house and the Net Mender's garden, down into the campfire lane.
         { from: [4.8, 31.2], to: [15.5, 31], w: 1.6 },
         { from: [15.5, 31], to: [18.5, 24], w: 1.6 },
         { from: [18.5, 24], to: [18.5, 16], w: 1.6 },
@@ -385,8 +394,9 @@ export const MAPS: MapDef[] = [
       benches: [
         // Along the east jetty's edge, looking across the water to the campfire headland.
         { x: 6.9, z: 7.2, facing: Math.PI / 2 },
-        // At the quay's east end where the boards stood, on the deck's rear edge looking out over the cove.
-        { x: 11.2, z: 13.8, facing: Math.PI },
+        // At the quay's east end where the boards stood, near the deck's rear edge looking out over the cove, with
+        // room behind it for its lamp to stand clear of the quay road.
+        { x: 11.2, z: 13.3, facing: Math.PI },
         // The rest stop on the walk up, beside the main street in front of the Fishmonger.
         { x: -4.6, z: 24.5, facing: Math.PI / 2 },
       ],
@@ -408,6 +418,18 @@ export const MAPS: MapDef[] = [
 const pond = MAPS[0];
 
 /** Where a player lands on `dest` when coming from map `from`: back through the gate, by the seaplane from a dive, or at the spawn. */
+/** True within `pad` metres of a map's cobbles: its paths, the square and the round patches. */
+export const onCobbles = (map: MapDef, x: number, z: number, pad = 0): boolean => {
+  const t = map.town;
+  for (const p of t.paths) {
+    const dx = p.to[0] - p.from[0];
+    const dz = p.to[1] - p.from[1];
+    const k = Math.max(0, Math.min(1, ((x - p.from[0]) * dx + (z - p.from[1]) * dz) / (dx * dx + dz * dz || 1)));
+    if (Math.hypot(x - p.from[0] - dx * k, z - p.from[1] - dz * k) < p.w / 2 + pad) return true;
+  }
+  return [t.square, ...(t.circles ?? [])].some((c) => c.r > 0 && Math.hypot(x - c.x, z - c.z) < c.r + pad);
+};
+
 export const arrivalSpot = (dest: MapDef, from?: string): { x: number; z: number; yaw: number } =>
   (from && dest.next?.id === from && dest.gateArrival)
   || (from && dest.harbour && MAPS.find((m) => m.id === from)?.sea && dest.harbour.diveStart)

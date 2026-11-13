@@ -4,11 +4,12 @@ import { LightPool } from './lightpool';
 import { NightGlow, glowTag } from './nightglow';
 import { revealAll } from './prewarm';
 import type { Location } from '../data/content';
-import type { MapDef } from '../data/maps';
+import { onCobbles, type MapDef } from '../data/maps';
 import {
   DOCK_RECTS,
   type DockRect,
   WATER_ORDER,
+  TERRAIN,
   groundHeight,
   innerRadius,
   isWater,
@@ -710,8 +711,8 @@ export class World {
   }
 
   private buildTerrain(loc: Location): void {
-    const NR = 150;
-    const NT = 120;
+    // `terrainHeight` (env.ts) reads the same grid, so what lies on the ground can follow the mesh as drawn.
+    const { NR, NT } = TERRAIN;
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
@@ -724,9 +725,8 @@ export class World {
     for (let j = 0; j <= NT; j++) {
       const th = -Math.PI + (j / NT) * Math.PI * 2;
       // One shared start radius keeps neighbouring columns aligned. A per-column start made long slivers across the bay behind the dock.
-      const inner = 1;
       for (let i = 0; i <= NR; i++) {
-        const r = inner + (175 - inner) * Math.pow(i / NR, 1.7);
+        const r = TERRAIN.radius(i);
         const x = Math.sin(th) * r;
         const z = Math.cos(th) * r;
         const y = groundHeight(x, z);
@@ -914,7 +914,8 @@ export class World {
       else if (!alongShore(th)) continue;
       const y = groundHeight(x, z);
       if (bed ? y > 0.4 || onDock(x, z, 0.6) : y < -0.5 || y > 0.4 || onDock(x, z, 1.2) || cleared(x, z)) continue;
-      const s = 0.6 + rnd() * 0.9;
+      // Like the rocks: a reed that would grow through the cobbles keeps its place, at no size.
+      const s = onCobbles(map, x, z, 0.2) ? (rnd(), 0) : 0.6 + rnd() * 0.9;
       q.setFromEuler(
         new THREE.Euler((rnd() - 0.5) * 0.3, rnd() * 6, (rnd() - 0.5) * 0.3),
       );
@@ -962,12 +963,15 @@ export class World {
       // Boulders stay out of the cove (inside the headlands), where the quay sets the scale.
       const s = (0.4 + rnd() * 1.4) * (Math.abs(th) < 2 ? 0.65 : 1);
       q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, rnd() * 3));
+      // A rock that would lie on the cobbles keeps its place in the count and in the random stream, at no size, so
+      // every other rock, reed and lily pad stays where it was.
+      const size = onCobbles(map, x, z, s + 0.2) ? 0 : s;
       rocks.setMatrixAt(
         kn++,
         m.compose(
           p.set(x, groundHeight(x, z) + s * 0.2, z),
           q,
-          sc.set(s, s * 0.7, s),
+          sc.set(size, size * 0.7, size),
         ),
       );
     }

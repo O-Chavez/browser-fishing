@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { MapDef, NpcDef, Spot } from '../data/maps';
-import { DOCK_TOP, groundHeight, onDock, standHeight, waveHeight } from './env';
+import { DOCK_TOP, groundHeight, onDock, standHeight, terrainHeight, waveHeight } from './env';
 import { DARK, WOOD, ball, cyl, limb, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
 import { NpcWalker, type Bystander } from './npcwalk';
@@ -143,13 +143,10 @@ export class Town {
     this.colliders.push({ x, z, r });
   }
 
-  /** Flat cobbled strip between two points, laid just above the ground. */
+  /** Flat cobbled strip between two points, laid just above the ground; `buildStreets` rounds the lanes' ends. */
   private path(ax: number, az: number, bx: number, bz: number, w: number): void {
     this.paths.push([ax, az, bx, bz, w / 2]);
-    // Lanes run on past each end by half their width, so a bend's strips overlap instead of leaving a wedge of
-    // ground between them; the main street stops where it is laid, since it meets the quay deck.
-    const over = w < 4 ? w / 2 : 0;
-    const len = Math.hypot(bx - ax, bz - az) + 2 * over;
+    const len = Math.hypot(bx - ax, bz - az);
     // Built in world space, a vertex every half metre along and across, each on the ground under it, so a lane
     // down or across a slope lies on the ground instead of floating at one edge and sinking at the other.
     const geo = new THREE.PlaneGeometry(w, len, Math.max(1, Math.ceil(w / 0.55)), Math.max(1, Math.ceil(len / 0.5))).rotateX(-Math.PI / 2);
@@ -164,8 +161,9 @@ export class Town {
       const x = mx + pos.getX(i) * cos + pos.getZ(i) * sin;
       const z = mz - pos.getX(i) * sin + pos.getZ(i) * cos;
       // Every strip and the square lie at one height with one depth bias and take their cobbles from the same
-      // world-space pattern, so where two overlap they show the same stones and read as one paved surface.
-      pos.setXYZ(i, x, groundHeight(x, z) + COBBLE_LIFT, z);
+      // world-space pattern, so where two overlap they show the same stones and read as one paved surface. The
+      // height is the terrain mesh's, not the ground's formula, so the ground can't poke through between its points.
+      pos.setXYZ(i, x, terrainHeight(x, z) + COBBLE_LIFT, z);
       uv.setXY(i, x / 2.2, z / 2.2);
     }
     geo.computeVertexNormals();
@@ -176,21 +174,35 @@ export class Town {
 
   /** The main street and the lanes, as the map lays them out (`paths` in maps.ts), and the round patches (`circles`). */
   private buildStreets(): void {
-    for (const p of this.map.town.paths) this.path(p.from[0], p.from[1], p.to[0], p.to[1], p.w);
+    // Every end of a lane gets a round of cobbles as wide as the widest strip that meets there. At a bend it fills
+    // the wedge between the two strips and rounds the outside corner; where a lane runs into a wider one or into
+    // the square it tucks under it; where a lane stops it ends in a half round instead of a sawn-off edge. The main
+    // street has none: it stops where it is laid, against the quay deck.
+    const ends = new Map<string, { x: number; z: number; r: number }>();
+    for (const p of this.map.town.paths) {
+      this.path(p.from[0], p.from[1], p.to[0], p.to[1], p.w);
+      if (p.w >= 4) continue;
+      for (const [x, z] of [p.from, p.to]) {
+        const e = ends.get(`${x},${z}`);
+        if (e) e.r = Math.max(e.r, p.w / 2);
+        else ends.set(`${x},${z}`, { x, z, r: p.w / 2 });
+      }
+    }
+    for (const e of ends.values()) this.disc(e.x, e.z, e.r, 20);
     for (const c of this.map.town.circles ?? []) this.disc(c.x, c.z, c.r);
   }
 
   /** Round cobbled patch, laid on the ground like `path`: the square, and the campfire's circle on its slope. */
-  private disc(cx: number, cz: number, r: number): void {
+  private disc(cx: number, cz: number, r: number, around = 40): void {
     // Rings every half metre, so the patch follows the ground under it instead of lying flat across a slope.
-    const geo = new THREE.RingGeometry(0, r, 40, Math.max(1, Math.ceil(r / 0.5))).rotateX(-Math.PI / 2);
+    const geo = new THREE.RingGeometry(0, r, around, Math.max(1, Math.ceil(r / 0.5))).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
     const pos = geo.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
       const x = cx + pos.getX(i);
       const z = cz + pos.getZ(i);
       // The same height, depth bias and world-space cobbles as the paths, so the lanes run in without a seam.
-      pos.setXYZ(i, x, groundHeight(x, z) + COBBLE_LIFT, z);
+      pos.setXYZ(i, x, terrainHeight(x, z) + COBBLE_LIFT, z);
       uv.setXY(i, x / 2.2, z / 2.2);
     }
     geo.computeVertexNormals();
@@ -1019,7 +1031,7 @@ export class Town {
     this.pot(-8.5, 19);
     this.pot(6.3, 23);
     // Beside the bench at the quay's east end.
-    this.pot(12.5, 13.95);
+    this.pot(12.45, 13.4);
     // A picnic blanket on the slope above Reed's lane (the campfire headland is too narrow for a second one).
     this.blanket(-15, 16.5, -0.3);
     // String lights over the mouth of the main street between the two stalls, over the square, at the gate, and over

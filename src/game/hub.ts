@@ -398,12 +398,13 @@ export class Hub {
     // east jetty's end) stand on their own piles in the water, a step off the deck's edge, out of reach, so they
     // need no collider. The quay's rear two are tucked against things that are solid already: the barrels by the
     // stall, and the back of the bench at the east end. The rest stand beside the cobbles: up the main street to
-    // the square, at Reed's lane and at the top of the campfire ramp, on its water side, where it stays out of the
-    // view down the ramp to the boards (the village's own posts are in town.ts). Five carry a point light.
+    // the square, at Reed's lane and beside the campfire lane where the village ring's lane joins it, on the hill
+    // side, where it stays out of the view down the lane to the boards (the village's own posts are in town.ts).
+    // Five carry a point light.
     // Play-test: the spots.
     const piles = [[-4, 9.7], [4, 9.7], [9.05, 4.5]];
     const lit = new Set(['3.6,27.5', '-19.6,5.2']);
-    const posts = [[-8.45, 13.5], [11.2, 14.5], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19.6, 5.2], [12.2, 9.4]];
+    const posts = [[-8.45, 13.5], [11.2, 13.95], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19.6, 5.2], [17.3, 8.3]];
     const lampPost = (x: number, z: number, light: boolean, pile: boolean) => {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
@@ -445,7 +446,9 @@ export class Hub {
       this.place(b, { x, z, facing: 0 });
       this.fixed.push({ x, z, r: 0.38 * s });
     }
-    const crates = [[-6.5, 14.1, 0.4]] as const;
+    // The crate stands toward the water from the deck's rear edge, so the quay road behind it keeps its width past
+    // the stall.
+    const crates = [[-7.1, 13.2, 0.4]] as const;
     for (const [x, z, rot] of crates) {
       const c = rbox(0.8, 0.7, 0.8, 0x9c7a4a, 0.05);
       this.place(c, { x, z, facing: rot }, 0, 0, standHeight(x, z) + 0.35);

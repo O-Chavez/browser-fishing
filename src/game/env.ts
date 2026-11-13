@@ -134,7 +134,63 @@ export function groundHeight(x: number, z: number): number {
   const blended = raw + (pad.h - raw) * w;
   // Beyond the pad the bank slopes gently into the water instead of dropping off a cliff.
   const bank = pad.h - Math.max(0, Math.hypot(x - pad.x, z - pad.z) - pad.r) * BANK_SLOPE;
-  return Math.max(blended, bank, apronHeight(x, z));
+  return Math.min(Math.max(blended, bank, apronHeight(x, z)), deckBed(x, z));
+}
+
+/**
+ * The highest the ground may stand under a dock and beside it: just below the planks' underside under the deck,
+ * rising gently from its edge (`DECK_BED_SLOPE` per metre). Where a bank or an apron would stand level with the
+ * planks, the coarse terrain mesh crossed them in a sawtooth of sand along the deck's rear edge and over its ends;
+ * held under them, the planks show to their true edge and the sand and cobbles meet it a few centimetres down.
+ */
+const DECK_BED = DOCK_TOP - 0.1;
+const DECK_BED_SLOPE = 0.15;
+function deckBed(x: number, z: number): number {
+  let bed = Infinity;
+  for (const r of DOCK_RECTS) {
+    const dx = Math.max(0, r.x0 - x, x - r.x1);
+    const dz = Math.max(0, r.z0 - z, z - r.z1);
+    bed = Math.min(bed, DECK_BED + Math.hypot(dx, dz) * DECK_BED_SLOPE);
+  }
+  return bed;
+}
+
+/**
+ * The terrain mesh's polar grid (world.ts draws it): `NT` spokes round the lake's middle and `NR` rings out from it,
+ * closer together near the middle. Each cell is two triangles.
+ */
+export const TERRAIN = { NR: 150, NT: 120, radius: (i: number): number => 1 + 174 * Math.pow(i / 150, 1.7) };
+
+/**
+ * Height of the terrain as it is drawn at (x, z): on the flat triangles of the terrain mesh, which sit up to a few
+ * centimetres above or below `groundHeight` between the mesh's points (most where a bank meets a slope). Things
+ * laid flat on the ground, like the cobbles, follow this so the ground never pokes through them.
+ */
+export function terrainHeight(x: number, z: number): number {
+  const { NR, NT, radius } = TERRAIN;
+  const r = Math.hypot(x, z);
+  if (atSea || r <= radius(0) || r >= radius(NR)) return groundHeight(x, z);
+  const step = (Math.PI * 2) / NT;
+  const j = Math.min(NT - 1, Math.max(0, Math.floor((Math.atan2(x, z) + Math.PI) / step)));
+  const i = Math.min(NR - 1, Math.floor(NR * Math.pow((r - 1) / 174, 1 / 1.7)));
+  // The cell's corners, as the mesh lays them: a and b on spoke j (rings i and i + 1), d and e on spoke j + 1.
+  const corner = (jj: number, ii: number): [number, number, number] => {
+    const th = -Math.PI + jj * step;
+    const cx = Math.sin(th) * radius(ii);
+    const cz = Math.cos(th) * radius(ii);
+    return [cx, cz, groundHeight(cx, cz)];
+  };
+  const a = corner(j, i);
+  const b = corner(j, i + 1);
+  const d = corner(j + 1, i);
+  const e = corner(j + 1, i + 1);
+  // Its two triangles are (a, b, d) and (b, e, d); the point lies in the first if it is on a's side of b-d.
+  const side = (p: [number, number, number]) => (d[0] - b[0]) * (p[1] - b[1]) - (d[1] - b[1]) * (p[0] - b[0]);
+  const [p, q, s] = side([x, z, 0]) * side(a) >= 0 ? [a, b, d] : [b, e, d];
+  const det = (q[1] - s[1]) * (p[0] - s[0]) + (s[0] - q[0]) * (p[1] - s[1]);
+  const u = ((q[1] - s[1]) * (x - s[0]) + (s[0] - q[0]) * (z - s[1])) / det;
+  const v = ((s[1] - p[1]) * (x - s[0]) + (p[0] - s[0]) * (z - s[1])) / det;
+  return u * p[2] + v * q[2] + (1 - u - v) * s[2];
 }
 
 function rawGroundHeight(x: number, z: number): number {
