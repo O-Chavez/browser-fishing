@@ -14,6 +14,9 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] Remove the CHARTERS poster by the pond gate and move its explanation to the Furthest Out board (Oscar, 2026-11-13: it doesn't make sense beside the casino poster with Reed's CHARTERS arch already at the wharf)
   - Remove the poster (`POSTERS.charters` and `charterSpot`, `src/game/hub.ts`; its "Charters poster · take a look" interaction and the `charters` menu in `src/game/game.ts`). Check whether the casino poster should move to the gate's middle or stay where it is, and update the smoke test, screenshots and GAME_DESIGN.md if they mention the poster
   - The Furthest Out board (`FurthestBoard`, `src/game/furthestboard.ts`; built in `buildFurthest`, `src/game/town.ts`) gets a "take a look" interaction that opens the poster's panel, the charters explanation with its images (`chartersPosterHtml`, `charterPreview`); it has no interaction today
+- [ ] Make the dev console login safe for screen sharing (Oscar, 2026-11-13): `/login` on its own in the chat opens a prompt for the username and password, both starred out as they're typed, so nothing readable shows to anyone watching
+  - Today `/login user pass` is typed in full into the chat box, readable while typing; only the echoed line hides the password (`send` in the `ChatBox` setup, `src/game/game.ts`; `src/game/chatbox.ts`). The server check stays as it is (`command` in `server/room.ts`, `devGate.login`)
+  - Keep the prompt's values out of the chat log and the chat input's history. `/resetpass <name> <new password>` shows its new password the same way while typing; decide whether it gets the same prompt
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
