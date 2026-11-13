@@ -2,6 +2,11 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Update the README with the newer features (done 2026-11-13, branch `readme-update`; a follow-up to "Fill out readme")
+  - Added: a deep sea charters paragraph (Captain Reed on the west beach, the Deep Sea Rod from level 20, the five zones, spools of line, the rod's eight steps, Black Pearls and the boat parts, the Abyss's markers, the Kraken, the Furthest Out board) with the photo of Reed's chart; the Lucky Wheel in the casino paragraph; a sentence on the harbour cove with the harbour photo. Both photos are the What's new ones in `src/assets/images/news/`, so `npm run screenshots` was not re-run (the shots in `docs/images/` date from the map rework and show no sea)
+  - Fixed: "Coming soon: spices for deep-sea charters" is gone; "20 fish species" is 19 lake fish and 23 sea fish; "50 levels" is levels with no cap and ranks up to Lord of the Deep at 150; Features at a glance, the shared rule modules (`dive.ts`) and the commands table (`bench:compare`, `bench:ab`, `bench:load`) brought up to date
+  - Checked: each new fact against `NEWS`, `src/data/dive.ts`, `content.ts`, `casino.ts` and `ranks.ts`; every image path resolves. No source changed, so no build or tests. The controls table was only spot-checked. Out-of-date text found elsewhere is filed in TODO.md (Bugs and tooling)
+
 - [x] Keep the player model in view in the Wardrobe (Oscar, 2026-11-13; done 2026-11-13, branch `wardrobe-sticky`)
   - Built: the Wardrobe's left column (the character preview, "Drag to turn" and the Colour swatches) is sticky, so it stays beside the item list while the list scrolls (`.cols.wardrobe > .side` in `src/style.css`; the menu's sheet is what scrolls). A list too short to scroll looks as before. The join screen's preview and the other two-column menus are untouched
   - The phone layout keeps the two columns side by side, so the same rule covers it

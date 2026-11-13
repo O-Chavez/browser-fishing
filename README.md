@@ -8,7 +8,7 @@
 
 [Watch in HD (MP4)](docs/images/gameplay.mp4)
 
-Grab a rod and head down to the pier. In this cozy multiplayer fishing game, everyone shares one lakeside town. You can hang out with your friends, cast side by side as the sun goes down, and trade stories about the one that got away. Start with a twig rod and a can of worms, and work your way up to hunting mythic Spirit Fish under the stars. When you're feeling lucky, bet your best catch at the casino.
+Grab a rod and head down to the pier. In this cozy multiplayer fishing game, everyone shares one lakeside town. You can hang out with your friends, cast side by side as the sun goes down, and trade stories about the one that got away. Start with a twig rod and a can of worms, and work your way up to hunting mythic Spirit Fish under the stars, then charter a boat out to the open sea. When you're feeling lucky, bet your best catch at the casino.
 
 ## About this game
 
@@ -16,7 +16,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![Reeling in a fish from the end of the pier: the rod is bent and the tension ring warns "Let go!"](docs/images/reel.jpg)
 
-**🐟 19 species to discover.** You'll start with Silver Minnows and Bluegill in the Shallows. Then come the Sport Fish and the Lake Giants, then the gem-bright Jewel Fish. At the top are the legendary Spirit Fish: the Ghost Carp, the Phoenix Trout and the Starweaver Eel. Each one has its own look, and the rarest are huge. Fill your **Fishdex** and chase your personal records.
+**🐟 19 lake fish to discover.** You'll start with Silver Minnows and Bluegill in the Shallows. Then come the Sport Fish and the Lake Giants, then the gem-bright Jewel Fish. At the top are the legendary Spirit Fish: the Ghost Carp, the Phoenix Trout and the Starweaver Eel. Each one has its own look, and the rarest are huge. Fill your **Fishdex** and chase your personal records. The sea has 23 more fish, on a Fishdex page of their own.
 
 ![All 19 fish in five tiers: Shallows, Sport fish, Lake giants, Jewel fish and Spirit fish, with night-only fish marked by a moon](docs/images/fish.jpg)
 
@@ -24,13 +24,17 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![The town square at night, lit by street lamps and string lights](docs/images/night.jpg)
 
-**📈 Level up from Worm to Moon Pearl.** Sell your catch, buy better bait, line and rods, and reach new tiers of fish. There are 50 levels to climb, and none of it is pay-to-win: everything is earned on the water.
+**📈 Level up from Worm to Moon Pearl.** Sell your catch, buy better bait, line and rods, and reach new tiers of fish. Levels have no cap: from level 20 you earn nautical ranks, from Deckhand to Admiral at 50 and on to Lord of the Deep at 150. None of it is pay-to-win: everything is earned on the water.
 
-**🎰 Welcome to Casino Cove.** Reach level 15 and the gate to the casino opens. Put a fish on the line at **roulette** or **blackjack** and push its value as high as 16×, or lose it all. Trade your winnings for chips and spend them on perks like Lucky Charms, Quick-Reel Gloves and Shiny Lures.
+**⚓ Charter out to the deep sea.** At level 20, **Captain Reed** on the west beach sells the **Deep Sea Rod** and takes you out on a charter. Pick one of five zones, from **the Shelf** to **the Abyss**, and cast off. Each charter runs on a **spool** of line: every fish you hook uses a few metres, one that gets away takes 25 m more, and when the spool is out you buy another or head home. Fish pay coins and **Black Pearls**. Coins buy line and the rod's eight steps, and pearls fill the bar for four **boat parts** that open the zones one by one. Only the Abyss has **markers**: every three fish you land takes you one further out, where the fish fight harder and pay more. The rarest sea fish are legends, up to **the Kraken**, and the **Furthest Out** board by Reed's lane shows how far each angler's boat reaches.
+
+![Captain Reed's chart: a card for each of the five zones with how it rates for your rod, what a fish pays and the price of a spool, then the Deep Sea Rod's step, the next boat part and a Cast off button](src/assets/images/news/charter-chart.jpg)
+
+**🎰 Welcome to Casino Cove.** Reach level 15 and the gate to the casino opens. Put a fish on the line at **roulette** or **blackjack** and push its value as high as 16×, or lose it all. Spin the **Lucky Wheel** with a fish and it comes back worth ×5, ×2 or half as much, or it's gone. Trade your winnings for chips and spend them on perks like Lucky Charms, Quick-Reel Gloves and Shiny Lures.
 
 ![Inside the casino](src/assets/images/casino-preview.jpg)
 
-**🔥 Smoke your catch.** From level 3, Mags Cinder's Smokehouse across the path from Marlow's stall smokes your spare fish in seconds (and keeps smoking while you're offline). Sell small fry smoked for more, eat one as a snack for ⭐ more XP or 💰 more coins on every catch, or cook smoked fish into dishes that give several buffs at once, up to ✨ more shinies. Coming soon: spices for deep-sea charters.
+**🔥 Smoke your catch.** From level 3, Mags Cinder's Smokehouse across the path from Marlow's stall smokes your spare fish in seconds (and keeps smoking while you're offline). Sell small fry smoked for more, eat one as a snack for ⭐ more XP or 💰 more coins on every catch, or cook smoked fish into dishes that give several buffs at once, up to ✨ more shinies.
 
 **👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, and race for a spot on the **Top Anglers** leaderboard.
 
@@ -42,17 +46,20 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![The wardrobe, with a player in a crown and cloak and the hats and shirts to choose from](docs/images/wardrobe.jpg)
 
-**🗺️ A town worth exploring.** Chat with Old Salty, Granny Wren and the other locals and track down the seven messages in bottles hidden around the map.
+**🗺️ A town worth exploring.** Chat with Old Salty, Granny Wren and the other locals and track down the seven messages in bottles hidden around the map. The town wraps a small harbour cove, with the pier at its middle, Marlow's stall and the Smokehouse on the quay, and Captain Reed's seaplane floating off his beach.
+
+![Looking back from the pier at the harbour: the Top Anglers and Thanks boards, the Smokehouse and Marlow's striped stall along the quay, and the main street running up into the trees](src/assets/images/news/harbour.jpg)
 
 ### Features at a glance
 - Free to play, right in your browser, on any desktop (early touch controls for phones and tablets)
 - Online multiplayer with global chat
-- 20 fish species across 5 tiers, plus rare shiny variants
-- 5 rods, 5 lines, 5 baits and 50 levels of progression
+- 19 lake fish across 5 tiers and 23 sea fish across 5 zones, plus rare shiny variants
+- 5 rods, 5 lines and 5 baits, plus the Deep Sea Rod, and levels with no cap
+- Deep sea charters: five zones, spools of line, a rod with eight steps, boat parts and endless Abyss markers
 - Day/night cycle with night-only fish
-- Casino Cove with roulette, blackjack and a perk shop
+- Casino Cove with roulette, blackjack, the Lucky Wheel and a perk shop
 - A Smokehouse that turns spare fish into snacks and dishes that buff your catches
-- Fishdex, records and a live leaderboard
+- Fishdex, records, a live leaderboard and a Furthest Out board for charters
 - Character customisation: faces, colours, hats, shirts and jewellery
 - Your progress is saved on the server, so just log back in with your name
 
@@ -110,7 +117,7 @@ Lakeside is free with no ads, made by one person. If you enjoy it, you can leave
 
 - **Client** (`src/`): the Three.js scene, player controller, reel minigame, HUD and menus. Game content (fish, rods, baits, maps, cosmetics, casino tuning) is plain TypeScript data in `src/data/`.
 - **Server** (`server/`): owns every save. When you cast, the server rolls what bites, and catches, sales, purchases and casino bets are all checked server-side, so the client can't award itself coins or fish.
-- **Shared code**: the server imports the same rule modules as the client (`src/game/economy.ts`, `progression.ts`, `casino.ts`, `smoke.ts`), so both sides always agree on prices, odds and level gates. Message types live in `src/net/protocol.ts`.
+- **Shared code**: the server imports the same rule modules as the client (`src/game/economy.ts`, `progression.ts`, `casino.ts`, `smoke.ts`, `dive.ts`), so both sides always agree on prices, odds and level gates. Message types live in `src/net/protocol.ts`.
 - **Saves**: accounts are stored through a small storage interface that uses PostgreSQL when `DATABASE_URL` is set and JSON files otherwise. Older saves are migrated on load.
 
 ## Running locally
@@ -131,7 +138,8 @@ Then open the URL Vite prints (usually http://localhost:5173).
 | `npm start` | Run the server, which also serves `dist/` (production mode) |
 | `npm test` | Unit tests (Vitest) |
 | `npm run smoke` | End-to-end smoke test in headless Chrome |
-| `npm run bench` | Render benchmark |
+| `npm run bench` | Render benchmark (`npm run bench:compare` compares runs, `npm run bench:ab -- <before> <after>` times two commits) |
+| `npm run bench:load` | Load-hitch probe: frame gaps and shader compiles from page load through joining |
 | `npm run screenshots` | Regenerate the README screenshots in `docs/images/` |
 | `npm run trailer` | Re-record the README gameplay clip (`docs/images/gameplay.mp4` and `.gif`); needs ffmpeg |
 
