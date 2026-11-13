@@ -2,6 +2,11 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Keep the player model in view in the Wardrobe (Oscar, 2026-11-13; done 2026-11-13, branch `wardrobe-sticky`)
+  - Built: the Wardrobe's left column (the character preview, "Drag to turn" and the Colour swatches) is sticky, so it stays beside the item list while the list scrolls (`.cols.wardrobe > .side` in `src/style.css`; the menu's sheet is what scrolls). A list too short to scroll looks as before. The join screen's preview and the other two-column menus are untouched
+  - The phone layout keeps the two columns side by side, so the same rule covers it
+  - Checked in headless Chrome at 1280x720 and on a 915x412 phone viewport with an account that owns every cosmetic, scrolled to the bottom, before and after; the build and 587 tests pass. Smoke skipped: CSS only. Not checked on a real phone
+
 - [x] 📋 Deep sea charters reworked as a place to earn (Oscar, 2026-11-12; done and merged 2026-11-13, branch `charter-edge`; REELING.md, "A place to earn"; plan and mockups: https://claude.ai/artifact/9htuc63qVi88eVU9bhEp4Z)
   - Built: a charter is fished in one zone on a 300 m spool of line bought from Reed (free on the Shelf, then 14,000 to 83,000 coins); every hooked fish uses 5 / 9 / 13 m at Easy / Fair / Tough for the rod, taken at the hook, and one that gets away 25 m more; when the spool is out, another spool or head home, with nothing lost; fish pay coins (about 1,500 to 15,500 a fish by zone on average) and Black Pearls (1 / 3 / 8 / 20 / 50, double for Feisty and Brutish, five times for legends); coins buy the Deep Sea Rod's eight steps (two a zone, on sale once the zone is open) and its endless Abyss levels; pearls buy the four boat parts that open zones; only the Abyss has markers (three fish each, numbered from 1, each harder and 12% richer) and the Furthest Out board ranks by them; Reed's chart and shop, the four-cell strip, the Spool's out, head home and end cards; older saves keep their pearls and get rod steps and boat parts from their old levels and furthest marker
   - It replaced "the edge pays" (pearl water, the haul's bonus, marker starts, two level tracks), built on this branch on 2026-11-11 and play-tested the next day (REELING.md has both)

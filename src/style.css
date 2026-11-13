@@ -313,6 +313,8 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; align-items: start; }
 .cols.wardrobe { grid-template-columns: minmax(240px, 36%) minmax(0, 1fr); }
+/* The preview column stays in view while the item list scrolls (.sheet is what scrolls). */
+.cols.wardrobe > .side { position: sticky; top: 0; }
 .main > h4 { margin-top: 2px; }
 .main > .tiles { margin-bottom: 16px; }
 .foot { margin: 4px 0 0; font-size: 13px; color: var(--ink-muted); }

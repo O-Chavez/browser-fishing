@@ -16,8 +16,6 @@ Finished items move to [DONE.md](DONE.md).
   - Fix what's out of date: the Smokehouse paragraph's "Coming soon: spices for deep-sea charters" (spices were shelved, `README.md:33`). Re-run `npm run screenshots` if a new shot (the harbour, a charter) is worth adding
 - [ ] Leave the casino only when looking at the door (Oscar, 2026-11-02): players who spam E as they walk in leave again at once, since they arrive by the exit and its "Exit to the pond" prompt is the nearest spot (`spots` in `game.ts` ~2175, picked by distance alone)
   - Show the exit prompt only while the player faces the doors (a view-angle check like a look cone), so E does nothing on arrival; maybe also give the casino a `gateArrival` a few steps in, facing the floor (`arrivalSpot`, `src/data/maps.ts`). Smoke check: entering and pressing E right away stays inside
-- [ ] Keep the player model in view in the Wardrobe (Oscar, 2026-11-13): when the item list is long enough to scroll, the character preview stays put (sticky) beside it instead of scrolling away
-  - The Wardrobe's two columns are `.cols.wardrobe` and the preview `canvas.preview` (`src/style.css:315`, `:466`); check the phone layout too
 - [ ] 🎨 A community area around the campfire (Oscar, 2026-11-13): move the Top Anglers and Thanks (supporter) boards from the quay's east end to stand around the fire pit; changing the fire pit area to fit them is fine
   - Today: `leaderboard` and `campfire` in `src/data/maps.ts:180-182`, built in `src/game/hub.ts` (`buildCampfire`); the headland is narrow (`src/game/town.ts:994`). Propose layouts before coding
 ## Ideas
