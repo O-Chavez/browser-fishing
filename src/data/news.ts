@@ -16,6 +16,7 @@
  *   { id: 1, date: '2026-11-20', title: 'The Delve', image: delve, alt: 'Diving below the pond',
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
+import charterChart from '../assets/images/news/charter-chart.jpg';
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
@@ -38,6 +39,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 7,
+    date: '2026-11-13',
+    title: 'Charters rebuilt: line, zones and the boat',
+    image: charterChart,
+    alt: "Captain Reed's chart: a card for each of the five zones from the Shelf to the Abyss with its rating for your rod, what a fish pays and the price of a spool, Kelp Deep picked and the Twilight and the Abyss locked; under it the Deep Sea Rod at step 3 of 8, the next boat part's bar of Black Pearls, and a Cast off to Kelp Deep button",
+    body: [
+      "Deep sea charters work a new way. <b>Captain Reed</b> on the west beach now sells the <b>Deep Sea Rod</b> himself (from level 20), and his chart shows the five zones: how each one rates for your rod, from <b>Easy</b> to <b>Too much</b>, what a fish pays there and what a spool costs. Pick a zone and <b>Cast off</b>.",
+      "A charter runs on one <b>spool</b> of line: free on <b>the Shelf</b>, bought with coins further out. Every fish you hook uses a few metres, fewer the better your rod is for the zone, and one that gets away takes 25 m more. When the spool's out, buy another or <b>Head home</b>. Fish sell as they land, and nothing you've earned is ever lost.",
+      "Coins upgrade the Deep Sea Rod, two steps for each zone past the Shelf. <b>Black Pearls</b> fill the bar for your next <b>boat part</b>, and each part opens the next zone. Only <b>the Abyss</b> has <b>markers</b> now: every third fish takes you one further out, where the fish fight harder and pay more. You keep your pearls, and your old rod and line levels and furthest marker have become rod steps and boat parts.",
+    ],
+  },
   {
     id: 6,
     date: '2026-11-10',

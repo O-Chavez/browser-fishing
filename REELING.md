@@ -167,7 +167,7 @@ Oscar found the Abyss out of reach and the charter still an "early idea". Measur
 - **Tried and dropped:** double and triple pearls by the hook toast's words alone (careful hands gained 2-15% and the best start stayed 30-45 fish short of the wall); steep pay with no haul growth (one-marker hops at the edge earn 88-100% of the best rate); uncapped haul growth on every marker (the best charter starts at the harbour and grinds every easy marker).
 - **Not in this build** (TODO): a twist and a first-time reward for each zone, a trophy for legends, boat upgrades as the coin sink, three-fish markers, bigger steps per level, chat lines for zones and legends.
 
-### A place to earn (2026-11-12, branch `charter-edge`; play-tested and retuned 2026-11-13)
+### A place to earn (2026-11-12; play-tested and retuned 2026-11-13; merged 2026-11-13 from branch `charter-edge`)
 
 Oscar played "The edge pays" and found the premise wrong, not the tuning. A full charter (markers 0-30, about 700 pearls and 45,000 coins) bought one line level, a sixth of a rung on one of two axes, and nothing changed: the fish still read as strong and heavy. Line vanished on clean catches with nothing saying why. Markers, zones and the strip's nine facts blurred together. And "see how far you can push" had no answer to "for what reason".
 
