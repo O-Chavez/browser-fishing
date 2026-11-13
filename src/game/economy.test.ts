@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as eco from './economy';
-import { ROD_SLOT, SLOT_COUNT, migrate, newSave, type SaveData } from './state';
+import { ROD_SLOT, SEA_VERSION, SLOT_COUNT, migrate, newSave, type SaveData } from './state';
 import { FISH, LINES, byId } from '../data/content';
 import { GLOVES_CONTROL } from '../data/casino';
 import { mulberry } from './env';
 import { FIGHT_DT, P, Reel, type ReelTune } from './reel';
-import { BACKPAY_VERSION, FISH_SPREAD, FLAT_LEVEL, TAG_TIERS, backPayXp, xpForNextLevel } from './progression';
+import { BACKPAY_VERSION, FISH_SPREAD, FLAT_LEVEL, TAG_TIERS, backPayXp, sellValue, xpForNextLevel } from './progression';
 import { Drops } from './drops';
 import { COSMETICS, COS_SLOTS, cosById, isFace } from '../data/cosmetics';
 
@@ -866,42 +866,51 @@ describe('the sea in old saves', () => {
   /** A save from before charters were places: rod and line levels, a chart, maybe pearls counted the old way. */
   const old = (o: Record<string, unknown>) => {
     const s = { ...newSave(), ...o } as Record<string, unknown>;
-    for (const k of ['rodStep', 'abyssLevels', 'boatParts', 'abyssRecord']) delete s[k];
+    for (const k of ['rodStep', 'abyssLevels', 'boatParts', 'abyssRecord', 'seaV']) delete s[k];
+    return s;
+  };
+  /** A save from the rebuilt charters but before the sea reset (`SEA_VERSION`): progress carried over or earned since. */
+  const unreset = (o: Record<string, unknown>) => {
+    const s = { ...newSave(), ...o } as Record<string, unknown>;
+    delete s.seaV;
     return s;
   };
 
-  it('turns rod and line levels into rod steps, one for every 4.8 levels of the two, up to 8', () => {
-    const steps = (rodLevel: number, seaLine: number) => migrate(old({ rodLevel, seaLine, seaRod: true })).rodStep;
-    expect(steps(0, 0)).toBe(0);
-    expect(steps(4, 0)).toBe(0);
-    expect(steps(3, 2)).toBe(1);
-    expect(steps(5, 5)).toBe(2);
-    expect(steps(12, 12)).toBe(5);
-    expect(steps(40, 30)).toBe(8);
-    expect(migrate(old({ rodLevel: 'x', seaLine: -3 })).rodStep).toBe(0);
+  it('resets the sea once for saves from before SEA_VERSION: rod steps, Abyss levels, boat parts, Abyss record and pearls', () => {
+    const m = migrate(unreset({ seaRod: true, rodStep: 5, abyssLevels: 3, boatParts: 4, abyssRecord: 12, pearls: 4200, coins: 98765, level: 40 }));
+    expect(m).toMatchObject({ seaRod: true, rodStep: 0, abyssLevels: 0, boatParts: 0, abyssRecord: 0, pearls: 0, coins: 98765, level: 40, seaV: SEA_VERSION });
+    const pre = migrate(old({ pearls: 350, pearlsV: 1, coins: 1234, rodLevel: 10, seaLine: 10, seaRod: true, sea: { ledges: [5, 45], record: 45 } }));
+    expect(pre).toMatchObject({ pearls: 0, coins: 1234, seaRod: true, rodStep: 0, boatParts: 0, abyssLevels: 0, abyssRecord: 0 });
+    for (const k of ['pearlsV', 'rodLevel', 'seaLine', 'sea']) expect(pre, k).not.toHaveProperty(k);
   });
 
-  it('turns the furthest marker headed home from into boat parts: 16, 41, 81 and 151 for one to four', () => {
-    const parts = (record: number) => migrate(old({ sea: { ledges: [], record } })).boatParts;
-    expect([0, 15, 16, 40, 41, 80, 81, 150, 151, 400].map(parts)).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
-    expect(migrate(old({})).boatParts).toBe(0);
-    expect(migrate(old({ sea: 'broken' })).boatParts).toBe(0);
+  it('takes the sea fish out of the Fishdex and keeps the pond ones', () => {
+    const m = migrate(unreset({ dex: { snapper: { count: 9, best: 160 }, marlin: { count: 1, best: 300, shiny: 1 }, perch: { count: 4, best: 20 } } }));
+    expect(Object.keys(m.dex)).toEqual(['perch']);
+    expect(eco.hasSailed(m)).toBe(false);
   });
 
-  it('starts Abyss levels and the Abyss record at 0, keeps pearls and coins as they were, and drops the old fields', () => {
-    const m = migrate(old({ pearls: 350, pearlsV: 1, coins: 1234, rodLevel: 10, seaLine: 10, seaRod: true, sea: { ledges: [5, 45], record: 45, haul: { pearls: 1, fish: 2, coins: 3 } } }));
-    expect(m).toMatchObject({ pearls: 350, coins: 1234, seaRod: true, rodStep: 4, boatParts: 2, abyssLevels: 0, abyssRecord: 0 });
-    for (const k of ['pearlsV', 'rodLevel', 'seaLine', 'sea']) expect(m, k).not.toHaveProperty(k);
+  it('moves a best catch from the sea to the best pond record left, or none', () => {
+    const dex = { marlin: { count: 1, best: 300 }, perch: { count: 4, best: 20 }, pike: { count: 2, best: 90 } };
+    const m = migrate(unreset({ dex, best: { fishId: 'marlin', size: 300, value: 99999, shiny: true } }));
+    const pike = FISH.find((f) => f.id === 'pike')!;
+    expect(m.best).toEqual({ fishId: 'pike', size: 90, value: sellValue(pike, 90) });
+    expect(migrate(unreset({ dex: { marlin: { count: 1, best: 300 } }, best: { fishId: 'marlin', size: 300, value: 9 } })).best).toBeNull();
+    const pond = { fishId: 'perch', size: 20, value: 5 };
+    expect(migrate(unreset({ dex, best: pond })).best).toEqual(pond);
   });
 
-  it('migrates once: running it again, as the server and the client do, changes nothing', () => {
-    const once = migrate(old({ rodLevel: 12, seaLine: 12, seaRod: true, pearls: 77, sea: { ledges: [], record: 90 } }));
-    expect(once).toMatchObject({ rodStep: 5, boatParts: 3 });
+  it('resets once: sea progress earned after it stays, as the server and the client migrate again', () => {
+    const once = migrate(unreset({ seaRod: true, rodStep: 5, boatParts: 3, pearls: 77 }));
     expect(migrate(once)).toEqual(once);
-    expect(migrate(JSON.parse(JSON.stringify(migrate(once))))).toEqual(once);
-    // Steps and parts bought since stay bought.
-    const later = { ...once, rodStep: 7, boatParts: 4, abyssLevels: 2, abyssRecord: 9 };
-    expect(migrate(later)).toMatchObject({ rodStep: 7, boatParts: 4, abyssLevels: 2, abyssRecord: 9 });
+    expect(migrate(JSON.parse(JSON.stringify(once)))).toEqual(once);
+    const later = { ...once, rodStep: 7, boatParts: 4, abyssLevels: 2, abyssRecord: 9, pearls: 31, dex: { snapper: { count: 2, best: 150 } } };
+    expect(migrate(later)).toMatchObject({ rodStep: 7, boatParts: 4, abyssLevels: 2, abyssRecord: 9, pearls: 31, dex: { snapper: { count: 2, best: 150 } } });
+  });
+
+  it('leaves a new save as it is', () => {
+    const s = newSave();
+    expect(migrate(s)).toMatchObject({ seaV: SEA_VERSION, rodStep: 0, boatParts: 0, pearls: 0, dex: {} });
   });
 
   it('cleans bad values on the new fields', () => {

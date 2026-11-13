@@ -3,7 +3,7 @@ import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { TITLES } from '../data/ranks';
 import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
-import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
+import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, sellValue, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isSeenId } from './tips';
 import { BOAT_PARTS, ROD } from '../data/dive';
 
@@ -110,6 +110,8 @@ export interface SaveData {
   boatParts: number;
   /** The furthest Abyss marker a charter has reached (0 before the Abyss); Abyss charters may start at any marker up to it. */
   abyssRecord: number;
+  /** The sea's save version (`SEA_VERSION`): a save without the current one has its sea progress reset by `migrate`. */
+  seaV: number;
   /** Casino perks owned (see `PERKS`). */
   perks: string[];
   /** Shiny Lure casts left. */
@@ -165,6 +167,7 @@ export const newSave = (): SaveData => ({
   abyssLevels: 0,
   boatParts: 0,
   abyssRecord: 0,
+  seaV: SEA_VERSION,
   perks: [],
   lure: 0,
   lureOff: false,
@@ -234,18 +237,16 @@ function cleanSmoke(raw: unknown): Smoke {
 }
 
 /**
- * The sea's progress from before charters were places (Oscar, 2026-11-12), for `migrate`: the old Deep Sea Rod and
- * Line levels became rod steps, one for every `OLD_LEVELS_A_STEP` levels of the two together, and the furthest marker
- * headed home from (`sea.record`) became the boat parts whose zones it had reached (`OLD_RECORD_PARTS`).
+ * The sea's save version. Saves from before it have their sea progress reset once by `migrate` (Oscar, 2026-11-13): the
+ * charters were rebuilt that day, and sea progress carried over from the old charters skipped the new early climb. Rod
+ * steps, Abyss levels, boat parts, the Abyss record, Black Pearls and the sea fish in the Fishdex go back to nothing;
+ * the Deep Sea Rod stays bought, and coins and everything at the pond stay as they were.
  */
-export const OLD_LEVELS_A_STEP = 4.8;
-export const OLD_RECORD_PARTS = [16, 41, 81, 151];
+export const SEA_VERSION = 1;
 
-/** Saves from before: the old fields (`rodLevel`, `seaLine`, `sea`), read only here. */
+/** Saves from before the Deep Sea Rod: the old Deep Sea Line's level (`seaLine`), read only here. */
 interface OldSea {
-  rodLevel?: unknown;
   seaLine?: unknown;
-  sea?: { record?: unknown };
 }
 
 /**
@@ -332,14 +333,11 @@ export function migrate(raw: object): SaveData {
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
   out.pearls = Number.isFinite(out.pearls) ? Math.max(0, Math.floor(out.pearls)) : 0;
-  // The sea's progress: saves from before charters were places get rod steps from their old rod and line levels and
-  // boat parts from their furthest marker; a save that has the new fields keeps them, so this happens once.
+  // The sea's progress, cleaned here and reset below for saves from before `SEA_VERSION`.
   const old = data as OldSea;
   const whole = (n: unknown, hi = Infinity): number | null => (typeof n === 'number' && Number.isFinite(n) ? Math.min(hi, Math.max(0, Math.floor(n))) : null);
-  const oldLevels = (whole(old.rodLevel) ?? 0) + (whole(old.seaLine) ?? 0);
-  out.rodStep = whole(data.rodStep, ROD.steps) ?? Math.min(ROD.steps, Math.floor(oldLevels / OLD_LEVELS_A_STEP));
-  const record = whole(old.sea?.record) ?? 0;
-  out.boatParts = whole(data.boatParts, BOAT_PARTS.length) ?? OLD_RECORD_PARTS.filter((m) => record >= m).length;
+  out.rodStep = whole(data.rodStep, ROD.steps) ?? 0;
+  out.boatParts = whole(data.boatParts, BOAT_PARTS.length) ?? 0;
   out.abyssLevels = whole(data.abyssLevels) ?? 0;
   out.abyssRecord = whole(data.abyssRecord) ?? 0;
   out.seaRod = out.seaRod === true;
@@ -380,12 +378,30 @@ export function migrate(raw: object): SaveData {
     : out.level >= FLAT_LEVEL ? { xp: backPayXp(out.dex, xpPastFlat(out)), paid: false, v: BACKPAY_VERSION }
     : { xp: 0, paid: true };
   for (const e of Object.values(out.dex)) if (e && e.shiny !== undefined) e.shiny = count(e.shiny);
+  if (data.seaV !== SEA_VERSION) resetSea(out);
   // Accounts from before faces get a random one.
   if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
   out.look = cleanLook(out.look, out.owned);
   // Leftovers from older layouts, the removed Town Fund and the old charters (pearl rescale, rod and line levels, charted markers).
   for (const k of ['baitStock', 'inventory', 'ownedRods', 'fund', 'contributed', 'pearlsV', 'rodLevel', 'seaLine', 'sea']) delete out[k];
   return out;
+}
+
+/**
+ * Sends the sea back to the start (`SEA_VERSION`): no rod steps, Abyss levels, boat parts, Abyss record or pearls, and
+ * no sea fish in the Fishdex. A best catch from the sea becomes the best pond record left, at its plain sale value.
+ */
+function resetSea(out: SaveData): void {
+  Object.assign(out, { rodStep: 0, abyssLevels: 0, boatParts: 0, abyssRecord: 0, pearls: 0, seaV: SEA_VERSION });
+  for (const f of FISH) if (f.sea) delete out.dex[f.id];
+  if (!out.best || !FISH.find((f) => f.id === out.best!.fishId)?.sea) return;
+  out.best = null;
+  for (const [fishId, e] of Object.entries(out.dex)) {
+    const f = FISH.find((x) => x.id === fishId);
+    if (!f || !e || !Number.isFinite(e.best)) continue;
+    const value = sellValue(f, e.best);
+    if (!out.best || value > out.best.value) out.best = { fishId, size: e.best, value };
+  }
 }
 
 export function load(): SaveData {

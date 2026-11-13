@@ -40,6 +40,15 @@ export interface NewsEntry {
 
 export const NEWS: NewsEntry[] = [
   {
+    id: 8,
+    date: '2026-11-13',
+    title: 'A fresh start at sea',
+    body: [
+      "With the charters rebuilt, everyone's sea progress starts over, so the climb from <b>the Shelf</b> to <b>the Abyss</b> is the same for every angler. Your <b>Deep Sea Rod</b>'s steps and Abyss levels, your <b>boat parts</b>, your <b>Black Pearls</b> and your furthest Abyss marker are back to the start, and the sea fish are out of your Fishdex, ready to catch again. The <b>Furthest Out</b> board starts fresh too.",
+      "You keep the Deep Sea Rod itself, your coins and everything at the pond. If your best catch was a sea fish, <b>Top Anglers</b> now shows your best pond fish. See <b>Captain Reed</b> on the west beach to cast off again: the first boat part comes quickly.",
+    ],
+  },
+  {
     id: 7,
     date: '2026-11-13',
     title: 'Charters rebuilt: line, zones and the boat',
@@ -48,7 +57,7 @@ export const NEWS: NewsEntry[] = [
     body: [
       "Deep sea charters work a new way. <b>Captain Reed</b> on the west beach now sells the <b>Deep Sea Rod</b> himself (from level 20), and his chart shows the five zones: how each one rates for your rod, from <b>Easy</b> to <b>Too much</b>, what a fish pays there and what a spool costs. Pick a zone and <b>Cast off</b>.",
       "A charter runs on one <b>spool</b> of line: free on <b>the Shelf</b>, bought with coins further out. Every fish you hook uses a few metres, fewer the better your rod is for the zone, and one that gets away takes 25 m more. When the spool's out, buy another or <b>Head home</b>. Fish sell as they land, and nothing you've earned is ever lost.",
-      "Coins upgrade the Deep Sea Rod, two steps for each zone past the Shelf. <b>Black Pearls</b> fill the bar for your next <b>boat part</b>, and each part opens the next zone. Only <b>the Abyss</b> has <b>markers</b> now: every third fish takes you one further out, where the fish fight harder and pay more. You keep your pearls, and your old rod and line levels and furthest marker have become rod steps and boat parts.",
+      "Coins upgrade the Deep Sea Rod, two steps for each zone past the Shelf. <b>Black Pearls</b> fill the bar for your next <b>boat part</b>, and each part opens the next zone. Only <b>the Abyss</b> has <b>markers</b> now: every third fish takes you one further out, where the fish fight harder and pay more.",
     ],
   },
   {
