@@ -398,13 +398,13 @@ export class Hub {
     // east jetty's end) stand on their own piles in the water, a step off the deck's edge, out of reach, so they
     // need no collider. The quay's rear two are tucked against things that are solid already: the barrels by the
     // stall, and the back of the bench at the east end. The rest stand beside the cobbles: up the main street to
-    // the square, at Reed's lane and beside the campfire lane where the village ring's lane joins it, on the hill
-    // side, where it stays out of the view down the lane to the boards (the village's own posts are in town.ts).
-    // Five carry a point light.
+    // the square, beside Reed's lane just before his arch, and beside the campfire lane where the village ring's
+    // lane joins it, on the hill side, where it stays out of the view down the lane to the boards (the village's
+    // own posts are in town.ts). Five carry a point light.
     // Play-test: the spots.
     const piles = [[-4, 9.7], [4, 9.7], [9.05, 4.5]];
-    const lit = new Set(['3.6,27.5', '-19.6,5.2']);
-    const posts = [[-8.45, 13.5], [11.2, 13.95], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19.6, 5.2], [17.3, 8.3]];
+    const lit = new Set(['3.6,27.5', '-18.9,5.3']);
+    const posts = [[-8.45, 13.5], [11.2, 13.95], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-18.9, 5.3], [17.3, 8.3]];
     const lampPost = (x: number, z: number, light: boolean, pile: boolean) => {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);

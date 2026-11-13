@@ -207,18 +207,29 @@ function rawGroundHeight(x: number, z: number): number {
 /**
  * Walkable timber over the water: the pier, its T end, the quay across the back of the cove that the pier
  * runs out of, and a short jetty either side of the pier's root (docks in docs/map-rework/harbour.json).
+ * A `landing` is a place to stand, not to fish: casting from it counts as the shore (`fishingSpot`).
  */
-export interface DockRect { x0: number; x1: number; z0: number; z1: number }
+export interface DockRect { x0: number; x1: number; z0: number; z1: number; landing?: boolean }
+/**
+ * Captain Reed's wharf (`HARBOUR` in maps.ts): a timber landing along the water's edge of his beach, on the line
+ * of his lane, with the seaplane moored square to its face. Play-test: the size.
+ */
+export const REED_WHARF: DockRect = { x0: -18.4, x1: -16, z0: -4.6, z1: 3.2, landing: true };
 export const DOCK_RECTS: DockRect[] = [
   { x0: -1.5, x1: 1.5, z0: -6, z1: 10 },
   { x0: -5, x1: 5, z0: -9, z1: -6 },
   { x0: -13, x1: 13, z0: 10, z1: 14.5 },
   { x0: 6.25, x1: 8.75, z0: 4, z1: 10 },
   { x0: -8.75, x1: -6.25, z0: 4, z1: 10 },
+  REED_WHARF,
 ];
 
 export const onDock = (x: number, z: number, pad = 0): boolean =>
   atSea ? (pad > 0 ? inHull(x, z, pad) : onDeck(x, z)) : DOCK_RECTS.some((r) => x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad);
+
+/** On a landing (`DockRect.landing`): timber to stand on that is no fishing spot. */
+export const onLanding = (x: number, z: number): boolean =>
+  !atSea && DOCK_RECTS.some((r) => r.landing && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1);
 
 /** Height of the surface a player stands on. */
 export const standHeight = (x: number, z: number): number => {

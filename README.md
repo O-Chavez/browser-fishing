@@ -46,7 +46,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 ![The wardrobe, with a player in a crown and cloak and the hats and shirts to choose from](docs/images/wardrobe.jpg)
 
-**🗺️ A town worth exploring.** Chat with Old Salty, Granny Wren and the other locals and track down the seven messages in bottles hidden around the map. The town wraps a small harbour cove, with the pier at its middle, Marlow's stall and the Smokehouse on the quay, and Captain Reed's seaplane floating off his beach.
+**🗺️ A town worth exploring.** Chat with Old Salty, Granny Wren and the other locals and track down the seven messages in bottles hidden around the map. The town wraps a small harbour cove, with the pier at its middle, Marlow's stall and the Smokehouse on the quay, and Captain Reed's seaplane tied up at his wharf on the west beach.
 
 ![Looking back from the pier at the harbour: the Smokehouse and Marlow's striped stall along the quay, and the main street running up to the gate](docs/images/harbour.jpg)
 

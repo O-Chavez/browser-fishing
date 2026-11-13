@@ -21,25 +21,26 @@ const SMOKEHOUSE: Spot = { x: 5.5, z: 17.5, facing: -2.4 };
 const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOUSE.z - 0.75 * Math.cos(SMOKEHOUSE.facing) };
 
 /**
- * Captain Reed's corner: his own beach under the west headland, at the foot of the lane from the quay's west end
- * (docs/map-rework/harbour.json). The seaplane floats in the cove with its nose toward the sand, in view from the
- * pier and both jetties; Reed stands on the beach by the CHARTERS signpost, players come back from a charter on the
- * sand beside him, and the Furthest Out board stands at the top of his lane by the worm patch (its look and words
- * are `FURTHEST_BOARD` in src/game/furthestboard.ts).
+ * Captain Reed's corner: his own wharf under the west headland, at the foot of the lane from the quay's west end.
+ * The lane runs straight down the water's edge onto a timber landing (`REED_WHARF` in env.ts), under a CHARTERS
+ * arch at its head. Reed stands on the boards beside the nose of his seaplane, which is moored square to the
+ * wharf's face, in view from the pier and both jetties; players come back from a charter on the boards in front
+ * of him, and the Furthest Out board stands beside the lane on the way down (its look and words are
+ * `FURTHEST_BOARD` in src/game/furthestboard.ts). Play-test: the spots.
  */
 export const HARBOUR = {
-  /** Reed stands on the sand facing up the lane toward the quay. */
-  stand: { x: -20, z: 1, facing: 0.9 } as Spot,
-  /** The middle of the seaplane, between its floats, afloat in the cove with its nose toward the beach. */
-  plane: { x: -14.5, z: -2.5, facing: -1.35 } as Spot,
-  /** The CHARTERS signpost, between Reed and the lane. */
-  sign: { x: -18.8, z: 2.5, facing: 0.9 } as Spot,
-  /** Where players land back from a dive: on the sand beside Reed, looking at the plane. */
-  diveStart: { x: -21.5, z: 3.5, yaw: 0 },
-  /** The Furthest Out board, at the top of Reed's lane under its lamp, facing down the lane. Play-test: the spot and the turn. */
-  board: { x: -19.2, z: 8.2, facing: 1.2 } as Spot,
+  /** Reed stands on the wharf's boards by the plane's nose, facing up the lane through the arch. */
+  stand: { x: -17.2, z: 0, facing: 0 } as Spot,
+  /** The middle of the seaplane, between its floats, afloat off the wharf with its nose square to the boards. */
+  plane: { x: -12.8, z: -1.6, facing: -Math.PI / 2 } as Spot,
+  /** The middle of the CHARTERS arch, across the lane's last cobbles at the head of the wharf; players walk under it. */
+  sign: { x: -17.2, z: 3.4, facing: 0 } as Spot,
+  /** Where players land back from a charter: on the boards just inside the arch, looking at Reed and the plane. */
+  diveStart: { x: -17.2, z: 2.4, yaw: 0 },
+  /** The Furthest Out board, beside Reed's lane on the way down, turned to the lane. Play-test: the spot and the turn. */
+  board: { x: -19.7, z: 8.1, facing: 1.2 } as Spot,
 };
-HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.plane.x - HARBOUR.diveStart.x), -(HARBOUR.plane.z - HARBOUR.diveStart.z));
+HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.stand.x - HARBOUR.diveStart.x), -(HARBOUR.stand.z - HARBOUR.diveStart.z));
 
 /**
  * The campfire on the east headland, the town's meeting place: a cobbled circle at the foot of the campfire lane
@@ -161,7 +162,7 @@ export interface MapDef {
   town: TownDef;
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
-  /** Captain Reed's seaplane charters (`HARBOUR`): where he stands, the plane, his signpost and where charters come back to. */
+  /** Captain Reed's seaplane charters (`HARBOUR`): where he stands, the plane, his sign arch and where charters come back to. */
   harbour?: { stand: Spot; plane: Spot; sign: Spot; board: Spot; diveStart: { x: number; z: number; yaw: number } };
   /** The open sea: players stand on the charter boat's deck (`BOAT` in sea.ts) instead of the shore. */
   sea?: boolean;
@@ -199,7 +200,7 @@ export const MAPS: MapDef[] = [
     thanks: byFire(3.7, 39),
     // The campfire on the east headland, seen across the water from the jetty bench.
     campfire: { ...CAMPFIRE, facing: 0 },
-    // Beside Reed's lane, at the top of his beach.
+    // Beside the top of Reed's lane.
     worms: { x: -18.6, z: 12 },
     smokehouse: SMOKEHOUSE,
     harbour: HARBOUR,
@@ -213,12 +214,16 @@ export const MAPS: MapDef[] = [
       { x0: 11, x1: 16, z0: 9.5, z1: 16.5, h: 0.72 },
       // The campfire's circle: a sand bank on its water side keeps the cobbles above the waterline. Play-test: the shore.
       { x0: 16.6, x1: 18.6, z0: 0.6, z1: 3.8, h: 0.6 },
+      // Reed's lane on a low bank down the water's edge to his wharf, and the sand behind the wharf level with its
+      // boards. Both stop short of the wharf's face, so it stands in water. Play-test: the shore.
+      { x0: -18.6, x1: -16.2, z0: 3, z1: 9.5, h: 0.72 },
+      { x0: -20.2, x1: -18.6, z0: -4.4, z1: 3, h: 0.72 },
     ],
     // The eye's target from the pier: 30 m past the T end and a few metres left of the pier's line, so it sits in
     // the first look without standing in front of the cast. Play-test: the spot.
     islet: { x: -4.5, z: -39, r: 6.2 },
     clearings: [
-      // Reed's beach and the landing spot, his lane, the campfire headland, and the two ring lanes down to the water.
+      // Reed's beach and wharf, his lane, the campfire headland, and the two ring lanes down to the water.
       { x: -19.5, z: 4, r: 7 },
       { x: -15, z: 11, r: 3.5 },
       { x: 18, z: 2, r: 5 },
@@ -367,11 +372,12 @@ export const MAPS: MapDef[] = [
         { from: [2, 32], to: [7.6, 36.9], w: 1.6 },
         { from: [-1.5, 42], to: [-6.3, 43.5], w: 1.6 },
         { from: [1.5, 42.5], to: [7, 46.9], w: 1.6 },
-        // Reed's lane: the quay road's west arm, round the deck's corner and down to his beach.
+        // Reed's lane: the quay road's west arm, round the deck's corner, on to the water's edge and straight down it
+        // to his wharf, where its cobbles run on to the first boards.
         { from: [-11.6, 15.6], to: [-13.7, 14.5], w: 2.2 },
         { from: [-13.7, 14.5], to: [-14.8, 12.6], w: 2.2 },
-        { from: [-14.8, 12.6], to: [-16.5, 9], w: 2.2 },
-        { from: [-16.5, 9], to: [-18.5, 3.5], w: 2.2 },
+        { from: [-14.8, 12.6], to: [-17.2, 8.6], w: 2.2 },
+        { from: [-17.2, 8.6], to: [-17.2, 4.45], w: 2.2 },
         // The campfire lane: its east arm, round the deck's other corner and down into the campfire's circle
         // (`circles`). The village ring's east lane joins it at (15.5, 8.5).
         { from: [11.6, 15.6], to: [13.7, 14.5], w: 2.2 },

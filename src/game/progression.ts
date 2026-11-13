@@ -9,7 +9,7 @@ import { DIVES_OPEN } from '../data/dive';
 import { cosById } from '../data/cosmetics';
 import { RANKS, nextRank, type Rank } from '../data/ranks';
 import { SMOKE_LEVEL } from '../data/smokehouse';
-import { onDock } from './env';
+import { onDock, onLanding } from './env';
 
 /** There is no level cap: from this level on every level costs the same, so the pace never slows. */
 export const FLAT_LEVEL = 50;
@@ -37,7 +37,8 @@ export const SPOTS: Record<SpotId, SpotRule> = {
 export const PRIME_Z = 5.4;
 
 export function fishingSpot(x: number, z: number): SpotId {
-  if (!onDock(x, z)) return 'shore';
+  // Reed's wharf is a landing: fishing from it is fishing from the shore, as on the beach it stands on.
+  if (!onDock(x, z) || onLanding(x, z)) return 'shore';
   return z <= PRIME_Z ? 'prime' : 'pier';
 }
 

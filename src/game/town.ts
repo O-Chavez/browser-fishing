@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { MapDef, NpcDef, Spot } from '../data/maps';
-import { DOCK_TOP, groundHeight, onDock, standHeight, terrainHeight, waveHeight } from './env';
+import { DOCK_TOP, REED_WHARF, groundHeight, onDock, standHeight, terrainHeight, waveHeight } from './env';
 import { DARK, WOOD, ball, cyl, limb, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
 import { NpcWalker, type Bystander } from './npcwalk';
@@ -628,58 +628,116 @@ export class Town {
   }
 
   /**
-   * Captain Reed's charters on the west beach (`HARBOUR` in maps.ts): his seaplane in the shallows and
-   * a CHARTERS signpost on the sand. The plane is cream with sea-green wings, tail and cowling, and a red
-   * band lettered CHARTERS down each side; it sits on two floats with its nose toward the beach and bobs
-   * on the swell (`update`). The signpost carries a lantern lit at night, a lifebuoy and a crate at its foot.
-   * Up the beach past the plane stands the Furthest Out board (`FurthestBoard`).
+   * Captain Reed's charters under the west headland (`HARBOUR` in maps.ts): his wharf (the boards are a dock rect,
+   * `REED_WHARF` in env.ts, drawn with the other docks), the CHARTERS arch at its head and his seaplane moored to
+   * it. The plane is cream with sea-green wings, tail and cowling, and a red band lettered CHARTERS down each
+   * side; it sits on two floats with its nose square to the wharf and bobs on the swell (`update`). Up the lane
+   * stands the Furthest Out board (`FurthestBoard`).
    */
   private buildHarbour(h: { plane: Spot; sign: Spot; board: Spot }): void {
     this.buildSeaplane(h.plane);
     this.buildFurthest(h.board);
-    const s = h.sign;
+    this.buildCharterArch(h.sign);
+    this.buildWharf(h.plane);
+  }
+
+  /**
+   * The CHARTERS arch over the head of Reed's wharf: a post either side of the lane's last cobbles, a beam across
+   * them with the sign hung under it, a lantern on top lit at night, and a lifebuoy on the beach-side post.
+   * Players walk under it, so the sign hangs clear of their heads and only the posts are solid.
+   */
+  private buildCharterArch(s: Spot): void {
+    const HALF = 1.08;
+    const H = 3;
     const g = new THREE.Group();
-    const post = cyl(0.07, 0.08, 2.4, DARK, 8);
-    post.position.y = 1.2;
-    g.add(post);
-    const sign = textPlane(1.5, 0.38, 512);
+    for (const sx of [-HALF, HALF]) {
+      const post = cyl(0.07, 0.09, H, DARK, 8);
+      post.position.set(sx, H / 2, 0);
+      g.add(post);
+    }
+    const beam = rbox(HALF * 2 + 0.5, 0.14, 0.18, DARK, 0.03);
+    beam.position.y = H - 0.12;
+    g.add(beam);
+    const sign = textPlane(1.8, 0.46, 512);
     woodSign(sign.ctx, 'CHARTERS');
     sign.tex.needsUpdate = true;
+    const SIGN_Y = H - 0.45;
     for (const [ry, oz] of [[0, 0.09], [Math.PI, -0.09]]) {
       const face = sign.mesh.clone();
       face.rotation.y = ry;
-      face.position.set(0, 1.95, oz);
+      face.position.set(0, SIGN_Y, oz);
       g.add(face);
     }
-    const board = rbox(1.56, 0.44, 0.16, DARK, 0.03);
-    board.position.y = 1.95;
+    const board = rbox(1.86, 0.52, 0.16, DARK, 0.03);
+    board.position.y = SIGN_Y;
     g.add(board);
     const lamp = ball(0.11, 0xffd27a);
     (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
-    lamp.position.y = 2.5;
+    lamp.position.y = H + 0.06;
     glowTag(lamp, 0.7);
     this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
     const cap = cyl(0.14, 0.1, 0.06, DARK, 8);
-    cap.position.y = 2.64;
+    cap.position.y = H + 0.2;
     g.add(lamp, cap);
-    // A lifebuoy (a cream ring with red bands) hung on the post, facing up the beach.
+    // A lifebuoy (a cream ring with red bands) hung on the beach-side post's outer side, clear of the way through,
+    // facing up the lane.
+    const BUOY_X = -HALF - 0.24;
     const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.09, 8, 16), mat(0xe8e0d0));
-    buoy.position.set(0, 1.1, 0.16);
+    buoy.position.set(BUOY_X, 1.25, 0.16);
     buoy.castShadow = true;
     g.add(buoy);
     for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
       const band = rbox(0.2, 0.2, 0.12, 0xc0453a, 0.02);
-      band.position.set(Math.sin(a) * 0.28, 1.1 + Math.cos(a) * 0.28, 0.16);
+      band.position.set(BUOY_X + Math.sin(a) * 0.28, 1.25 + Math.cos(a) * 0.28, 0.16);
       band.rotation.z = -a;
       g.add(band);
     }
-    const crate = rbox(0.6, 0.5, 0.6, WOOD, 0.04);
-    crate.position.set(0.65, 0.25, 0.1);
-    crate.rotation.y = 0.3;
-    g.add(crate);
     this.at(g, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.05);
-    this.solid(s.x, s.z, 0.3);
-    this.solid(s.x + 0.65 * Math.cos(s.facing), s.z - 0.65 * Math.sin(s.facing), 0.45);
+    for (const sx of [-HALF, HALF]) this.solid(s.x + sx * Math.cos(s.facing), s.z - sx * Math.sin(s.facing), 0.15);
+  }
+
+  /**
+   * What stands on Reed's wharf: a mooring pile off its face for each of the plane's floats, with a line to the
+   * float's bow, a coil of rope on the boards, and two fuel drums and a crate across its far end. The piles
+   * stand in the water a step off the boards, out of reach like the quay's lamp piles, so they need no collider.
+   */
+  private buildWharf(p: Spot): void {
+    const w = REED_WHARF;
+    const ROPE = 0xc8b07a;
+    const sin = Math.sin(p.facing);
+    const cos = Math.cos(p.facing);
+    for (const sx of [-0.95, 0.95]) {
+      // The float's bow, in the plane's own frame (`buildSeaplane`).
+      const bow = new THREE.Vector3(p.x + sx * cos + 2.42 * sin, 0.34, p.z - sx * sin + 2.42 * cos);
+      const px = w.x1 + 0.25;
+      const pile = cyl(0.1, 0.12, 3.3, DARK, 7);
+      this.at(pile, px, bow.z, 0, -0.5);
+      const hitch = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.035, 6, 12), mat(ROPE));
+      hitch.rotation.x = Math.PI / 2;
+      this.at(hitch, px, bow.z, 0, 0.92);
+      this.group.add(limb(new THREE.Vector3(px + 0.1, 0.92, bow.z), bow, 0.025, ROPE));
+    }
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.07, 6, 14), mat(ROPE));
+    coil.rotation.x = Math.PI / 2;
+    coil.castShadow = true;
+    this.at(coil, w.x1 - 0.5, p.z + 2.2, 0, DOCK_TOP + 0.07);
+    this.drum(w.x0 + 0.45, w.z0 + 0.42);
+    this.drum(w.x0 + 1.08, w.z0 + 0.5);
+    const crate = rbox(0.6, 0.5, 0.6, WOOD, 0.04);
+    this.at(crate, w.x1 - 0.5, w.z0 + 0.5, 0.3, DOCK_TOP + 0.25);
+    this.solid(w.x1 - 0.5, w.z0 + 0.5, 0.42);
+  }
+
+  /** A fuel drum in the seaplane's sea green with its red band; on a dock it stands on the deck. */
+  private drum(x: number, z: number): void {
+    const g = new THREE.Group();
+    const body = cyl(0.27, 0.27, 0.82, 0x6f9e96, 12);
+    body.position.y = 0.41;
+    const band = cyl(0.278, 0.278, 0.14, 0xc0453a, 12);
+    band.position.y = 0.55;
+    g.add(body, band);
+    this.at(g, x, z, 0, standHeight(x, z));
+    this.solid(x, z, 0.3);
   }
 
   /** The Furthest Out board by the seaplane (D6); `setFurthest` redraws it from the server's rows. */
@@ -780,7 +838,7 @@ export class Town {
     g.rotation.order = 'YXZ';
     this.at(g, s.x, s.z, s.facing, 0);
     this.plane = g;
-    // The floats' tips and the nose reach the edge of the sand.
+    // The floats' tips and the nose, a step off the wharf's face.
     const sin = Math.sin(s.facing);
     const cos = Math.cos(s.facing);
     for (const [lx, lz, r] of [[-0.95, 2.1, 0.45], [0.95, 2.1, 0.45], [0, 2.3, 0.55], [-0.95, 0.8, 0.45], [0.95, 0.8, 0.45]] as const) {
