@@ -346,8 +346,12 @@ async function pondChecks(): Promise<void> {
   await sleep(200);
   await page.screenshot({ path: `${SHOTS}/wardrobe-faces.png` });
   const worn = await page.evaluate(() => (window.__game.s as any).look.face as string);
-  // Dragging the preview turns the character, and the auto-spin waits instead of fighting it.
-  const spinNow = () => page.evaluate(() => (window.__game.preview() as any).spin as number);
+  // Dragging the preview turns the character, and its sway waits instead of fighting it. Read a frame later, as
+  // the turn is applied when the preview draws.
+  const spinNow = () => page.evaluate(async () => {
+    await new Promise((r) => requestAnimationFrame(r));
+    return (window.__game.preview() as any).char.group.rotation.y as number;
+  });
   const box = (await (await page.$('#pv-slot canvas'))!.boundingBox())!;
   const s0 = await spinNow();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

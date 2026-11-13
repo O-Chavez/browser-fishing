@@ -1546,7 +1546,7 @@ export class Game {
     tip.style.top = `${y}px`;
   }
 
-  /** Hovering an item in the shop or wardrobe previews it on the spinning character. */
+  /** Hovering an item in the shop or wardrobe previews it on the preview character. */
   private tryOn(el: HTMLElement, on: boolean): void {
     const card = el.closest<HTMLElement>('[data-try]');
     if (!card || !this.preview) return;

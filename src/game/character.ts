@@ -646,17 +646,21 @@ export class Character {
   }
 }
 
-/** Auto-spin speed (radians per second), and how long it waits after a drag before resuming. */
-const SPIN_SPEED = 0.7;
-const SPIN_RESUME_MS = 3000;
+/**
+ * The preview faces the viewer and sways this far to either side (radians), there and back once every
+ * `SWAY_PERIOD_MS`; after a drag it waits `SWAY_RESUME_MS`, then sways about where the drag left it.
+ */
+const SWAY = Math.PI / 4;
+const SWAY_PERIOD_MS = 7000;
+const SWAY_RESUME_MS = 3000;
 /** Radians of turn per pixel dragged. */
 const DRAG_TURN = 0.012;
 
 /**
- * One shared WebGL canvas showing a slowly spinning character; moved into whichever menu tab
- * needs it. Click and drag to turn it by hand.
+ * One shared WebGL canvas showing a character that faces the viewer and sways slowly from side to side; moved
+ * into whichever menu tab needs it. Click and drag to turn it by hand, right round to the back.
  */
-/** The box the preview keeps in view: hem to the tallest hat, and wide enough for a spinning cloak. */
+/** The box the preview keeps in view: hem to the tallest hat, and wide enough for a cloak at any turn. */
 const FRAME = { y: 1.2, h: 2.2, w: 1.4 };
 
 export class CharacterPreview {
@@ -666,8 +670,11 @@ export class CharacterPreview {
   private cam = new THREE.PerspectiveCamera(32, 0.8, 0.1, 20);
   private char: Character;
   private raf = 0;
-  private spin = 0.6;
-  private drag: { x: number; spin: number } | null = null;
+  /** The turn it sways about: 0 faces the viewer, a drag moves it. */
+  private turn = 0;
+  /** Milliseconds into the sway; it starts over after a drag, from the middle, so the model never jumps. */
+  private swayMs = 0;
+  private drag: { x: number; turn: number } | null = null;
   private idleAt = 0;
 
   constructor(look: Look) {
@@ -685,16 +692,19 @@ export class CharacterPreview {
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       this.canvas.setPointerCapture(e.pointerId);
-      this.drag = { x: e.clientX, spin: this.spin };
+      // Pick the model up at the turn it is showing, mid-sway.
+      this.turn = this.char.group.rotation.y;
+      this.swayMs = 0;
+      this.drag = { x: e.clientX, turn: this.turn };
       this.canvas.classList.add('dragging');
     });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (this.drag) this.spin = this.drag.spin + (e.clientX - this.drag.x) * DRAG_TURN;
+      if (this.drag) this.turn = this.drag.turn + (e.clientX - this.drag.x) * DRAG_TURN;
     });
     const end = () => {
       if (!this.drag) return;
       this.drag = null;
-      this.idleAt = performance.now() + SPIN_RESUME_MS;
+      this.idleAt = performance.now() + SWAY_RESUME_MS;
       this.canvas.classList.remove('dragging');
     };
     this.canvas.addEventListener('pointerup', end);
@@ -721,19 +731,22 @@ export class CharacterPreview {
   start(): void {
     if (this.raf) return;
     this.fit();
+    // Each time it is shown, it starts facing the viewer.
+    this.turn = 0;
+    this.swayMs = 0;
     let last = performance.now();
     const loop = (t: number) => {
       this.raf = requestAnimationFrame(loop);
-      if (!this.drag && t >= this.idleAt) this.spin += ((t - last) / 1000) * SPIN_SPEED;
+      if (!this.drag && t >= this.idleAt) this.swayMs += t - last;
       last = t;
-      this.char.group.rotation.y = this.spin;
+      this.char.group.rotation.y = this.turn + SWAY * Math.sin((this.swayMs / SWAY_PERIOD_MS) * Math.PI * 2);
       this.char.tick(t / 1000);
       this.renderer.render(this.scene, this.cam);
     };
     this.raf = requestAnimationFrame(loop);
   }
 
-  /** Stops spinning and shrinks the drawing buffer, so a hidden preview holds almost no GPU memory. */
+  /** Stops drawing and shrinks the drawing buffer, so a hidden preview holds almost no GPU memory. */
   stop(): void {
     if (!this.raf) return;
     cancelAnimationFrame(this.raf);

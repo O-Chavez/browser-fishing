@@ -2,6 +2,13 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Three small fixes from a play test: the smoker's turn, taller chimneys, the wardrobe preview sways (Oscar, 2026-11-13; done 2026-11-13, branch `quay-east-clear`)
+  - The stone smoker beside the Smokehouse faced the street; its iron door and coals now face the way the shack does, with its firewood on the street side (a small collider added for the stack) and the pipe's smoke moved with it (`buildSmokehouse`, `src/game/town.ts`)
+  - The cottages' chimneys stood 0.3 m above the ridge on the back slope, so from the street the houses seemed to smoke from the roof. They now stand 1.4 m above the ridge with a darker cap, and the smoke starts at the new top (`CHIMNEY_TOP`)
+  - The character preview (wardrobe, shop) turned a full circle. It now faces the viewer and sways 45° to either side, there and back every 7 s (`SWAY`, `SWAY_PERIOD_MS`, `src/game/character.ts`). Dragging still turns it right round; after a drag it waits 3 s, then sways about where the drag left it, and it faces the viewer again each time the menu opens. The smoke check on dragging reads the shown turn. README wardrobe photo re-taken
+  - Checked: the build, 592 tests and smoke 113/113 (run with the paths, the entry above); headless views of the street, the square and the stalls, and the wardrobe photo
+  - Play-test: the chimneys' height; the sway's width and pace, and whether it should swing back to the front by itself after a drag
+
 - [x] Clear walkways on the quay: the east end's barrel and crate removed, the lamp posts and string-light posts moved off the boards and the quay road (Oscar, 2026-11-13; done 2026-11-13, branch `quay-east-clear`)
   - Oscar, in two asks: the barrels and boxes before the campfire area with the boards were blocking the path, so remove them; many of the light poles on the dock stand in the middle of the boardwalk and interrupt movement, so move them to the water's edge or a better spot
   - Removed: the barrel at (12.6, 12.4) and the crate at (12.1, 11.7), which stood solid on the cobbles where the campfire ramp leaves the quay's east end. The two barrels and the crate by Marlow's stall stay

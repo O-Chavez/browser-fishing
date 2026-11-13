@@ -19,6 +19,8 @@ const rnd = (seed: number) => () => {
 /** Seamless-ish cobblestone texture, drawn once. */
 /** How far the cobbles lie above the ground. */
 const COBBLE_LIFT = 0.04;
+/** How far a cottage's chimney top stands above its eaves; the ridge is 1.5 above them. Play-test: the height. */
+const CHIMNEY_TOP = 2.9;
 
 function cobbleTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -333,18 +335,21 @@ export class Town {
     glowTag(lamp, 0.7);
     this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
     g.add(lamp);
-    // Chimney
-    const chim = rbox(0.55, 1.6, 0.55, 0x8d6e63, 0.03);
+    // Chimney: on the back slope, and tall enough to stand well clear of the ridge (`CHIMNEY_TOP` above the
+    // eaves), so it shows from the street in front and the smoke has somewhere to come from. A darker cap on top.
+    const chim = rbox(0.55, CHIMNEY_TOP - 0.2, 0.55, 0x8d6e63, 0.03);
     boxUV(chim.geometry, 1.6);
     chim.material = this.painted(0xa08478, stoneTexture());
-    chim.position.set(-1.4, H + 1.0, -0.6);
-    g.add(chim);
+    chim.position.set(-1.4, H + 0.2 + (CHIMNEY_TOP - 0.2) / 2, -0.6);
+    const pot = rbox(0.7, 0.14, 0.7, 0x6f5a52, 0.03);
+    pot.position.set(-1.4, H + CHIMNEY_TOP, -0.6);
+    g.add(chim, pot);
     this.at(g, h.x, h.z, h.facing);
     const sin = Math.sin(h.facing);
     const cos = Math.cos(h.facing);
     const wx = h.x + -1.4 * cos + -0.6 * sin;
     const wz = h.z - -1.4 * sin + -0.6 * cos;
-    const wy = groundHeight(h.x, h.z) + H + 1.9;
+    const wy = groundHeight(h.x, h.z) + H + CHIMNEY_TOP + 0.2;
     for (let k = 0; k < 4; k++) {
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xdadada, transparent: true, opacity: 0.5, depthWrite: false }));
       this.group.add(m);
@@ -565,7 +570,8 @@ export class Town {
     sign.mesh.rotation.x = -0.12;
     g.add(sign.mesh);
     // The stone smoker stands beside the shack on its street side, where players see it, its iron door and
-    // glowing coals turned to the street, and a tall pipe so the smoke rises beside the roof.
+    // glowing coals facing the way the shack does, firewood stacked on its street side, and a tall pipe so the
+    // smoke rises beside the roof.
     const SX = W / 2 + 0.8;
     const SZ = -0.6;
     const sm = new THREE.Group();
@@ -590,18 +596,17 @@ export class Town {
       sm.add(log);
     }
     sm.position.set(SX, 0, SZ);
-    sm.rotation.y = Math.PI / 2;
     g.add(sm);
     this.at(g, sh.x, sh.z, sh.facing);
     const sin = Math.sin(sh.facing);
     const cos = Math.cos(sh.facing);
     const world = (lx: number, lz: number) => ({ x: sh.x + lx * cos + lz * sin, z: sh.z - lx * sin + lz * cos });
-    for (const [lx, lz, r] of [[-1, 0, 0.5], [0, 0, 0.5], [1, 0, 0.5], [-1.2, BACK, 0.5], [0, BACK, 0.5], [1.2, BACK, 0.5], [-1, BACK - 0.38, 0.5], [-W / 2, -1, 0.6], [W / 2, -1, 0.6], [SX, SZ, 0.75]] as const) {
+    for (const [lx, lz, r] of [[-1, 0, 0.5], [0, 0, 0.5], [1, 0, 0.5], [-1.2, BACK, 0.5], [0, BACK, 0.5], [1.2, BACK, 0.5], [-1, BACK - 0.38, 0.5], [-W / 2, -1, 0.6], [W / 2, -1, 0.6], [SX, SZ, 0.75], [SX + 0.7, SZ, 0.3]] as const) {
       const c = world(lx, lz);
       this.solid(c.x, c.z, r);
     }
-    // The pipe sits 0.15 behind the smoker's middle; the smoker is turned a quarter, so that's along local x.
-    const top2 = world(SX - 0.15, SZ);
+    // The pipe sits 0.15 behind the smoker's middle.
+    const top2 = world(SX, SZ - 0.15);
     const base = new THREE.Vector3(top2.x, groundHeight(sh.x, sh.z) + 3.75, top2.z);
     for (let n = 0; n < 4; n++) {
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xcfcfcf, transparent: true, opacity: 0.5, depthWrite: false }));
