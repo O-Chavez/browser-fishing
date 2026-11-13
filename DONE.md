@@ -2,6 +2,12 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Leave the casino only when looking at the door (Oscar, 2026-11-02; done 2026-11-13, branch `casino-exit-facing`)
+  - Built: the "Exit to the pond" prompt, and E, only answer while the player is near the doors and looking toward them, within 60° either side (`FACE_CONE`; an optional `face` yaw on an interaction spot, used only by the casino exit, `src/game/game.ts`). Players arrive facing the hall with the doors behind them, so E on arrival or while walking in does nothing, and turning round brings the exit back. The same on touch, where the prompt is the button. Arriving on a map also drops the last map's spot, so an E pressed in the frame after travelling can't use the old gate
+  - No `gateArrival` for the casino: players still arrive at (0, 29.5) facing the hall, inside the exit's range, and facing away is enough
+  - Checked: the build, 587 tests, and smoke 111/111 with four new checks (back to the doors: no prompt; facing them a little off-centre: E leaves; in from the pond gate pressing E all the way and walking on: stays inside; turning round at the arrival spot: E leaves). Not tried on a real touch device
+  - Play-test: the 60° cone (70° if leaving from beside the doors feels tight)
+
 - [x] Update the README with the newer features (done 2026-11-13, branch `readme-update`; a follow-up to "Fill out readme")
   - Added: a deep sea charters paragraph (Captain Reed on the west beach, the Deep Sea Rod from level 20, the five zones, spools of line, the rod's eight steps, Black Pearls and the boat parts, the Abyss's markers, the Kraken, the Furthest Out board) with the photo of Reed's chart; the Lucky Wheel in the casino paragraph; a sentence on the harbour cove with the harbour photo. Both photos are the What's new ones in `src/assets/images/news/`, so `npm run screenshots` was not re-run (the shots in `docs/images/` date from the map rework and show no sea)
   - Fixed: "Coming soon: spices for deep-sea charters" is gone; "20 fish species" is 19 lake fish and 23 sea fish; "50 levels" is levels with no cap and ranks up to Lord of the Deep at 150; Features at a glance, the shared rule modules (`dive.ts`) and the commands table (`bench:compare`, `bench:ab`, `bench:load`) brought up to date

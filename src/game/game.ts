@@ -141,6 +141,11 @@ const CAMP_TIPS = [
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const GRAVITY = 9.8;
+/**
+ * How far the view may turn from an interaction spot's `face` yaw and still use it (radians, either side): 60°, so the
+ * casino doors only need to be roughly in view. A map `Spot`'s `facing` is the yaw that looks straight at its front.
+ */
+const FACE_CONE = Math.PI / 3;
 /** Menu tabs drawn as small cards for the sea trips: Reed's panel, a marker's choice, heading home and the end card. */
 const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
 
@@ -1661,6 +1666,8 @@ export class Game {
     const at = arrivalSpot(this.map, from);
     this.player.teleport(at.x, at.z);
     this.world.yaw = at.yaw;
+    // The last map's spot (its gate, say) is stale until the next frame picks one here: an E pressed in between does nothing.
+    this.near = null;
     this.avatars.sync(this.net.players, this.net.id, this.here());
     // A new hub starts with an empty board, and the server only resends it when someone's stats change.
     this.world.hub?.setLeaders(this.anglers());
@@ -2149,8 +2156,9 @@ export class Game {
 
     const hub = w.hub;
     const { x, z } = this.player;
-    // Lower d wins: selling, then picking up, then everything else by distance.
-    const spots: { d: number; label: string; act: () => void }[] = [];
+    // Lower d wins: selling, then picking up, then everything else by distance. A spot with `face` only counts while
+    // the view looks that way (within FACE_CONE), so it can't be hit by accident while walking away from it.
+    const spots: { d: number; label: string; act: () => void; face?: number }[] = [];
 
     for (const d of this.curDrops()) {
       const dist = d.map === this.map.id ? Math.hypot(d.x - x, d.z - z) : Infinity;
@@ -2201,7 +2209,8 @@ export class Game {
       if (at(c.prizes) <= CASINO_RANGE - 0.4) spots.push({ d: at(c.prizes) - 25, label: 'Prize counter · turn fish in for chips, buy perks', act: () => this.openPrizes() });
       spots.push(
         { d: at(c.mirror), label: 'Dressing mirror · change your look', act: () => this.openMenu('wardrobe') },
-        { d: at(this.map.gate) - 0.5, label: `Exit to ${this.map.next?.name ?? 'the pond'}`, act: () => this.useGate() },
+        // Players arrive by the doors facing the hall, so the exit waits until they turn round to look at the doors.
+        { d: at(this.map.gate) - 0.5, label: `Exit to ${this.map.next?.name ?? 'the pond'}`, act: () => this.useGate(), face: this.map.gate.facing },
       );
     }
     if (hub) {
@@ -2234,7 +2243,8 @@ export class Game {
         },
       );
     }
-    const best = walking ? spots.filter((sp) => sp.d < 3).sort((a, b) => a.d - b.d)[0] : undefined;
+    const looking = (face?: number) => face === undefined || Math.abs(Math.atan2(Math.sin(w.yaw - face), Math.cos(w.yaw - face))) <= FACE_CONE;
+    const best = walking ? spots.filter((sp) => sp.d < 3 && looking(sp.face)).sort((a, b) => a.d - b.d)[0] : undefined;
     this.near = best ?? null;
     const prompt = $('prompt');
     prompt.classList.toggle('hidden', !best);

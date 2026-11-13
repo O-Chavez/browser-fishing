@@ -686,17 +686,23 @@ async function casinoChecks(): Promise<void> {
   await page.screenshot({ path: `${SHOTS}/casino-cosmetics.png` });
   await page.evaluate(() => window.__game.closeMenu());
 
-  // Leave through the front door: real server travel back to the pond.
+  // Leave through the front door: real server travel back to the pond. The exit only answers while you face the doors.
   const exit = await page.evaluate(async (gate) => {
-    window.__game.teleport(gate.x, gate.z + 1.2);
+    const g = window.__game;
+    g.teleport(gate.x, gate.z + 1.2);
+    g.look(gate.facing + Math.PI, 0);
     await new Promise((r) => setTimeout(r, 600));
-    const label = window.__game.player().near;
-    window.__game.interact();
+    const away = g.player().near;
+    g.look(gate.facing + 0.6, 0);
+    await new Promise((r) => setTimeout(r, 200));
+    const label = g.player().near;
+    g.interact();
     const t0 = performance.now();
-    while (performance.now() - t0 < 6000 && !(window.__game.world as any).hub) await new Promise((r) => setTimeout(r, 50));
-    return { label, atPond: !!(window.__game.world as any).hub };
-  }, { x: casinoMap.gate.x, z: casinoMap.gate.z });
-  check('travel: casino exit takes you to the pond', exit.atPond, `prompt "${exit.label}"`);
+    while (performance.now() - t0 < 6000 && !(g.world as any).hub) await new Promise((r) => setTimeout(r, 50));
+    return { away, label, atPond: !!(g.world as any).hub };
+  }, casinoMap.gate);
+  check('travel: by the casino doors with your back to them, no exit prompt', !exit.away?.startsWith('Exit'), `prompt "${exit.away}"`);
+  check('travel: facing the casino doors (a little off-centre), E takes you to the pond', exit.atPond && !!exit.label?.startsWith('Exit to'), `prompt "${exit.label}"`);
   if (exit.atPond) {
     await sleep(800);
     const hub = await page.evaluate(() => window.__smoke.attachedReport('hub'));
@@ -705,6 +711,44 @@ async function casinoChecks(): Promise<void> {
     const want = MAPS[0].gateArrival!;
     check('travel: back from the casino at the pond gate, facing town', Math.hypot(at.x - want.x, at.z - want.z) < 0.5 && Math.abs(at.yaw - want.yaw) < 0.01, JSON.stringify(at));
     await page.screenshot({ path: `${SHOTS}/pond-after-travel.png` });
+
+    // Back in through the pond gate, mashing E from the gate until well into the hall: players arrive by the casino
+    // doors facing the hall, so the exit behind them doesn't answer and they stay inside.
+    const pg = MAPS[0].gate;
+    await page.evaluate((p) => window.__game.teleport(p.x, p.z), { x: pg.x + 2.4 * Math.sin(pg.facing), z: pg.z + 2.4 * Math.cos(pg.facing) });
+    await sleep(600);
+    const travel = await page.evaluate(() => window.__game.player().near);
+    const inHall = () => page.evaluate(() => !!(window.__game.world as any).hall);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 8000 && !(await inHall())) {
+      await page.keyboard.press('KeyE');
+      await sleep(100);
+    }
+    const arrived = await page.evaluate(() => ({ ...window.__game.player(), yaw: window.__game.world.yaw }));
+    await page.keyboard.down('KeyW');
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('KeyE');
+      await sleep(120);
+    }
+    await page.keyboard.up('KeyW');
+    await sleep(1500);
+    const stay = await page.evaluate(() => ({ hall: !!(window.__game.world as any).hall, hub: !!(window.__game.world as any).hub, location: window.__game.s.location }));
+    check('travel: into the casino mashing E, you stay inside', stay.hall && !stay.hub && stay.location === 'casino', JSON.stringify({ travel, arrived, ...stay }));
+    if (stay.hall) {
+      // Turning round at the arrival spot brings the exit up again, and E leaves: the sea checks start at the pond.
+      const turned = await page.evaluate(async ({ at, gate }) => {
+        const g = window.__game;
+        g.teleport(at.x, at.z);
+        g.look(gate.facing, 0);
+        await new Promise((r) => setTimeout(r, 600));
+        const label = g.player().near;
+        g.interact();
+        const t0 = performance.now();
+        while (performance.now() - t0 < 6000 && !(g.world as any).hub) await new Promise((r) => setTimeout(r, 50));
+        return { label, atPond: !!(g.world as any).hub };
+      }, { at: casinoMap.spawn, gate: casinoMap.gate });
+      check('travel: turning round at the casino arrival spot shows the exit, and E leaves', turned.atPond && !!turned.label?.startsWith('Exit to'), `prompt "${turned.label}"`);
+    }
   }
   await ctx.close();
 }
