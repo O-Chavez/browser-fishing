@@ -11,6 +11,9 @@ Finished items move to [DONE.md](DONE.md).
   - Not simulated or tuned yet: the Abyss (three fish a marker, each a tenth of a tier harder and 12% richer; Abyss levels from 1,000,000 coins rising 12%); what older saves' pearls buy at the new boat part prices; a slow player (0.7 s) on the new rules (Oscar, 2026-11-01: it's fine for a slow player's reach to sit well short of a fast one's, since gear should help land the fish, not take the skill out of it)
   - 🎨 Defaults for Oscar to keep or change: the boat parts' working names (Storm sail, Kelp cutter, Deep lamps, Iron keel); the rod's glow (a new colour every 2 steps, then every 5 Abyss levels); the wording on Reed's chart and the cards
   - Every number is in `src/data/dive.ts`; `npx tsx scripts/seaeconomy.ts` prints each zone and rod step and a whole journey (`PARTS=` and `STEPS=` try prices without editing). When a zone's boat part gets cheaper, lower the rod steps sold in that zone too, or the zone opens into a coin wall
+- [ ] Remove the CHARTERS poster by the pond gate and move its explanation to the Furthest Out board (Oscar, 2026-11-13: it doesn't make sense beside the casino poster with Reed's CHARTERS arch already at the wharf)
+  - Remove the poster (`POSTERS.charters` and `charterSpot`, `src/game/hub.ts`; its "Charters poster · take a look" interaction and the `charters` menu in `src/game/game.ts`). Check whether the casino poster should move to the gate's middle or stay where it is, and update the smoke test, screenshots and GAME_DESIGN.md if they mention the poster
+  - The Furthest Out board (`FurthestBoard`, `src/game/furthestboard.ts`; built in `buildFurthest`, `src/game/town.ts`) gets a "take a look" interaction that opens the poster's panel, the charters explanation with its images (`chartersPosterHtml`, `charterPreview`); it has no interaction today
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
