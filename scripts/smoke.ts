@@ -18,6 +18,7 @@ import { FISH } from '../src/data/content';
 import { MAPS } from '../src/data/maps';
 import { STAGES } from '../src/data/smokehouse';
 import { CARD_SLIDE_MS, RESULT_BEAT_MS } from '../src/game/tablepace';
+import { xpForNextLevel } from '../src/game/progression';
 import { newSave } from '../src/game/state';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -46,7 +47,8 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fishing-smoke-'));
 const fish = (i: number) => ({ k: 'fish' as const, fishId: FISH[i % FISH.length].id, size: 40 + i * 5 });
 // The last slot holds a top-tier fish: anything worth under 1 chip is refused at the tray.
 const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, size: 60 };
-const save = { ...newSave(), level: 20, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
+// One XP short of level 21: the first fish landed (the sea checks' one) is a level-up, which makes the tip nudge due.
+const save = { ...newSave(), level: 20, xp: xpForNextLevel(20) - 1, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
 // Smokehouse stages already seen, so their banner and jingle don't land in the middle of the casino checks.
 save.smoke.seen = STAGES.map((st) => st.id);
 // The Aurora Rod in the locker: charters still need the Deep Sea Rod, which the trip checks buy from Captain Reed.
@@ -853,6 +855,11 @@ async function seaChecks(): Promise<void> {
   check('sea: a landed sea fish is sold on the spot, takes its line off the spool and the zone stays the Drop-off', sea.seen.includes('result') && sea.gained > 1000 && sea.newFish === 0 && sea.depth === 26 && sea.strip.includes('Drop-off') && /\D(28\d|29\d) m/.test(sea.strip) && /This charter\s*[1-9]/.test(sea.strip), JSON.stringify(sea));
   await page.evaluate(() => window.__game.press());
   await sleep(300);
+  // That fish was a level-up (the seeded XP), so the tip nudge is due: it waits out the charter.
+  const nudgeAtSea = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 1500));
+    return { level: window.__game.s.level as number, waiting: !!window.__game.nudge.state(), menu: !document.getElementById('menu')!.classList.contains('hidden') };
+  });
 
   await say('/tp pond');
   const home = await page.evaluate(async () => {
@@ -871,6 +878,23 @@ async function seaChecks(): Promise<void> {
     await sleep(500);
     const hub = await page.evaluate(() => window.__smoke.attachedReport('hub'));
     check('sea: pond hub intact after the trip', hub.missing.length === 0, hub.missing.join(', '));
+    // Back at the harbour the tip nudge opens, and its milestone is saved on the server.
+    const nudge = await page.evaluate(async () => {
+      const menu = document.getElementById('menu')!;
+      const up = () => menu.classList.contains('nudge') && !menu.classList.contains('hidden');
+      const t0 = performance.now();
+      while (performance.now() - t0 < 6000 && !up()) await new Promise((r) => setTimeout(r, 50));
+      const card = { up: up(), title: document.getElementById('menu-who')!.textContent, link: document.querySelector('.nudge a')?.getAttribute('href') ?? null };
+      (document.querySelector('.nudge [data-act="close"]') as HTMLButtonElement | null)?.click();
+      await new Promise((r) => setTimeout(r, 300));
+      return { ...card, closed: menu.classList.contains('hidden'), waiting: !!window.__game.nudge.state() };
+    });
+    const seen = await page.evaluate(async () => {
+      for (let i = 0; i < 40 && !(window.__game.s.tips as string[]).includes('nudge20'); i++) await new Promise((r) => setTimeout(r, 50));
+      return window.__game.s.tips as string[];
+    });
+    check('tip nudge: due after a level-up on a charter, it waits for the harbour', nudgeAtSea.waiting && !nudgeAtSea.menu && nudge.up, JSON.stringify({ nudgeAtSea, nudge }));
+    check('tip nudge: the card links the Ko-fi, Keep fishing closes it and the milestone is saved', nudge.title!.includes('Enjoying Lakeside?') && nudge.link === 'https://ko-fi.com/ochavez' && nudge.closed && !nudge.waiting && seen.includes('nudge20'), JSON.stringify({ nudge, seen }));
   }
   await ctx.close();
 }

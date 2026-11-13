@@ -98,10 +98,6 @@ Finished items move to [DONE.md](DONE.md).
 - 🎨 The backs of Top Anglers and Thanks at the campfire (from the community area, 2026-11-13): from the ring lane up the hill the boards show plain dark backs. A carving, a lantern or a notice pinned there could dress them, if it bothers anyone in play
 - 🎨 Show your own smoking fish at the Smokehouse: fish hanging in Mags's smoker and thicker smoke while one of yours is smoking (`buildSmokehouse`, `src/game/town.ts`), so the counter shows at a glance whether something is ready
 
-### Accounts and server
-
-- 🎨 Tip nudge at level milestones, a follow-up to the finished tip jar (DONE.md; Oscar had skipped its milestone prompt): at levels 20, 30 and 50, a one-time modal like "Psst, if you're enjoying the game, help keep it running!" that says the server costs money to run, links the ☕ Ko-fi (https://ko-fi.com/ochavez) and mentions the cosmetic 💗 and the Thank you board. Each milestone shows once (saved like the tips, `markTip` in `src/game/tips.ts`), never mid-fight, never for supporters, and not on top of the rank banner (20 Deckhand, 30 First Mate, 50 Admiral; `progression.ts`). Decide whether players already past a milestone (or back-paid past it) see it once. The tip-gives-nothing-in-game rule still holds
-
 ### Mobile
 
 - 🎨 Chat on a real phone: check it's readable (`body.touch #chat`, `src/style.css:468`, under the scaled 1400px layout) and that new messages get noticed beyond the full-strength flash every new line now gets, e.g. an unread badge on the 💬 button (`src/game/touch.ts:50`). Split off the "easier to notice" chat item (2026-10-30)

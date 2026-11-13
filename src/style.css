@@ -578,6 +578,16 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 .peek .peek-lock, .peek .peek-open { padding: 10px 14px; border-radius: 12px; background: var(--paper-2); color: var(--ink); font-weight: 900; }
 .peek .peek-open { background: var(--ok); color: #fff; }
 
+/* The tip nudge card after a milestone level-up (`nudgeHtml`) */
+#menu.nudge > .win { width: min(470px, 94vw); }
+/* The bar splits evenly between the heading and the close button to centre the tabs; with no tabs and a narrow card, the heading takes the room. */
+#menu.nudge .who { flex: 1 1 auto; }
+#menu.nudge .close { flex: none; }
+.nudge p { margin: 0 0 10px; font-size: 16px; font-weight: 700; line-height: 1.45; }
+.nudge .btns { display: flex; gap: 10px; margin: 18px 0 12px; }
+.nudge .btns .btn { flex: 1; }
+.nudge .foot { margin: 0; font-size: 13px; font-weight: 700; }
+
 /* "What's new" board: the card on joining and the full board from Settings */
 #menu.news > .win { width: min(820px, 94vw); max-height: var(--win-h); }
 .news-item { padding: 0 0 16px; margin: 0 0 16px; border-bottom: 2px solid rgba(58,39,22,.12); }

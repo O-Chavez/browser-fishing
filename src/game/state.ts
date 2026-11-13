@@ -4,7 +4,7 @@ import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/c
 import { TITLES } from '../data/ranks';
 import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
-import { TIP_IDS, isTip } from './tips';
+import { TIP_IDS, isSeenId } from './tips';
 import { BOAT_PARTS, ROD } from '../data/dive';
 
 export interface DexEntry {
@@ -116,7 +116,7 @@ export interface SaveData {
   lure: number;
   /** The player switched the Shiny Lure off to save its charges for later. */
   lureOff: boolean;
-  /** New-player tips already shown (see `TIP_IDS`). */
+  /** New-player tips already shown (see `TIP_IDS`), and the tip nudge milestones seen (`NUDGE_IDS`). */
   tips: string[];
   /** Titles earned (ids from `TITLES`), and the one worn under the name tag. */
   titles: string[];
@@ -345,7 +345,7 @@ export function migrate(raw: object): SaveData {
   out.seaRod = out.seaRod === true;
   out.lureOff = out.lureOff === true;
   // Saves from before the tips only get them if they haven't started playing yet.
-  out.tips = Array.isArray(data.tips) ? data.tips.filter(isTip) : isFreshSave(out) ? [] : [...TIP_IDS];
+  out.tips = Array.isArray(data.tips) ? data.tips.filter(isSeenId) : isFreshSave(out) ? [] : [...TIP_IDS];
   if (!Number.isInteger(out.held) || out.held < 0 || out.held >= out.slots.length) out.held = 0;
   const lk = (out.locker ?? {}) as Partial<SaveData['locker']>;
   const bait: Record<string, number> = {};

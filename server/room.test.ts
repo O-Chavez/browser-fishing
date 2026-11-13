@@ -83,6 +83,15 @@ describe('Room economy', () => {
     expect(last(a.c, 'state').save.tips).toEqual(['start']);
   });
 
+  it('remembers the tip nudge milestones a player has seen', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'tip', id: 'nudge20' });
+    room.handle(a.id, { t: 'tip', id: 'nudge20' });
+    room.handle(a.id, { t: 'tip', id: 'nudge25' });
+    expect(a.acct.save.tips).toEqual(['nudge20']);
+  });
+
   it('lets broke players with no bait dig worms at the patch, with a cooldown', () => {
     const { room, join, advance } = setup();
     const a = join('Ann');

@@ -226,7 +226,8 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       t.clearDig();
       return say('Worm patch cooldown cleared.');
     case 'tips': {
-      // Empties the list of new-player tips seen, so they show again (see `markTip`, `src/game/tips.ts`).
+      // Empties the list of new-player tips seen, so they show again (see `markTip`, `src/game/tips.ts`). The tip
+      // nudge's milestones are kept there too, so it comes back after the next level-up.
       if (!s.tips.length) return say('No new-player tips are marked as seen.');
       s.tips = [];
       return ok('New-player tips reset: they show again.');

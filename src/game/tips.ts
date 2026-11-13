@@ -1,6 +1,7 @@
 import { CASINO_LEVEL } from '../data/casino';
 import { BAITS, FISH, LINES, RODS, type Bait, type Fish, type Line, type Rod } from '../data/content';
 import { DIVES_OPEN } from '../data/dive';
+import { KOFI_URL } from '../data/support';
 import { nextRodBuy, rodBuyName, seaFightRating } from './dive';
 import { BAIT_PACK, CLEAN_BONUS, hasSailed } from './economy';
 import { COIN } from './format';
@@ -17,11 +18,46 @@ export type TipId = (typeof TIP_IDS)[number];
 
 export const isTip = (id: unknown): id is TipId => TIP_IDS.includes(id as TipId);
 
-/** Records a tip as seen. False if the id is unknown or it was already seen. */
+/**
+ * The tip nudge: a card that asks whether the player would like to tip, at most once per milestone level (Oscar,
+ * 2026-11-13). It follows a level-up that leaves a milestone at or under the player's level unseen: reaching 20,
+ * 30 and 50 each show it once, and a player already past some of them (from before the nudge, or back-paid past
+ * them) gets one card for all of those after their next level-up. The milestones seen are kept with the tips.
+ */
+export const NUDGE_LEVELS = [20, 30, 50] as const;
+export const nudgeId = (level: number): string => `nudge${level}`;
+export const NUDGE_IDS: readonly string[] = NUDGE_LEVELS.map(nudgeId);
+
+/** Whether an id may be kept in `SaveData.tips`: a new-player tip or a tip nudge milestone. */
+export const isSeenId = (id: unknown): id is string => isTip(id) || NUDGE_IDS.includes(id as string);
+
+/** Records a tip (or a tip nudge milestone) as seen. False if the id is unknown or it was already seen. */
 export function markTip(s: Pick<SaveData, 'tips'>, id: unknown): boolean {
-  if (!isTip(id) || s.tips.includes(id)) return false;
+  if (!isSeenId(id) || s.tips.includes(id)) return false;
   s.tips.push(id);
   return true;
+}
+
+/** The milestones a tip nudge shown now would cover: those reached and not seen yet. Empty when none is due. */
+export function nudgesDue(s: Pick<SaveData, 'level' | 'tips'>): string[] {
+  return NUDGE_LEVELS.filter((l) => s.level >= l).map(nudgeId).filter((id) => !s.tips.includes(id));
+}
+
+/** The card opens once the player has stood idle this long after releasing a catch. A default, to tune in play. */
+export const NUDGE_BEAT_SECS = 1;
+
+/** The tip nudge card's heading, in the window's bar. */
+export const NUDGE_TITLE = 'Enjoying Lakeside?';
+
+/**
+ * The tip nudge card as HTML (Oscar chose the short wording, 2026-11-13). `name` is the player's name, already
+ * escaped: a tip only gets its 💗 when the Ko-fi message carries it, so the card says so under the buttons.
+ */
+export function nudgeHtml(name: string): string {
+  return `<div class="nudge"><p>The server costs money to run. If you'd like to help keep it going, you can leave a tip.</p>
+    <p>Tips give nothing in game, only a 💗 by your name.</p>
+    <div class="btns"><a class="btn gold" href="${KOFI_URL}" target="_blank" rel="noopener">☕ Tip on Ko-fi</a><button class="btn plain" data-act="close">Keep fishing</button></div>
+    <p class="foot">Write your name (<b>${name}</b>) in the Ko-fi message to get the 💗.</p></div>`;
 }
 
 /** The next bait up from the best one the player owns, or null at the top. */

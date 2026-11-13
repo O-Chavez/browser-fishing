@@ -39,7 +39,7 @@ import casinoPreview from '../assets/images/casino-preview.jpg';
 import charterPreview from '../assets/images/charter-preview.jpg';
 import { NEWS, type NewsEntry } from '../data/news';
 import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
-import { baitWarning, charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
+import { baitWarning, charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, NUDGE_BEAT_SECS, NUDGE_TITLE, nudgeHtml, nudgesDue, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, catchPearlsHtml, endHtml, headHomeHtml, outHtml, ratePill, ratingToast, rodProgress, reedHtml, reedMarkerPick, reedZone, startText, whereText } from './divehud';
@@ -264,6 +264,12 @@ export class Game {
   private newsGlance: NewsEntry[] | null = null;
   /** A banner that came up while that card was open, shown once it's put away. */
   private afterNews: (() => void) | null = null;
+  /**
+   * A tip nudge waiting for a quiet moment (`tickNudge`): `armed` once a catch has been released and nothing cast
+   * since, `quiet` the seconds the player has then stood idle. Not saved: one that never opens (the player left
+   * first) comes back after the next level-up, since its milestones are only marked when the card opens.
+   */
+  private nudge: { armed: boolean; quiet: number } | null = null;
   /** When Esc last closed a menu; see the pointerlockchange handler. */
   private escClosedAt = -Infinity;
   private atVendor = false;
@@ -726,6 +732,45 @@ export class Game {
     el.classList.remove('welcome');
   }
 
+  /** Whether the tip nudge has anything to ask: online (there is a server to pay for), not a supporter, a milestone unseen. */
+  private nudgeDue(): boolean {
+    return this.net.connected && !this.net.isSupporter(this.net.name) && nudgesDue(this.s).length > 0;
+  }
+
+  /** After a level-up: the tip nudge waits for a quiet moment if a milestone at or under the new level is unseen. */
+  private queueNudge(): void {
+    if (!this.nudge && this.nudgeDue()) this.nudge = { armed: false, quiet: 0 };
+  }
+
+  /**
+   * Opens a waiting tip nudge in a lull: a catch released (or the charter just ended) and nothing cast since, at
+   * the pond, standing idle for a beat with no menu, chat, banner, arrival card or wheel spin up. So it never lands in a fight,
+   * on the rank banner, after a lost fish, on a charter or at a casino table; a player who casts again at once
+   * gets it after a later catch, at the latest on the walk to sell.
+   */
+  private tickNudge(dt: number): void {
+    const n = this.nudge;
+    if (!n) return;
+    if (this.phase !== 'idle') n.armed = false;
+    const lull =
+      n.armed && this.active && !this.chat.active && !this.map.sea && !this.map.casino && !this.spin &&
+      // Freeing the mouse within a second of an Esc is read as that Esc's echo, and no menu opens (pointerlockchange).
+      performance.now() - this.escClosedAt >= 1000 &&
+      // The "Heading in" card has faded out all the way, so the beat is spent looking at the harbour.
+      $('banner').classList.contains('hidden') && $('castoff').classList.contains('hidden');
+    n.quiet = lull ? n.quiet + dt : 0;
+    if (n.quiet >= NUDGE_BEAT_SECS) this.openNudge();
+  }
+
+  /** Shows the tip nudge card and marks every milestone it covers as seen, here and on the server. */
+  private openNudge(): void {
+    this.nudge = null;
+    // A tip that arrived while the card waited makes it moot.
+    if (!this.nudgeDue()) return;
+    for (const id of nudgesDue(this.s)) if (markTip(this.s, id)) this.net.send({ t: 'tip', id });
+    this.openMenu('nudge');
+  }
+
   /** The rod in use: the pond rod in the rod slot, or at sea the Deep Sea Rod from Reed's boat. */
   private get rod() {
     return this.map.sea ? DEEP_SEA_ROD : byId(RODS, this.s.rod);
@@ -802,6 +847,8 @@ export class Game {
       openMenu: (tab: string) => this.openMenu(tab),
       /** The "What's new" check that runs on joining. */
       showNews: () => this.showNews(),
+      /** The tip nudge waiting for a quiet moment, if any. */
+      nudge: { state: () => (this.nudge ? { ...this.nudge } : null) },
       closeMenu: () => this.setMenu(false),
       player: () => ({ x: this.player.x, z: this.player.z, y: this.player.eyeY, near: this.near?.label ?? null }),
       /** The held item is drawn in the player's hand. */
@@ -1657,6 +1704,8 @@ export class Game {
     this.map = MAPS.find((m) => m.id === this.s.location) ?? MAPS[0];
     if (this.map.sea || left?.sea) this.showCastOff(!!this.map.sea);
     if (!this.map.sea) this.diveHud.set(null);
+    // A tip nudge that came due on a charter opens back at the harbour, with no catch there to wait for.
+    if (this.nudge && left?.sea && !this.map.sea) this.nudge.armed = true;
     this.s.location = this.map.id;
     this.world.setLocation(byId(LOCATIONS, this.map.locationId), this.map);
     this.setGateSign();
@@ -2572,6 +2621,7 @@ export class Game {
     const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch', h: this.holds.encode() });
+    if (leveledUp) this.queueNudge();
     this.stagesWaiting.push(...stages);
     if (gift) this.toast(smoke.giftText(gift), 3.5);
     this.caughtTier = fish.tier;
@@ -2745,6 +2795,7 @@ export class Game {
     this.world.line.line.visible = false;
     this.phase = 'idle';
     this.setIdlePose();
+    if (this.nudge) this.nudge.armed = true;
     // Tips wait for the catch card to be put away, so they don't land on top of it.
     let tipped = false;
     if (this.stagesWaiting.length) this.stageBanner(this.stagesWaiting.splice(0), false);
@@ -2904,6 +2955,7 @@ export class Game {
     this.updateNight();
     this.updateLure();
     this.tickSmoke(dt);
+    this.tickNudge(dt);
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
     this.avatars.update(dt, this.world.time, this.net.players, this.player.x, this.player.z);
     this.syncBystanders();
@@ -3361,8 +3413,9 @@ export class Game {
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
     $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
     const card = DIVE_TABS.includes(this.tab);
-    $('menu').classList.toggle('fit', this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || card);
+    $('menu').classList.toggle('fit', this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || this.tab === 'nudge' || card);
     $('menu').classList.toggle('news', this.tab === 'news');
+    $('menu').classList.toggle('nudge', this.tab === 'nudge');
     $('menu').classList.toggle('dive', card);
     $('menu').classList.toggle('reedwin', this.tab === 'reed');
     $('menu-who').innerHTML = this.menuWhoHtml();
@@ -3423,6 +3476,9 @@ export class Game {
         break;
       case 'news':
         el.innerHTML = newsHtml(this.newsGlance ?? NEWS, !!this.newsGlance);
+        break;
+      case 'nudge':
+        el.innerHTML = nudgeHtml(escapeHtml(this.net.name));
         break;
       case 'reed':
         el.innerHTML = reedHtml({ say: this.reedSay, s: this.s, pick: this.reedPick(), open: DIVES_OPEN, marker: this.reedMark() });
@@ -3581,6 +3637,7 @@ export class Game {
     if (this.tab === 'reed') return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>Charters</span></div>`;
     if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? whereText(this.diveHud.view.zone, this.diveHud.view.marker) : 'Back at the harbour'}</span></div>`;
     if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
+    if (this.tab === 'nudge') return `<span class="who-ic">☕</span><div><b>${NUDGE_TITLE}</b></div>`;
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
     if (this.tab === 'charters') return `<span class="who-ic">⚓</span><div><b>Charters</b><span>Captain Reed · the west beach · with the ${DEEP_SEA_ROD.name}</span></div>`;
     if (this.tab === 'casino') return `<span class="who-ic">🎰</span><div><b>Prize Counter</b><span>${this.chipsText(this.s.chips)} chips to spend</span></div>`;
@@ -3602,7 +3659,7 @@ export class Game {
         tab('pantry', '🧺', `Pantry${n ? ` (${n})` : ''}`, this.smokeTab === 'pantry', 'data-smoke')
       );
     }
-    if (this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || DIVE_TABS.includes(this.tab)) return '';
+    if (this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || this.tab === 'nudge' || DIVE_TABS.includes(this.tab)) return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),

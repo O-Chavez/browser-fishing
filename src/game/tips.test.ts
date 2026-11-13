@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { COIN } from './format';
 import { migrate, newSave } from './state';
-import { TIP_IDS, baitWarning, charterTipDue, chartersToTry, lossVerdict, markTip, rodHintText, rodUpgrade, seaLossVerdict, tipText } from './tips';
+import { NUDGE_IDS, TIP_IDS, baitWarning, charterTipDue, chartersToTry, lossVerdict, markTip, nudgeHtml, nudgesDue, rodHintText, rodUpgrade, seaLossVerdict, tipText } from './tips';
+import { KOFI_URL } from '../data/support';
 import { BAITS, FISH, byId } from '../data/content';
 
 describe('new-player tips', () => {
@@ -37,6 +38,55 @@ describe('new-player tips', () => {
     const { tips: __, ...played } = { ...newSave(), level: 3, xp: 10, dex: { minnow: { count: 2, best: 8 } } };
     expect(migrate(played).tips).toEqual([...TIP_IDS]);
     expect(migrate({ ...newSave(), tips: ['start', 'bogus'] }).tips).toEqual(['start']);
+  });
+});
+
+describe('tip nudge', () => {
+  it('is due at levels 20, 30 and 50, each once', () => {
+    const s = newSave();
+    s.level = 19;
+    expect(nudgesDue(s)).toEqual([]);
+    s.level = 20;
+    expect(nudgesDue(s)).toEqual(['nudge20']);
+    expect(markTip(s, 'nudge20')).toBe(true);
+    expect(markTip(s, 'nudge20')).toBe(false);
+    s.level = 29;
+    expect(nudgesDue(s)).toEqual([]);
+    s.level = 30;
+    expect(nudgesDue(s)).toEqual(['nudge30']);
+    markTip(s, 'nudge30');
+    s.level = 50;
+    expect(nudgesDue(s)).toEqual(['nudge50']);
+    markTip(s, 'nudge50');
+    s.level = 120;
+    expect(nudgesDue(s)).toEqual([]);
+  });
+
+  it('covers every milestone a player is already past with one card', () => {
+    const s = newSave();
+    s.level = 34;
+    expect(nudgesDue(s)).toEqual(['nudge20', 'nudge30']);
+    for (const id of nudgesDue(s)) markTip(s, id);
+    expect(nudgesDue(s)).toEqual([]);
+    s.level = 50;
+    expect(nudgesDue(s)).toEqual(['nudge50']);
+    const past = newSave();
+    past.level = 73;
+    expect(nudgesDue(past)).toEqual([...NUDGE_IDS]);
+  });
+
+  it('keeps its milestones through a reload, and saves from before the tips still get it', () => {
+    expect(migrate({ ...newSave(), tips: ['start', 'nudge20', 'nudge99'] }).tips).toEqual(['start', 'nudge20']);
+    const { tips: _, ...played } = { ...newSave(), level: 31, xp: 10, dex: { minnow: { count: 2, best: 8 } } };
+    expect(nudgesDue(migrate(played))).toEqual(['nudge20', 'nudge30']);
+  });
+
+  it('links the Ko-fi, says a tip gives nothing in game and how to get the heart, and has a way out', () => {
+    const h = nudgeHtml('Ann');
+    expect(h).toContain(`href="${KOFI_URL}" target="_blank" rel="noopener"`);
+    expect(h).toContain('Tips give nothing in game');
+    expect(h).toContain('Write your name (<b>Ann</b>) in the Ko-fi message');
+    expect(h).toContain('data-act="close">Keep fishing</button>');
   });
 });
 
