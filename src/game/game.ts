@@ -4375,7 +4375,7 @@ export class Game {
       )
       .join('');
     const head = this.net.connected ? `<b>${this.net.players.size + 1}</b> online now` : 'Playing offline - join a server to fish with others.';
-    // All-time ranking by most valuable single catch, the same list as the Top Anglers board in the plaza.
+    // All-time ranking by most valuable single catch, the same list as the Top Anglers board by the campfire.
     const top = this.anglers()
       .filter((a) => a.value > 0)
       .slice(0, 10)

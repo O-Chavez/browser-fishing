@@ -41,6 +41,20 @@ export const HARBOUR = {
 };
 HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.plane.x - HARBOUR.diveStart.x), -(HARBOUR.plane.z - HARBOUR.diveStart.z));
 
+/**
+ * The campfire on the east headland, the town's meeting place: a cobbled circle at the foot of the ramp from the
+ * quay's east end, benches on its lake and quay sides, string lights over it, and Top Anglers and Thanks behind
+ * the fire on the hill side, turned to the fire, so the fire lights them at night and the cove sees them from the
+ * pier and the east jetty. The water side stays open. Play-test: the spots, the turns and the circle's size.
+ */
+const CAMPFIRE = { x: 18.6, z: 2.2 };
+/** Each board stands `r` m from the fire, `deg` degrees round from +z (90 is straight up the hill), facing it. */
+const byFire = (r: number, deg: number): Spot => {
+  const x = CAMPFIRE.x + r * Math.sin((deg * Math.PI) / 180);
+  const z = CAMPFIRE.z + r * Math.cos((deg * Math.PI) / 180);
+  return { x, z, facing: faceToward(x, z, CAMPFIRE.x, CAMPFIRE.z) };
+};
+
 export interface HouseDef extends Spot {
   /** Wall and roof colours. */
   wall: number;
@@ -104,6 +118,8 @@ export interface TownDef {
   flowers: { x: number; z: number; w: number; d: number }[];
   /** Cobbled paths: the main street and the lanes, each a straight strip `w` wide. */
   paths: { from: [number, number]; to: [number, number]; w: number }[];
+  /** Round cobbled patches besides the square (the campfire's circle), laid on the ground like the paths. */
+  circles?: { x: number; z: number; r: number }[];
   /** Benches besides the square's own pair; on a dock they stand on the deck. */
   benches: Spot[];
   /** Trees inside the town, where the forest keeps out: leafy ones among the houses, pines round the edge. `s` is the scale. */
@@ -126,6 +142,8 @@ export interface MapDef {
   gate: Spot;
   /** Live "Top Anglers" board; E opens the player list. */
   leaderboard: Spot;
+  /** The smaller Thanks board listing supporters. */
+  thanks: Spot;
   campfire: Spot;
   /** Beach patch where broke players with no bait can dig up worms. */
   worms?: { x: number; z: number };
@@ -175,11 +193,12 @@ export const MAPS: MapDef[] = [
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
     gateArrival: { x: 0, z: 50.5, yaw: 0 },
-    // Top Anglers and Thanks stand along the quay deck's rear at its east end, facing the water: in full view from
-    // the pier without standing in front of the Smokehouse (which the plan's spot by the pier root did).
-    leaderboard: { x: 11, z: 13.6, facing: Math.PI },
+    // Top Anglers and Thanks stand round the campfire (`CAMPFIRE`): Top Anglers straight up the hill behind the fire
+    // and Thanks beside it toward the quay, far enough round that both clear the headland pine's low branches.
+    leaderboard: byFire(3.8, 82),
+    thanks: byFire(3.7, 39),
     // The campfire on the east headland, seen across the water from the jetty bench.
-    campfire: { x: 18, z: 2, facing: 0 },
+    campfire: { ...CAMPFIRE, facing: 0 },
     // Beside Reed's lane, at the top of his beach.
     worms: { x: -18.6, z: 12 },
     smokehouse: SMOKEHOUSE,
@@ -192,6 +211,8 @@ export const MAPS: MapDef[] = [
       { x0: -13.5, x1: 13.5, z0: 13.5, z1: 16.5, h: 0.72 },
       { x0: -16, x1: -11, z0: 9.5, z1: 16.5, h: 0.72 },
       { x0: 11, x1: 16, z0: 9.5, z1: 16.5, h: 0.72 },
+      // The campfire's circle: a sand bank on its water side keeps the cobbles above the waterline. Play-test: the shore.
+      { x0: 16.6, x1: 18.6, z0: 0.6, z1: 3.8, h: 0.6 },
     ],
     // The eye's target from the pier: 30 m past the T end and a few metres left of the pier's line, so it sits in
     // the first look without standing in front of the cast. Play-test: the spot.
@@ -346,8 +367,8 @@ export const MAPS: MapDef[] = [
         // Reed's lane, a street of the town, from the quay's west end down to his beach.
         { from: [-13, 13.5], to: [-16.5, 9], w: 2.4 },
         { from: [-16.5, 9], to: [-18.5, 3.5], w: 2.4 },
-        // The ramp from the quay's east end to the campfire headland.
-        { from: [12.5, 11], to: [16.5, 5.5], w: 1.6 },
+        // The ramp from the quay's east end down into the campfire's circle (`circles`).
+        { from: [12.5, 11], to: [17.1, 4.68], w: 1.6 },
         // The village ring: west from the square between Wren's and the Fishmonger's garden, down past the worm patch to the quay...
         { from: [-4.5, 30.5], to: [-12.5, 28.6], w: 1.6 },
         { from: [-12.5, 28.6], to: [-16.5, 22], w: 1.6 },
@@ -359,9 +380,13 @@ export const MAPS: MapDef[] = [
         { from: [18.5, 24], to: [18.5, 16], w: 1.6 },
         { from: [18.5, 16], to: [15.5, 8.5], w: 1.6 },
       ],
+      // The campfire's circle, round the fire and its two benches, where the ramp comes down. Play-test: the radius.
+      circles: [{ ...CAMPFIRE, r: 3 }],
       benches: [
         // Along the east jetty's edge, looking across the water to the campfire headland.
         { x: 6.9, z: 7.2, facing: Math.PI / 2 },
+        // At the quay's east end where the boards stood, on the deck's rear edge looking out over the cove.
+        { x: 11.2, z: 13.8, facing: Math.PI },
         // The rest stop on the walk up, beside the main street in front of the Fishmonger.
         { x: -4.6, z: 24.5, facing: Math.PI / 2 },
       ],

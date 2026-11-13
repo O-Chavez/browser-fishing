@@ -117,8 +117,7 @@ export class Town {
       const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
       if (Math.hypot(x - ax - dx * t, z - az - dz * t) < hw + pad) return true;
     }
-    const s = this.map.town.square;
-    if (Math.hypot(x - s.x, z - s.z) < s.r + pad) return true;
+    for (const s of [this.map.town.square, ...(this.map.town.circles ?? [])]) if (Math.hypot(x - s.x, z - s.z) < s.r + pad) return true;
     // Keep hidden bottles and the worm patch easy to spot
     if (this.bottles.some((b) => Math.hypot(x - b.pos.x, z - b.pos.z) < 1.5)) return true;
     if (this.wormSpot && Math.hypot(x - this.wormSpot.x, z - this.wormSpot.z) < 2) return true;
@@ -173,20 +172,33 @@ export class Town {
     this.group.add(m);
   }
 
-  /** The main street and the lanes, as the map lays them out (`paths` in maps.ts). */
+  /** The main street and the lanes, as the map lays them out (`paths` in maps.ts), and the round patches (`circles`). */
   private buildStreets(): void {
     for (const p of this.map.town.paths) this.path(p.from[0], p.from[1], p.to[0], p.to[1], p.w);
+    for (const c of this.map.town.circles ?? []) this.disc(c.x, c.z, c.r);
+  }
+
+  /** Round cobbled patch, laid on the ground like `path`: the square, and the campfire's circle on its slope. */
+  private disc(cx: number, cz: number, r: number): void {
+    // Rings every half metre, so the patch follows the ground under it instead of lying flat across a slope.
+    const geo = new THREE.RingGeometry(0, r, 40, Math.max(1, Math.ceil(r / 0.5))).rotateX(-Math.PI / 2);
+    const uv = geo.getAttribute('uv');
+    const pos = geo.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      const x = cx + pos.getX(i);
+      const z = cz + pos.getZ(i);
+      // The same height, depth bias and world-space cobbles as the paths, so the lanes run in without a seam.
+      pos.setXYZ(i, x, groundHeight(x, z) + COBBLE_LIFT, z);
+      uv.setXY(i, x / 2.2, z / 2.2);
+    }
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    m.receiveShadow = true;
+    this.group.add(m);
   }
 
   private buildSquare(s: { x: number; z: number; r: number }): void {
-    const geo = new THREE.CircleGeometry(s.r, 40).rotateX(-Math.PI / 2);
-    const uv = geo.getAttribute('uv');
-    const sp = geo.getAttribute('position');
-    // The same world-space cobbles as the paths (`path`), so the lanes run into the square without a seam.
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (s.x + sp.getX(i)) / 2.2, (s.z + sp.getZ(i)) / 2.2);
-    const disc = new THREE.Mesh(geo, mat(0xffffff, { map: this.cobble, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-    disc.receiveShadow = true;
-    this.at(disc, s.x, s.z, 0, groundHeight(s.x, s.z) + COBBLE_LIFT);
+    this.disc(s.x, s.z, s.r);
 
     // Well
     const well = new THREE.Group();
@@ -956,19 +968,24 @@ export class Town {
     this.at(g, x, z, facing);
   }
 
-  private stringLights(x0: number, x1: number, z: number, h: number): void {
+  /** A string of bulbs between two posts `h` tall, from (ax, az) to (bx, bz). */
+  private stringLights(ax: number, az: number, bx: number, bz: number, h: number): void {
     // A bulb about every half metre, with the sag of a short string.
-    const n = Math.max(8, Math.round(Math.abs(x1 - x0) * 2));
-    for (const x of [x0, x1]) {
+    const n = Math.max(8, Math.round(Math.hypot(bx - ax, bz - az) * 2));
+    for (const [x, z] of [[ax, az], [bx, bz]]) {
       const post = cyl(0.05, 0.06, h, DARK, 6);
       this.at(post, x, z, 0, groundHeight(x, z) + h / 2);
       this.solid(x, z, 0.15);
     }
+    // Straight from one post top to the other, so a string across a slope hangs like one.
+    const ya = groundHeight(ax, az) + h;
+    const yb = groundHeight(bx, bz) + h;
     const colors = [0xffd27a, 0xff9a6a, 0xfff0b0, 0xffb84a];
     for (let i = 0; i <= n; i++) {
       const k = i / n;
-      const x = x0 + (x1 - x0) * k;
-      const y = groundHeight(x, z) + h - Math.sin(k * Math.PI) * 0.45;
+      const x = ax + (bx - ax) * k;
+      const z = az + (bz - az) * k;
+      const y = ya + (yb - ya) * k - Math.sin(k * Math.PI) * 0.45;
       const b = ball(0.07, colors[i % 4]);
       const m = b.material as THREE.MeshLambertMaterial;
       m.emissive.set(colors[i % 4]);
@@ -991,12 +1008,20 @@ export class Town {
     this.pot(3.6, 34.5);
     this.pot(-8.5, 19);
     this.pot(6.3, 23);
+    // Beside the bench at the quay's east end.
+    this.pot(12.5, 13.95);
     // A picnic blanket on the slope above Reed's lane (the campfire headland is too narrow for a second one).
     this.blanket(-15, 16.5, -0.3);
-    // String lights across the quay's rear in front of the stalls, over the square and at the gate.
-    this.stringLights(-8, 8, 15.3, 3.3);
-    this.stringLights(-4, 4, 32, 3.3);
-    this.stringLights(-3.4, 3.4, 54.5, 3.1);
+    // String lights across the quay's rear in front of the stalls, over the square, at the gate, and over the campfire
+    // from its lake side to its quay side, the posts behind the benches on the circle's rim. The string is turned a
+    // little off north-south so, seen from the ramp, the quay post stands just clear of Top Anglers instead of in
+    // front of it. Play-test: the posts and the height.
+    this.stringLights(-8, 15.3, 8, 15.3, 3.3);
+    this.stringLights(-4, 32, 4, 32, 3.3);
+    this.stringLights(-3.4, 54.5, 3.4, 54.5, 3.1);
+    const fire = this.map.campfire;
+    const [sx, sz] = [3 * Math.sin(-0.17), 3 * Math.cos(-0.17)];
+    this.stringLights(fire.x - sx, fire.z - sz, fire.x + sx, fire.z + sz, 3.3);
     this.woodpile(-18.5, 31, 1.57);
   }
 

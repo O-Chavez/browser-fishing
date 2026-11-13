@@ -11,8 +11,6 @@ Finished items move to [DONE.md](DONE.md).
   - Not simulated or tuned yet: the Abyss (three fish a marker, each a tenth of a tier harder and 12% richer; Abyss levels from 1,000,000 coins rising 12%); what older saves' pearls buy at the new boat part prices; a slow player (0.7 s) on the new rules (Oscar, 2026-11-01: it's fine for a slow player's reach to sit well short of a fast one's, since gear should help land the fish, not take the skill out of it)
   - 🎨 Defaults for Oscar to keep or change: the boat parts' working names (Storm sail, Kelp cutter, Deep lamps, Iron keel); the rod's glow (a new colour every 2 steps, then every 5 Abyss levels); the wording on Reed's chart and the cards
   - Every number is in `src/data/dive.ts`; `npx tsx scripts/seaeconomy.ts` prints each zone and rod step and a whole journey (`PARTS=` and `STEPS=` try prices without editing). When a zone's boat part gets cheaper, lower the rod steps sold in that zone too, or the zone opens into a coin wall
-- [ ] 🎨 A community area around the campfire (Oscar, 2026-11-13): move the Top Anglers and Thanks (supporter) boards from the quay's east end to stand around the fire pit; changing the fire pit area to fit them is fine
-  - Today: `leaderboard` and `campfire` in `src/data/maps.ts:180-182`, built in `src/game/hub.ts` (`buildCampfire`); the headland is narrow (`src/game/town.ts:994`). Propose layouts before coding
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
@@ -97,6 +95,7 @@ Finished items move to [DONE.md](DONE.md).
 
 - 🎨 Townsfolk follow the day: head indoors at night (Granny Wren to her cottage) or gather at the campfire; their walks could take a different loop after dark (`nightLines` already exists for talk)
 - 🎨 Level 3 of the visual polish options (https://claude.ai/artifact/4rfm9mFjxTXaYms9thDuUc): a soft foam line just offshore and lighter shallows (a baked shore-distance texture read by the water shader), small round bushes along the shore and hillsides, slightly richer greens. Each piece could ship on its own
+- 🎨 The backs of Top Anglers and Thanks at the campfire (from the community area, 2026-11-13): from the ring lane up the hill the boards show plain dark backs. A carving, a lantern or a notice pinned there could dress them, if it bothers anyone in play
 - 🎨 Show your own smoking fish at the Smokehouse: fish hanging in Mags's smoker and thicker smoke while one of yours is smoking (`buildSmokehouse`, `src/game/town.ts`), so the counter shows at a glance whether something is ready
 
 ### Accounts and server

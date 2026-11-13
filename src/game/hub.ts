@@ -176,7 +176,7 @@ export class Hub {
     if (map.harbour) (this as { charterSpot: THREE.Vector3 | null }).charterSpot = this.buildPoster(map.gate, POSTERS.charters);
     this.buildProps();
     this.buildLeaderboard(map.leaderboard);
-    this.buildThanks(map.leaderboard);
+    this.buildThanks(map.thanks);
     this.buildCampfire(map.campfire);
     this.setLeaders([]);
     this.setSupporters([]);
@@ -394,10 +394,11 @@ export class Hub {
   }
 
   private buildProps(): void {
-    // Lamp posts on the quay and jetty, up the main street to the square, and one each at Reed's lane and the campfire
-    // ramp (docs/map-rework/harbour.json; the village's own posts are in town.ts). Five carry a point light.
+    // Lamp posts on the quay and jetty, up the main street to the square, and one each at Reed's lane and the top of
+    // the campfire ramp, on its water side, where it stays out of the view down the ramp to the boards
+    // (docs/map-rework/harbour.json; the village's own posts are in town.ts). Five carry a point light.
     const lit = new Set(['-4,11.2', '4,11.2', '8.3,4.5', '3.6,27.5', '-19,5']);
-    const posts = [[-4, 11.2], [4, 11.2], [-9.5, 13.8], [9.8, 13.8], [8.3, 4.5], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19, 5], [18.5, 5.5]];
+    const posts = [[-4, 11.2], [4, 11.2], [-9.5, 13.8], [9.8, 13.8], [8.3, 4.5], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-19, 5], [12.2, 9.4]];
     for (const [x, z] of posts) {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
@@ -455,12 +456,18 @@ export class Hub {
     g.add(frame, face.mesh, roof);
     this.leaderCtx = face.ctx;
     this.leaderTex = face.tex;
-    this.place(g, spot);
+    this.place(g, spot, 0, 0, this.footing(spot, 1.0));
     for (const lx of [-1.0, 1.0]) {
       const c = this.world(spot, lx, 0);
       this.fixed.push({ x: c.x, z: c.z, r: 0.3 });
     }
-    this.world(spot, 0, 2.0, this.leaderSpot);
+    // Close enough that a reader in front stands clear of the fire the board faces.
+    this.world(spot, 0, 1.8, this.leaderSpot);
+  }
+
+  /** Height to stand a two-post board on: the lower post's ground, so on a slope the other post sinks in rather than one floating. */
+  private footing(spot: Spot, postX: number): number {
+    return Math.min(this.world(spot, -postX, 0).y, this.world(spot, postX, 0).y);
   }
 
   /** Redraws the "Top Anglers" board, ranked by the most valuable fish each player has caught. */
@@ -516,7 +523,7 @@ export class Hub {
   }
 
   /** A small "thank you" board beside Top Anglers, listing the players who tipped on Ko-fi. */
-  private buildThanks(board: Spot): void {
+  private buildThanks(spot: Spot): void {
     const g = new THREE.Group();
     for (const lx of [-0.6, 0.6]) {
       const post = cyl(0.06, 0.08, 2.2, DARK, 8);
@@ -533,9 +540,7 @@ export class Hub {
     g.add(frame, face.mesh, roof);
     this.thanksCtx = face.ctx;
     this.thanksTex = face.tex;
-    const at = this.world(board, 2.45, 0.35);
-    const spot = { x: at.x, z: at.z, facing: board.facing };
-    this.place(g, spot);
+    this.place(g, spot, 0, 0, this.footing(spot, 0.6));
     for (const lx of [-0.6, 0.6]) {
       const c = this.world(spot, lx, 0);
       this.fixed.push({ x: c.x, z: c.z, r: 0.25 });
@@ -607,10 +612,11 @@ export class Hub {
     g.add(this.fireLight);
     this.place(g, spot);
     this.fixed.push({ x: spot.x, z: spot.z, r: 0.8 });
-    // Benches around the fire, leaving the side facing the water (-x, the cove) open.
-    for (const a of [Math.PI, Math.PI / 2, 0]) {
-      const bx = spot.x + Math.sin(a) * 2.5;
-      const bz = spot.z + Math.cos(a) * 2.5;
+    // Benches on the lake and quay sides of the fire, inside its cobbled circle (`circles` in maps.ts); the water side
+    // (-x, the cove) stays open and the hill side has the boards.
+    for (const a of [Math.PI, 0]) {
+      const bx = spot.x + Math.sin(a) * 2.4;
+      const bz = spot.z + Math.cos(a) * 2.4;
       const bench = new THREE.Group();
       const seat = rbox(1.7, 0.1, 0.5, 0x8a6a40, 0.03);
       seat.position.y = 0.45;
@@ -623,7 +629,8 @@ export class Hub {
       this.place(bench, { x: bx, z: bz, facing: Math.atan2(spot.x - bx, spot.z - bz) });
       this.fixed.push({ x: bx, z: bz, r: 0.85 });
     }
-    this.campSpot.set(spot.x + 1.8, groundHeight(spot.x, spot.z), spot.z);
+    // On the open water side, away from the boards' prompt behind the fire.
+    this.campSpot.set(spot.x - 1.8, groundHeight(spot.x, spot.z), spot.z);
   }
 
   /** Opens or seals the gate for the local player; redraws only when something changed. */

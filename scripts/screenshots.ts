@@ -1,7 +1,7 @@
 // README screenshots: stages scenes in headless Chrome and writes them to docs/images/.
 //
 //   npm run screenshots              # every shot
-//   npm run screenshots -- dock reel # only these (dock, night, reel, fish, outfits, wardrobe, casino)
+//   npm run screenshots -- dock reel # only these (dock, night, harbour, reel, fish, outfits, wardrobe, casino)
 //
 // `casino` re-shoots src/assets/images/casino-preview.jpg, the look inside shown by the poster at the
 // pond's casino gate (and in the README).
@@ -23,7 +23,7 @@ const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Conte
 const VITE_PORT = 5299;
 const SERVER_PORT = 8799;
 const OUT = path.resolve('docs/images');
-const SHOTS = ['dock', 'night', 'reel', 'fish', 'outfits', 'wardrobe', 'casino'];
+const SHOTS = ['dock', 'night', 'harbour', 'reel', 'fish', 'outfits', 'wardrobe', 'casino'];
 const only = process.argv.slice(2);
 const unknown = only.filter((s) => !SHOTS.includes(s));
 if (unknown.length) {
@@ -145,7 +145,7 @@ const yawTo = (x: number, z: number, tx: number, tz: number) => Math.atan2(-(tx 
 let failed = false;
 try {
   // Two friends chatting on the pier head at sunset, seen by a third player.
-  if (want('dock') || want('night')) {
+  if (want('dock') || want('night') || want('harbour')) {
     const [maya, theo, cam] = [await join('Maya', 'shots'), await join('Theo', 'shots'), await join('Cam', 'shots')];
     const M = { x: -0.75, z: -7.8 }, T = { x: 0.75, z: -7.8 }, C = { x: 0.3, z: -4.2 };
     // Each faces halfway between the other and the camera, so both faces show.
@@ -163,6 +163,12 @@ try {
       await game(cam, `G.teleport(0, 25.5); G.look(Math.PI, -0.04); G.day(0.72);`);
       await sleep(1500);
       await shoot(cam, 'night');
+    }
+    // The harbour from the pier by day: the quay, the Smokehouse and Marlow's stall, and the main street up to the gate.
+    if (want('harbour')) {
+      await game(cam, `G.teleport(0, 1); G.look(Math.PI, -0.03); G.day(0.3);`);
+      await sleep(1500);
+      await shoot(cam, 'harbour');
     }
     await leave(maya, theo, cam);
   }
