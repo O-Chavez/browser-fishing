@@ -764,20 +764,20 @@ describe('rod steps and Abyss levels', () => {
     s.boatParts = 1;
     expect(eco.buyRodStep(s)).toBe(true);
     expect(eco.buyRodStep(s)).toBe(true);
-    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 650_000, pearls: 100_000 });
+    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 130_000, pearls: 100_000 });
     // Step 3 waits for Kelp Deep.
     expect(eco.buyRodStep(s)).toBe(false);
     expect(eco.rodBuyError(s)).toMatch(/Kelp cutter/);
     s.boatParts = 2;
     expect(eco.buyRodStep(s)).toBe(true);
-    expect(s).toMatchObject({ rodStep: 3, coins: 10_000_000 - 950_000 });
+    expect(s).toMatchObject({ rodStep: 3, coins: 10_000_000 - 280_000 });
   });
 
   it('refuses a step without the coins or the Deep Sea Rod', () => {
-    const s = owner({ boatParts: 4, coins: 249_999 });
+    const s = owner({ boatParts: 4, coins: 39_999 });
     expect(eco.buyRodStep(s)).toBe(false);
-    expect(eco.rodBuyError(s)).toMatch(/250,000/);
-    s.coins = 250_000;
+    expect(eco.rodBuyError(s)).toMatch(/40,000/);
+    s.coins = 40_000;
     expect(eco.buyRodStep(s)).toBe(true);
     expect(s).toMatchObject({ rodStep: 1, coins: 0 });
     const none = Object.assign(newSave(), { level: 20, coins: 1e7, boatParts: 4 });
@@ -822,9 +822,9 @@ describe('rod steps and Abyss levels', () => {
 describe('boat parts', () => {
   const owner = (o: Partial<SaveData> = {}) => Object.assign(newSave(), { level: 20, seaRod: true }, o);
 
-  it('opens the zones one by one for Black Pearls: 150, 900, 2,500 and 6,500', () => {
-    const s = owner({ pearls: 150 + 900 + 2500 + 6500 + 7, coins: 5 });
-    for (const left of [900 + 2500 + 6500 + 7, 2500 + 6500 + 7, 6500 + 7, 7]) {
+  it('opens the zones one by one for Black Pearls: 30, 150, 1,500 and 10,000', () => {
+    const s = owner({ pearls: 30 + 150 + 1500 + 10_000 + 7, coins: 5 });
+    for (const left of [150 + 1500 + 10_000 + 7, 1500 + 10_000 + 7, 10_000 + 7, 7]) {
       expect(eco.buyBoatPart(s)).toBe(true);
       expect(s.pearls).toBe(left);
     }
@@ -834,9 +834,9 @@ describe('boat parts', () => {
   });
 
   it('refuses a part without the pearls or the Deep Sea Rod', () => {
-    const s = owner({ pearls: 149, coins: 1e9 });
+    const s = owner({ pearls: 29, coins: 1e9 });
     expect(eco.buyBoatPart(s)).toBe(false);
-    expect(eco.boatPartError(s)).toMatch(/Storm sail costs 150/);
+    expect(eco.boatPartError(s)).toMatch(/Storm sail needs 30 Black Pearls/);
     const none = Object.assign(newSave(), { pearls: 1000 });
     expect(eco.buyBoatPart(none)).toBe(false);
     expect(none.boatParts).toBe(0);
@@ -923,15 +923,5 @@ describe('the sea in old saves', () => {
     expect(eco.lineBeaten(s, byId(LINES, 'moonsilk'))).toBe(false);
     expect(eco.buyLine(s, 'moonsilk')).toBe(true);
     expect(eco.lineName(s)).toBe('Moonsilk Line');
-  });
-});
-
-describe('pearl box', () => {
-  it('shows from the first pearl earned, even once they are all spent', () => {
-    const s = newSave();
-    expect(eco.showPearlBox(s)).toBe(false);
-    expect(eco.showPearlBox({ ...s, slots: [rod('aurora'), ...s.slots.slice(1)] })).toBe(false);
-    expect(eco.showPearlBox({ ...s, pearls: 1 })).toBe(true);
-    expect(eco.showPearlBox({ ...s, pearls: 0, boatParts: 1 })).toBe(true);
   });
 });

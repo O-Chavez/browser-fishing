@@ -4,7 +4,7 @@
 // Pure logic for the server and the screens; no Math.pow, so the server and the client agree. Numbers in data/dive.ts.
 import { byId, DEEP_SEA_ROD, FISH, type Fish } from '../data/content';
 import { ABYSS, BOAT_PARTS, DIVE, LINE, MARKER, PEARLS, RATING, ROD, SEA_TIERS, SPOOL_COINS, ZONES, type Behaviour, type Zone } from '../data/dive';
-import { sellValue, type FishTag } from './progression';
+import { sellValue, SHINY_CHANCE, SHINY_VALUE, TAG_BONUS, TAG_CHANCE, type FishTag } from './progression';
 import type { Gaps } from './reel';
 
 /** base^n for a whole n ≥ 0, by repeated multiplication (same result in every JS engine, unlike `Math.pow`). */
@@ -102,33 +102,54 @@ export const pearlMult = (fish: PearlFish): number => (fish.tag ? PEARLS.tag : 1
 export const pearlsFor = (zone: number, marker: number, fish: PearlFish = {}): number =>
   Math.round(PEARLS.zone[zone] * pearlMult(fish) * markerGrowth(zone, marker));
 
-/** Bins for `typicalSale`'s average over a fish's sizes. */
+/** Bins for `meanSale`'s average over a fish's sizes. */
 const SIZE_BINS = 200;
 
-/**
- * An everyday fish's average sale in this zone (plain, before clean-catch and tag bonuses, and before any Abyss
- * marker's growth), worked out from `sellValue` over the size roll (`rollSize`: the mean of two uniform rolls), evenly
- * across the zone's everyday fish.
- */
-export function typicalSale(zone: number): number {
-  const z = zoneOf(zone);
-  let total = 0;
-  for (const id of z.fish) {
-    const f = byId(FISH, id);
-    let sum = 0;
-    for (let i = 0; i < SIZE_BINS; i++) {
-      const t = (i + 0.5) / SIZE_BINS;
-      const p = t < 0.5 ? 4 * t : 4 * (1 - t);
-      sum += p * sellValue(f, f.minSize + t * (f.maxSize - f.minSize));
-    }
-    total += sum / SIZE_BINS;
+/** A fish's average plain sale, worked out from `sellValue` over the size roll (`rollSize`: the mean of two uniform rolls). */
+function meanSale(fish: Fish): number {
+  let sum = 0;
+  for (let i = 0; i < SIZE_BINS; i++) {
+    const t = (i + 0.5) / SIZE_BINS;
+    const p = t < 0.5 ? 4 * t : 4 * (1 - t);
+    sum += p * sellValue(fish, fish.minSize + t * (fish.maxSize - fish.minSize));
   }
-  return total / z.fish.length;
+  return sum / SIZE_BINS;
 }
 
-/** What a plain everyday fish pays here, for the screens: its pearls, and its average coins to the nearest 10. */
+const meanOf = (ids: string[]): number => ids.reduce((a, id) => a + meanSale(byId(FISH, id)), 0) / ids.length;
+
+/**
+ * An everyday fish's average sale in this zone, plain: no legend, shiny, tag or clean-catch bonus, and before any
+ * Abyss marker's growth. What the sea fish's `baseValue`s are set by; the screens show `averageSale`.
+ */
+export const typicalSale = (zone: number): number => meanOf(zoneOf(zone).fish);
+
+/**
+ * What a landed fish sells for in this zone on average (Oscar, 2026-11-13: the shown coins a fish are what a player
+ * really gets): over its everyday fish and its legends (`DIVE.legendChance`) and their sizes, with the shiny chance
+ * (`SHINY_CHANCE`, worth `SHINY_VALUE` times) and the Feisty or Brutish bonus (`TAG_CHANCE`, `TAG_BONUS`) counted in.
+ * About a third over `typicalSale`. Before any Abyss marker's growth, and without what's the player's own: the
+ * clean-catch bonus, a snack or dish, a charm.
+ */
+export function averageSale(zone: number): number {
+  const z = zoneOf(zone);
+  const bite = (1 - DIVE.legendChance) * meanOf(z.fish) + DIVE.legendChance * meanOf(z.legends);
+  return bite * (1 + SHINY_CHANCE * (SHINY_VALUE - 1)) * (1 + TAG_CHANCE * TAG_BONUS);
+}
+
+/** A number to three figures: 1,473 as 1,470, 15,468 as 15,500. */
+function threeFigures(x: number): number {
+  let unit = 1;
+  while (x / unit >= 1000) unit *= 10;
+  return Math.round(x / unit) * unit;
+}
+
+/**
+ * What a fish pays here, for the screens: a plain fish's pearls, and a landed fish's average coins (`averageSale`,
+ * with the Abyss marker's growth) to three figures, since it's an average.
+ */
 export function payAt(zone: number, marker: number): { pearls: number; coins: number } {
-  return { pearls: pearlsFor(zone, marker), coins: Math.round((typicalSale(zone) * markerGrowth(zone, marker)) / 10) * 10 };
+  return { pearls: pearlsFor(zone, marker), coins: threeFigures(averageSale(zone) * markerGrowth(zone, marker)) };
 }
 
 /** The behaviours a fish in this zone fights with, evenly (none on the Shelf). The fight leaves them off for now. */

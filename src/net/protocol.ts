@@ -52,7 +52,7 @@ export interface DiveView {
   rating: Rating;
   /** Metres of line a hooked fish uses here (`lineCost`); one that gets away takes `LINE.lost` more. */
   fishLine: number;
-  /** What a plain everyday fish pays here (`payAt`): its Black Pearls and its average coins. */
+  /** What a fish pays here (`payAt`): a plain fish's Black Pearls, and a landed fish's average coins, legends, shinies and tags counted in. */
   pay: { pearls: number; coins: number };
   /** Coins another spool costs here (`spoolPrice`). */
   spool: number;

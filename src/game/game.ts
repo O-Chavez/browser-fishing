@@ -3339,8 +3339,9 @@ export class Game {
     // Chips only matter inside the casino.
     $('chips').textContent = this.chipsText(s.chips);
     $('chipbox').classList.toggle('hidden', !this.map.casino);
-    $('pearls').textContent = s.pearls.toLocaleString();
-    $('pearlbox').classList.toggle('hidden', !eco.showPearlBox(s));
+    // Black Pearls show as the next boat part's progress on the charter strip; the pearls that fill it say so once.
+    const ready = this.diveHud.boat(s);
+    if (ready && this.diveHud.view) this.toast(`⛵ ${ready} ready! Head home and see Captain Reed.`, 5);
     this.setGateSign();
     this.renderHotbar();
   }
@@ -3423,7 +3424,7 @@ export class Game {
         el.innerHTML = this.diveHud.view ? headHomeHtml(this.diveHud.view) : '';
         break;
       case 'diveend':
-        el.innerHTML = this.diveEnd ? endHtml(this.diveEnd, this.diveEndRecord) : '';
+        el.innerHTML = this.diveEnd ? endHtml(this.diveEnd, this.diveEndRecord, this.s) : '';
         break;
     }
     const slot = document.getElementById('pv-slot');

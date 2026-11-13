@@ -179,6 +179,8 @@ export function matchupWords(g: Gaps): { words: string; too: boolean } {
 export type FishTag = 'feisty' | 'brutish';
 /** How often a fish carries a tag, pond and sea. */
 export const TAG_CHANCE = 1 / 8;
+/** A Feisty or Brutish fish landed is worth this much more, on top of a clean catch (REELING.md, "Temperament"). */
+export const TAG_BONUS = 0.15;
 /**
  * Tiers a tag adds to its axis (Oscar, 2026-11-03): a change you notice in the fight, not a lost fish. Feisty is
  * smaller, since a careful player's strength limit is a cliff at the red's edge (Brutish +0.5 only lengthens the fight).

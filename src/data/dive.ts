@@ -73,8 +73,11 @@ export const ROD = {
   step: 0.4,
   /** Tiers each Abyss level adds. */
   level: 0.1,
-  /** Coins for steps 1 to 8. */
-  stepCoins: [250_000, 400_000, 300_000, 700_000, 550_000, 1_300_000, 1_000_000, 2_400_000],
+  /**
+   * Coins for steps 1 to 8. A zone's two steps come in while its fish earn the next boat part (`BOAT_PARTS`), so the
+   * first ones are cheap (Oscar, 2026-11-13).
+   */
+  stepCoins: [40_000, 90_000, 150_000, 350_000, 600_000, 1_300_000, 1_200_000, 2_400_000],
   /** Abyss level n costs `levelCoins × levelGrow^(n−1)` coins, to the nearest `levelRound`. */
   levelCoins: 1_000_000,
   levelGrow: 1.12,
@@ -120,14 +123,16 @@ export const PEARLS = {
 export const MARKER = { every: 3, grow: 1.12 };
 
 /**
- * The boat parts that open zones, bought from Captain Reed with Black Pearls: zone z needs z of them, in this order.
- * Working names, flagged for Oscar to rename.
+ * The boat parts that open zones, fitted by Captain Reed for Black Pearls: zone z needs z of them, in this order.
+ * Pearls buy nothing else, so the screens show them as progress to the next part, not as a purse. The prices taper in
+ * (Oscar, 2026-11-13): the first part after 5 to 10 minutes on the Shelf, the next 15 to 30 minutes on, then an hour
+ * to an hour and a half, then two to three hours (`scripts/seaeconomy.ts`). Working names, flagged for Oscar to rename.
  */
 export const BOAT_PARTS = [
-  { id: 'sail', name: 'Storm sail', pearls: 150 },
-  { id: 'cutter', name: 'Kelp cutter', pearls: 900 },
-  { id: 'lamps', name: 'Deep lamps', pearls: 2500 },
-  { id: 'keel', name: 'Iron keel', pearls: 6500 },
+  { id: 'sail', name: 'Storm sail', pearls: 30 },
+  { id: 'cutter', name: 'Kelp cutter', pearls: 150 },
+  { id: 'lamps', name: 'Deep lamps', pearls: 1500 },
+  { id: 'keel', name: 'Iron keel', pearls: 10_000 },
 ];
 
 export const DIVE = {

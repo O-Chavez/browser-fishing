@@ -802,7 +802,7 @@ async function seaChecks(): Promise<void> {
       await new Promise((r) => setTimeout(r, 50));
     }
     g.hold(false);
-    // The server's view of the charter follows the catch: the strip's pearls come with it.
+    // The server's view of the charter follows the catch: the strip's coins come with it.
     for (let i = 0; i < 80 && !/This charter\s*[1-9]/.test(document.getElementById('divehud')!.textContent!); i++) await new Promise((r) => setTimeout(r, 50));
     return { seen: [...seen], gained: (g.s.coins as number) - coins, newFish: fishIn() - fish0, depth: g.seaDepth(), strip: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') };
   });
@@ -919,15 +919,25 @@ async function tripChecks(): Promise<void> {
   const atSea = await gear();
   check("charter: at sea the Deep Sea Rod is in hand, the hotbar shows only it, and the rod's step shows", atSea.kind === 'sea' && atSea.shown && !!atSea.rod?.includes('Sea Rod') && atSea.baitAway && atSea.slots === 1 && atSea.levels === 'Rod', JSON.stringify(atSea));
   const hud = await strip();
-  check('charter: casting off shows the strip with the zone and its rating, the full spool and this charter\'s pearls', !(await page.evaluate(() => document.getElementById('divehud')!.classList.contains('hidden'))) && hud.includes('The Shelf') && hud.includes('Easy') && hud.includes('Line · 5 m a fish') && hud.includes('300 m') && /This charter\s*0/.test(hud), hud);
+  /** The pearls toward the Storm sail, as the strip's bar shows them ("3 / 30"), or -1. */
+  const sailPearls = () => page.evaluate(() => Number(/^(\d+) \/ 30$/.exec(document.querySelector('#divehud .part .pn')?.textContent ?? '')?.[1] ?? -1));
+  const pearls0 = await sailPearls();
+  check("charter: casting off shows the strip with the zone and its rating, the full spool, this charter's coins and the next boat part's progress", !(await page.evaluate(() => document.getElementById('divehud')!.classList.contains('hidden'))) && hud.includes('The Shelf') && hud.includes('Easy') && hud.includes('Line · 5 m a fish') && hud.includes('300 m') && /This charter\s*0/.test(hud) && hud.includes('Storm sail') && pearls0 >= 0, hud);
+  const top = await page.evaluate(() => {
+    const box = (id: string) => document.getElementById(id)!.getBoundingClientRect();
+    const [strip, tl] = [box('divehud'), box('hud-tl')];
+    return { off: Math.round((strip.left + strip.right) / 2 - innerWidth / 2), clear: strip.left > tl.right || strip.top > tl.bottom, pearlBox: !!document.getElementById('pearlbox') };
+  });
+  check('charter: the strip is centred on the screen, clear of the level and coins, and there is no pearl purse', Math.abs(top.off) <= 1 && top.clear && !top.pearlBox, JSON.stringify(top));
 
   const seen = await landOne();
   const hooked: string = await page.evaluate(() => (window as any).__hook);
   const after = await strip();
-  check('charter: a hooked fish takes its line as the fight starts and a landed one pays pearls on the strip', seen.includes('reeling') && hooked.includes('295 m') && hooked.includes('−5 m') && after.includes('295 m') && /This charter\s*1\b/.test(after), `${seen.join(',')} · ${hooked} · ${after}`);
+  const pearls1 = await sailPearls();
+  check("charter: a hooked fish takes its line as the fight starts, and a landed one pays coins and moves the boat part's progress on the strip", seen.includes('reeling') && hooked.includes('295 m') && hooked.includes('−5 m') && after.includes('295 m') && /This charter\s*[1-9]/.test(after) && pearls1 > pearls0, `${seen.join(',')} · ${hooked} · ${after} · pearls ${pearls0} -> ${pearls1}`);
 
   const card: string = await page.evaluate(() => (window as any).__card);
-  check('charter: a landed sea fish shows its pearls on the catch card', /Sea fish · sold on the spot/.test(card) && /\+1\b/.test(card) && card.includes('XP') && !/undefined|NaN|easy water/.test(card), card);
+  check('charter: a landed sea fish shows its pearls on the catch card', /Sea fish · sold on the spot/.test(card) && /\+(?:1|2|5|10)\b/.test(card) && card.includes('XP') && !/undefined|NaN|easy water/.test(card), card);
 
   // Head home from the Bag: asks once, says the line left isn't refunded, then the end card.
   await page.evaluate(() => window.__game.openMenu('inventory'));

@@ -3,7 +3,7 @@ import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/
 import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_FISH, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { BOAT_PARTS, glowStep } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
-import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, overGear, type Gifts, pickFish, rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
+import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, overGear, type Gifts, pickFish, rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, TAG_BONUS, type FishTag, type SpotId } from './progression';
 import { P, type Gaps, type ReelTune } from './reel';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
@@ -23,13 +23,6 @@ export { clearSlot, freeSlots } from './state';
 export const hasRod = (s: SaveData, id: string): boolean => s.slots.some((sl) => sl?.k === 'rod' && sl.id === id);
 /** Carried in the hotbar or kept in the locker. */
 export const ownsRod = (s: SaveData, id: string): boolean => hasRod(s, id) || s.locker.rods.includes(id);
-
-/**
- * Whether the HUD's Black Pearl box shows: from the first pearl a player earns, and still after spending them all
- * (pearls only go on boat parts, so a part means pearls were earned). Hidden before that, so it doesn't sit at 0
- * through the early game. A new pearl spend should count here too.
- */
-export const showPearlBox = (s: SaveData): boolean => s.pearls > 0 || s.boatParts > 0;
 
 export const LOCKER_CAP = 200;
 
@@ -226,7 +219,7 @@ export function boatPartError(s: SaveData): string | null {
   const p = nextBoatPart(s.boatParts);
   if (!p) return 'Every boat part is fitted.';
   if (!s.seaRod) return `Boat parts need the ${DEEP_SEA_ROD.name}.`;
-  if (s.pearls < p.pearls) return `The ${p.name} costs ${p.pearls.toLocaleString('en-US')} Black Pearls.`;
+  if (s.pearls < p.pearls) return `The ${p.name} needs ${p.pearls.toLocaleString('en-US')} Black Pearls.`;
   return null;
 }
 
@@ -581,8 +574,7 @@ export interface CatchResult {
 
 /** A clean catch (landed without fraying the line) is worth this much more. */
 export const CLEAN_BONUS = 0.1;
-/** A Feisty or Brutish fish landed is worth this much more, on top of a clean catch (REELING.md, "Temperament"). */
-export const TAG_BONUS = 0.15;
+export { TAG_BONUS };
 
 /**
  * Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins

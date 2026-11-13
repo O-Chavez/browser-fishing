@@ -183,35 +183,35 @@ describe('Room economy', () => {
     const { room, join, atShop } = setup();
     const a = join('Ann');
     const s = a.acct.save;
-    Object.assign(s, { level: 20, seaRod: true, coins: 10_000_000, pearls: 1_000 });
+    Object.assign(s, { level: 20, seaRod: true, coins: 10_000_000, pearls: 100 });
     const atReed = () => room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
     // Not at the stall, nor anywhere but Reed's stand.
     atShop(a);
     room.handle(a.id, { t: 'boatpart' });
     room.handle(a.id, { t: 'rodstep' });
-    expect(s).toMatchObject({ boatParts: 0, rodStep: 0, pearls: 1_000 });
+    expect(s).toMatchObject({ boatParts: 0, rodStep: 0, pearls: 100 });
     atReed();
     // Step 1 is on sale only once the Drop-off is open.
     room.handle(a.id, { t: 'rodstep' });
     expect(s.rodStep).toBe(0);
     expect(last(a.c, 'notice').msg).toMatch(/Storm sail/);
     room.handle(a.id, { t: 'boatpart' });
-    expect(s).toMatchObject({ boatParts: 1, pearls: 850 });
-    expect(last(a.c, 'state').save).toMatchObject({ boatParts: 1, pearls: 850 });
-    // The next part needs 900 pearls.
+    expect(s).toMatchObject({ boatParts: 1, pearls: 70 });
+    expect(last(a.c, 'state').save).toMatchObject({ boatParts: 1, pearls: 70 });
+    // The next part needs 150 pearls.
     room.handle(a.id, { t: 'boatpart' });
     expect(s.boatParts).toBe(1);
-    expect(last(a.c, 'notice').msg).toMatch(/Kelp cutter costs 900/);
+    expect(last(a.c, 'notice').msg).toMatch(/Kelp cutter needs 150/);
     room.handle(a.id, { t: 'rodstep' });
     room.handle(a.id, { t: 'rodstep' });
     room.handle(a.id, { t: 'rodstep' });
-    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 650_000 });
+    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 130_000 });
     // Abyss levels come after the eighth step.
     room.handle(a.id, { t: 'abysslevel' });
     expect(s.abyssLevels).toBe(0);
     Object.assign(s, { rodStep: 8, boatParts: 4 });
     room.handle(a.id, { t: 'abysslevel' });
-    expect(s).toMatchObject({ abyssLevels: 1, coins: 10_000_000 - 650_000 - 1_000_000 });
+    expect(s).toMatchObject({ abyssLevels: 1, coins: 10_000_000 - 130_000 - 1_000_000 });
   });
 
   it('a pond fish lost to a gear wall is noted in the Fishdex as seen', () => {

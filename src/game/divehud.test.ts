@@ -1,7 +1,7 @@
 // The charter screens: Reed's chart and shop, the strip at sea, the spool's-out card, heading home and the end card.
 import { describe, expect, it } from 'vitest';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { DiveHud, catchPearlsHtml, endHtml, fishTagHtml, headHomeHtml, hudHtml, lineLevel, lossText, nextRodText, outHint, outHtml, ratingToast, reedHtml, reedMarkerPick, reedZone, rodProgress, startText, whereText, type ReedSave } from './divehud';
+import { DiveHud, catchPearlsHtml, endHtml, fishTagHtml, headHomeHtml, hudHtml, lineLevel, lossText, nextRodText, outHint, outHtml, partProgress, ratingToast, reedHtml, reedMarkerPick, reedZone, rodProgress, startText, whereText, type ReedSave } from './divehud';
 import { newSave } from './state';
 
 const tally = { landed: 21, lost: 2, pearls: 186, coins: 91_000, spools: 3, spoolCoins: 78_000 };
@@ -52,22 +52,22 @@ describe('charter screens', () => {
     it('has a card for each zone: rating, pay, line a fish and fish a spool, and the spool', () => {
       const h = chart(mid());
       expect(h.match(/class="zcard /g)).toHaveLength(5);
-      expect(card(h, 0)).toBe('The Shelf Easy 1 · 1,090 a fish 5 m a fish · 60 fish a spool Spool: free');
+      expect(card(h, 0)).toBe('The Shelf Easy 1 · 1,470 a fish 5 m a fish · 60 fish a spool Spool: free');
       expect(card(h, 1)).toContain('Easy');
-      expect(card(h, 1)).toContain('3 · 2,010 a fish');
+      expect(card(h, 1)).toContain('3 · 2,710 a fish');
       expect(card(h, 1)).toContain('Spool: 14,000');
-      expect(card(chart(mid(), 2), 2)).toBe('Kelp Deep ⛵ Tough 8 · 3,590 a fish 13 m a fish · 23 fish a spool Spool: 26,000');
+      expect(card(chart(mid(), 2), 2)).toBe('Kelp Deep ⛵ Tough 8 · 4,830 a fish 13 m a fish · 23 fish a spool Spool: 26,000');
     });
 
     it('shows a closed zone locked, dimmed, with what opens it, and not as a button', () => {
       const h = chart(mid());
       expect(card(h, 3)).toContain('🔒');
-      expect(card(h, 3)).toContain('Opens with the Deep lamps: 2,500');
+      expect(card(h, 3)).toContain('Opens with the Deep lamps: 1,500');
       expect(card(h, 3)).not.toContain('Spool');
       expect(h).toContain('class="zcard z3 locked"');
       expect(h).not.toContain('data-act="divefrom" data-id="3"');
       expect(h).toContain('data-act="divefrom" data-id="2"');
-      expect(card(h, 4)).toContain('Opens with the Iron keel: 6,500');
+      expect(card(h, 4)).toContain('Opens with the Iron keel: 10,000');
     });
 
     it('highlights the picked zone, and casts off to it', () => {
@@ -99,10 +99,10 @@ describe('charter screens', () => {
       expect(text(ok)).toContain('Deep Sea Rod · step 2 of 8');
       expect(text(ok)).toContain('Next step: Kelp Deep goes from Tough to Fair, 13 m to 9 m a fish');
       expect(ok).toContain('data-act="rodstep"');
-      expect(text(ok)).toContain('Upgrade 300,000');
-      const poor = chart(mid({ coins: 299_000 }));
+      expect(text(ok)).toContain('Upgrade 150,000');
+      const poor = chart(mid({ coins: 149_000 }));
       expect(poor).not.toContain('data-act="rodstep"');
-      expect(text(poor)).toContain('Need 1,000 more of 300,000');
+      expect(text(poor)).toContain('Need 1,000 more of 150,000');
       const wait = chart(mid({ rodStep: 4 }));
       expect(wait).not.toContain('data-act="rodstep"');
       expect(text(wait)).toContain('On sale when The Twilight opens');
@@ -119,21 +119,32 @@ describe('charter screens', () => {
       expect(nextRodText({ rodStep: 4, abyssLevels: 0 }, 1)).toMatch(/^Next step: The Twilight (stays|goes from)/);
     });
 
-    it('has the boat row: buy, need more, and fully fitted', () => {
-      const ok = chart(mid({ pearls: 2500 }));
-      expect(text(ok)).toContain('Next boat part: Deep lamps Opens the Twilight');
-      expect(ok).toContain('data-act="boatpart"');
-      expect(text(ok)).toContain('Buy 2,500');
+    it("has the boat row: the next part's progress in pearls, ready to fit, and fully fitted", () => {
       const poor = chart(mid());
+      expect(text(poor)).toContain('Next boat part: Deep lamps Opens the Twilight 1,260 / 1,500');
+      expect(poor).toContain('<i style="width:84.0%">');
       expect(poor).not.toContain('data-act="boatpart"');
-      expect(text(poor)).toContain('Need 1,240 more of 2,500');
-      const done = chart(reed({ boatParts: 4 }));
+      expect(text(poor)).toContain('240 to go');
+      const ok = chart(mid({ pearls: 1500 }));
+      expect(ok).toContain('data-act="boatpart"');
+      expect(ok).toContain('class="pbar full"');
+      expect(text(ok)).toContain('1,500 / 1,500 Fit it 1,500');
+      const done = chart(reed({ boatParts: 4, pearls: 23_480 }));
       expect(done).not.toContain('data-act="boatpart"');
-      expect(text(done)).toContain('The boat is fully fitted');
+      expect(done).not.toContain('pbar');
+      expect(text(done)).toContain('The boat is fully fitted Every zone is open · 23,480 Black Pearls');
     });
 
-    it("ends with the player's coins and Black Pearls", () => {
-      expect(text(chart(mid()))).toContain('341,000 coins 1,260 Black Pearls');
+    it("ends with the player's coins; the pearls are the boat row's", () => {
+      const t = text(chart(mid()));
+      expect(t).toContain('341,000 coins');
+      expect(t).not.toContain('Black Pearls');
+    });
+
+    it("works out the next part's progress, carrying pearls past its price", () => {
+      expect(partProgress({ pearls: 12, boatParts: 0 })).toEqual({ name: 'Storm sail', zone: 1, have: 12, need: 30, pct: 40, ready: false });
+      expect(partProgress({ pearls: 36, boatParts: 0 })).toMatchObject({ have: 36, need: 30, pct: 100, ready: true });
+      expect(partProgress({ pearls: 99_999, boatParts: 4 })).toBeNull();
     });
 
     it('has the Abyss marker stepper only once the Abyss is open, from 1 to the furthest reached', () => {
@@ -155,12 +166,22 @@ describe('charter screens', () => {
   });
 
   describe('the strip', () => {
-    it('shows the zone with its rating, the line a fish uses and what the charter has earned', () => {
-      const t = text(hudHtml(view()));
+    const sv = { pearls: 1260, boatParts: 2 };
+
+    it("shows the zone with its rating, the line a fish uses, the charter's coins and the next boat part's progress", () => {
+      const t = text(hudHtml(view(), {}, sv));
       expect(t).toContain('Kelp Deep Tough');
       expect(t).toContain('Line · 13 m a fish');
       expect(t).toContain('199 m');
-      expect(t).toContain('This charter 186 91,000');
+      expect(t).toContain('This charter 91,000 Deep lamps 1,260 / 1,500');
+      expect(hudHtml(view(), {}, sv)).toContain('<i style="width:84.0%">');
+      // Enough pearls: the part is ready for Captain Reed.
+      const ready = hudHtml(view(), {}, { pearls: 1510, boatParts: 2 });
+      expect(text(ready)).toContain('Deep lamps · ready 1,510 / 1,500');
+      expect(ready).toContain('class="part ready"');
+      // With every part fitted, the pearls held; without a save, this charter's.
+      expect(text(hudHtml(view(), {}, { pearls: 23_480, boatParts: 4 }))).toContain('Black Pearls 23,480');
+      expect(text(hudHtml(view()))).toContain('This charter 91,000 Black Pearls 186');
       expect(hudHtml(view({ line: 20 }))).toContain('class="line danger"');
       expect([lineLevel(200), lineLevel(60), lineLevel(25), lineLevel(0)]).toEqual(['ok', 'low', 'danger', 'danger']);
     });
@@ -173,12 +194,13 @@ describe('charter screens', () => {
     });
 
     it('notes the cost of the fish just hooked, and the pearls a landed fish paid', () => {
-      expect(text(hudHtml(view(), { cost: 13 }))).toContain('199 m −13 m');
+      expect(text(hudHtml(view(), { cost: 13 }))).toContain('Line · 13 m a fish −13 m 199 m');
       expect(text(hudHtml(view()))).not.toContain('−13');
-      expect(text(hudHtml(view(), { gain: 8 }))).toContain('186 +8');
+      expect(text(hudHtml(view(), { gain: 8 }, { pearls: 1268, boatParts: 2 }))).toContain('Deep lamps +8 1,268 / 1,500');
+      expect(text(hudHtml(view(), {}, sv))).not.toContain('+8');
       // Drawn at the hook: the bar and the number are as they will be.
       const hooked = hudHtml(view(), { hooked: 13, cost: 13 });
-      expect(text(hooked)).toContain('186 m −13 m');
+      expect(text(hooked)).toContain('−13 m 186 m');
       expect(hooked).toContain('width:62.0%');
       expect(text(hudHtml(view({ line: 5 }), { hooked: 13 }))).toContain('0 m');
     });
@@ -200,12 +222,12 @@ describe('charter screens', () => {
       stage((hud, el) => {
         hud.set(view());
         hud.hook();
-        expect(text(el.innerHTML)).toContain('186 m −13 m');
+        expect(text(el.innerHTML)).toContain('−13 m 186 m');
         hud.set(view({ line: 186, cost: 13 }));
-        expect(text(el.innerHTML)).toContain('186 m −13 m');
+        expect(text(el.innerHTML)).toContain('−13 m 186 m');
         hud.hook();
         hud.set(view({ line: 148, cost: 38, tally: { ...tally, lost: 3 } }));
-        expect(text(el.innerHTML)).toContain('148 m −38 m');
+        expect(text(el.innerHTML)).toContain('−38 m 148 m');
       });
     });
 
@@ -213,13 +235,37 @@ describe('charter screens', () => {
       stage((hud, el) => {
         hud.set(view());
         hud.set(view({ tally: { ...tally, landed: 22, pearls: 194 }, gain: 8 }));
-        expect(text(el.innerHTML)).toContain('194 +8');
+        expect(text(el.innerHTML)).toContain('Black Pearls +8 194');
       });
       stage((hud, el) => {
         hud.set(view({ gain: 8 }));
         expect(text(el.innerHTML)).not.toContain('+8');
       });
     });
+  });
+
+  it("the strip follows the save's pearls, and says once when they make the next boat part ready", () => {
+    const el = { classList: { toggle() {} }, innerHTML: '' } as unknown as HTMLElement;
+    const tag = { classList: { toggle() {}, add() {}, remove() {} }, innerHTML: '' } as unknown as HTMLElement;
+    const g = globalThis as any;
+    const had = 'window' in g;
+    g.window = { setTimeout: () => 0 };
+    try {
+      const hud = new DiveHud(el, tag);
+      // The save as it stands on joining says nothing, even with a part already affordable.
+      expect(hud.boat({ pearls: 1600, boatParts: 2 })).toBeNull();
+      expect(hud.boat({ pearls: 100, boatParts: 3 })).toBeNull(); // the part was fitted
+      hud.set(view());
+      expect(text(el.innerHTML)).toContain('Iron keel 100 / 10,000');
+      expect(hud.boat({ pearls: 9_990, boatParts: 3 })).toBeNull();
+      expect(text(el.innerHTML)).toContain('Iron keel 9,990 / 10,000');
+      expect(hud.boat({ pearls: 10_010, boatParts: 3 })).toBe('Iron keel');
+      expect(text(el.innerHTML)).toContain('Iron keel · ready 10,010 / 10,000');
+      expect(hud.boat({ pearls: 10_030, boatParts: 3 })).toBeNull(); // already ready
+      expect(hud.boat({ pearls: 10_030, boatParts: 3 })).toBeNull(); // nothing changed
+    } finally {
+      if (!had) delete g.window;
+    }
   });
 
   it("writes a sea fish's pearls for the catch card, with why when it paid more", () => {
@@ -231,7 +277,7 @@ describe('charter screens', () => {
   });
 
   describe("the spool's out", () => {
-    const sv = { coins: 100_000, rodStep: 2, abyssLevels: 0, boatParts: 2 };
+    const sv = { coins: 100_000, pearls: 1260, rodStep: 2, abyssLevels: 0, boatParts: 2 };
     const out = view({ state: 'out', line: 0 });
 
     it('shows the fish, the pearls, the coins from fish and on line, and the hint', () => {
@@ -243,6 +289,12 @@ describe('charter screens', () => {
       expect(t).toContain('Line · 3 spools −78,000');
       expect(t).toContain('Tough for your rod: 13 m a fish. The next rod step makes it 9 m.');
       expect(t).toContain('Head home');
+    });
+
+    it("shows the next boat part's progress, and when Captain Reed can fit it", () => {
+      expect(text(outHtml(out, sv))).toContain('⛵ Deep lamps 1,260 / 1,500');
+      expect(text(outHtml(out, { ...sv, pearls: 1500 }))).toContain('⛵ Deep lamps Ready: see Captain Reed 1,500 / 1,500');
+      expect(outHtml(out, { ...sv, boatParts: 4 })).not.toContain('pbar');
     });
 
     it('offers another spool at the zone price, with the key hints', () => {
@@ -268,7 +320,7 @@ describe('charter screens', () => {
       expect(outHint(view({ rating: 'easy', fishLine: 5 }), sv)).toBe('');
       expect(outHint(out, { ...sv, rodStep: 4, boatParts: 2 })).toBe(''); // step 4 is not on sale yet
       expect(outHint(out, sv)).toContain('The next rod step makes it 9 m.');
-      expect(outHint(view({ zone: 4, marker: 5, rating: 'tough', fishLine: 13, state: 'out' }), { coins: 0, rodStep: 8, abyssLevels: 0, boatParts: 4 })).toContain('The next Abyss level makes it');
+      expect(outHint(view({ zone: 4, marker: 5, rating: 'tough', fishLine: 13, state: 'out' }), { coins: 0, pearls: 0, rodStep: 8, abyssLevels: 0, boatParts: 4 })).toContain('The next Abyss level makes it');
     });
   });
 
@@ -306,6 +358,9 @@ describe('charter screens', () => {
     });
 
     it('says when the boat waited and turned back', () => {
+      expect(text(endHtml(end, false, { pearls: 1260, boatParts: 2 }))).toContain('⛵ Deep lamps 1,260 / 1,500');
+      expect(endHtml(end)).not.toContain('pbar');
+      expect(endHtml(end, false, { pearls: 5, boatParts: 4 })).not.toContain('pbar');
       expect(text(endHtml({ ...end, why: 'away' }))).toContain('waited 2 minutes');
       expect(text(endHtml({ ...end, why: 'away' }))).toContain('The charter ended');
       expect(lossText('held-surge')).toContain('through a surge');

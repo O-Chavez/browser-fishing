@@ -57,24 +57,65 @@ export const ratingToast = (r: Rating): string => (r === 'easy' ? 'An easy one.'
 export interface StripNote {
   /** Metres taken at the hook: drawn off the bar and the number before the server's view says so. */
   hooked?: number;
-  /** Metres to note beside the bar, as a red "−13 m". */
+  /** Metres to note over the bar, as a red "−13 m". */
   cost?: number;
   /** Pearls the last landed fish paid, shown for a few seconds. */
   gain?: number;
 }
 
-/** The strip's contents: where, the line and what the charter has earned. */
-export function hudHtml(v: DiveView, note: StripNote = {}): string {
+/** What the screens read from the save to show the next boat part's progress. */
+export interface PartSave {
+  pearls: number;
+  boatParts: number;
+}
+
+/**
+ * Black Pearls as progress (Oscar, 2026-11-13): they only buy boat parts, so the screens show how far along the next
+ * part is instead of a purse.
+ */
+export interface PartProgress {
+  name: string;
+  /** The zone the part opens. */
+  zone: number;
+  have: number;
+  need: number;
+  /** The bar's fill, 0 to 100. */
+  pct: number;
+  /** Enough pearls: Captain Reed can fit it. */
+  ready: boolean;
+}
+
+/** Progress to the next boat part, or null with the boat fully fitted. */
+export function partProgress(s: PartSave): PartProgress | null {
+  const part = nextBoatPart(s.boatParts);
+  if (!part) return null;
+  return { name: part.name, zone: s.boatParts + 1, have: s.pearls, need: part.pearls, pct: Math.max(0, Math.min(100, (s.pearls / part.pearls) * 100)), ready: s.pearls >= part.pearls };
+}
+
+/** A part's progress as a pearl, a bar and "42 / 150". */
+export const partBar = (p: PartProgress, pop = false): string =>
+  `${PEARL}<span class="pbar${p.ready ? ' full' : ''}"><i style="width:${p.pct.toFixed(1)}%"></i></span><span class="pn${pop ? ' pop' : ''}">${num(p.have)} / ${num(p.need)}</span>`;
+
+/**
+ * The strip's contents: where, the line, the coins this charter's fish have paid, and the next boat part's progress
+ * (with every part fitted, the pearls held). Without a save (`s`), the pearls this charter has paid.
+ */
+export function hudHtml(v: DiveView, note: StripNote = {}, s: PartSave | null = null): string {
   const line = Math.max(0, v.line - (note.hooked ?? 0));
   const full = Math.max(0, Math.min(100, (line / LINE.spool) * 100));
   const cost = note.cost ? `<span class="worn">−${note.cost} m</span>` : '';
   const where = v.zone === ABYSS
     ? `<span class="v">Marker ${v.marker} <span class="pips" title="${MARKER.every - v.toNext} fish to the next marker">${'●'.repeat(v.toNext)}${'○'.repeat(Math.max(0, MARKER.every - v.toNext))}</span></span>`
     : `<span class="v">${ratePill(v.rating)}</span>`;
-  const earned = note.gain ? `<span class="gain">+${note.gain}</span>` : '';
-  return `<div><span class="zone">${ZONES[v.zone]?.name ?? ZONES[0].name}</span>${where}</div>
-    <div class="line ${lineLevel(line)}"><span class="lab">Line · ${v.fishLine} m a fish</span><span class="linerow"><span class="bar"><i style="width:${full.toFixed(1)}%"></i></span><span class="m">${Math.floor(line)} m</span>${cost}</span></div>
-    <div><span class="lab">This charter</span><span class="haul"><span class="pnum${note.gain ? ' pop' : ''}">${PEARL}${v.tally.pearls.toLocaleString()}</span>${earned}<span class="dcoins">${COIN} ${v.tally.coins.toLocaleString()}</span></span></div>`;
+  const gain = note.gain ? `<span class="gain">+${note.gain}</span>` : '';
+  const p = s ? partProgress(s) : null;
+  const part = p
+    ? `<div class="part${p.ready ? ' ready' : ''}"><span class="labrow"><span class="lab">${p.name}${p.ready ? ' · ready' : ''}</span>${gain}</span><span class="partrow">${partBar(p, !!note.gain)}</span></div>`
+    : `<div class="part"><span class="labrow"><span class="lab">Black Pearls</span>${gain}</span><span class="partrow">${PEARL}<span class="pn${note.gain ? ' pop' : ''}">${num(s ? s.pearls : v.tally.pearls)}</span></span></div>`;
+  return `<div class="where"><span class="zone">${ZONES[v.zone]?.name ?? ZONES[0].name}</span>${where}</div>
+    <div class="line ${lineLevel(line)}"><span class="labrow"><span class="lab">Line · ${v.fishLine} m a fish</span>${cost}</span><span class="linerow"><span class="bar"><i style="width:${full.toFixed(1)}%"></i></span><span class="m">${Math.floor(line)} m</span></span></div>
+    <div class="earn"><span class="lab">This charter</span><span class="haul">${COIN} ${num(v.tally.coins)}</span></div>
+    ${part}`;
 }
 
 /** The charter strip at the top of the screen, and the hooked sea fish's sticker under it. */
@@ -86,8 +127,24 @@ export class DiveHud {
   private gain = 0;
   /** Metres a hooked fish will take, drawn at the hook until the server's view says so. */
   private hooked = 0;
+  /** The save's pearls and boat parts, for the next part's progress. */
+  private save: PartSave | null = null;
 
   constructor(private readonly el: HTMLElement, private readonly tag: HTMLElement) {}
+
+  /**
+   * The save's pearls and boat parts as they stand. Returns the next boat part's name when these pearls are the ones
+   * that made it ready, so the game can say so once.
+   */
+  boat(s: PartSave): string | null {
+    const before = this.save;
+    if (before && before.pearls === s.pearls && before.boatParts === s.boatParts) return null;
+    this.save = { pearls: s.pearls, boatParts: s.boatParts };
+    if (this.view) this.render();
+    const was = before && before.boatParts === s.boatParts ? partProgress(before) : null;
+    const now = partProgress(s);
+    return was && now && !was.ready && now.ready ? now.name : null;
+  }
 
   /** A new charter state; a fish's line cost and pearls show for a few seconds. */
   set(v: DiveView | null): void {
@@ -117,17 +174,20 @@ export class DiveHud {
     const now = performance.now();
     const cost = this.hooked || (now < this.costUntil ? v.cost ?? 0 : 0);
     const gaining = now < this.gainUntil;
-    // The bar slides from where it was to where it is now.
+    // The line and the boat part's bars slide from where they were to where they are now.
     const dom = typeof this.el.querySelector === 'function';
-    const prev = dom ? this.el.querySelector<HTMLElement>('.bar i')?.style.width : undefined;
-    this.el.innerHTML = hudHtml(v, { hooked: this.hooked, cost, gain: gaining ? this.gain : 0 });
-    const bar = dom ? this.el.querySelector<HTMLElement>('.bar i') : null;
-    if (bar && prev && prev !== bar.style.width) {
+    const BARS = ['.bar i', '.pbar i'];
+    const prev = BARS.map((q) => (dom ? this.el.querySelector<HTMLElement>(q)?.style.width : undefined));
+    this.el.innerHTML = hudHtml(v, { hooked: this.hooked, cost, gain: gaining ? this.gain : 0 }, this.save);
+    BARS.forEach((q, i) => {
+      const bar = dom ? this.el.querySelector<HTMLElement>(q) : null;
+      const from = prev[i];
+      if (!bar || !from || from === bar.style.width) return;
       const to = bar.style.width;
-      bar.style.width = prev;
+      bar.style.width = from;
       void bar.offsetWidth;
       bar.style.width = to;
-    }
+    });
     clearTimeout(this.timer);
     const due = Math.max(!this.hooked && now < this.costUntil ? this.costUntil : 0, gaining ? this.gainUntil : 0);
     if (due) this.timer = window.setTimeout(() => this.render(), due - now + 20);
@@ -228,7 +288,6 @@ export const rodProgress = (s: Pick<ReedSave, 'rodStep' | 'abyssLevels'>): strin
 
 /** "Need [coin] 1,240 more", for a button the player can't afford yet. */
 const needCoins = (n: number) => `Need ${COIN} ${num(n)} more`;
-const needPearls = (n: number) => `Need ${PEARL} ${num(n)} more`;
 
 /** One zone's card on the chart. */
 function zoneCard(s: ReedSave, i: number, picked: boolean, marker: number): string {
@@ -292,14 +351,14 @@ export function reedHtml(o: { say: string; s: ReedSave; pick: number; open: bool
     : s.coins < buy.coins
       ? `<button class="btn off" disabled><span>${needCoins(buy.coins - s.coins)}</span><small>of ${num(buy.coins)}</small></button>`
       : `<button class="btn ok" data-act="${buy.kind === 'step' ? 'rodstep' : 'abysslevel'}"><span>Upgrade</span><small>${COIN} ${num(buy.coins)}</small></button>`;
-  const part = nextBoatPart(s.boatParts);
+  const part = partProgress(s);
   const partRow = part
-    ? `<div class="row"><div>⛵ Next boat part: ${part.name}<small>Opens ${lower(ZONES[s.boatParts + 1].name)}</small></div>${
-        s.pearls < part.pearls
-          ? `<button class="btn off" disabled><span>${needPearls(part.pearls - s.pearls)}</span><small>of ${num(part.pearls)}</small></button>`
-          : `<button class="btn ok" data-act="boatpart"><span>Buy</span><small>${PEARL} ${num(part.pearls)}</small></button>`
+    ? `<div class="row"><div>⛵ Next boat part: ${part.name}<small>Opens ${lower(ZONES[part.zone].name)}</small><span class="prog">${partBar(part)}</span></div>${
+        part.ready
+          ? `<button class="btn ok" data-act="boatpart"><span>Fit it</span><small>${PEARL} ${num(part.need)}</small></button>`
+          : `<button class="btn off" disabled><span>${PEARL} ${num(part.need - part.have)} to go</span></button>`
       }</div>`
-    : `<div class="row"><div>⛵ The boat is fully fitted<small>Every zone is open</small></div></div>`;
+    : `<div class="row"><div>⛵ The boat is fully fitted<small>Every zone is open · ${PEARL} ${num(s.pearls)} Black Pearls</small></div></div>`;
   const price = spoolPrice(o.pick);
   const go = s.coins >= price
     ? `<button class="btn ok" data-act="castoff" data-id="${o.pick}"><span>⚓ Cast off to ${lower(ZONES[o.pick].name)}</span><small>one spool · ${price ? `${num(price)} coins` : 'free'}</small></button>`
@@ -308,11 +367,18 @@ export function reedHtml(o: { say: string; s: ReedSave; pick: number; open: bool
     <div class="zcards">${cards}</div>${abyss}
     <div class="rows"><div class="row"><div>🎣 ${rodProgress(s)}<small>${nextRodText(s, marker)}</small></div>${rodBtn}</div>${partRow}</div>
     <div class="btns"><button class="btn plain" data-act="close">Not now</button>${go}</div>
-    <div class="foot"><span>${COIN} ${num(s.coins)} coins</span><span>${PEARL} ${num(s.pearls)} Black Pearls</span></div></div>`;
+    <div class="foot"><span>${COIN} ${num(s.coins)} coins</span></div></div>`;
 }
 
-/** What the spool's-out card needs of the save: the coins on hand, and the rod and boat as they stand. */
-export type OutSave = Pick<ReedSave, 'coins' | 'rodStep' | 'abyssLevels' | 'boatParts'>;
+/** What the spool's-out card needs of the save: the coins and pearls on hand, and the rod and boat as they stand. */
+export type OutSave = Pick<ReedSave, 'coins' | 'pearls' | 'rodStep' | 'abyssLevels' | 'boatParts'>;
+
+/** The next boat part's row on the cards after fishing: its progress, or that Captain Reed can fit it. Nothing with the boat fully fitted. */
+function partRowHtml(s: PartSave | null): string {
+  const p = s ? partProgress(s) : null;
+  if (!p) return '';
+  return `<div class="row part${p.ready ? ' ready' : ''}"><span>⛵ ${p.name}${p.ready ? '<small>Ready: see Captain Reed</small>' : ''}</span><span class="prog">${partBar(p)}</span></div>`;
+}
 
 /** The hint on the spool's-out card: when the zone isn't Easy and the next rod purchase is on sale and would cut the line a fish uses. */
 export function outHint(v: DiveView, s: OutSave): string {
@@ -339,6 +405,7 @@ export function outHtml(v: DiveView, s: OutSave): string {
     <div class="rows">
       <div class="row">Coins from fish <b>${COIN} ${signed(t.coins)}</b></div>
       <div class="row">Line · ${plural(t.spools, 'spool')} <b>${t.spoolCoins ? `${COIN} ${signed(-t.spoolCoins)}` : 'free'}</b></div>
+      ${partRowHtml(s)}
     </div>
     ${hint ? `<p class="note">${hint}</p>` : ''}
     <div class="btns"><button class="btn plain" data-act="headhome"><span><kbd>2</kbd>Head home</span></button>${spool}</div></div>`;
@@ -352,8 +419,11 @@ export function headHomeHtml(v: DiveView): string {
     <div class="btns"><button class="btn plain" data-act="close">Stay out</button><button class="btn ok" data-act="headhome">Head home</button></div></div>`;
 }
 
-/** The card after a charter: where it ended, what it caught and what it came to. `record`: it reached a new furthest Abyss marker. */
-export function endHtml(e: DiveEnd, record = false): string {
+/**
+ * The card after a charter: where it ended, what it caught and what it came to, and how far along the next boat part
+ * is (`s`). `record`: it reached a new furthest Abyss marker.
+ */
+export function endHtml(e: DiveEnd, record = false, s: PartSave | null = null): string {
   const t = e.tally;
   const title = e.why === 'away' ? 'The charter ended' : 'Home safe!';
   const why = e.why === 'away' ? `<div class="why">The boat waited ${Math.round(DIVE.holdMs / 60000)} minutes for you, then turned back.</div>` : '';
@@ -369,6 +439,7 @@ export function endHtml(e: DiveEnd, record = false): string {
       <div class="row">Coins from fish <b>${COIN} ${signed(t.coins)}</b></div>
       <div class="row">Line · ${plural(t.spools, 'spool')} <b>${t.spoolCoins ? `${COIN} ${signed(-t.spoolCoins)}` : 'free'}</b></div>
       <div class="row net">Net coins <b>${COIN} ${signed(net)}</b></div>
+      ${partRowHtml(s)}
     </div>
     <div class="btns"><button class="btn" data-act="close">OK</button></div></div>`;
 }

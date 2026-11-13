@@ -3,17 +3,20 @@
 // every zone at every rod step, with the style that costs them the least line per landed fish. Then:
 //  1. a table per hand, zone and rod step: fight seconds, share landed, fish a spool, minutes a spool, and pearls and
 //     net coins (sales less the spool) a spool and an hour;
-//  2. a journey for each hand from a fresh Deep Sea Rod: it always fishes whichever open zone moves it fastest toward
-//     its next purchases (the next boat part in pearls, the next rod step on sale in coins) and buys as soon as it can,
-//     printing when each zone opens and each rod step is bought.
+//  2. a journey for each hand from a fresh Deep Sea Rod: it always fishes whichever open zone it can afford a spool in
+//     that moves it fastest toward its next purchases (the next boat part in pearls, the next rod step on sale in
+//     coins), and heads home to buy as soon as it can, giving up what's left of the spool, printing when each zone
+//     opens and each rod step is bought.
 // The Abyss is fished at its first marker. A spool is counted as a charter of its own (the flight out, `CHARTER`).
+// Coins count a shiny's worth at its odds (`SHINY`), so a cell isn't swung by the few it happens to roll.
 // Run: npx tsx scripts/seaeconomy.ts [fights a cell, default 120]; START=<coins> brings coins from the lake;
-// HANDS=careful,skilled picks the hands.
+// HANDS=careful,skilled picks the hands. To try other prices without editing the data: PARTS=30,220,1500,8000 (the
+// four boat parts, in pearls) and STEPS=40,80,180,350,600,1300,1200,2400 (the rod's eight steps, in thousands of coins).
 import { BOAT_PARTS, LINE, ROD, ZONES } from '../src/data/dive';
 import { lineCost, pearlsFor, RATING_NAMES, rodStepCost, rollSeaFish, seaGaps, seaRating, spoolPrice, stepZone, type SeaRod } from '../src/game/dive';
 import { CLEAN_BONUS, TAG_BONUS } from '../src/game/economy';
 import { mulberry } from '../src/game/env';
-import { rollFishGaps, rollSize, sellValue } from '../src/game/progression';
+import { rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_VALUE } from '../src/game/progression';
 import { botFight, HANDS, type Hand } from '../src/game/reelbot';
 
 const N = Number(process.argv[2] ?? 120);
@@ -21,6 +24,10 @@ const N = Number(process.argv[2] ?? 120);
 const BITE = 4.5, AROUND = 4, CHARTER = 45;
 const START = Number(process.env.START ?? 0);
 const hands = (process.env.HANDS ?? 'careful,skilled').split(',') as Hand[];
+/** What the shiny chance adds to a fish's sale, on average. */
+const SHINY = 1 + SHINY_CHANCE * (SHINY_VALUE - 1);
+if (process.env.PARTS) process.env.PARTS.split(',').forEach((p, i) => (BOAT_PARTS[i].pearls = Number(p)));
+if (process.env.STEPS) ROD.stepCoins = process.env.STEPS.split(',').map((c) => Number(c) * 1000);
 
 /** One hand in one zone at one rod step, per fight: seconds, landed share, metres of line, pearls and coins. */
 interface Cell { t: number; land: number; m: number; pearls: number; coins: number }
@@ -49,7 +56,7 @@ function cell(hand: Hand, zone: number, steps: number): Cell {
       if (!ok) continue;
       landed++;
       pearls += pearlsFor(zone, marker, { tag: m.tag, legend: !!bite.fish.legend });
-      coins += Math.round(sellValue(bite.fish, size) * (f.frays === 0 ? 1 + CLEAN_BONUS : 1) * (m.tag ? 1 + TAG_BONUS : 1));
+      coins += Math.round(sellValue(bite.fish, size) * SHINY * (f.frays === 0 ? 1 + CLEAN_BONUS : 1) * (m.tag ? 1 + TAG_BONUS : 1));
     }
     const cost = landed ? metres / landed : Infinity;
     if (!best || cost < bestCost) {
@@ -86,11 +93,36 @@ for (const hand of hands) {
     }
 }
 
+/** The journey heads home to buy as soon as it can afford something: it looks this many times a spool. */
+const LOOKS = 12;
+const hm = (h: number) => (h < 1 ? `${Math.round(h * 60)}min` : `${h.toFixed(1)}h`);
+
 console.log('');
 for (const hand of hands) {
   let parts = 0, steps = 0, coins = START, pearls = 0, hours = 0;
   const opened: number[] = [];
   const log: string[] = [];
+  /** Buys what it can afford: the next rod step on sale, the next boat part. */
+  const buy = (): boolean => {
+    let bought = false;
+    for (let again = true; again;) {
+      again = false;
+      if (steps < ROD.steps && stepZone(steps + 1) <= parts && coins >= rodStepCost(steps + 1)) {
+        coins -= rodStepCost(++steps);
+        log.push(`rod step ${steps} @${hm(hours)}`);
+        again = bought = true;
+      }
+      const p = BOAT_PARTS[parts];
+      if (p && pearls >= p.pearls) {
+        pearls -= p.pearls;
+        parts++;
+        opened.push(hours);
+        log.push(`${ZONES[parts].name} opens @${hm(hours)}`);
+        again = bought = true;
+      }
+    }
+    return bought;
+  };
   let guard = 0;
   while ((parts < BOAT_PARTS.length || steps < ROD.steps) && guard++ < 20_000) {
     // What it still needs: the next boat part's pearls, and the next rod step's coins once that step is on sale.
@@ -98,32 +130,23 @@ for (const hand of hands) {
     const needP = part ? Math.max(1, part.pearls - pearls) : 0;
     const onSale = steps < ROD.steps && stepZone(steps + 1) <= parts;
     const needC = onSale ? Math.max(1, rodStepCost(steps + 1) - coins) : 0;
-    let pick = spool(hand, 0, steps), best = -Infinity;
+    let zone = 0, pick = spool(hand, 0, steps), best = -Infinity;
     for (let z = 0; z <= parts; z++) {
+      if (coins < spoolPrice(z)) continue;
       const r = spool(hand, z, steps);
       const score = (needP ? r.pearls / r.hours / needP : 0) + (needC ? r.coins / r.hours / needC : 0) + (!needP && !needC ? r.coins / r.hours : 0);
-      if (score > best) (best = score), (pick = r);
+      if (score > best) (best = score), (pick = r), (zone = z);
     }
-    hours += pick.hours;
-    pearls += pick.pearls;
-    coins += pick.coins;
-    for (let again = true; again;) {
-      again = false;
-      if (steps < ROD.steps && stepZone(steps + 1) <= parts && coins >= rodStepCost(steps + 1)) {
-        coins -= rodStepCost(++steps);
-        log.push(`rod step ${steps} @${hours.toFixed(1)}h`);
-        again = true;
-      }
-      const p = BOAT_PARTS[parts];
-      if (p && pearls >= p.pearls) {
-        pearls -= p.pearls;
-        parts++;
-        opened.push(hours);
-        log.push(`${ZONES[parts].name} opens @${hours.toFixed(1)}h`);
-        again = true;
-      }
+    // One charter: the spool is paid for on casting off, and what's left of it is given up on heading home to buy.
+    coins -= spoolPrice(zone);
+    hours += CHARTER / 3600;
+    for (let i = 0; i < LOOKS; i++) {
+      hours += (pick.hours - CHARTER / 3600) / LOOKS;
+      pearls += pick.pearls / LOOKS;
+      coins += (pick.coins + spoolPrice(zone)) / LOOKS;
+      if (buy()) break;
     }
   }
-  console.log(`${hand}${START ? ` (+${START / 1000}k coins brought)` : ''}: zones open at ${opened.map((h) => h.toFixed(1)).join(' / ')} h; all ${ROD.steps} rod steps by ${hours.toFixed(1)} h; left over ${Math.round(coins / 1000)}k coins, ${Math.round(pearls)} pearls`);
+  console.log(`${hand}${START ? ` (+${START / 1000}k coins brought)` : ''}: zones open at ${opened.map(hm).join(' / ')}; all ${ROD.steps} rod steps by ${hm(hours)}; left over ${Math.round(coins / 1000)}k coins, ${Math.round(pearls)} pearls`);
   console.log(`   ${log.join(' · ')}`);
 }
