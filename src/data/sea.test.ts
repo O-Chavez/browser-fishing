@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BOAT, DEEP_LOOKS, deepLookAt, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, onDeck, screenSprayAt, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
+import { BOAT, DEEP_LOOKS, deepLookAt, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, onDeck, screenSprayAt, seaDepthFor, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
 import { MAPS } from './maps';
 import { isWater, onDock, setAtSea, standHeight } from '../game/env';
 
@@ -15,6 +15,20 @@ describe('sea zones', () => {
     expect(zoneAt(90).id).toBe('twilight');
     expect(zoneAt(91).id).toBe('abyss');
     expect(zoneAt(999).id).toBe('abyss');
+  });
+
+  it("draws a charter's zone at about its middle, and the Abyss rougher each marker up to a cap", () => {
+    expect([0, 1, 2, 3].map((z) => seaDepthFor(z))).toEqual([8, 26, 48, 76]);
+    // Markers only count in the Abyss.
+    expect(seaDepthFor(2, 30)).toBe(48);
+    expect([0, 1, 2, 3].map((z) => zoneAt(seaDepthFor(z)).id)).toEqual(['shelf', 'dropoff', 'kelp', 'twilight']);
+    expect(seaDepthFor(4, 1)).toBe(100);
+    expect(seaDepthFor(4)).toBe(100);
+    expect(seaDepthFor(4, 2)).toBe(103);
+    expect(seaDepthFor(4, 11)).toBe(130);
+    expect(seaDepthFor(4, 51)).toBe(250);
+    expect(seaDepthFor(4, 500)).toBe(250);
+    expect(zoneAt(seaDepthFor(4, 1)).id).toBe('abyss');
   });
 });
 

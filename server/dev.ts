@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
-import { zoneAt } from '../src/data/sea';
+import { ABYSS, BOAT_PARTS, ROD, ZONES } from '../src/data/dive';
+import { seaDepthFor } from '../src/data/sea';
 import * as eco from '../src/game/economy';
 import { DISHES } from '../src/data/smokehouse';
 import * as smoke from '../src/game/smoke';
@@ -54,12 +55,10 @@ export interface DevTarget {
   teleport(map: string): void;
   /** A day fraction (see `dayFraction`), or null to follow the clock again. */
   setTime(f: number | null): void;
-  /** The dive depth the sea's look follows, for this player only. */
+  /** The depth the sea's look follows (`seaDepthFor`), for this player only. */
   setDepth(depth: number): void;
-  /** Starts a dive at this depth (any depth, charted or not), ending one under way without banking it. */
-  dive(depth: number): void;
-  /** At a ledge: dive on, or surface. True if the save changed. */
-  ledge(a: 'on' | 'surface'): boolean | null;
+  /** Starts a charter in this zone and Abyss marker (any, open or not) without paying, ending one under way. */
+  dive(zone: number, marker: number): void;
   clearDig(): void;
   /** Puts the player at a spot on their map, past the server's move check. */
   place(x: number, z: number): void;
@@ -68,10 +67,10 @@ export interface DevTarget {
 export const TIMES: Record<string, number> = { day: 0.2, dusk: 0.5, night: 0.7, dawn: 0.93 };
 
 export const HELP = [
-  '/coins N · /chips N · /pearls N · /level N · /rodlevel N · /linelevel N',
+  '/coins N · /chips N · /pearls N · /level N · /rodstep 0-8 · /abysslevel N · /boat 0-4',
   '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
-  '/sea [depth] (start a dive there; 0 is the harbour) · /ledge on|up (at a ledge)',
+  '/sea <zone 0-4> [marker] (start a charter there, free; 0 is the Shelf, 4 the Abyss)',
   '/dig (reset worm cooldown) · /tips (show the new-player tips again) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
   '/resetpass <name> <new password>',
@@ -80,10 +79,10 @@ export const HELP = [
 
 /** There is no level cap; this only keeps `/level` typos sane. */
 const MAX_DEV_LEVEL = 999;
-/** Rod and line levels have no cap; this keeps `/rodlevel` and `/linelevel` typos sane. */
-const MAX_DEV_ROD_LEVEL = 999;
-/** Dives have no bottom either; this keeps `/sea` typos sane. */
-const MAX_DEV_DEPTH = 999;
+/** Abyss levels have no cap; this keeps `/abysslevel` typos sane. */
+const MAX_DEV_ABYSS_LEVEL = 999;
+/** The Abyss has no last marker either; this keeps `/sea 4` typos sane. */
+const MAX_DEV_MARKER = 999;
 
 const int = (v: string | undefined, lo: number, hi: number): number | null => {
   const n = Number(v);
@@ -107,17 +106,23 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       s[cmd] = n;
       return ok(`${{ coins: 'Coins', chips: 'Chips', pearls: 'Black Pearls' }[cmd]} set to ${n}.`);
     }
-    case 'rodlevel': {
-      const n = int(args[0], 0, MAX_DEV_ROD_LEVEL);
-      if (n === null) return say(`Usage: /rodlevel 0-${MAX_DEV_ROD_LEVEL}`);
-      s.rodLevel = n;
-      return ok(`Deep Sea Rod level set to +${n}.`);
+    case 'rodstep': {
+      const n = int(args[0], 0, ROD.steps);
+      if (n === null) return say(`Usage: /rodstep 0-${ROD.steps}`);
+      s.rodStep = n;
+      return ok(`Deep Sea Rod set to step ${n}.`);
     }
-    case 'linelevel': {
-      const n = int(args[0], 0, MAX_DEV_ROD_LEVEL);
-      if (n === null) return say(`Usage: /linelevel 0-${MAX_DEV_ROD_LEVEL}`);
-      s.seaLine = n;
-      return ok(`Deep Sea Line level set to +${n}.`);
+    case 'abysslevel': {
+      const n = int(args[0], 0, MAX_DEV_ABYSS_LEVEL);
+      if (n === null) return say(`Usage: /abysslevel 0-${MAX_DEV_ABYSS_LEVEL}`);
+      s.abyssLevels = n;
+      return ok(`Deep Sea Rod set to Abyss level ${n}.`);
+    }
+    case 'boat': {
+      const n = int(args[0], 0, BOAT_PARTS.length);
+      if (n === null) return say(`Usage: /boat 0-${BOAT_PARTS.length}`);
+      s.boatParts = n;
+      return ok(`Boat parts set to ${n}: ${n ? `${ZONES[n].name} and nearer open` : 'the Shelf only'}.`);
     }
     case 'level': {
       const n = int(args[0], 1, MAX_DEV_LEVEL);
@@ -189,20 +194,15 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       return ok(`Teleported to ${m.name}.`);
     }
     case 'sea': {
-      const depth = args[0] === undefined ? 1 : int(args[0], 0, MAX_DEV_DEPTH);
-      if (depth === null) return say(`Usage: /sea [depth 0-${MAX_DEV_DEPTH}]`);
+      const zone = int(args[0], 0, ZONES.length - 1);
+      const marker = args[1] === undefined ? 1 : int(args[1], 1, MAX_DEV_MARKER);
+      if (zone === null || marker === null) return say(`Usage: /sea <zone 0-${ZONES.length - 1}> [marker 1-${MAX_DEV_MARKER}, the Abyss's]`);
       const sea = Object.values(t.maps).find((m) => m.sea);
       if (!sea) return say('There is no sea on this server.');
-      t.setDepth(depth);
-      t.dive(depth);
-      return ok(`Diving from ${zoneAt(depth).name}, depth ${depth}.`);
-    }
-    case 'ledge': {
-      const a = args[0] === 'on' ? 'on' : args[0] === 'up' ? 'surface' : null;
-      if (!a) return say('Usage: /ledge on|up');
-      const res = t.ledge(a);
-      if (res === null) return say("You're not at a ledge.");
-      return { lines: [a === 'on' ? 'Diving on.' : 'Surfaced.'], changed: res };
+      const m = zone === ABYSS ? marker : 0;
+      t.setDepth(seaDepthFor(zone, m));
+      t.dive(zone, m);
+      return ok(`Sailing to ${ZONES[zone].name}${zone === ABYSS ? `, marker ${m}` : ''}.`);
     }
     case 'goto': {
       const x = Number(args[0]);

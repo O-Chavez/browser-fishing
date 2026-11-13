@@ -23,7 +23,7 @@ const MAGS = { x: SMOKEHOUSE.x - 0.75 * Math.sin(SMOKEHOUSE.facing), z: SMOKEHOU
 /**
  * Captain Reed's corner: his own beach under the west headland, at the foot of the lane from the quay's west end
  * (docs/map-rework/harbour.json). The seaplane floats in the cove with its nose toward the sand, in view from the
- * pier and both jetties; Reed stands on the beach by the CHARTERS signpost, players come back from a dive on the
+ * pier and both jetties; Reed stands on the beach by the CHARTERS signpost, players come back from a charter on the
  * sand beside him, and the Furthest Out board stands at the top of his lane by the worm patch (its look and words
  * are `FURTHEST_BOARD` in src/game/furthestboard.ts).
  */
@@ -126,8 +126,6 @@ export interface MapDef {
   gate: Spot;
   /** Live "Top Anglers" board; E opens the player list. */
   leaderboard: Spot;
-  /** Dressing mirror; E opens the wardrobe. */
-  mirror: Spot;
   campfire: Spot;
   /** Beach patch where broke players with no bait can dig up worms. */
   worms?: { x: number; z: number };
@@ -145,7 +143,7 @@ export interface MapDef {
   town: TownDef;
   /** Mags Cinder's smoke shack: the middle of its counter, facing out; the shack stands behind it. */
   smokehouse?: Spot;
-  /** Captain Reed's seaplane charters (`HARBOUR`): where he stands, the plane, his signpost and where dives come back to. */
+  /** Captain Reed's seaplane charters (`HARBOUR`): where he stands, the plane, his signpost and where charters come back to. */
   harbour?: { stand: Spot; plane: Spot; sign: Spot; board: Spot; diveStart: { x: number; z: number; yaw: number } };
   /** The open sea: players stand on the charter boat's deck (`BOAT` in sea.ts) instead of the shore. */
   sea?: boolean;
@@ -180,8 +178,6 @@ export const MAPS: MapDef[] = [
     // Top Anglers and Thanks stand along the quay deck's rear at its east end, facing the water: in full view from
     // the pier without standing in front of the Smokehouse (which the plan's spot by the pier root did).
     leaderboard: { x: 11, z: 13.6, facing: Math.PI },
-    // The wardrobe mirror at the quay deck's front west corner, facing along the deck toward the pier and clear of Reed's lane.
-    mirror: { x: -12.2, z: 10.8, facing: Math.PI / 2 },
     // The campfire on the east headland, seen across the water from the jetty bench.
     campfire: { x: 18, z: 2, facing: 0 },
     // Beside Reed's lane, at the top of his beach.
@@ -304,10 +300,10 @@ export const MAPS: MapDef[] = [
           name: 'Captain Reed', face: 'grin', ...HARBOUR.stand, coat: 0x2f4f4f, hat: 0x2b2b2b,
           // Talking to Reed opens his charter panel (`reedHtml`, src/game/divehud.ts), which leads with his next line.
           lines: [
-            'Every five fish you land, we reach a marker: head home with the haul, or sail on.',
-            'One spool of line a charter. Run it out and you keep your pearls, but the bonus is gone.',
-            "I'll fly you straight out to any marker up to your furthest.",
-            'Pearls come from fish that test your rod and line. The easy ones are just supper.',
+            'A charter runs on one spool of line. Every fish you hook uses some. Shelf line is free.',
+            'Further out, fish pay more and fight harder. Coins buy line and a better rod.',
+            'Black Pearls buy the boat part that opens the next zone.',
+            'The Abyss has no end. Every third fish takes us a marker further.',
           ],
         },
       ],

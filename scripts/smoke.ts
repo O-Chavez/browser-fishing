@@ -49,7 +49,7 @@ const rich = { k: 'fish' as const, fishId: FISH.find((f) => f.tier === 5)!.id, s
 const save = { ...newSave(), level: 20, coins: 5000, chips: 100, location: 'casino', slots: [{ k: 'rod', id: 'twig' }, { k: 'bait', id: 'worm', n: 15 }, fish(0), fish(1), rich] };
 // Smokehouse stages already seen, so their banner and jingle don't land in the middle of the casino checks.
 save.smoke.seen = STAGES.map((st) => st.id);
-// The Aurora Rod in the locker: charters still need the Deep Sea Rod, which the trip checks buy at the stall.
+// The Aurora Rod in the locker: charters still need the Deep Sea Rod, which the trip checks buy from Captain Reed.
 save.locker.rods.push('aurora');
 fs.writeFileSync(
   path.join(dataDir, 'accounts.json'),
@@ -709,7 +709,7 @@ async function casinoChecks(): Promise<void> {
   await ctx.close();
 }
 
-// ---------- the open sea (dev console; the dive trip comes later) ----------
+// ---------- the open sea (dev console: /sea <zone> starts a free charter) ----------
 
 async function seaChecks(): Promise<void> {
   const ctx = await browser.createBrowserContext();
@@ -724,7 +724,7 @@ async function seaChecks(): Promise<void> {
     await sleep(300);
   };
   await say('/login smoke smoke-dev-pass');
-  await say('/sea 20');
+  await say('/sea 1');
   const trip = await page.evaluate(async () => {
     const card = document.getElementById('castoff')!;
     const t0 = performance.now();
@@ -739,7 +739,13 @@ async function seaChecks(): Promise<void> {
   });
   check('sea: /sea takes you to the open sea, with the boat and no pond hub', trip.sea && trip.boat && !trip.hub, JSON.stringify(trip));
   check('sea: the "Casting off" card covers the trip, names the zone, then clears', trip.shown.includes('Casting off') && trip.shown.includes('The Drop-off') && trip.gone, trip.shown);
-  check('sea: depth 20 sets the Drop-off mood', Math.abs(trip.mood - 0.6842) < 0.01, String(trip.mood));
+  const want = await page.evaluate(async () => {
+    const sea = await import('/src/data/sea.ts' as any);
+    return sea.seaMood(sea.seaDepthFor(1, 0)) as number;
+  });
+  await page.waitForFunction((m) => Math.abs((window.__game.world as any).mood - m) < 0.02, { timeout: 8000 }, want).catch(() => {});
+  const mood = await page.evaluate(() => (window.__game.world as any).mood as number);
+  check("sea: the Drop-off charter sets the Drop-off's mood", Math.abs(mood - want) < 0.02, `${mood} vs ${want}`);
   if (!trip.sea) return void (await ctx.close());
 
   // Walk toward the rail and beyond: the deck holds you.
@@ -779,7 +785,7 @@ async function seaChecks(): Promise<void> {
   await page.screenshot({ path: `${SHOTS}/sea.png` });
   check('sea: a cast over the rail lands in the water and floats on the swell', cast.visible && cast.z < -3 && cast.gap < 0.2 && cast.phase !== 'idle', JSON.stringify(cast));
 
-  // Fight the sea fish out: the server replays it with its behaviour, sells it as it lands and takes the boat deeper.
+  // Fight the sea fish out: the server replays it with its behaviour, sells it as it lands and takes line off the spool.
   const sea = await page.evaluate(async () => {
     const g = window.__game;
     const coins = g.s.coins as number;
@@ -796,10 +802,11 @@ async function seaChecks(): Promise<void> {
       await new Promise((r) => setTimeout(r, 50));
     }
     g.hold(false);
-    await new Promise((r) => setTimeout(r, 1500));
-    return { seen: [...seen], gained: (g.s.coins as number) - coins, newFish: fishIn() - fish0, depth: g.seaDepth() };
+    // The server's view of the charter follows the catch: the strip's pearls come with it.
+    for (let i = 0; i < 80 && !/This charter\s*[1-9]/.test(document.getElementById('divehud')!.textContent!); i++) await new Promise((r) => setTimeout(r, 50));
+    return { seen: [...seen], gained: (g.s.coins as number) - coins, newFish: fishIn() - fish0, depth: g.seaDepth(), strip: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') };
   });
-  check('sea: a landed sea fish is sold on the spot and the boat goes a depth deeper', sea.seen.includes('result') && sea.gained > 1000 && sea.newFish === 0 && sea.depth === 21, JSON.stringify(sea));
+  check('sea: a landed sea fish is sold on the spot, takes its line off the spool and the zone stays the Drop-off', sea.seen.includes('result') && sea.gained > 1000 && sea.newFish === 0 && sea.depth === 26 && sea.strip.includes('Drop-off') && /\D(28\d|29\d) m/.test(sea.strip) && /This charter\s*[1-9]/.test(sea.strip), JSON.stringify(sea));
   await page.evaluate(() => window.__game.press());
   await sleep(300);
 
@@ -824,19 +831,21 @@ async function seaChecks(): Promise<void> {
   await ctx.close();
 }
 
-// ---------- a charter from Captain Reed (D3) ----------
+// ---------- a charter from Captain Reed ----------
 
 async function tripChecks(): Promise<void> {
   const ctx = await browser.createBrowserContext();
   const page = await openPage(`http://localhost:${VITE_PORT}/?name=Smoke&room=smoke`, ctx, TOKEN);
   await page.waitForFunction(() => window.__game.online() && (window.__game.world as any).hub, { timeout: 15000 });
   await page.evaluate(() => { window.__game.activate(); window.__game.day(0.4); });
-  const tab = () => page.evaluate(() => (document.getElementById('menu')!.classList.contains('hidden') ? '' : document.getElementById('tab')!.className + ' ' + document.getElementById('tab')!.textContent));
+  const tab = () => page.evaluate(() => (document.getElementById('menu')!.classList.contains('hidden') ? '' : document.getElementById('tab')!.className + ' ' + document.getElementById('tab')!.textContent!.replace(/\s+/g, ' ')));
+  const strip = () => page.evaluate(() => document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' '));
   const arrived = (sea: boolean) => page.waitForFunction((sea) => !!(window.__game.world as any)[sea ? 'sea' : 'hub'] && document.getElementById('castoff')!.classList.contains('hidden'), { timeout: 20000, polling: 100 }, sea);
-  /** Casts and fights a fish out, letting go in the red, then clears the catch card. */
+  /** Casts and fights a fish out, letting go in the red, then clears the catch card. Keeps the strip as the fight began. */
   const landOne = () => page.evaluate(async () => {
     const g = window.__game;
     const seen = new Set<string>();
+    (window as any).__hook = '';
     g.press();
     await new Promise((r) => setTimeout(r, 400));
     g.release();
@@ -844,13 +853,15 @@ async function tripChecks(): Promise<void> {
     while (performance.now() - t0 < 60000) {
       const st = g.state();
       seen.add(st.phase);
+      if (st.phase === 'reeling' && !(window as any).__hook) (window as any).__hook = document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ');
       if (st.phase === 'bite') g.press();
       else if (st.phase === 'reeling') g.hold(st.surging ? (st.tension ?? 0) < 0.7 : (st.tension ?? 0) < 0.6);
       else if (st.phase === 'result' || (st.phase === 'idle' && seen.has('reeling'))) break;
       await new Promise((r) => setTimeout(r, 50));
     }
     g.hold(false);
-    await new Promise((r) => setTimeout(r, 1500));
+    for (let i = 0; i < 80 && !/This charter\s*[1-9]|Spool/.test(document.getElementById('divehud')!.textContent! + document.getElementById('menu')!.textContent!); i++) await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 300));
     (window as any).__card = document.getElementById('catch')!.textContent!.replace(/\s+/g, ' ');
     if (g.state().phase === 'result') g.press();
     g.release();
@@ -873,27 +884,21 @@ async function tripChecks(): Promise<void> {
     await sleep(300);
     return tab();
   };
-  // The Aurora Rod alone doesn't open charters: Reed sends you to the stall for the Deep Sea Rod.
+  // The Aurora Rod alone doesn't open charters: Reed says what a charter is and sells the Deep Sea Rod.
   const refused = await toReed();
-  check('charter: without the Deep Sea Rod, Captain Reed sends you to the stall and offers no Cast off', refused.includes('tab-reed') && refused.includes('need the Deep Sea Rod') && !refused.includes('Cast off'), refused.slice(0, 200));
+  check('charter: without the Deep Sea Rod, Captain Reed says what a charter is, sells the rod and offers no Cast off', refused.includes('tab-reed') && refused.includes("A charter is a day's fishing at sea") && refused.includes('It takes the Deep Sea Rod') && !refused.includes('Cast off'), refused.slice(0, 240));
   await page.evaluate(() => window.__game.closeMenu());
   await dev('/coins 130000');
-  await page.evaluate(() => {
-    const h = (window.__game.world as any).hub;
-    window.__game.teleport(h.vendorSpot.x + Math.cos(h.npcYaw) * 2, h.vendorSpot.z - Math.sin(h.npcYaw) * 2);
-  });
-  await sleep(600);
-  await page.evaluate(() => window.__game.openMenu('shop'));
-  await sleep(200);
-  await page.click('#menu [data-shop="sea"]');
-  await sleep(200);
+  await page.waitForFunction(() => window.__game.s.coins === 130000, { timeout: 4000 }).catch(() => {});
+  await page.evaluate(() => window.__game.interact());
+  await sleep(300);
   await page.click('#menu [data-act="buysearod"]');
   await sleep(800);
   const bought = await page.evaluate(() => ({ seaRod: window.__game.s.seaRod, coins: window.__game.s.coins, rods: window.__game.s.locker.rods.join(',') }));
-  check("charter: the Deep Sea Rod is bought at the stall's Sea gear tab for 100,000 coins, with nothing put in the bag", bought.seaRod === true && bought.coins === 30000 && bought.rods === 'aurora', JSON.stringify(bought));
-  await page.evaluate(() => window.__game.closeMenu());
-  const reed = await toReed();
-  check('charter: Captain Reed offers a charter from the harbour with a Cast off button', reed.includes('tab-reed') && reed.includes('Start at the harbour') && reed.includes('Cast off'), reed.slice(0, 160));
+  check("charter: the Deep Sea Rod is bought from Captain Reed for 100,000 coins, with nothing put in the bag", bought.seaRod === true && bought.coins === 30000 && bought.rods === 'aurora', JSON.stringify(bought));
+  const chart = await tab();
+  check("charter: Reed's chart offers the Shelf with a free spool, the other zones locked, and the rod and boat rows", chart.includes('The Shelf') && chart.includes('Spool: free') && chart.includes('Cast off to the Shelf') && chart.includes('one spool · free') && chart.includes('Opens with the Storm sail') && chart.includes('step 0 of 8') && chart.includes('Next boat part: Storm sail'), chart.slice(0, 400));
+  await page.screenshot({ path: `${SHOTS}/trip-chart.png` });
   await page.click('#menu [data-act="castoff"]');
   /** The rod in hand and the hotbar's rod and bait slots. */
   const gear = () => page.evaluate(() => {
@@ -912,19 +917,19 @@ async function tripChecks(): Promise<void> {
   await page.keyboard.press('Digit1');
   await sleep(300);
   const atSea = await gear();
-  check("charter: at sea the Deep Sea Rod is in hand, the hotbar shows only it, and its and the line's levels show", atSea.kind === 'sea' && atSea.shown && !!atSea.rod?.includes('Sea Rod') && atSea.baitAway && atSea.slots === 1 && atSea.levels === 'RodLine', JSON.stringify(atSea));
-  const hud = await page.evaluate(() => ({ shown: !document.getElementById('divehud')!.classList.contains('hidden'), text: document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' ') }));
-  check('charter: Cast off sails out from the harbour, with the strip showing the zone, the line and the haul', hud.shown && hud.text.includes('The Shelf') && hud.text.includes('300 m') && hud.text.includes('5 fish to marker 5') && hud.text.includes('3 markers to the Drop-off'), hud.text);
+  check("charter: at sea the Deep Sea Rod is in hand, the hotbar shows only it, and the rod's step shows", atSea.kind === 'sea' && atSea.shown && !!atSea.rod?.includes('Sea Rod') && atSea.baitAway && atSea.slots === 1 && atSea.levels === 'Rod', JSON.stringify(atSea));
+  const hud = await strip();
+  check('charter: casting off shows the strip with the zone and its rating, the full spool and this charter\'s pearls', !(await page.evaluate(() => document.getElementById('divehud')!.classList.contains('hidden'))) && hud.includes('The Shelf') && hud.includes('Easy') && hud.includes('Line · 5 m a fish') && hud.includes('300 m') && /This charter\s*0/.test(hud), hud);
 
   const seen = await landOne();
-  const after = await page.evaluate(() => document.getElementById('divehud')!.textContent!.replace(/\s+/g, ' '));
-  const lit = await page.evaluate(() => document.querySelectorAll('#divehud .trail i.on').length);
-  check('charter: a landed fish lights a fish on the strip', seen.includes('reeling') && lit === 1 && after.includes('4 fish to marker 5'), `${seen.join(',')} · ${after}`);
+  const hooked: string = await page.evaluate(() => (window as any).__hook);
+  const after = await strip();
+  check('charter: a hooked fish takes its line as the fight starts and a landed one pays pearls on the strip', seen.includes('reeling') && hooked.includes('295 m') && hooked.includes('−5 m') && after.includes('295 m') && /This charter\s*1\b/.test(after), `${seen.join(',')} · ${hooked} · ${after}`);
 
   const card: string = await page.evaluate(() => (window as any).__card);
-  check('charter: a landed sea fish in pearl water shows its pearls on the catch card', /Sea fish · sold on the spot/.test(card) && /\+\d+/.test(card) && card.includes('XP') && !/undefined|NaN|no pearls/.test(card), card);
+  check('charter: a landed sea fish shows its pearls on the catch card', /Sea fish · sold on the spot/.test(card) && /\+1\b/.test(card) && card.includes('XP') && !/undefined|NaN|easy water/.test(card), card);
 
-  // Head home between markers, from the Bag: the card says the pearls are kept.
+  // Head home from the Bag: asks once, says the line left isn't refunded, then the end card.
   await page.evaluate(() => window.__game.openMenu('inventory'));
   await sleep(200);
   await page.click('#menu [data-act="askhome"]');
@@ -934,28 +939,58 @@ async function tripChecks(): Promise<void> {
   await arrived(false);
   await sleep(800);
   const early = await tab();
-  check('charter: heading home between markers asks first, then brings you back with the "Headed home" card', ask.includes('tab-headhome') && early.includes('Headed home') && early.includes('Fish sold along the way') && !/sank|sunk/i.test(early), `${ask.slice(0, 60)} | ${early.slice(0, 120)}`);
+  check('charter: heading home asks first and says the line left is not refunded', ask.includes('tab-headhome') && ask.includes('Head home?') && ask.includes("295 m of line left. It isn't refunded.") && ask.includes('Stay out'), ask.slice(0, 160));
+  check('charter: heading home brings you back with the "Home safe!" card and the tally', early.includes('Home safe!') && early.includes('The Shelf') && early.includes('Fish landed 1') && early.includes('Net coins') && !/sank|sunk|undefined|NaN/i.test(early), early.slice(0, 260));
+  await page.screenshot({ path: `${SHOTS}/trip-end.png` });
   await page.click('#menu [data-act="close"]');
   await page.keyboard.press('Digit1');
   await sleep(300);
   const home = await gear();
   check('charter: back home the pond rod is in hand again, with the whole hotbar back', home.kind === 'pond' && home.shown && !home.rod?.includes('Sea Rod') && !home.baitAway && home.slots > 2 && home.levels === '', JSON.stringify(home));
 
-  // From league 4, one fish reaches the marker at 5: its choice waits for the catch card, then 1 heads home with the haul.
-  await dev('/sea 4');
+  // The stall has no sea gear tab any more, only a signpost to Captain Reed on its Gear tab.
+  await page.evaluate(() => {
+    const h = (window.__game.world as any).hub;
+    window.__game.teleport(h.vendorSpot.x + Math.cos(h.npcYaw) * 2, h.vendorSpot.z - Math.sin(h.npcYaw) * 2);
+  });
+  await sleep(600);
+  await page.evaluate(() => window.__game.openMenu('shop'));
+  await sleep(300);
+  const stall = await page.evaluate(() => ({ text: document.getElementById('tab')!.textContent!.replace(/\s+/g, ' '), seaTab: !!document.querySelector('#menu [data-shop="sea"]') }));
+  check("charter: the stall's Gear tab points to Captain Reed for deep sea gear, and has no Sea gear tab", stall.text.includes('Deep sea gear: see Captain Reed on the west beach') && !stall.seaTab, stall.text.slice(0, 160));
+  await page.evaluate(() => window.__game.closeMenu());
+
+  // Running a spool out: at Abyss marker 999 one hooked fish takes the whole spool, so the card shows after its catch card.
+  await dev('/sea 4 999');
   await arrived(true);
   await sleep(500);
+  const abyss = await strip();
+  check('charter: the Abyss strip shows the marker with a pip for each fish toward the next', abyss.includes('The Abyss') && abyss.includes('Marker 999') && abyss.includes('○○○'), abyss);
+  await page.screenshot({ path: `${SHOTS}/trip-abyss.png` });
   await landOne();
-  await page.waitForFunction(() => document.getElementById('tab')!.classList.contains('tab-marker') && !document.getElementById('menu')!.classList.contains('hidden'), { timeout: 5000 }).catch(() => {});
-  const marker = await tab();
-  check('charter: reaching a marker offers Head home or Sail on', marker.includes('Marker 5') && marker.includes('Head home') && marker.includes('Sail on'), marker.slice(0, 160));
-  await page.screenshot({ path: `${SHOTS}/trip-marker.png` });
-  await page.keyboard.press('Digit1');
+  await page.waitForFunction(() => document.getElementById('tab')!.classList.contains('tab-marker') && !document.getElementById('menu')!.classList.contains('hidden'), { timeout: 8000 }).catch(() => {});
+  const out = await tab();
+  const coinsNow: number = await page.evaluate(() => window.__game.s.coins);
+  check("charter: running the spool out shows \"Spool's out\" with its tally, another spool and Head home", out.includes("Spool's out") && out.includes('Coins from fish') && out.includes('Line · 1 spool') && (coinsNow >= 83000 ? out.includes('Another spool') : out.includes('Need') && out.includes('for another spool')) && out.includes('Head home'), out.slice(0, 260));
+  await page.screenshot({ path: `${SHOTS}/trip-spool-out.png` });
+  await page.evaluate(() => window.__game.closeMenu());
+  await dev('/coins 200000');
+  await page.waitForFunction(() => window.__game.s.coins === 200000, { timeout: 4000 }).catch(() => {});
+  await page.evaluate(() => window.__game.openMenu('marker'));
+  await sleep(200);
+  await page.click('#menu [data-act="spool"]');
+  await sleep(800);
+  const again = await strip();
+  check('charter: another spool carries on in the same zone and marker with a full spool and the pearls kept', again.includes('Marker 999') && again.includes('300 m') && !(await page.evaluate(() => document.getElementById('divehud')!.classList.contains('hidden'))), again);
+  await page.evaluate(() => window.__game.openMenu('inventory'));
+  await sleep(200);
+  await page.click('#menu [data-act="askhome"]');
+  await sleep(200);
+  await page.click('#menu [data-act="headhome"]');
   await arrived(false);
   await sleep(800);
   const safe = await tab();
-  const chart = await page.evaluate(() => window.__game.s.sea);
-  check('charter: Head home at a marker banks the haul, charts it and shows "Home safe!"', safe.includes('Home safe!') && safe.includes('Marker 5 charted') && chart.ledges.includes(5), `${safe.slice(0, 120)} · ${JSON.stringify(chart)}`);
+  check('charter: Head home in the Abyss shows "Home safe!", the marker, and two spools of line', safe.includes('Home safe!') && safe.includes('The Abyss · marker 999') && safe.includes('Line · 2 spools'), safe.slice(0, 260));
   await page.click('#menu [data-act="close"]');
   await ctx.close();
 }

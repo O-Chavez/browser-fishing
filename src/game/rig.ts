@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { DEEP_SEA_LINE } from '../data/content';
+import { SEA_SPOOL_COLOR } from '../data/content';
 
 /** The Deep Sea Line's colour, on the Deep Sea Rod's spool. */
-const DEEP_SEA_BLUE = DEEP_SEA_LINE.color;
+const DEEP_SEA_BLUE = SEA_SPOOL_COLOR;
 
 class Spring {
   vel = 0;

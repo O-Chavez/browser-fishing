@@ -1,23 +1,23 @@
 import { DEEP_SEA_ROD, FISH, byId } from '../src/data/content';
-import { DIVE, DIVES_OPEN, type Behaviour } from '../src/data/dive';
+import { ABYSS, DIVE, DIVES_OPEN, type Behaviour } from '../src/data/dive';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot, type FishTag } from '../src/game/progression';
-import { afterFight, canStartAt, diveOn, lineWorn, surface } from '../src/game/dive';
-import { replayFight, type Gaps, type LossReason, type ReelTune, type ReelWear } from '../src/game/reel';
+import { afterFight, canStart, markerGrowth, newSpool, pearlsFor, spoolPrice } from '../src/game/dive';
+import { replayFight, type Gaps, type LossReason, type ReelTune } from '../src/game/reel';
 import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type FurthestRow, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, WHEEL_MS, type RouletteBet } from '../src/data/casino';
 import * as cas from '../src/game/casino';
 import { SMOKE_RANGE, dishById } from '../src/data/smokehouse';
 import * as smoke from '../src/game/smoke';
-import { keepRecordHaul, newSave, type SaveData, type Slot } from '../src/game/state';
+import { newSave, type SaveData, type Slot } from '../src/game/state';
 import { markTip } from '../src/game/tips';
 import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
-import { diveView, expired, healRun, newRun, sinkRun, type DiveRun } from './dive';
+import { diveEnd, diveView, expired, newRun, type DiveRun } from './dive';
 import type { SmokeStats } from './smokestats';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
@@ -84,8 +84,6 @@ const MOVE_BUDGET = 20;
 const SETTLE_MS = 1500;
 /** After the bite, a cast dropped with no fight log was the player missing the strike (about 1.4 s), plus the network. */
 const MISS_MS = 3000;
-/** A fish dropped without a fight to show for it costs the line as a snap. */
-const GONE: ReelWear = { lineOut: 0, frays: 0, snapped: true };
 /** Coins change nearly every tick on a busy server, so the leaderboard goes out at most this often. */
 export const BOARD_MS = 1000;
 /** How often the server's clock goes out again, so day and night stay in step if a device's clock changes. */
@@ -179,11 +177,11 @@ export class Room {
   join(conn: Conn, acct: Account, color?: number): number {
     if (color !== undefined) eco.setBodyColor(acct.save, int(color));
     const id = this.nextId++;
-    // A dive waits a while for a player who dropped out; after that it has ended, keeping the haul without its bonus.
-    let run = acct.dive ? healRun(acct.dive, eco.seaGear(acct.save)) : null;
+    // A charter waits a while for a player who dropped out; after that it has simply ended.
+    let run = acct.dive ?? null;
     let sunk: DiveEnd | null = null;
     if (run && expired(run, this.now())) {
-      sunk = sinkRun(run, acct.save, 'away');
+      sunk = diveEnd(run, 'away');
       acct.dive = undefined;
       run = null;
       this.onChange();
@@ -282,14 +280,18 @@ export class Room {
       case 'buyrod':
         changed = this.atVendor(m) && this.stocks(m).rods.includes(str(msg.id)) && eco.buyRod(s, str(msg.id));
         break;
+      // Captain Reed sells the Deep Sea Rod, its steps and Abyss levels, and the boat parts.
       case 'buysearod':
-        changed = this.atVendor(m) && eco.buySeaRod(s);
+        changed = this.atReed(m) && eco.buySeaRod(s);
         break;
-      case 'levelrod':
-        changed = this.atVendor(m) && eco.levelRod(s);
+      case 'rodstep':
+        changed = this.atReed(m) && this.ok(m, eco.rodBuyError(s)) && eco.buyRodStep(s);
         break;
-      case 'levelline':
-        changed = this.atVendor(m) && eco.levelSeaLine(s);
+      case 'abysslevel':
+        changed = this.atReed(m) && this.ok(m, eco.rodBuyError(s)) && eco.buyAbyssLevel(s);
+        break;
+      case 'boatpart':
+        changed = this.atReed(m) && this.ok(m, eco.boatPartError(s)) && eco.buyBoatPart(s);
         break;
       case 'buyline':
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));
@@ -380,7 +382,7 @@ export class Room {
         break;
       case 'reset':
         m.pending = null;
-        if (this.runOf(m)) this.endDive(m, sinkRun(m.acct.dive!, m.acct.save, 'quit'));
+        if (this.runOf(m)) this.endDive(m, diveEnd(m.acct.dive!, 'quit'));
         this.resetAccount(m);
         changed = true;
         break;
@@ -418,7 +420,7 @@ export class Room {
         m.pending = null;
         this.syncCarry(m);
         if (!p) return;
-        // On a dive, the line pays for the fight. At the pond a fish lost to a gear wall is noted in the Fishdex, but
+        // On a charter, the line pays for the fish. At the pond a fish lost to a gear wall is noted in the Fishdex, but
         // only if the replayed log shows a fight that ended in a snap or a run-off: a cast reeled in early saw nothing.
         if (!this.runOf(m)) {
           const fight = typeof msg.h === 'string' && msg.h ? replayFight(p.d, p.seed, msg.h, p.tune) : null;
@@ -431,10 +433,10 @@ export class Room {
         break;
       }
       case 'dive':
-        changed = this.startDive(m, msg.from);
+        changed = this.startDive(m, msg.zone, msg.marker ?? 0);
         break;
-      case 'ledge':
-        changed = this.ledge(m, msg.a);
+      case 'spool':
+        changed = this.spool(m);
         break;
       case 'headhome':
         changed = this.headHome(m);
@@ -565,12 +567,11 @@ export class Room {
       teleport: (map) => this.teleport(m, map),
       setTime: (f) => { m.dayFrac = time = f; },
       setDepth: (d) => { depth = d; },
-      dive: (d) => {
+      dive: (zone, marker) => {
         m.acct.dive = undefined;
         m.pending = null;
-        this.launch(m, d);
+        this.launch(m, zone, marker);
       },
-      ledge: (a) => (this.runOf(m)?.dive.state === 'ledge' ? this.ledge(m, a) : null),
       clearDig: () => this.dugAt.delete(m.acct),
       place: (x, z) => this.place(m.info.id, x, z),
     }, cmd.toLowerCase(), args);
@@ -659,66 +660,82 @@ export class Room {
     return Object.values(this.maps).find((x) => x.sea);
   }
 
-  /** The dive this member is on, if any. */
+  /** The charter this member is on, if any. */
   private runOf(m: Member): DiveRun | null {
     const run = m.acct.dive;
-    return run && m.info.dive === run.id ? healRun(run, eco.seaGear(m.acct.save)) : null;
+    return run && m.info.dive === run.id ? run : null;
   }
 
-  /** Starts a dive at Captain Reed's seaplane, from the harbour or a charted ledge, for a player who owns the Deep Sea Rod. */
-  private startDive(m: Member, from: unknown): boolean {
-    const s = m.acct.save;
+  /** Close enough to Captain Reed to start a charter or buy from him; says where he is if not. */
+  private atReed(m: Member): boolean {
     const h = this.maps[m.info.map]?.harbour;
-    if (!h || Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) > DIVE.standRange) return this.deny(m, "Charters start at Captain Reed's seaplane on the west beach.");
-    if (m.acct.dive || m.pending) return false;
+    return (!!h && Math.hypot(m.info.x - h.stand.x, m.info.z - h.stand.z) <= DIVE.standRange) || this.deny(m, "Captain Reed's seaplane is on the west beach.");
+  }
+
+  /**
+   * Starts a charter at Captain Reed's seaplane for a player who owns the Deep Sea Rod: in an open zone, and in the
+   * Abyss at a marker up to the furthest (`canStart`), paying the zone's spool.
+   */
+  private startDive(m: Member, zone: unknown, marker: unknown): boolean {
+    const s = m.acct.save;
+    if (!this.atReed(m) || m.acct.dive || m.pending) return false;
     if (!this.chartersOpen) return this.deny(m, "Reed's still working on his seaplane. Charters open soon!");
     if (!eco.ownsSeaRod(s)) return this.deny(m, `Charters need the ${DEEP_SEA_ROD.name}.`);
-    const start = int(from);
-    if (!Number.isInteger(start) || !canStartAt(s.sea, start)) return this.deny(m, "Reed sails from the harbour or any marker up to your furthest.");
-    return this.launch(m, start);
+    if (!canStart(s, zone, marker)) return this.deny(m, zone === ABYSS ? 'Reed sails to any Abyss marker up to your furthest.' : "Reed only sails to the zones your boat is fitted for.");
+    const z = zone as number;
+    const price = spoolPrice(z);
+    if (s.coins < price) return this.deny(m, `A spool for this zone costs ${price.toLocaleString('en-US')} coins.`);
+    s.coins -= price;
+    return this.launch(m, z, marker as number);
   }
 
-  /** Puts the player on a new dive's sea at `start`. The dive's state goes first, so the sea is built at its depth. */
-  private launch(m: Member, start: number): boolean {
+  /** Puts the player on a new charter's sea. The charter's state goes first, so the sea is built for its zone. */
+  private launch(m: Member, zone: number, marker: number): boolean {
     const sea = this.seaMap();
     if (!sea) return false;
-    const run = newRun(start, m.acct.name, eco.seaGear(m.acct.save));
+    const run = newRun(zone, marker, m.acct.name, eco.seaRod(m.acct.save));
     m.acct.dive = run;
     m.info.dive = run.id;
+    this.noteAbyss(m, run);
     this.setAct(m, null);
     m.conn.send({ t: 'divestate', dive: diveView(run) });
     this.teleport(m, sea.id);
     return true;
   }
 
-  /** At a ledge: dive on, or surface, banking the haul, charting the ledge and taking the player back to the harbour. */
-  private ledge(m: Member, a: unknown): boolean {
+  /** Keeps the furthest Abyss marker a charter has reached on the save (`abyssRecord`). */
+  private noteAbyss(m: Member, run: DiveRun): void {
+    const s = m.acct.save;
+    if (run.dive.zone === ABYSS && run.dive.marker > s.abyssRecord) s.abyssRecord = run.dive.marker;
+  }
+
+  /** Out of line: another spool at the zone's price, and fishing on in the same zone and marker. */
+  private spool(m: Member): boolean {
     const run = this.runOf(m);
-    if (!run || run.dive.state !== 'ledge' || m.pending) return false;
-    if (a === 'on') {
-      diveOn(run.dive);
-      run.worn = run.lost = undefined;
-      m.conn.send({ t: 'divestate', dive: diveView(run) });
-      return false;
-    }
-    if (a !== 'surface') return false;
-    const res = surface(run.dive, m.acct.save.sea)!;
-    m.acct.save.pearls += res.pearls;
-    // The Furthest Out board shows what the record's charter banked: the numbers on its "Home safe!" card.
-    keepRecordHaul(m.acct.save.sea, res.ledge, res.record, { pearls: res.pearls, fish: res.fish.length, coins: run.coins });
-    this.endDive(m, { result: 'surfaced', ledge: res.ledge, pearls: res.pearls, record: res.record, fish: res.fish.length, coins: run.coins });
+    const s = m.acct.save;
+    if (!run || run.dive.state !== 'out') return false;
+    const price = spoolPrice(run.dive.zone);
+    if (s.coins < price) return this.deny(m, `Another spool costs ${price.toLocaleString('en-US')} coins.`);
+    s.coins -= price;
+    newSpool(run.dive);
+    run.cost = run.lost = run.gain = undefined;
+    m.conn.send({ t: 'divestate', dive: diveView(run) });
     return true;
   }
 
-  /** Between ledges: give up and head home, keeping the haul without its bonus; the fish were already sold. Not mid-cast. */
+  /** Ends the charter and flies home, at any time outside a fight: a cast still waiting for its bite is reeled in. Nothing is lost. */
   private headHome(m: Member): boolean {
     const run = this.runOf(m);
-    if (!run || run.dive.state !== 'fishing' || m.pending) return false;
-    this.endDive(m, sinkRun(run, m.acct.save, 'home'));
+    if (!run || (m.pending && this.now() >= m.pending.biteAt)) return false;
+    if (m.pending) {
+      m.pending = null;
+      this.setAct(m, null);
+    }
+    this.endDive(m, diveEnd(run, 'home'));
     return true;
   }
 
-  /** Ends the dive and brings the player back to the harbour; the new save follows from the caller. */
+  /** Ends the charter and brings the player back to the harbour; the new save follows from the caller. */
   private endDive(m: Member, end: DiveEnd): void {
     m.acct.dive = undefined;
     delete m.info.dive;
@@ -728,38 +745,44 @@ export class Room {
     this.onChange();
   }
 
-  /** Applies a finished fight to the dive: the line it wore, the fish and its pearls (`pearlsFor`, with its tag), kept as `gain` for the HUD; ends the dive if the line ran out, keeping the haul without its bonus. */
-  private fightOver(m: Member, run: DiveRun, p: Pending, landed: boolean, wear: ReelWear, lost?: LossReason | 'gone'): void {
-    const before = run.dive.pearls;
-    afterFight(run.dive, p.fishId, landed, wear, p.tag ?? null);
-    run.gain = landed ? run.dive.pearls - before : undefined;
-    run.worn = lineWorn(wear, landed);
+  /**
+   * Applies a finished fight to the charter: a landed fish's pearls (`pearlsFor`, with its tag and whether it's a
+   * legend) go to the save now, beside the coins it sold for (`coins`), and the line pays for the fish (`afterFight`).
+   * The pearls are kept as `gain` for the HUD. An Abyss marker reached is kept as the record.
+   */
+  private fightOver(m: Member, run: DiveRun, p: Pending, landed: boolean, coins = 0, lost?: LossReason | 'gone'): void {
+    const d = run.dive;
+    const pearls = landed ? pearlsFor(d.zone, d.marker, { tag: p.tag ?? null, legend: !!byId(FISH, p.fishId).legend }) : 0;
+    if (landed) m.acct.save.pearls += pearls;
+    const res = afterFight(d, landed ? { pearls, coins } : null);
+    run.gain = landed ? pearls : undefined;
+    run.cost = res.cost;
     run.lost = lost;
+    if (res.marker) this.noteAbyss(m, run);
     m.conn.send({ t: 'divestate', dive: diveView(run) });
-    if (run.dive.state === 'sunk') this.endDive(m, sinkRun(run, m.acct.save, 'line', lost));
   }
 
   /**
-   * A fish lost on a dive. The replayed button log says what the fight cost the line; with no log, a cast dropped soon
-   * after the bite missed the strike and costs nothing, and anything later counts as a snap. True if the dive changed.
+   * A fish lost on a charter. With no button log, a cast dropped soon after the bite missed the strike and costs
+   * nothing; anything else was hooked, and costs its line and the lost fish's. True if the charter changed.
    */
   private seaLost(m: Member, p: Pending, h: unknown): boolean {
     const run = this.runOf(m)!;
     const fight = typeof h === 'string' && h ? replayFight(p.d, p.seed, h, p.tune) : null;
     if (!fight && this.now() < p.biteAt + MISS_MS) return false;
     const ended = fight && (fight.status === 'snapped' || fight.status === 'escaped');
-    this.fightOver(m, run, p, false, ended ? fight.wear : { ...GONE, lineOut: fight?.wear.lineOut ?? 0 }, ended ? fight.reason ?? 'gone' : 'gone');
+    this.fightOver(m, run, p, false, 0, ended ? fight.reason ?? 'gone' : 'gone');
     // A fish lost over the gear in a fight the log shows is noted in the Fishdex, as at the pond.
     if (ended) eco.recordSeaSighting(m.acct.save, byId(FISH, p.fishId), p.d);
     return true;
   }
 
-  /** Drops the fish on the line: on a dive, one that had bitten costs a snap (leaving or recasting mid-fight). */
+  /** Drops the fish on the line: on a charter, one that had bitten is lost (leaving or recasting mid-fight). */
   private abandon(m: Member): void {
     const p = m.pending;
     m.pending = null;
     const run = this.runOf(m);
-    if (p && run && this.now() >= p.biteAt + MISS_MS) this.fightOver(m, run, p, false, GONE, 'gone');
+    if (p && run && this.now() >= p.biteAt + MISS_MS) this.fightOver(m, run, p, false, 0, 'gone');
   }
 
   private deny(m: Member, msg: string): false {
@@ -914,7 +937,7 @@ export class Room {
     return true;
   }
 
-  /** A cast on a dive: no bait, and the fish and its fight come from the dive's depth. */
+  /** A cast on a charter: no bait, and the fish and its fight come from the charter's zone, marker and rod. */
   private seaCast(m: Member, x: number, z: number): boolean {
     const s = m.acct.save;
     const fail = (msg: string) => {
@@ -923,12 +946,12 @@ export class Room {
     };
     const run = this.runOf(m);
     if (!run) return fail("You're not on a charter. Book one at Captain Reed's stand.");
-    if (run.dive.state !== 'fishing') return fail('Choose at the marker first: head home with the haul, or sail on.');
+    if (run.dive.state !== 'fishing') return fail('Out of line: buy another spool, or head home.');
     const can = finite(x, z) ? eco.canCastAt(s, true) : 'hands';
     if (can !== 'ok') return fail(eco.CAST_MESSAGES[can]);
     this.abandon(m);
     if (!this.runOf(m)) return true;
-    const roll = eco.rollSeaCast(s, run.dive.depth, this.rng);
+    const roll = eco.rollSeaCast(s, run.dive.zone, run.dive.marker, run.dive.rod, this.rng);
     m.pending = { fishId: roll.fishId!, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.b ? { b: roll.b } : {}), ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) };
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
@@ -937,7 +960,7 @@ export class Room {
 
   /**
    * Completes the pending catch if replaying the fight from its seed and the button log `h` lands the fish, and the
-   * fight fits in the time since the bite. The replay's `wear` (frays, line taken) is what the dive will spend.
+   * fight fits in the time since the bite. On a charter the fish is sold as it lands and pays its pearls.
    */
   private land(m: Member, h: unknown): boolean {
     const p = m.pending;
@@ -953,22 +976,20 @@ export class Room {
     if (!fight || why) {
       console.warn(`catch refused (${why}): ${m.acct.name}, ${p.fishId} at gaps ${JSON.stringify(p.d)}`);
       this.setAct(m, null);
-      // On a dive, a fish that wasn't really landed still cost the line.
-      if (run) this.fightOver(m, run, p, false, fight && fight.status !== 'reeling' && fight.status !== 'caught' ? fight.wear : { ...GONE, lineOut: fight?.wear.lineOut ?? 0 }, fight?.reason ?? 'gone');
+      // On a charter, a fish that wasn't really landed was still hooked: it costs its line and the lost fish's.
+      if (run) this.fightOver(m, run, p, false, 0, fight?.reason ?? 'gone');
       return !!run;
     }
-    // On a dive the fish is sold as it's landed: the hotbar couldn't hold a dive's catch.
-    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean, !!run, p.tag ?? null);
+    // On a charter the fish is sold as it's landed (the hotbar couldn't hold a charter's catch), worth more each Abyss marker.
+    const grow = run ? markerGrowth(run.dive.zone, run.dive.marker) : 1;
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean, !!run, p.tag ?? null, grow);
     if (!res.stored) {
       this.setAct(m, null);
       return false;
     }
     for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
     this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(res.mult > 1 ? { mult: res.mult } : {}) });
-    if (run) {
-      run.coins += res.sold ?? 0;
-      this.fightOver(m, run, p, true, fight.wear);
-    }
+    if (run) this.fightOver(m, run, p, true, res.sold ?? 0);
     return true;
   }
 
@@ -1051,9 +1072,9 @@ export class Room {
     }
   }
 
-  /** The Furthest Out board, kept like the hall of fame: re-ranked when an online player's furthest marker, its haul or their level moves. */
+  /** The Furthest Out board, kept like the hall of fame: re-ranked when an online player's boat parts, Abyss record, first sea fish or level moves. */
   private furthestBoard(): void {
-    const sk = [...this.members.values()].map((m) => `${m.acct.save.sea.record}:${m.acct.save.sea.haul?.pearls}:${m.acct.save.sea.haul?.coins}:${m.acct.save.level}`).join();
+    const sk = [...this.members.values()].map((m) => `${m.acct.save.boatParts}:${m.acct.save.abyssRecord}:${eco.hasSailed(m.acct.save)}:${m.acct.save.level}`).join();
     if (sk !== this.lastSea) {
       this.lastSea = sk;
       this.furthestStale();

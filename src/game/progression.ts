@@ -122,13 +122,13 @@ export function backPayXp(dex: Record<string, { count: number }>, since = 0): nu
 /** The best tier of fish you can hook is set by the bait; the rod only decides how hard the fight is. */
 export const gearTier = (_rod: Rod, bait: Bait): number => bait.tier;
 
-/** A hooked fish's strength and weight, in tiers: a pond fish's tier on both, a sea fish's from how far out (`seaFishTiers`). */
+/** A hooked fish's strength and weight, in tiers: a pond fish's tier on both, a sea fish's from its zone (`seaFishTier`). */
 export interface FishTiers {
   strength: number;
   weight: number;
 }
 
-/** The gear's, in tiers: the line answers strength and the rod weight, one to one (a sea level is a share of a tier, `seaGearTiers`). */
+/** The gear's, in tiers: the line answers strength and the rod weight, one to one (at sea both are the Deep Sea Rod's, `seaRodTier`). */
 export interface GearTiers {
   line: number;
   rod: number;
@@ -299,7 +299,7 @@ export function nextGoal(level: number, dex: Record<string, unknown> = {}, chart
   const named = (r: Rod) => (sea && r.unlockLevel === DEEP_SEA_ROD.unlockLevel ? `the ${r.name} and the ${DEEP_SEA_ROD.name} become available` : `the ${r.name} becomes available`);
   if (level < SMOKE_LEVEL) return `Level ${SMOKE_LEVEL}: Mags's Smokehouse opens${rod?.unlockLevel === SMOKE_LEVEL ? ` and ${named(rod)}` : ''}`;
   if (rod) return `Level ${rod.unlockLevel}: ${named(rod)}`;
-  if (sea) return level < DEEP_SEA_ROD.unlockLevel ? `Level ${DEEP_SEA_ROD.unlockLevel}: the ${DEEP_SEA_ROD.name}, for Captain Reed's charters` : `The ${DEEP_SEA_ROD.name} at the stall: it opens Captain Reed's charters`;
+  if (sea) return level < DEEP_SEA_ROD.unlockLevel ? `Level ${DEEP_SEA_ROD.unlockLevel}: the ${DEEP_SEA_ROD.name}, for Captain Reed's charters` : `The ${DEEP_SEA_ROD.name} from Captain Reed: it opens his charters`;
   const rank = nextRank(level);
   if (rank) return `Level ${rank.level}: ${rankReward(rank)}`;
   const missing = POND_FISH.filter((f) => !dex[f.id]).length;

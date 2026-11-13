@@ -1,263 +1,321 @@
+// The charter screens: Reed's chart and shop, the strip at sea, the spool's-out card, heading home and the end card.
 import { describe, expect, it } from 'vitest';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { DiveHud, banked, catchPearlsHtml, defaultStart, endHtml, fishTagHtml, headHomeHtml, hudHtml, lastMarker, lineLevel, lossText, zoneMarkers, markerHtml, nextMarker, reedHtml, reedStart, startText } from './divehud';
-import { pearlsAt, surface, type Dive } from './dive';
+import { DiveHud, catchPearlsHtml, endHtml, fishTagHtml, headHomeHtml, hudHtml, lineLevel, lossText, nextRodText, outHint, outHtml, ratingToast, reedHtml, reedMarkerPick, reedZone, rodProgress, startText, whereText, type ReedSave } from './divehud';
+import { newSave } from './state';
 
-const view = (o: Partial<DiveView> = {}): DiveView => ({ id: 1, start: 10, depth: 23, line: 214, state: 'fishing', ledges: 2, grown: 2, pearls: 16, gear: { rod: 0, line: 0 }, fish: 13, coins: 24000, ...o });
+const tally = { landed: 21, lost: 2, pearls: 186, coins: 91_000, spools: 3, spoolCoins: 78_000 };
+const view = (o: Partial<DiveView> = {}): DiveView => ({
+  id: 1, zone: 2, marker: 0, toNext: 0, line: 199, state: 'fishing', rating: 'tough', fishLine: 13, pay: { pearls: 8, coins: 3600 }, spool: 26_000, tally, ...o,
+});
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+const reed = (o: Partial<ReedSave> = {}): ReedSave => ({ ...newSave(), level: 20, coins: 300_000, seaRod: true, ...o });
+const chart = (s: ReedSave, pick = reedZone(s, null), marker?: number) => reedHtml({ say: 'Ahoy', s, pick, open: true, marker: marker ?? reedMarkerPick(s, null) });
+/** The text of one zone's card on the chart. */
+const card = (html: string, zone: number) => text(new RegExp(`<(?:button|div) class="zcard z${zone}[^>]*>[\\s\\S]*?</(?:button|div)>`).exec(html)![0]);
 
-describe('dive HUD', () => {
-  it("the fish's sticker keeps its pull, behaviour and matchup with the gear up all fight", () => {
+// The mid-game player of the mockup: step 2, Storm sail and Kelp cutter fitted (Kelp Deep open).
+const mid = (o: Partial<ReedSave> = {}) => reed({ rodStep: 2, boatParts: 2, coins: 341_000, pearls: 1260, ...o });
+
+describe('charter screens', () => {
+  it("the fish's sticker names the zone's rating for the rod all fight", () => {
     const none = { match: '', too: false };
-    expect(text(fishTagHtml({ b: 'thrasher', pull: 'strong', match: 'Too strong for your line', too: true }))).toBe('💪 Strong · 💥 Thrasher · too strong for your line');
+    expect(text(fishTagHtml({ b: 'thrasher', pull: 'strong', match: 'Too much for your rod', too: true }))).toBe('💪 Strong · 💥 Thrasher · too much for your rod');
     expect(text(fishTagHtml({ b: 'runner', pull: 'light', ...none }))).toBe('🪶 Light · 🏃 Runner · long pulls that take line');
-    expect(text(fishTagHtml({ b: 'sounder', pull: null, ...none }))).toBe('⤵️ Sounder · dives with little warning');
-    expect(text(fishTagHtml({ b: null, pull: 'strong', ...none }))).toBe('💪 Strong');
-    expect(fishTagHtml({ b: null, pull: null, match: 'Strong for your line, heavy for your rod', too: false })).toBe('Strong for your line, heavy for your rod');
-    // A fish the gear handles: no sticker.
+    expect(fishTagHtml({ b: null, pull: null, match: 'Fair for your rod', too: false })).toBe('Fair for your rod');
     expect(fishTagHtml({ b: null, pull: null, ...none })).toBe('');
+    expect([ratingToast('easy'), ratingToast('fair'), ratingToast('tough'), ratingToast('over')]).toEqual(['An easy one.', 'Fair for your rod.', 'Tough for your rod.', 'Too much for your rod!']);
   });
 
-  it('counts to the next marker, and past the one the boat is at', () => {
-    expect(nextMarker(0)).toBe(5);
-    expect(nextMarker(23)).toBe(25);
-    expect(nextMarker(25)).toBe(30);
-    expect([lastMarker(0), lastMarker(4), lastMarker(23), lastMarker(25)]).toEqual([0, 0, 20, 25]);
+  it('names where a charter is: the zone, and the marker in the Abyss', () => {
+    expect(whereText(1, 0)).toBe('The Drop-off');
+    expect(whereText(4, 7)).toBe('The Abyss · marker 7');
+    expect(startText(view())).toBe('Kelp Deep');
+    expect(startText(null)).toBe('Out to sea');
   });
 
-  it('banks the haul the way surfacing does', () => {
-    for (const [pearls, grown] of [[20, 3], [7, 1], [100, 9], [0, 0]]) {
-      const dive: Dive = { start: 0, depth: 25, line: 100, state: 'ledge', ledges: 5, grown, pearls, gear: { rod: 0, line: 0 }, fish: [] };
-      expect(banked({ pearls, grown })).toBe(surface(dive, { ledges: [], record: 0 })!.pearls);
+  describe("Reed's chart and shop", () => {
+    it('sells the Deep Sea Rod to a player without one, and says what a charter is', () => {
+      const h = reedHtml({ say: 'Ahoy', s: reed({ seaRod: false, coins: 100_000 }), pick: 0, open: true });
+      expect(text(h)).toContain("A charter is a day's fishing at sea");
+      expect(h).toContain('data-act="buysearod"');
+      expect(h).not.toContain('disabled data-act="buysearod"');
+      expect(h).not.toContain('zcard');
+      expect(text(h)).toContain('100,000');
+      const poor = reedHtml({ say: '', s: reed({ seaRod: false, coins: 99_990 }), pick: 0, open: true });
+      expect(poor).toContain('disabled data-act="buysearod"');
+      expect(text(poor)).toContain('Need 10 more');
+      expect(text(reedHtml({ say: '', s: reed({ seaRod: false, level: 12 }), pick: 0, open: true }))).toContain('Needs level 20');
+      expect(text(reedHtml({ say: '', s: reed(), pick: 0, open: false }))).toContain('coming soon');
+    });
+
+    it('has a card for each zone: rating, pay, line a fish and fish a spool, and the spool', () => {
+      const h = chart(mid());
+      expect(h.match(/class="zcard /g)).toHaveLength(5);
+      expect(card(h, 0)).toBe('The Shelf Easy 1 · 1,090 a fish 5 m a fish · 60 fish a spool Spool: free');
+      expect(card(h, 1)).toContain('Easy');
+      expect(card(h, 1)).toContain('3 · 2,010 a fish');
+      expect(card(h, 1)).toContain('Spool: 14,000');
+      expect(card(chart(mid(), 2), 2)).toBe('Kelp Deep ⛵ Tough 8 · 3,590 a fish 13 m a fish · 23 fish a spool Spool: 26,000');
+    });
+
+    it('shows a closed zone locked, dimmed, with what opens it, and not as a button', () => {
+      const h = chart(mid());
+      expect(card(h, 3)).toContain('🔒');
+      expect(card(h, 3)).toContain('Opens with the Deep lamps: 2,500');
+      expect(card(h, 3)).not.toContain('Spool');
+      expect(h).toContain('class="zcard z3 locked"');
+      expect(h).not.toContain('data-act="divefrom" data-id="3"');
+      expect(h).toContain('data-act="divefrom" data-id="2"');
+      expect(card(h, 4)).toContain('Opens with the Iron keel: 6,500');
+    });
+
+    it('highlights the picked zone, and casts off to it', () => {
+      const h = chart(mid(), 1);
+      expect(h).toContain('class="zcard z1 sel"');
+      expect(h).not.toContain('class="zcard z2 sel"');
+      expect(h).toContain('data-act="castoff" data-id="1"');
+      expect(text(h)).toContain('⚓ Cast off to the Drop-off one spool · 14,000 coins');
+    });
+
+    it('starts on the furthest open zone the rod rates Easy or Fair, else the furthest open one', () => {
+      expect(reedZone(reed({ boatParts: 2, rodStep: 2 }), null)).toBe(1); // Kelp Deep is Tough at step 2
+      expect(reedZone(reed({ boatParts: 2, rodStep: 3 }), null)).toBe(2);
+      expect(reedZone(reed({ boatParts: 0 }), null)).toBe(0);
+      expect(reedZone(reed({ boatParts: 2, rodStep: 0 }), 1)).toBe(1);
+      expect(reedZone(reed({ boatParts: 1, rodStep: 0 }), 3)).toBe(0);
+    });
+
+    it('offers the spool free on the Shelf, and a disabled "Need" button without the coins', () => {
+      expect(text(chart(reed({ coins: 0 }), 0))).toContain('one spool · free');
+      expect(chart(reed({ coins: 0 }), 0)).toContain('data-act="castoff"');
+      const poor = chart(mid({ coins: 20_000 }), 2);
+      expect(poor).not.toContain('data-act="castoff"');
+      expect(text(poor)).toContain('Need 6,000 more');
+    });
+
+    it('has the rod row in each state: upgrade, need more, and not on sale yet', () => {
+      const ok = chart(mid());
+      expect(text(ok)).toContain('Deep Sea Rod · step 2 of 8');
+      expect(text(ok)).toContain('Next step: Kelp Deep goes from Tough to Fair, 13 m to 9 m a fish');
+      expect(ok).toContain('data-act="rodstep"');
+      expect(text(ok)).toContain('Upgrade 300,000');
+      const poor = chart(mid({ coins: 299_000 }));
+      expect(poor).not.toContain('data-act="rodstep"');
+      expect(text(poor)).toContain('Need 1,000 more of 300,000');
+      const wait = chart(mid({ rodStep: 4 }));
+      expect(wait).not.toContain('data-act="rodstep"');
+      expect(text(wait)).toContain('On sale when The Twilight opens');
+      const late = chart(reed({ boatParts: 4, rodStep: 8, abyssLevels: 3, coins: 5e6 }));
+      expect(text(late)).toContain('Deep Sea Rod · Abyss level 3');
+      expect(text(late)).toContain('Next Abyss level: The Abyss at marker');
+      expect(late).toContain('data-act="abysslevel"');
+      expect(rodProgress(reed({ rodStep: 8 }))).toBe('Deep Sea Rod · step 8 of 8');
+    });
+
+    it('says what the next rod step changes, including when the rating stays', () => {
+      expect(nextRodText({ rodStep: 0, abyssLevels: 0 }, 1)).toContain('The Drop-off');
+      expect(nextRodText({ rodStep: 2, abyssLevels: 0 }, 1)).toBe('Next step: Kelp Deep goes from Tough to Fair, 13 m to 9 m a fish');
+      expect(nextRodText({ rodStep: 4, abyssLevels: 0 }, 1)).toMatch(/^Next step: The Twilight (stays|goes from)/);
+    });
+
+    it('has the boat row: buy, need more, and fully fitted', () => {
+      const ok = chart(mid({ pearls: 2500 }));
+      expect(text(ok)).toContain('Next boat part: Deep lamps Opens the Twilight');
+      expect(ok).toContain('data-act="boatpart"');
+      expect(text(ok)).toContain('Buy 2,500');
+      const poor = chart(mid());
+      expect(poor).not.toContain('data-act="boatpart"');
+      expect(text(poor)).toContain('Need 1,240 more of 2,500');
+      const done = chart(reed({ boatParts: 4 }));
+      expect(done).not.toContain('data-act="boatpart"');
+      expect(text(done)).toContain('The boat is fully fitted');
+    });
+
+    it("ends with the player's coins and Black Pearls", () => {
+      expect(text(chart(mid()))).toContain('341,000 coins 1,260 Black Pearls');
+    });
+
+    it('has the Abyss marker stepper only once the Abyss is open, from 1 to the furthest reached', () => {
+      expect(chart(mid())).not.toContain('mstep');
+      const s = reed({ boatParts: 4, rodStep: 8, abyssRecord: 9, coins: 1e6 });
+      const h = chart(s, 4, 7);
+      expect(text(h)).toContain('Marker 7 + of 9 reached');
+      expect(card(h, 4)).toContain('Marker 7');
+      expect(h).toContain('data-act="markerup"');
+      expect(h).toContain('data-act="markerdown"');
+      expect(chart(s, 4, 9)).toContain('data-act="markerup" disabled');
+      expect(chart(s, 4, 1)).toContain('data-act="markerdown" disabled');
+      expect(reedMarkerPick(s, 12)).toBe(9);
+      expect(reedMarkerPick(s, 0)).toBe(1);
+      expect(reedMarkerPick(reed({ abyssRecord: 0 }), null)).toBe(1);
+      // By default it is the furthest marker the rod rates Easy or Fair.
+      expect(reedMarkerPick(reed({ boatParts: 4, rodStep: 8, abyssRecord: 40 }), null)).toBeLessThan(40);
+    });
+  });
+
+  describe('the strip', () => {
+    it('shows the zone with its rating, the line a fish uses and what the charter has earned', () => {
+      const t = text(hudHtml(view()));
+      expect(t).toContain('Kelp Deep Tough');
+      expect(t).toContain('Line · 13 m a fish');
+      expect(t).toContain('199 m');
+      expect(t).toContain('This charter 186 91,000');
+      expect(hudHtml(view({ line: 20 }))).toContain('class="line danger"');
+      expect([lineLevel(200), lineLevel(60), lineLevel(25), lineLevel(0)]).toEqual(['ok', 'low', 'danger', 'danger']);
+    });
+
+    it('shows the Abyss marker with a pip for each fish toward the next', () => {
+      const t = text(hudHtml(view({ zone: 4, marker: 7, toNext: 2 })));
+      expect(t).toContain('The Abyss Marker 7 ●●○');
+      expect(text(hudHtml(view({ zone: 4, marker: 7, toNext: 0 })))).toContain('○○○');
+      expect(t).not.toContain('Tough');
+    });
+
+    it('notes the cost of the fish just hooked, and the pearls a landed fish paid', () => {
+      expect(text(hudHtml(view(), { cost: 13 }))).toContain('199 m −13 m');
+      expect(text(hudHtml(view()))).not.toContain('−13');
+      expect(text(hudHtml(view(), { gain: 8 }))).toContain('186 +8');
+      // Drawn at the hook: the bar and the number are as they will be.
+      const hooked = hudHtml(view(), { hooked: 13, cost: 13 });
+      expect(text(hooked)).toContain('186 m −13 m');
+      expect(hooked).toContain('width:62.0%');
+      expect(text(hudHtml(view({ line: 5 }), { hooked: 13 }))).toContain('0 m');
+    });
+
+    function stage(run: (hud: DiveHud, el: { innerHTML: string }) => void): void {
+      const el = { classList: { toggle() {} }, innerHTML: '' } as unknown as HTMLElement;
+      const tag = { classList: { toggle() {}, add() {}, remove() {} }, innerHTML: '' } as unknown as HTMLElement;
+      const g = globalThis as any;
+      const had = 'window' in g;
+      g.window = { setTimeout: () => 0 };
+      try {
+        run(new DiveHud(el, tag), el);
+      } finally {
+        if (!had) delete g.window;
+      }
     }
+
+    it('takes the line at the hook and settles on the next view, a lost fish showing its extra metres', () => {
+      stage((hud, el) => {
+        hud.set(view());
+        hud.hook();
+        expect(text(el.innerHTML)).toContain('186 m −13 m');
+        hud.set(view({ line: 186, cost: 13 }));
+        expect(text(el.innerHTML)).toContain('186 m −13 m');
+        hud.hook();
+        hud.set(view({ line: 148, cost: 38, tally: { ...tally, lost: 3 } }));
+        expect(text(el.innerHTML)).toContain('148 m −38 m');
+      });
+    });
+
+    it('notes the pearls a landed fish paid for a while, and only after a landing', () => {
+      stage((hud, el) => {
+        hud.set(view());
+        hud.set(view({ tally: { ...tally, landed: 22, pearls: 194 }, gain: 8 }));
+        expect(text(el.innerHTML)).toContain('194 +8');
+      });
+      stage((hud, el) => {
+        hud.set(view({ gain: 8 }));
+        expect(text(el.innerHTML)).not.toContain('+8');
+      });
+    });
   });
 
-  it('shows the last marker, fish and markers to go, the line and the haul in pearls and coins, and warns as the line runs low', () => {
-    const t = text(hudHtml(view({ worn: 12 }), true));
-    expect(t).toContain('The Drop-off Marker 20');
-    expect(t).not.toMatch(/league/i);
-    expect(t).toContain('2 fish to marker 25');
-    expect(t).toContain('3 markers to Kelp Deep');
-    expect(text(hudHtml(view({ depth: 24 }), false))).toContain('1 fish to marker 25');
-    expect(text(hudHtml(view({ depth: 3 }), false))).toMatch(/^The Shelf 2 fish to marker 5 .* 3 markers to the Drop-off/);
-    expect(text(hudHtml(view({ depth: 32 }), false))).toContain('1 marker to Kelp Deep');
-    expect(text(hudHtml(view({ state: 'ledge', depth: 35 }), false))).toContain('Kelp Deep next');
-    expect(hudHtml(view({ worn: 12 }), true).match(/<i class="on/g)).toHaveLength(3);
-    expect(hudHtml(view({ state: 'ledge', depth: 25 }), false).match(/<i class="(flag )?on/g)).toHaveLength(7);
-    expect(t).toContain('214 m −12 m');
-    expect(t).toContain('16 ×1.56 24,000');
-    expect(t).not.toContain('🐟 13');
-    expect(text(hudHtml(view({ worn: 12 }), false))).not.toContain('−12');
-    expect(text(hudHtml(view({ worn: 0.3 }), true))).not.toContain('−');
-    expect(text(hudHtml(view({ state: 'ledge', depth: 25 }), false))).toContain('Marker 25 reached');
-    expect([lineLevel(200), lineLevel(60), lineLevel(25), lineLevel(0)]).toEqual(['ok', 'low', 'danger', 'danger']);
-    expect(hudHtml(view({ line: 20 }), false)).toContain('class="line danger"');
+  it("writes a sea fish's pearls for the catch card, with why when it paid more", () => {
+    expect(text(catchPearlsHtml(2, 0, {}))).toBe('+8');
+    expect(text(catchPearlsHtml(2, 0, { tag: 'feisty' }))).toBe('+16 double: Feisty');
+    expect(text(catchPearlsHtml(0, 0, { legend: true }))).toBe('+5 five times: legend');
+    expect(text(catchPearlsHtml(1, 0, { tag: 'brutish', legend: true }))).toBe('+30 ten times: Brutish legend');
+    expect(text(catchPearlsHtml(4, 2, {}))).toBe('+56');
   });
 
-  it('lists a flag per marker in the zone, none in the last one', () => {
-    expect([0, 20, 45, 75, 90].map((d) => zoneMarkers(d).length)).toEqual([3, 4, 5, 6, 6]);
-    expect(zoneMarkers(200)).toEqual([]);
-    expect(zoneMarkers(75)[0]).toBe(65);
-    expect(text(hudHtml(view({ depth: 72 }), false))).toContain('4 markers to the Abyss');
-    expect(hudHtml(view({ depth: 72 }), false).match(/class="flag on/g)).toHaveLength(2);
-    expect(hudHtml(view({ depth: 200 }), false)).not.toContain('markers to');
-    expect(text(hudHtml(view({ depth: 200 }), false))).toContain('The Abyss Marker 200');
+  describe("the spool's out", () => {
+    const sv = { coins: 100_000, rodStep: 2, abyssLevels: 0, boatParts: 2 };
+    const out = view({ state: 'out', line: 0 });
+
+    it('shows the fish, the pearls, the coins from fish and on line, and the hint', () => {
+      const t = text(outHtml(out, sv));
+      expect(t).toContain("Spool's out");
+      expect(t).toContain('21 fish landed · 2 got away');
+      expect(t).toContain('+186');
+      expect(t).toContain('Coins from fish +91,000');
+      expect(t).toContain('Line · 3 spools −78,000');
+      expect(t).toContain('Tough for your rod: 13 m a fish. The next rod step makes it 9 m.');
+      expect(t).toContain('Head home');
+    });
+
+    it('offers another spool at the zone price, with the key hints', () => {
+      const h = outHtml(out, sv);
+      expect(h).toContain('data-act="spool"');
+      expect(text(h)).toContain('Another spool 26,000');
+      expect(h).toContain('<kbd>1</kbd>');
+      expect(h).toContain('<kbd>2</kbd>');
+      expect(h).toContain('data-act="headhome"');
+    });
+
+    it('is a disabled "Need" button without the coins, and free on the Shelf', () => {
+      const poor = outHtml(out, { ...sv, coins: 20_000 });
+      expect(poor).not.toContain('data-act="spool"');
+      expect(text(poor)).toContain('Need 6,000 more');
+      const shelf = outHtml(view({ zone: 0, state: 'out', spool: 0, rating: 'easy', fishLine: 5, tally: { ...tally, spools: 2, spoolCoins: 0 } }), { ...sv, coins: 0 });
+      expect(shelf).toContain('data-act="spool"');
+      expect(text(shelf)).toContain('Another spool free');
+      expect(text(shelf)).toContain('Line · 2 spools free');
+    });
+
+    it('hints only when the zone is not Easy and a rod purchase on sale would help', () => {
+      expect(outHint(view({ rating: 'easy', fishLine: 5 }), sv)).toBe('');
+      expect(outHint(out, { ...sv, rodStep: 4, boatParts: 2 })).toBe(''); // step 4 is not on sale yet
+      expect(outHint(out, sv)).toContain('The next rod step makes it 9 m.');
+      expect(outHint(view({ zone: 4, marker: 5, rating: 'tough', fishLine: 13, state: 'out' }), { coins: 0, rodStep: 8, abyssLevels: 0, boatParts: 4 })).toContain('The next Abyss level makes it');
+    });
   });
 
-  it('shows what a fish pays right now on the strip: pearls in pearl water, else when they start', () => {
-    // +0/+0 at depth 3: pearl water from the harbour, so every fish pays.
-    expect(text(hudHtml(view({ depth: 3, grown: 0, pearls: 0 }), false))).toContain('Haul 1 a fish');
-    const easy = text(hudHtml(view({ depth: 23, grown: 0, pearls: 0, gear: { rod: 10, line: 10 } }), false));
-    expect(easy).toContain('Haul easy water · pearls from marker 50');
-    expect(easy).not.toContain('×');
-    expect(text(hudHtml(view({ depth: 23, grown: 2, pearls: 16, gear: { rod: 10, line: 10 } }), false))).toContain('16 ×1.56');
-    expect(text(hudHtml(view({ grown: 0 }), false))).not.toContain('×');
+  it('heading home asks once, and says the line left is not refunded', () => {
+    const h = headHomeHtml(view({ line: 187 }));
+    expect(text(h)).toContain('Head home? Kelp Deep');
+    expect(text(h)).toContain("You have 187 m of line left. It isn't refunded.");
+    expect(h).toContain('data-act="close"');
+    expect(text(h)).toContain('Stay out');
+    expect(h).toContain('data-act="headhome"');
+    expect(h).not.toContain('bad');
   });
 
-  it("starts Reed's panel where pearl water starts for the gear, up to the furthest marker", () => {
-    const gear = { rod: 10, line: 10 };
-    expect(defaultStart({ ledges: [], record: 0 }, gear)).toBe(0);
-    expect(defaultStart({ ledges: [], record: 20 }, gear)).toBe(20);
-    expect(defaultStart({ ledges: [], record: 100 }, gear)).toBe(50);
-    expect(defaultStart({ ledges: [], record: 40 }, gear)).toBe(40);
-    expect(defaultStart({ ledges: [], record: 100 }, { rod: 0, line: 0 })).toBe(0);
-    // A pick counts only where a charter can start.
-    expect(reedStart({ ledges: [], record: 60 }, gear, 50)).toBe(50);
-    expect(reedStart({ ledges: [], record: 60 }, gear, 65)).toBe(50);
-    expect(reedStart({ ledges: [], record: 60 }, gear, null)).toBe(50);
+  describe('the end card', () => {
+    const end: DiveEnd = { why: 'home', zone: 4, marker: 5, tally };
+
+    it('shows the zone, the fish, the pearls, the coins and the net', () => {
+      const t = text(endHtml({ ...end, zone: 2, marker: 0 }));
+      expect(t).toContain('Home safe!');
+      expect(t).toContain('Kelp Deep');
+      expect(t).toContain('+186');
+      expect(t).toContain('Fish landed 21');
+      expect(t).toContain('Fish that got away 2');
+      expect(t).toContain('Coins from fish +91,000');
+      expect(t).toContain('Line · 3 spools −78,000');
+      expect(t).toContain('Net coins +13,000');
+      expect(text(endHtml({ ...end, tally: { ...tally, coins: 1000 } }))).toContain('Net coins −77,000');
+    });
+
+    it('shows the Abyss marker reached, with a ribbon for a new record', () => {
+      expect(text(endHtml(end))).toContain('The Abyss · marker 5');
+      expect(endHtml(end)).not.toContain('ribbon');
+      expect(text(endHtml(end, true))).toContain('★ New record');
+      expect(text(endHtml({ ...end, zone: 2, marker: 0 }, true))).not.toContain('record');
+    });
+
+    it('says when the boat waited and turned back', () => {
+      expect(text(endHtml({ ...end, why: 'away' }))).toContain('waited 2 minutes');
+      expect(text(endHtml({ ...end, why: 'away' }))).toContain('The charter ended');
+      expect(lossText('held-surge')).toContain('through a surge');
+    });
   });
 
-  it("offers Reed's starts as chips and a stepper for any marker up to the furthest, with the rod and line's reach", () => {
-    const gear = { rod: 10, line: 10 };
-    const chart = { ledges: [5, 60], record: 60 };
-    const reed = (pick: number, c = chart, g = gear) => reedHtml({ say: 'Shall we?', chart: c, pearls: 68, ownsRod: true, pick, open: true, gear: g });
-    const html = reed(40);
-    const t = text(html);
-    expect(t).toContain('Harbour start Pearl water marker 50 Furthest marker 60');
-    expect(html).toContain('class="chip" data-act="divefrom" data-id="0"');
-    expect(html).toContain('class="chip rec" data-act="divefrom" data-id="60"');
-    expect(html).toContain('class="chip" data-act="divefrom" data-id="50"');
-    expect(reed(50)).toContain('class="chip sel" data-act="divefrom" data-id="50"');
-    // The stepper moves one marker a step and stops at both ends.
-    expect(t).toContain('Marker 40 Kelp Deep');
-    expect(html).toContain('data-id="35" aria-label="Earlier marker"');
-    expect(html).toContain('data-id="45" aria-label="Later marker"');
-    expect(reed(60)).toMatch(/data-id="60" aria-label="Later marker" disabled/);
-    expect(reed(0)).toMatch(/data-id="0" aria-label="Earlier marker" disabled/);
-    expect(t).toContain('Your rod and line Pearl water from marker 50 Hard going from marker 80 Too much from marker 95');
-    expect(text(reed(55))).toMatch(/Start at marker 55 in Kelp Deep\. \d+ a fish here, more each marker out\./);
-    expect(html).toContain('data-act="castoff" data-id="40"');
-    expect(t).toContain('Head home at a marker to bank the haul with its bonus. Run out of line and you keep the pearls but lose the bonus.');
-    expect(t).toContain('Furthest marker: 60');
-    // Before pearl water.
-    expect(text(reed(20))).toContain('Start at marker 20 in the Drop-off. Easy water for your gear: quick fights and coins, no pearls until marker 50.');
-    // No pearl chip past the furthest marker; fresh gear is in pearl water from the harbour.
-    const fresh = text(reed(0, { ledges: [], record: 0 }, { rod: 0, line: 0 }));
-    expect(fresh).toContain('Start at the harbour, into the Shelf. 1 a fish here, more each marker out.');
-    expect(fresh).toContain('Pearl water from the harbour');
-    expect(fresh).not.toContain('Pearl water marker');
-    expect(fresh).not.toContain('Furthest marker ');
-    expect(fresh).toContain('No markers charted yet');
-    const locked = text(reedHtml({ say: '', chart: { ledges: [], record: 0 }, pearls: 0, ownsRod: false, pick: 0, open: true, gear: { rod: 0, line: 0 } }));
-    expect(locked).toContain('need the Deep Sea Rod');
-    expect(locked).toContain('stays on my boat');
-    expect(locked).toContain('keep the pearls but lose the bonus');
-    expect(locked).not.toContain('Cast off');
-  });
-
-  it("explains charters and that Reed's seaplane isn't ready while charters are closed", () => {
-    const closed = (ownsRod: boolean) => reedHtml({ say: 'Shall we?', chart: { ledges: [5], record: 5 }, pearls: 3, ownsRod, pick: 5, open: false, gear: { rod: 0, line: 0 } });
-    const t = text(closed(true));
-    expect(t).toContain('Charters are coming soon.');
-    expect(t).toContain('Every 5 fish you land, you reach a marker: head home with your haul, or sail on');
-    expect(t).toContain('keep the pearls but lose the bonus');
-    expect(t).toContain('Deep Sea Rod, and you have one.');
-    expect(t).not.toContain('Shall we?');
-    expect(closed(true)).not.toContain('castoff');
-    expect(closed(true)).not.toContain('divefrom');
-    expect(text(closed(false))).toMatch(/Deep Sea Rod, which Marlow sells from level \d+\./);
-  });
-
-  it('offers head home or sail on at a marker, with the haul each way and what sailing on means', () => {
-    // Pearl water ahead (+0/+0).
-    const t = text(markerHtml(view({ depth: 25, state: 'ledge', ledges: 3, grown: 3, pearls: 20, line: 198, fish: 15 })));
-    expect(t).toContain('Marker 25 The Drop-off · 24,000 from fish this charter');
-    expect(t).toContain('Line left 198 m');
-    expect(t).toContain('20 ×1.95 = 39');
-    expect(t).toContain('Sail on: 6 a fish to marker 30, and the bonus grows to ×2.44 there. Run out of line and you keep the 20 pearls but lose the bonus.');
-    expect(t).toContain('Head home bank 39 · chart marker 25');
-    expect(t).toContain('Sail on ×2.44 at marker 30');
-    // Easy water ahead: the bonus holds, a new zone ahead, and the pearl water start.
-    const easy = text(markerHtml(view({ depth: 35, state: 'ledge', ledges: 5, grown: 2, pearls: 60, gear: { rod: 10, line: 10 } })));
-    expect(easy).toContain('Sail on: easy water to marker 40, no pearls yet. Pearl water starts at marker 50. Past marker 35: Kelp Deep.');
-    expect(easy).toContain('Run out of line and you keep the 60 pearls but lose the bonus.');
-    expect(easy).toContain('Sail on next: marker 40');
-    const deep = text(markerHtml(view({ depth: 50, state: 'ledge', ledges: 6, grown: 1, pearls: 60, gear: { rod: 10, line: 10 } })));
-    expect(deep).toContain('Sail on: 3 a fish to marker 55, and the bonus grows to ×1.56 there.');
-    const wide = text(markerHtml(view({ depth: 20, state: 'ledge', ledges: 4, grown: 0, pearls: 0, gear: { rod: 10, line: 10 } })));
-    expect(wide).toContain('Sail on: easy water to marker 25, no pearls yet. Pearl water starts at marker 50.');
-    expect(wide).toContain('Sail on next: marker 25');
-    expect(wide).not.toContain('Run out of line');
-    for (const h of [t, easy, deep, wide]) expect(h).not.toMatch(/\bsink|\bsank|\bsunk/i);
-  });
-
-  it('tells what heading home between markers keeps, with and without a bonus', () => {
-    const bonus = text(headHomeHtml(view({ pearls: 120, grown: 2 })));
-    expect(bonus).toContain('The Drop-off · 2 fish to marker 25 Head home now and you keep the 120 pearls but lose the ×1.56 bonus (68 pearls).');
-    expect(bonus).toContain('You keep the 24,000 from fish sold so far.');
-    expect(bonus).not.toContain('13 fish');
-    const plain = text(headHomeHtml(view({ pearls: 120, grown: 0 })));
-    expect(plain).toContain('You keep the 120 pearls.');
-    expect(plain).not.toContain('bonus');
-    const empty = text(headHomeHtml(view({ pearls: 0, grown: 0, fish: 0, coins: 0 })));
-    expect(empty).toContain('Nothing in the haul yet');
-    expect(empty).not.toContain('You keep');
-    for (const h of [bonus, plain, empty]) expect(h).not.toMatch(/\bsink|\bsank|\bsunk/i);
-  });
-
-  it('tells how a charter ended: pearls kept as a gain, and the bonus lost only when there was one', () => {
-    const home: DiveEnd = { result: 'surfaced', ledge: 25, pearls: 39, record: true, fish: 15, coins: 27400 };
-    const t = text(endHtml(home, view({ depth: 25, state: 'ledge', ledges: 3, grown: 3, pearls: 20 }), 68, 25));
-    expect(t).toContain('Home safe!');
-    expect(t).toContain('Marker 25 charted ★ New record');
-    expect(t).toContain('+39 20 pearls ×1.95 for 3 markers in pearl water · 68 Black Pearls in all');
-    expect(t).toContain('Fish landed and sold 15 · 27,400');
-    const sunkHtml = (o: Partial<Extract<DiveEnd, { result: 'sunk' }>> = {}, last: DiveView | null = null) =>
-      endHtml({ result: 'sunk', why: 'line', depth: 27, pearls: 120, bonus: 67, fish: 17, coins: 31200, ...o }, last, 42, 25);
-    const sunk = (o: Partial<Extract<DiveEnd, { result: 'sunk' }>> = {}, last: DiveView | null = null) => text(sunkHtml(o, last));
-    const line = sunk({ lost: 'held-red' }, view());
-    expect(line).toContain('Out of line Before marker 30 · The Drop-off The last fish snapped the line: you held on in the red.');
-    expect(line).toContain('+120');
-    expect(line).toContain('The ×1.56 bonus (67 pearls) was lost. Head home at a marker to bank it.');
-    expect(line).toContain('Head home sooner when the line runs low.');
-    expect(sunkHtml()).not.toContain('class="big lost"');
-    expect(sunk({ lost: 'ran' })).toContain('ran off with the line');
-    expect(sunk()).toContain('took the last of the line');
-    // Without the dive's growth the multiplier is worked back from the pearls.
-    expect(sunk({ pearls: 100, bonus: 25 })).toContain('The ×1.25 bonus (25 pearls) was lost.');
-    const headed = sunk({ why: 'home' });
-    expect(headed).toContain('Headed home');
-    expect(headed).toContain('You headed home between markers.');
-    const away = sunk({ why: 'away' });
-    expect(away).toContain('The charter ended');
-    expect(away).toContain('waited 2 minutes');
-    // No bonus, no line about it; no pearls, no gain.
-    const none = sunk({ pearls: 12, bonus: 0 });
-    expect(none).toContain('+12');
-    expect(none).not.toContain('bonus');
-    const empty = sunk({ pearls: 0, bonus: 0 });
-    expect(empty).not.toContain('+0');
-    expect(empty).not.toContain('bonus');
-    for (const h of [line, headed, away, none, empty]) expect(h).not.toMatch(/\bsink|\bsank|\bsunk/i);
-    expect(lossText('held-surge')).toContain('through a surge');
-    expect([startText(0), startText(20), startText(24)]).toEqual(['The Shelf · from the harbour', 'The Drop-off · from marker 20', 'The Drop-off · partway to marker 25']);
-  });
-
-  it("shows a landing's pearls beside the haul for a while, only when the fish paid", () => {
-    expect(text(hudHtml(view(), false, 2, 8))).toContain('16 +8');
-    expect(hudHtml(view(), false, 2, 8)).toContain('pnum pop');
-    expect(hudHtml(view(), false, -1, 8)).not.toContain('pnum pop');
-    expect(text(hudHtml(view(), false, 2, 0))).not.toContain('+');
-    expect(hudHtml(view(), false)).not.toContain('class="gain"');
-  });
-
-  it('the strip notes a gain after a landing, not on a later view at the same marker, and not for 0', () => {
-    const el = { classList: { toggle() {} }, innerHTML: '' } as unknown as HTMLElement;
-    const tag = { classList: { toggle() {}, add() {}, remove() {} }, innerHTML: '' } as unknown as HTMLElement;
-    const g = globalThis as any;
-    const had = 'window' in g;
-    g.window = { setTimeout: () => 0 };
-    try {
-      const hud = new DiveHud(el, tag);
-      hud.set(view({ depth: 3, pearls: 0 }));
-      hud.set(view({ depth: 4, pearls: 3, gain: 3 }));
-      expect(text(el.innerHTML)).toContain('3 +3');
-      hud.set(view({ depth: 4, pearls: 3, gain: 3, worn: 5 }));
-      hud.set(view({ depth: 4, pearls: 3, gain: 3, line: 100 }));
-      expect(text(el.innerHTML)).toContain('3 +3');
-      // A view that arrives with a gain but no landing (a reconnect, the same marker) starts no note.
-      const late = new DiveHud(el, tag);
-      late.set(view({ depth: 4, pearls: 3, gain: 3 }));
-      late.set(view({ depth: 4, pearls: 3, gain: 3, line: 90 }));
-      expect(text(el.innerHTML)).not.toContain('+');
-      hud.set(view({ depth: 5, pearls: 3, gain: 0 }));
-      expect(text(el.innerHTML)).not.toContain('+');
-      hud.set(view({ depth: 5, pearls: 3, gain: 0, line: 90 }));
-      expect(text(el.innerHTML)).not.toContain('+');
-    } finally {
-      if (!had) delete g.window;
-    }
-  });
-
-  it("writes a sea fish's pearls for the catch card, with why when it paid more, or that it was easy water", () => {
-    const gear = { rod: 0, line: 0 };
-    const at5 = pearlsAt(5, gear);
-    expect(text(catchPearlsHtml(5, gear, {}))).toBe(`+${at5}`);
-    expect(text(catchPearlsHtml(5, gear, { tag: 'feisty' }))).toBe(`+${at5 * 2} double: Feisty`);
-    expect(text(catchPearlsHtml(5, gear, { tag: 'brutish' }))).toBe(`+${at5 * 2} double: Brutish`);
-    expect(text(catchPearlsHtml(5, gear, { legend: true }))).toBe(`+${at5 * 5} five times: legend`);
-    expect(text(catchPearlsHtml(5, gear, { tag: 'brutish', legend: true }))).toBe(`+${at5 * 10} ten times: Brutish legend`);
-    expect(text(catchPearlsHtml(5, { rod: 10, line: 10 }, { tag: 'feisty' }))).toBe('Easy water · no pearls');
-    expect(catchPearlsHtml(5, gear, {})).toContain('bpearl');
+  it('keeps the banned words off every screen', () => {
+    const s = reed({ boatParts: 4, rodStep: 8, abyssRecord: 9, coins: 1e7, pearls: 1e4 });
+    const all = [chart(s, 4, 3), chart(mid()), chart(reed({ boatParts: 0 })), reedHtml({ say: '', s: reed({ seaRod: false }), pick: 0, open: true }), hudHtml(view()), hudHtml(view({ zone: 4, marker: 3, toNext: 1 })), outHtml(view({ state: 'out' }), s), headHomeHtml(view()), endHtml({ why: 'home', zone: 4, marker: 5, tally }, true)]
+      .map(text).join(' ');
+    for (const bad of [/depth/i, /\bdive/i, /league/i, /ledge/i, /\bsunk\b|\bsank\b|\bsink/i, /\bhaul/i, /bonus/i, /pearl water/i, /undefined|NaN|<\w/]) expect(all).not.toMatch(bad);
   });
 });

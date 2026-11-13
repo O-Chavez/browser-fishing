@@ -5,7 +5,7 @@ import type { DishId, StageId } from '../data/smokehouse';
 import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 import type { Behaviour } from '../data/dive';
-import type { DiveState, SeaGear } from '../game/dive';
+import type { DiveState, Rating, Tally } from '../game/dive';
 import type { Gaps, LossReason, ReelTune } from '../game/reel';
 import type { FishTag } from '../game/progression';
 
@@ -31,44 +31,54 @@ export interface PlayerInfo {
 /** Where a player is for seeing each other: the map, or the dive's own sea. */
 export const placeOf = (p: { map: string; dive?: number }): string => (p.dive ? `${p.map}#${p.dive}` : p.map);
 
-/** A dive as its player sees it (`Dive` in `src/game/dive.ts`, with the fish counted). */
+/**
+ * A charter as its player sees it (`Dive` in `src/game/dive.ts`), with what the screens show already worked out by
+ * the rules, so they don't recompute them.
+ */
 export interface DiveView {
-  /** The dive's instance (`PlayerInfo.dive`). */
+  /** The charter's instance (`PlayerInfo.dive`). */
   id: number;
-  start: number;
-  depth: number;
-  /** Metres of line left. */
+  /** The zone fished (0 the Shelf ... 4 the Abyss, `ZONES`). */
+  zone: number;
+  /** The Abyss marker (1 and up); 0 in the other zones. */
+  marker: number;
+  /** In the Abyss, fish landed toward the next marker, out of `MARKER.every`; 0 elsewhere. */
+  toNext: number;
+  /** Metres of line left on the spool (of `LINE.spool`). */
   line: number;
+  /** Fishing, or out of line: another spool (`spool`) or head home. */
   state: DiveState;
-  /** Markers reached this dive, and those of them whose stretch was pearl water, which grew the haul's bonus. */
-  ledges: number;
-  grown: number;
-  /** Pearls in the haul, before its bonus (`haulBonus(grown)`). */
-  pearls: number;
-  /** The Deep Sea Rod and Line levels the dive fishes with, as the server applies them. */
-  gear: SeaGear;
-  /** Fish landed this dive, and the coins they sold for. */
-  fish: number;
-  coins: number;
-  /** Metres the last fight wore off the spool, and why it was lost if it was. */
-  worn?: number;
-  lost?: LossReason | 'gone';
+  /** How the zone (and marker) reads for the charter's rod (`seaRating`). */
+  rating: Rating;
+  /** Metres of line a hooked fish uses here (`lineCost`); one that gets away takes `LINE.lost` more. */
+  fishLine: number;
+  /** What a plain everyday fish pays here (`payAt`): its Black Pearls and its average coins. */
+  pay: { pearls: number; coins: number };
+  /** Coins another spool costs here (`spoolPrice`). */
+  spool: number;
+  /** The charter so far: fish landed and lost, pearls and coins they paid, spools bought and their coins. */
+  tally: Tally;
   /**
-   * Pearls the last fight added to the haul (`pearlsFor`: doubled for a Feisty or Brutish fish, five times for a
-   * legend): present, maybe 0, after a landed fish; absent after a lost fish and on a fresh charter.
+   * Pearls the last fish paid (`pearlsFor`: doubled for a Feisty or Brutish fish, five times for a legend): present
+   * after a landed fish; absent after a lost fish and on a fresh charter.
    */
   gain?: number;
+  /** Metres of line the last fish used, and why it was lost if it was. */
+  cost?: number;
+  lost?: LossReason | 'gone';
 }
 
 /**
- * How a dive ended. Surfaced: the haul banked with its bonus, and the ledge charted. Sunk: the line ran out (`line`),
- * the player was away longer than the dive waits (`away`), headed home between ledges (`home`), or reset their
- * account (`quit`); the haul's `pearls` were kept without its bonus, and `bonus` is the pearls of bonus lost. The fish
- * were sold as they were landed either way, for `coins`.
+ * How a charter ended, and where: the player headed home (`home`), was away longer than the charter waits (`away`),
+ * or reset their account (`quit`). Nothing is lost either way: every fish's pearls and coins were the player's as it
+ * landed, and the tally says what they came to.
  */
-export type DiveEnd =
-  | { result: 'surfaced'; ledge: number; pearls: number; record: boolean; fish: number; coins: number }
-  | { result: 'sunk'; why: 'line' | 'away' | 'home' | 'quit'; depth: number; pearls: number; bonus: number; fish: number; coins: number; lost?: LossReason | 'gone' };
+export interface DiveEnd {
+  why: 'home' | 'away' | 'quit';
+  zone: number;
+  marker: number;
+  tally: Tally;
+}
 
 export type Activity =
   | { a: 'cast'; x: number; z: number }
@@ -84,10 +94,14 @@ export type ClientMsg =
   | { t: 'jump' }
   | { t: 'buyrod'; id: string }
   | { t: 'buyline'; id: string }
-  /** The Deep Sea Rod, at the stall (`buySeaRod`), and its next level (`levelRod`). */
+  /**
+   * From Captain Reed (within `DIVE.standRange` of his stand): the Deep Sea Rod (`buySeaRod`), its next step
+   * (`buyRodStep`) or Abyss level (`buyAbyssLevel`), and the next boat part (`buyBoatPart`).
+   */
   | { t: 'buysearod' }
-  | { t: 'levelrod' }
-  | { t: 'levelline' }
+  | { t: 'rodstep' }
+  | { t: 'abysslevel' }
+  | { t: 'boatpart' }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
   | { t: 'equiprod'; id: string }
@@ -114,11 +128,11 @@ export type ClientMsg =
   | { t: 'catch'; h: string }
   /** A fish got away (or the cast ended). On a dive `h` is the lost fight's button log, which the line pays for. */
   | { t: 'lost'; h?: string }
-  /** Start a dive at Captain Reed's seaplane, from the harbour (0) or a charted ledge. */
-  | { t: 'dive'; from: number }
-  /** At a ledge: dive on, or surface with the haul. */
-  | { t: 'ledge'; a: 'on' | 'surface' }
-  /** Head home between ledges: the dive ends and its haul keeps its pearls without the bonus. */
+  /** Start a charter at Captain Reed's seaplane in an open zone, and in the Abyss at a marker up to the furthest (`canStart`); pays the zone's spool. */
+  | { t: 'dive'; zone: number; marker?: number }
+  /** Out of line on a charter: buy another spool at the zone's price and fish on. */
+  | { t: 'spool' }
+  /** End the charter and fly home, at any time outside a fight. Nothing is lost. */
   | { t: 'headhome' }
   /** Spin the Lucky Wheel with the fish in hotbar slot i. */
   | { t: 'wheel'; i: number }
@@ -192,9 +206,9 @@ export type ServerMsg =
   | { t: 'moved'; id: number; map: string; dive?: number }
   /** The server refused a move (too far, too fast): the player goes back here. */
   | { t: 'pos'; x: number; z: number }
-  /** The player's dive after a fight or a ledge choice. Sent before the save that takes them to sea. */
+  /** The player's charter after a fight or a new spool. Sent before the save that takes them to sea. */
   | { t: 'divestate'; dive: DiveView }
-  /** The dive is over; the save that brings the player back to the harbour follows. */
+  /** The charter is over; the save that brings the player back to the harbour follows. */
   | { t: 'diveend'; end: DiveEnd }
   | { t: 'act'; id: number; act: Activity | null }
   /** Player `id` jumped (sent to the others on their map). */
@@ -208,7 +222,7 @@ export type ServerMsg =
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
   | { t: 'hall'; rows: HallRow[] }
-  /** The Furthest Out board at the harbour: every account's furthest marker headed home from, including offline players. */
+  /** The Furthest Out board at the harbour: how far out every account's charters reach, including offline players. */
   | { t: 'furthest'; rows: FurthestRow[] }
   /** Every Ko-fi supporter's name, newest first, for the 💗 by their names and the thank-you board. */
   | { t: 'supporters'; names: string[] }
@@ -220,17 +234,17 @@ export type ServerMsg =
   | { t: 'sys'; text: string }
   /**
    * Slash command replies, for the player who typed the command only; `time` (dev console) overrides their day/night,
-   * `depth` sets the dive depth their sea looks like.
+   * `depth` sets the depth their sea looks like (`seaDepthFor`).
    * `sent` answers a /bug, /idea or /feedback: whether the report went through (the feedback form reads it).
    */
   | { t: 'dev'; lines: string[]; time?: number | null; depth?: number; sent?: boolean };
 
 export interface HallRow { name: string; level: number; best: BestCatch; title?: string | null }
 /**
- * A Furthest Out row: the deepest ledge the player surfaced from (`SaveData.sea.record`), "Marker N" on screen, and
- * the Black Pearls and fish that charter banked (`sea.haul`; left out for records from before it was kept).
+ * A Furthest Out row: the furthest zone the player has opened (`SaveData.boatParts`, an index into `ZONES`) and, for
+ * a player in the Abyss, the furthest marker reached there (`abyssRecord`).
  */
-export interface FurthestRow { name: string; level: number; ledge: number; pearls?: number; fish?: number }
+export interface FurthestRow { name: string; level: number; zone: number; marker?: number }
 
 export type CasinoGame = 'blackjack' | 'roulette' | 'wheel';
 /** One settled hand or spin: the coins it won or lost, and the fish that was bet. */

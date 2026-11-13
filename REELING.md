@@ -145,7 +145,7 @@ Built from "The gauge is the ladder" after a headless sim (`scripts/gaugesim.ts`
 - **The line's panel** says "a fish strong for your line pulls its surges up to the red, one too strong pulls them into it, and holding in the red frays the line" (it said a fish above the line snaps it).
 - **The hook toast** says "An easy one" for a fish a rung or more under the gear on both axes, give or take its spread (Oscar: upgrades should feel rewarded); the Easy-to-Brutal word stays gone.
 
-### The edge pays (2026-11-11, branch `charter-edge`, not play-tested)
+### The edge pays (2026-11-11, branch `charter-edge`; play-tested 2026-11-12 and replaced by "A place to earn" below)
 
 Oscar found the Abyss out of reach and the charter still an "early idea". Measured on the reference hands first: a level on both tracks took about 50 minutes at every stage and moved the wall one marker, so the Abyss (marker 151) needed about +22 / +22, 17-20 hours; the best pearls an hour came from a five-marker run that ended 5-30 fish short of the wall, its first markers fought only for the haul's +50%; and the stall's panels listed rod and line apart ("too heavy from marker 60") though the gaps add up, so they overstated a player's reach by 15-20 fish.
 
@@ -166,6 +166,27 @@ Oscar found the Abyss out of reach and the charter still an "early idea". Measur
   - Coins: edge fights are longer, so charter fish earn less an hour than farming did (205-541k / 211-539k from +0 to +16). The levels' coins take about 75% of a skilled hand's charter coins at +0, 64% at +8 and 57% at +16, and half that share of a careful hand's.
 - **Tried and dropped:** double and triple pearls by the hook toast's words alone (careful hands gained 2-15% and the best start stayed 30-45 fish short of the wall); steep pay with no haul growth (one-marker hops at the edge earn 88-100% of the best rate); uncapped haul growth on every marker (the best charter starts at the harbour and grinds every easy marker).
 - **Not in this build** (TODO): a twist and a first-time reward for each zone, a trophy for legends, boat upgrades as the coin sink, three-fish markers, bigger steps per level, chat lines for zones and legends.
+
+### A place to earn (2026-11-12, branch `charter-edge`, not play-tested)
+
+Oscar played "The edge pays" and found the premise wrong, not the tuning. A full charter (markers 0-30, about 700 pearls and 45,000 coins) bought one line level, a sixth of a rung on one of two axes, and nothing changed: the fish still read as strong and heavy. Line vanished on clean catches with nothing saying why. Markers, zones and the strip's nine facts blurred together. And "see how far you can push" had no answer to "for what reason".
+
+- **Why the old pay rule could not be tuned into shape** (an independent review, 2026-11-12): pearls were paid only on fish that at least matched the gear, so a level never made the paying fights easier; it moved the paying water further out. Pearls bought the right to earn pearls in harder water.
+- **The premise now (Oscar):** the sea is a place to earn. Pay is by place, so after an upgrade the same water gets easier and earns more, as at the lake. Each further zone challenges the gear, and upgrading raises what a spool of line returns.
+- **Zones are places** (`SEA_TIERS`, `seaFishTier`): the Shelf to the Twilight have one difficulty each, 0.8 of a tier apart, and no markers. Only the Abyss has markers: every third fish reaches the next, each a tenth of a tier harder and 12% richer in pearls and coins, numbered from 1, with the furthest kept for the board.
+- **One rod track** (`ROD`, `seaRodTier`): eight steps of 0.4 of a tier on strength and weight alike, two a zone and on sale once the zone is open, then endless Abyss levels of a tenth of a tier. The Deep Sea Line's levels are gone; the line is the spool. The lake keeps its rods and lines.
+- **The rating** (`ratingOf`): a zone reads Easy, Fair, Tough or Too much for the rod (a typical fish at most 0.05, 0.45 or 0.85 of a tier over it, or more). It replaces the two-gear words at sea, and the hook toast names the zone's rating rather than the fish's own, since a Brutish fish would read Too much in a zone that is Fair.
+- **Line** (`LINE`, `lineCost`): one 300 m spool in every zone. Every hooked fish uses 5 m at Easy, 9 m at Fair, 13 m at Tough (5 + 10 a tier over the rod), taken at the hook, and one that gets away 25 m more. Frays and the way the fight was played no longer cost line (Oscar: losing line on a clean catch was not intuitive; a fixed cost that falls as the rod improves is).
+- **Spools cost coins** (`SPOOL_COINS`): free on the Shelf, then 14,000 / 26,000 / 46,000 / 83,000. When one runs out the player buys another or heads home; nothing is ever lost.
+- **Two kinds of money** (Oscar wants the lake and the sea to feed each other): coins buy line and the rod (steps 250,000 / 400,000 / 300,000 / 700,000 / 550,000 / 1,300,000 / 1,000,000 / 2,400,000, Abyss levels from 1,000,000 rising 12% each); Black Pearls, which only sea fish pay (1 / 3 / 8 / 20 / 50 a fish by zone, double for a tagged fish, five times for a legend), buy the four boat parts that open zones (150 / 900 / 2,500 / 6,500). First drafted the other way round; Oscar swapped them so a zone is always earned at sea and coins have a sink without end.
+- **What the swap needs:** coins a fish rising about 1.8 times a zone (1,100 / 2,000 / 3,600 / 6,400 / 11,500; it was about 1.3 times). With the old values the simulated player bought every rod step from easy water in the zone before and never fished a zone until it was easy. Oscar accepted the inflation (a matched Abyss charter earns about 2 million coins an hour) with an economy repass to follow (TODO Ideas).
+- **Reed sells it all:** the Deep Sea Rod, its steps and levels and the boat parts, at his stand; the stall's Sea gear tab is gone.
+- **Bands on the reference hands** (careful / skilled; `scripts/seaeconomy.ts`):
+  - In a zone, a rod step takes a fight from about 35 / 28 s (Tough) to 19 / 14 s (Fair) to 12 / 10 s (Easy) and a spool from 17 / 23 landed fish to 33 to 60. A careful hand lands about 88% at Tough; everything easier lands every time.
+  - Zones open at about 0.7 / 0.6, 3.1 / 2.7, 5.4 / 4.7 and 7.7 / 6.7 hours, and all eight rod steps are bought by 10.3 / 9.0 hours. The gap between the hands is about a seventh (it was more than double under "The edge pays").
+  - The simulated player spends a little over half its time at Fair and the rest at Easy; Tough is a choice for a player who wants the next zone sooner, since a Tough zone pays more pearls an hour than the easy zone before it.
+  - A million lake coins shorten the journey by about a third and cannot skip a zone.
+- **Open:** pearls pile up once the Abyss is open (about 12,000-17,000 by the last rod step): a pearl purchase every five Abyss markers to sail further is the idea on file. The Abyss's tuning is not simulated. Nothing is at stake in a charter but the line; if charters feel flat, stakes can come back in the Abyss only.
 
 
 

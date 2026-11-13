@@ -40,7 +40,7 @@ try {
     await sleep(1200);
     await page.screenshot({ path: `${OUT}/${name}.jpg`, type: 'jpeg', quality: 80 });
   }
-  await say('/sea 1');
+  await say('/sea 0');
   await page.waitForFunction(() => (window as any).__game.world.sea && document.getElementById('castoff')!.classList.contains('hidden'), { timeout: 20000 });
   await page.addStyleTag({ content: '#hud, #crosshair, #toast, #banner, #tip, #guide, #divehud, #chat, #chatbox, #hotbar { display: none !important; }' });
   // Camera override: an outside view when set, applied just before each render.

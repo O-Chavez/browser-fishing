@@ -26,6 +26,20 @@ export const zoneAt = (depth: number): SeaZone => {
 };
 
 /**
+ * The depth the sea is drawn at for a charter's zone (0 the Shelf ... 4 the Abyss) and Abyss marker: about the middle
+ * of each zone's stretch of looks (`SEA_LOOK_DEPTH`), and in the Abyss `abyss.from + abyss.per·(marker − 1)`, rougher
+ * each marker, up to `abyss.cap`.
+ */
+export const SEA_LOOK_DEPTH = { zones: [8, 26, 48, 76], abyss: { from: 100, per: 3, cap: 250 } };
+
+export function seaDepthFor(zone: number, marker = 1): number {
+  const z = Math.max(0, Math.min(SEA_ZONES.length - 1, Math.floor(zone)));
+  const a = SEA_LOOK_DEPTH.abyss;
+  if (z < SEA_LOOK_DEPTH.zones.length) return SEA_LOOK_DEPTH.zones[z];
+  return Math.min(a.cap, a.from + a.per * (Math.max(1, Math.floor(marker)) - 1));
+}
+
+/**
  * How rough the sea and sky are at each depth: 0 is the pond's calm sky over a choppy sea, 0.6 the
  * Drop-off's low cloud, fog, whitecaps and spray. It climbs steadily rather than stepping at zone
  * lines. Colours stop changing at 1, the end of the Drop-off; past it the swell, spray and roll keep

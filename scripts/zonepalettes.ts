@@ -36,7 +36,7 @@ try {
   await sleep(600);
   const say = async (text: string) => { await page.keyboard.press('Enter'); await page.keyboard.type(text); await page.keyboard.press('Enter'); await sleep(300); };
   await say('/login shots shots-dev-pass');
-  await say('/sea 1');
+  await say('/sea 0');
   await page.waitForFunction(() => (window as any).__game.world.sea && document.getElementById('castoff')!.classList.contains('hidden'), { timeout: 20000 });
   await page.addStyleTag({ content: '#hud, #crosshair, #toast, #banner, #tip, #guide, #divehud, #chat, #chatbox, #hotbar { display: none !important; }' });
   // Per render: an optional outside camera and an optional palette laid over what the game just set.

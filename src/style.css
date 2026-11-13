@@ -694,8 +694,6 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 #divehud > div { padding: 7px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 #divehud > div + div { border-left: 2px solid rgba(255,255,255,.12); }
 #divehud .zone { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fd6e6; font-weight: 900; }
-#divehud .depth { font-size: 22px; font-weight: 900; line-height: 1; }
-#divehud .depth small { font-size: 12px; color: var(--cream-muted); font-weight: 800; margin-right: 5px; }
 #divehud .lab { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--cream-muted); font-weight: 900; }
 #divehud .linerow { display: flex; align-items: center; gap: 10px; }
 #divehud .bar { width: 90px; height: 12px; border-radius: 99px; background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.12); overflow: hidden; }
@@ -704,27 +702,17 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 #divehud .line.danger .bar i { background: linear-gradient(#ff8a70, #d9442b); }
 #divehud .line.danger .m { color: #ff9b7a; }
 #divehud .m { font-size: 16px; font-weight: 900; }
-#divehud .worn { font-size: 13px; font-weight: 900; color: #ff9b7a; animation: wornIn .3s ease-out both; }
+#divehud .worn { font-size: 13px; font-weight: 900; color: #ff6f5e; animation: wornIn .3s ease-out both; }
 @keyframes wornIn { from { opacity: 0; transform: translateY(-4px); } }
 #divehud .haul { font-size: 19px; font-weight: 900; display: flex; align-items: center; gap: 6px; }
 #divehud .gain { font-size: 13px; font-weight: 900; color: #8fd6e6; animation: wornIn .3s ease-out both; }
 #divehud .pnum { display: inline-flex; align-items: center; gap: 6px; }
 #divehud .pnum.pop { animation: pnumPop .6s ease-out both; }
 @keyframes pnumPop { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
-#divehud .grow { font-size: 12px; font-weight: 900; padding: 1px 7px; border-radius: 99px; background: var(--gold); color: var(--gold-ink); }
-#divehud .pay { letter-spacing: 0; text-transform: none; font-size: 11px; font-weight: 800; color: #8fd6e6; margin-left: 4px; }
-#divehud .pay .bpearl { width: 11px; height: 11px; vertical-align: -1px; }
+#divehud .v { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 900; line-height: 1.2; }
+#divehud .pips { letter-spacing: 3px; font-size: 13px; color: #8fd6e6; }
+#divehud .rate { font-size: 13px; padding: 1px 9px; }
 #divehud .dcoins { font-size: 15px; color: var(--cream-muted); margin-left: 4px; display: flex; align-items: center; gap: 4px; }
-#divehud .at { font-size: 15px; font-weight: 900; }
-/* Next-marker trail: a fish per catch between markers, then the flag. Tweak the grey-out and pop here. */
-#divehud .trail { --off-opacity: .35; --off-flag-opacity: .55; --off-filter: grayscale(1); --pop-ms: .6s; display: flex; align-items: center; gap: 1px; font-size: 15px; line-height: 1; }
-#divehud .trailrow { display: flex; align-items: center; gap: 8px; }
-#divehud .trailrow .lab { font-size: 10px; letter-spacing: 1px; min-width: 150px; white-space: nowrap; flex: none; }
-#divehud .trail i { font-style: normal; opacity: var(--off-opacity); filter: var(--off-filter); transition: opacity .3s, filter .3s; }
-#divehud .trail i.flag { opacity: var(--off-flag-opacity); }
-#divehud .trail i.on { opacity: 1; filter: none; }
-#divehud .trail i.pop { animation: trailPop var(--pop-ms) ease-out both; }
-@keyframes trailPop { 0% { transform: scale(.5); opacity: .3; } 55% { transform: scale(1.35); opacity: 1; } 100% { transform: scale(1); } }
 /* Under the reel gauge's words (the gauge is centred on the screen), so the top stays the charter's. */
 #divetag { position: absolute; top: calc(50% + 190px); left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; background: #c96a2b; color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
 #divetag span { font-weight: 700; opacity: .9; }
@@ -777,23 +765,59 @@ body.touch .dcard .btn kbd { display: none; }
 .dcard .big .bpearl { width: 34px; height: 34px; }
 .dcard .big.lost { color: #8a7a6a; text-decoration: line-through; text-decoration-thickness: 3px; }
 .dcard .why { margin: 6px 0 10px; padding: 10px 14px; border-radius: 12px; background: #fde3d8; color: #8a2f1d; font-weight: 800; font-size: 15px; }
-.reed .say { margin: 0 0 6px; font-style: italic; color: var(--ink-muted); font-size: 15px; }
-.reed .zlab { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 900; color: var(--ink-muted); margin: 10px 0 6px; }
-.reed .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.reed .chip { min-width: 64px; padding: 8px 12px; border-radius: 12px; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.15); font: inherit; font-weight: 900; font-size: 15px; color: var(--ink); text-align: center; cursor: pointer; }
-.reed .chip small { display: block; font-size: 11px; color: var(--ink-muted); font-weight: 800; }
-.reed .chip.sel { background: var(--gold); box-shadow: 0 0 0 3px var(--wood-600); }
-.reed .chip.rec::after { content: '★'; margin-left: 4px; color: var(--gold-dark); }
-.reed .rows { margin: 4px 0 0; }
-.reed .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 12px; border-radius: 10px; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.1); font-size: 14px; }
-.reed .stepper { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; }
-.reed .stepper .at { min-width: 130px; text-align: center; font-size: 15px; }
-.reed .stepper .at small { display: block; font-size: 11px; color: var(--ink-muted); font-weight: 800; }
-.reed .chip.step { min-width: 40px; padding: 6px 10px; }
-.reed .chip:disabled { opacity: .4; cursor: default; }
+.reed .say { margin: 0 0 8px; font-style: italic; color: var(--ink-muted); font-size: 15px; }
+/* a rating as a pill: Easy green, Fair teal, Tough amber, Too much red */
+.rate { display: inline-block; align-self: flex-start; padding: 2px 9px; border-radius: 99px; color: #fff; font-size: 12px; font-weight: 900; line-height: 1.3; white-space: nowrap; }
+.rate.easy { background: #46b866; } .rate.fair { background: #2f8ea3; } .rate.tough { background: #e79a2c; color: #3a2716; } .rate.over { background: #d9523a; }
+/* Reed's chart: a card for each zone, shelf light teal to abyss dark indigo */
+#menu.reedwin .win { width: min(820px, 96vw); }
+.reed .zcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 8px; }
+.reed .zcard { display: flex; flex-direction: column; min-width: 0; padding: 0; border-radius: 12px; overflow: hidden; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.14); font: inherit; color: var(--ink); text-align: left; }
+.reed button.zcard { cursor: pointer; }
+.reed button.zcard:hover { filter: brightness(1.04); }
+.reed .zcard.sel { box-shadow: 0 0 0 3px var(--wood-800), 0 0 0 6px var(--gold); }
+.reed .zcard .top { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 30px; padding: 3px 8px; color: #fff; font-weight: 900; font-size: 13px; line-height: 1.15; }
+.reed .zcard.z0 .top { background: #7fd0d4; color: #0e3f44; } .reed .zcard.z1 .top { background: #4aa3b8; } .reed .zcard.z2 .top { background: #5b8f6a; } .reed .zcard.z3 .top { background: #6a5a9c; } .reed .zcard.z4 .top { background: #2b2a55; }
+.reed .zcard .in { display: flex; flex-direction: column; gap: 5px; padding: 8px 9px 10px; font-size: 13px; font-weight: 800; }
+.reed .zcard .in small { font-size: 12px; font-weight: 700; color: var(--ink-muted); }
+.reed .zcard .pay { line-height: 1.35; font-size: 12.5px; }
+.reed .zcard .pay .amts { white-space: nowrap; display: inline-flex; align-items: center; gap: 3px; }
+.reed .zcard .pay .af { color: var(--ink-muted); font-weight: 700; font-size: 11.5px; }
+.reed .zcard .pay .bpearl, .reed .mstep .bpearl, .reed .row .bpearl, .reed .foot .bpearl { width: 13px; height: 13px; vertical-align: -2px; }
+.reed .zcard.locked .in { opacity: .6; }
+.reed .zcard.locked .opens { color: var(--ink); }
+.reed .mstep { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; padding: 6px 12px; border-radius: 12px; background: var(--paper-2); font-size: 14px; font-weight: 800; }
+.reed .mstep .lab { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-muted); font-weight: 900; }
+.reed .mstep b { min-width: 84px; text-align: center; font-size: 16px; }
+.reed .mstep .of { color: var(--ink-muted); font-size: 12px; }
+.reed .mstep .pay { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.reed .step { width: 30px; height: 30px; border-radius: 10px; background: var(--gold); color: var(--gold-ink); box-shadow: 0 3px 0 var(--gold-dark); font: inherit; font-size: 18px; font-weight: 900; line-height: 1; cursor: pointer; }
+.reed .step:disabled { background: var(--paper-3); color: var(--ink-muted); box-shadow: none; opacity: .5; cursor: default; }
+.reed .rows { margin: 10px 0 0; display: grid; gap: 8px; }
+.reed .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.1); font-size: 14px; font-weight: 800; }
+.reed .row > div { min-width: 0; flex: 1 1 180px; }
+.reed .row small { display: block; font-size: 12px; font-weight: 700; color: var(--ink-muted); }
+.reed .row .btn { flex: none; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 14px; font-size: 14px; white-space: nowrap; }
+.reed .btn small, .dcard .btn small { display: block; font-size: 11.5px; font-weight: 800; opacity: .9; }
+.reed .btn.off, .dcard .btn.off { background: var(--paper-2); color: var(--ink-muted); box-shadow: none; }
+.reed .btn .bpearl, .reed .btn .coin, .dcard .btn .bpearl, .dcard .btn .coin { width: 13px; height: 13px; vertical-align: -2px; }
+.reed .btns { margin-top: 12px; }
+.reed .btns .btn, .dcard .btns .btn { justify-content: center; }
+.reed .foot { margin-top: 10px; }
+.reed .foot .coin { width: 13px; height: 13px; vertical-align: -2px; }
+.dcard .row.net { background: var(--paper-2); }
+.dcard .note { margin: 0 0 14px; }
+.signpost { margin: 0 0 8px; padding: 8px 12px; border-radius: 12px; background: #d8ecef; font-size: 13px; font-weight: 800; color: #1f5a66; }
+.zrow { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 6px 0 8px; }
+.zrow .rate { font-size: 11px; padding: 1px 7px; }
+.zrow .zr { display: inline-flex; flex-direction: column; gap: 2px; }
+.zrow .zr small { font-size: 11px; font-weight: 800; color: var(--ink-muted); }
 .reed .detail p { margin: 0 0 6px; }
 .reed .detail p:last-child { margin: 0; }
 .reed .detail { display: block; margin: 14px 0; padding: 10px 14px; border-radius: 12px; background: var(--paper-2); font-size: 14px; line-height: 1.5; }
 .reed .foot { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-muted); font-weight: 800; margin-top: 12px; }
 .seastrip { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px; background: #d8ecef; font-size: 14px; font-weight: 800; }
 .seastrip .btn { flex: none; padding: 8px 14px; font-size: 14px; }
+
+/* Reed's chart: keep "23 fish a spool" on one line, so a card's line breaks at the dot. */
+.reed .nb { white-space: nowrap; }

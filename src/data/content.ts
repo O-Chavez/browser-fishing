@@ -118,22 +118,19 @@ export const LINES: Line[] = [
 ];
 
 /**
- * The charters' rod, not one of the pond's `RODS`: bought once at Marlow's stall, which is what pays for charter access,
- * and kept on Reed's boat rather than in the bag. The boat hands it over when a charter casts off and keeps it when the
- * player heads home. Its levels (`ROD_LEVEL`) make sea fish lighter. The stats only matter for casting at sea. Priced as
- * the next grind after the Aurora Rod and the pond's top gear (Oscar, 2026-11-01): five times the Aurora Rod, from the
- * level after it that takes ~70-90 top-gear catches to reach. A default, to tune after a play test.
+ * The charters' rod, not one of the pond's `RODS`: bought once from Captain Reed, which is what pays for charter
+ * access, and kept on Reed's boat rather than in the bag. The boat hands it over when a charter casts off and keeps it
+ * when the player heads home. Its steps and Abyss levels (`ROD` in dive.ts) answer the further zones' fish. The stats
+ * only matter for casting at sea. Priced as the next grind after the Aurora Rod and the pond's top gear (Oscar,
+ * 2026-11-01): five times the Aurora Rod, from the level after it that takes ~70-90 top-gear catches to reach.
  */
 export const DEEP_SEA_ROD: Rod = { id: 'searod', name: 'Deep Sea Rod', tier: 5, unlockLevel: 20, price: 100000, castDistance: 34, luck: 2.5, control: 2.2, color: 0x36548f };
 
-/** The Deep Sea Rod's short name, for the hotbar and tiles ("Sea Rod +12"). */
+/** The Deep Sea Rod's short name, for the hotbar and tiles. */
 export const SEA_ROD_SHORT = 'Sea Rod';
 
-/**
- * The sea's line (`SEA_LINE` in dive.ts): comes spooled on the Deep Sea Rod and is levelled with Black Pearls. Sea
- * only: the pond uses the pond line bought (`SaveData.line`).
- */
-export const DEEP_SEA_LINE: Line = { id: 'deepsea', name: 'Deep Sea Line', tier: 5, unlockLevel: 15, price: 0, color: 0x3fb6e6 };
+/** The colour of the charter's spool on the Deep Sea Rod's reel. */
+export const SEA_SPOOL_COLOR = 0x3fb6e6;
 
 export const BAITS: Bait[] = [
   { id: 'worm', name: 'Worm', tier: 1, price: 2, unlockLevel: 1, luck: 1, color: 0x9aa3ad },
@@ -171,35 +168,36 @@ const FISH_DEFS: FishDef[] = [
   { id: 'aurorapike', name: 'Aurora Pike', tier: 5, locations: ['pond', 'lake'], minSize: 200, maxSize: 270, maxWeight: 90, baseValue: 100, stamina: 2.5, color: 0x2fe0c0 },
   { id: 'constellation', name: 'Starweaver Eel', tier: 5, night: true, locations: ['pond', 'lake'], minSize: 220, maxSize: 320, maxWeight: 70, baseValue: 120, stamina: 2.5, color: 0x2a1b6e },
 
-  // Sea · Shelf (depths 1-15) and Drop-off (16-35). Tier 5 for rods and bait, but plain-looking, worth `SEA_VALUE`
-  // times their base value, and never rolled in the pond. The dive (D1/D3) catches them by location.
-  { id: 'pewtercod', name: 'Pewter Cod', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 190, maxWeight: 60, baseValue: 140, stamina: 2.55, color: 0x8a9ba8 },
-  { id: 'snapper', name: 'Copper Snapper', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 180, maxWeight: 45, baseValue: 155, stamina: 2.6, color: 0xd9763c },
-  { id: 'grouper', name: 'Grandmother Grouper', tier: 5, sea: true, legend: true, locations: ['shelf'], minSize: 200, maxSize: 300, maxWeight: 180, baseValue: 420, stamina: 2.7, color: 0x6b7a4a },
-  { id: 'galemackerel', name: 'Gale Mackerel', tier: 5, sea: true, locations: ['dropoff'], minSize: 150, maxSize: 210, maxWeight: 40, baseValue: 175, stamina: 2.6, color: 0x2f7f9a },
-  { id: 'irontuna', name: 'Ironside Tuna', tier: 5, sea: true, locations: ['dropoff'], minSize: 190, maxSize: 280, maxWeight: 200, baseValue: 195, stamina: 2.7, color: 0x2a4f8a },
-  { id: 'marlin', name: 'Squall Marlin', tier: 5, sea: true, legend: true, locations: ['dropoff'], minSize: 260, maxSize: 320, maxWeight: 300, baseValue: 560, stamina: 2.8, color: 0x1d5fb0 },
+  // Sea · the Shelf and the Drop-off. Tier 5 for rods and bait, but plain-looking, worth `SEA_VALUE` times their base
+  // value, and never rolled in the pond; a charter catches them by zone. Base values are set so an everyday fish's
+  // average sale (plain, average size) is about 1,100 coins on the Shelf, 2,000 in the Drop-off, 3,600 in Kelp Deep,
+  // 6,400 in the Twilight and 11,500 in the Abyss, and a legend about three times that (Oscar, 2026-11-12).
+  { id: 'pewtercod', name: 'Pewter Cod', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 190, maxWeight: 60, baseValue: 110, stamina: 2.55, color: 0x8a9ba8 },
+  { id: 'snapper', name: 'Copper Snapper', tier: 5, sea: true, locations: ['shelf'], minSize: 130, maxSize: 180, maxWeight: 45, baseValue: 125, stamina: 2.6, color: 0xd9763c },
+  { id: 'grouper', name: 'Grandmother Grouper', tier: 5, sea: true, legend: true, locations: ['shelf'], minSize: 200, maxSize: 300, maxWeight: 180, baseValue: 360, stamina: 2.7, color: 0x6b7a4a },
+  { id: 'galemackerel', name: 'Gale Mackerel', tier: 5, sea: true, locations: ['dropoff'], minSize: 150, maxSize: 210, maxWeight: 40, baseValue: 205, stamina: 2.6, color: 0x2f7f9a },
+  { id: 'irontuna', name: 'Ironside Tuna', tier: 5, sea: true, locations: ['dropoff'], minSize: 190, maxSize: 280, maxWeight: 200, baseValue: 230, stamina: 2.7, color: 0x2a4f8a },
+  { id: 'marlin', name: 'Squall Marlin', tier: 5, sea: true, legend: true, locations: ['dropoff'], minSize: 260, maxSize: 320, maxWeight: 300, baseValue: 630, stamina: 2.8, color: 0x1d5fb0 },
 
-  // Sea · Kelp Deep (36-60), the Twilight (61-90) and the Abyss (91+): stranger and dearer the further out (the
-  // Deep Sea Fish Options page, Oscar 2026-11-01). Stamina stays in the Drop-off's band; for now a
-  // sea fish's fight comes from how far out it is only (`seaGaps`).
-  { id: 'frondback', name: 'Frondback Seadragon', tier: 5, sea: true, locations: ['kelp'], minSize: 160, maxSize: 240, maxWeight: 50, baseValue: 240, stamina: 2.6, color: 0x8a8a2e },
-  { id: 'lionfish', name: 'Bramble Lionfish', tier: 5, sea: true, locations: ['kelp'], minSize: 160, maxSize: 230, maxWeight: 70, baseValue: 260, stamina: 2.65, color: 0xc0532c },
-  { id: 'wolfeel', name: 'Ironjaw Wolf-eel', tier: 5, sea: true, locations: ['kelp'], minSize: 200, maxSize: 300, maxWeight: 90, baseValue: 250, stamina: 2.65, color: 0x56707e },
-  { id: 'kelpbeard', name: 'Old Kelpbeard', tier: 5, sea: true, legend: true, locations: ['kelp'], minSize: 300, maxSize: 420, maxWeight: 400, baseValue: 700, stamina: 2.7, color: 0x3c6b38 },
-  { id: 'kelpwyrm', name: 'Thornback Kelpwyrm', tier: 5, sea: true, legend: true, locations: ['kelp'], minSize: 350, maxSize: 480, maxWeight: 300, baseValue: 700, stamina: 2.7, color: 0x2e5a3a },
-  { id: 'hatchet', name: 'Glass Hatchetfish', tier: 5, sea: true, locations: ['twilight'], minSize: 170, maxSize: 240, maxWeight: 40, baseValue: 330, stamina: 2.6, color: 0x9fb6cc },
-  { id: 'fangjaw', name: 'Fangjaw Dragonfish', tier: 5, sea: true, locations: ['twilight'], minSize: 200, maxSize: 320, maxWeight: 60, baseValue: 360, stamina: 2.65, color: 0x1c1834 },
-  { id: 'lanternshark', name: 'Velvet Lanternshark', tier: 5, sea: true, locations: ['twilight'], minSize: 180, maxSize: 260, maxWeight: 110, baseValue: 340, stamina: 2.65, color: 0x2a2442 },
-  { id: 'oarfish', name: 'Moonlit Oarfish', tier: 5, sea: true, legend: true, locations: ['twilight'], minSize: 500, maxSize: 800, maxWeight: 270, baseValue: 1000, stamina: 2.7, color: 0xd8e0ee },
-  { id: 'chandelier', name: 'Chandelier Angler', tier: 5, sea: true, legend: true, locations: ['twilight'], minSize: 250, maxSize: 400, maxWeight: 500, baseValue: 1000, stamina: 2.7, color: 0x2c2040 },
-  { id: 'lurker', name: 'Hundred-Eye Lurker', tier: 5, sea: true, locations: ['abyss'], minSize: 250, maxSize: 380, maxWeight: 400, baseValue: 490, stamina: 2.65, color: 0x5a3a7c },
-  { id: 'gulper', name: 'Gulper Maw', tier: 5, sea: true, locations: ['abyss'], minSize: 250, maxSize: 420, maxWeight: 120, baseValue: 500, stamina: 2.65, color: 0x241d34 },
-  { id: 'krakenspawn', name: 'Kraken Spawn', tier: 5, sea: true, locations: ['abyss'], minSize: 280, maxSize: 450, maxWeight: 350, baseValue: 510, stamina: 2.65, color: 0x8a2a4c },
-  { id: 'boneserpent', name: 'Bone Serpent', tier: 5, sea: true, locations: ['abyss'], minSize: 300, maxSize: 600, maxWeight: 250, baseValue: 490, stamina: 2.65, color: 0xe8e0cc },
-  { id: 'leviathan', name: 'The Leviathan', tier: 5, sea: true, legend: true, locations: ['abyss'], minSize: 900, maxSize: 1400, maxWeight: 9000, baseValue: 1500, stamina: 2.7, color: 0x2c2c42 },
-  { id: 'dreamer', name: 'The Drowned Dreamer', tier: 5, sea: true, legend: true, locations: ['abyss'], minSize: 700, maxSize: 1100, maxWeight: 6000, baseValue: 1500, stamina: 2.7, color: 0x2c6a5c },
-  { id: 'kraken', name: 'The Kraken', tier: 5, sea: true, legend: true, locations: ['abyss'], minSize: 1000, maxSize: 1500, maxWeight: 2500, baseValue: 1500, stamina: 2.7, color: 0x6a1a36 },
+  // Sea · Kelp Deep, the Twilight and the Abyss: stranger and dearer the further out (the Deep Sea Fish Options page,
+  // Oscar 2026-11-01). Stamina stays in the Drop-off's band; for now a sea fish's fight comes from its zone only (`seaGaps`).
+  { id: 'frondback', name: 'Frondback Seadragon', tier: 5, sea: true, locations: ['kelp'], minSize: 160, maxSize: 240, maxWeight: 50, baseValue: 375, stamina: 2.6, color: 0x8a8a2e },
+  { id: 'lionfish', name: 'Bramble Lionfish', tier: 5, sea: true, locations: ['kelp'], minSize: 160, maxSize: 230, maxWeight: 70, baseValue: 405, stamina: 2.65, color: 0xc0532c },
+  { id: 'wolfeel', name: 'Ironjaw Wolf-eel', tier: 5, sea: true, locations: ['kelp'], minSize: 200, maxSize: 300, maxWeight: 90, baseValue: 390, stamina: 2.65, color: 0x56707e },
+  { id: 'kelpbeard', name: 'Old Kelpbeard', tier: 5, sea: true, legend: true, locations: ['kelp'], minSize: 300, maxSize: 420, maxWeight: 400, baseValue: 1160, stamina: 2.7, color: 0x3c6b38 },
+  { id: 'kelpwyrm', name: 'Thornback Kelpwyrm', tier: 5, sea: true, legend: true, locations: ['kelp'], minSize: 350, maxSize: 480, maxWeight: 300, baseValue: 1160, stamina: 2.7, color: 0x2e5a3a },
+  { id: 'hatchet', name: 'Glass Hatchetfish', tier: 5, sea: true, locations: ['twilight'], minSize: 170, maxSize: 240, maxWeight: 40, baseValue: 670, stamina: 2.6, color: 0x9fb6cc },
+  { id: 'fangjaw', name: 'Fangjaw Dragonfish', tier: 5, sea: true, locations: ['twilight'], minSize: 200, maxSize: 320, maxWeight: 60, baseValue: 730, stamina: 2.65, color: 0x1c1834 },
+  { id: 'lanternshark', name: 'Velvet Lanternshark', tier: 5, sea: true, locations: ['twilight'], minSize: 180, maxSize: 260, maxWeight: 110, baseValue: 690, stamina: 2.65, color: 0x2a2442 },
+  { id: 'oarfish', name: 'Moonlit Oarfish', tier: 5, sea: true, legend: true, locations: ['twilight'], minSize: 500, maxSize: 800, maxWeight: 270, baseValue: 2120, stamina: 2.7, color: 0xd8e0ee },
+  { id: 'chandelier', name: 'Chandelier Angler', tier: 5, sea: true, legend: true, locations: ['twilight'], minSize: 250, maxSize: 400, maxWeight: 500, baseValue: 2120, stamina: 2.7, color: 0x2c2040 },
+  { id: 'lurker', name: 'Hundred-Eye Lurker', tier: 5, sea: true, locations: ['abyss'], minSize: 250, maxSize: 380, maxWeight: 400, baseValue: 1265, stamina: 2.65, color: 0x5a3a7c },
+  { id: 'gulper', name: 'Gulper Maw', tier: 5, sea: true, locations: ['abyss'], minSize: 250, maxSize: 420, maxWeight: 120, baseValue: 1290, stamina: 2.65, color: 0x241d34 },
+  { id: 'krakenspawn', name: 'Kraken Spawn', tier: 5, sea: true, locations: ['abyss'], minSize: 280, maxSize: 450, maxWeight: 350, baseValue: 1315, stamina: 2.65, color: 0x8a2a4c },
+  { id: 'boneserpent', name: 'Bone Serpent', tier: 5, sea: true, locations: ['abyss'], minSize: 300, maxSize: 600, maxWeight: 250, baseValue: 1265, stamina: 2.65, color: 0xe8e0cc },
+  { id: 'leviathan', name: 'The Leviathan', tier: 5, sea: true, legend: true, locations: ['abyss'], minSize: 900, maxSize: 1400, maxWeight: 9000, baseValue: 3790, stamina: 2.7, color: 0x2c2c42 },
+  { id: 'dreamer', name: 'The Drowned Dreamer', tier: 5, sea: true, legend: true, locations: ['abyss'], minSize: 700, maxSize: 1100, maxWeight: 6000, baseValue: 3790, stamina: 2.7, color: 0x2c6a5c },
+  { id: 'kraken', name: 'The Kraken', tier: 5, sea: true, legend: true, locations: ['abyss'], minSize: 1000, maxSize: 1500, maxWeight: 2500, baseValue: 3790, stamina: 2.7, color: 0x6a1a36 },
 ];
 
 export const FISH: Fish[] = FISH_DEFS.map((f) => ({ ...f, rarity: TIERS[f.tier - 1] }));

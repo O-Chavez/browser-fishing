@@ -1,9 +1,10 @@
 import { CASINO_LEVEL } from '../data/casino';
-import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, byId, type Bait, type Fish, type Line, type Rod } from '../data/content';
-import { DIVES_OPEN, SEA_TIERS } from '../data/dive';
-import { BAIT_PACK, CLEAN_BONUS } from './economy';
+import { BAITS, FISH, LINES, RODS, type Bait, type Fish, type Line, type Rod } from '../data/content';
+import { DIVES_OPEN } from '../data/dive';
+import { nextRodBuy, rodBuyName, seaFightRating } from './dive';
+import { BAIT_PACK, CLEAN_BONUS, hasSailed } from './economy';
 import { COIN } from './format';
-import { gapsOf, matchupWords, overGear, rungsOver } from './progression';
+import { gapsOf, matchupWords, overGear } from './progression';
 import type { Gaps } from './reel';
 import type { SaveData } from './state';
 
@@ -32,16 +33,16 @@ function nextBait(s: Pick<SaveData, 'slots' | 'locker'>) {
 }
 
 /**
- * Whether charters are worth pointing the player at: they own the Deep Sea Rod, haven't headed home from a marker
- * yet (`sea.record`), and the seaplane is taking players out (`open`, `DIVES_OPEN`), so
- * nothing points at closed charters and the usual goals come back after a first charter.
+ * Whether charters are worth pointing the player at: they own the Deep Sea Rod, haven't landed a sea fish yet (none
+ * in the Fishdex), and the seaplane is taking players out (`open`, `DIVES_OPEN`), so nothing points at closed
+ * charters and the usual goals come back after a first charter.
  */
-export function chartersToTry(s: Pick<SaveData, 'seaRod' | 'sea'>, open = DIVES_OPEN): boolean {
-  return open && s.sea.record === 0 && s.seaRod;
+export function chartersToTry(s: Pick<SaveData, 'seaRod' | 'dex'>, open = DIVES_OPEN): boolean {
+  return open && s.seaRod && !hasSailed(s);
 }
 
 /** True when the one-time charter tip should show now. */
-export const charterTipDue = (s: Pick<SaveData, 'seaRod' | 'sea' | 'tips'>, open = DIVES_OPEN): boolean => !s.tips.includes('charter') && chartersToTry(s, open);
+export const charterTipDue = (s: Pick<SaveData, 'seaRod' | 'dex' | 'tips'>, open = DIVES_OPEN): boolean => !s.tips.includes('charter') && chartersToTry(s, open);
 
 /** Tip text as HTML. Only game data goes in, so nothing needs escaping. `touch` words controls for the on-screen buttons. */
 export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker' | 'dex'>, vendor: string, touch = false): string {
@@ -76,7 +77,7 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
     case 'snack':
       return `Smoked fish ready! Eat one from your <b>Bag</b> (${touch ? 'the 🎒 button' : '<kbd>Tab</kbd>'}) for ⭐ more XP on every catch.`;
     case 'charter':
-      return 'Your Deep Sea Rod is waiting on <b>Captain Reed</b>\'s seaplane! Find him on the <b>west beach</b> and book a charter: the further out, the rarer the fish.';
+      return 'Your Deep Sea Rod is waiting on <b>Captain Reed</b>\'s seaplane! Find him on the <b>west beach</b>, buy a spool of line and cast off: the further out, the more the fish pay.';
     case 'dish': {
       // Names the player's own tier 3 catch, so the next Fish Cakes is easy to picture.
       const t3 = FISH.filter((f) => f.tier === 3 && s.dex[f.id]).sort((a, b) => s.dex[b.id]!.count - s.dex[a.id]!.count)[0];
@@ -156,25 +157,15 @@ export function lossVerdict(end: LossEnd, s: Pick<SaveData, 'rod' | 'line' | 'le
   return fixes.length ? { title: ended(end), fixes } : reelTip(end);
 }
 
-/** Levels past the current one until a fish this far over a sea track is no longer over it: a level is one marker (`SEA_TIERS.level`). */
-function levelsToClear(gap: number): number {
-  let k = 1;
-  while (rungsOver(Math.round((gap - k * SEA_TIERS.level) * 100) / 100) >= 1) k++;
-  return k;
-}
-
 /**
- * The card after a lost sea fight, as the pond's: each gear line names the first Deep Sea Line or Rod level on which
- * this fish (`g`, its own gaps) is no longer over that gear, as the pond names the line that holds it (Oscar,
- * 2026-11-03: the next level alone undersold a fish several markers past the wall).
+ * The card after a lost sea fight, as the pond's: a fish Tough or Too much for the rod (`seaFightRating` on its own
+ * gaps, `g`) names the rod's next step or Abyss level ("Rod too weak → Deep Sea Rod step 5"); a Fair or Easy one
+ * was the player's doing, and gets the cause and a reel tip.
  */
-export function seaLossVerdict(end: LossEnd, s: Pick<SaveData, 'rodLevel' | 'seaLine'>, g: Gaps): Verdict {
-  const over = overGear(g);
-  const fixes = [
-    over.line && `Line too weak → Deep Sea Line +${s.seaLine + levelsToClear(g.strength)}`,
-    over.rod && `Rod too weak → ${DEEP_SEA_ROD.name} +${s.rodLevel + levelsToClear(g.weight)}`,
-  ].filter((x): x is string => !!x);
-  return fixes.length ? { title: ended(end), fixes } : reelTip(end);
+export function seaLossVerdict(end: LossEnd, s: Pick<SaveData, 'rodStep' | 'abyssLevels'>, g: Gaps): Verdict {
+  const r = seaFightRating(g);
+  if (r !== 'tough' && r !== 'over') return reelTip(end);
+  return { title: ended(end), fixes: [`Rod too weak → ${rodBuyName(nextRodBuy({ steps: s.rodStep, levels: s.abyssLevels }))}`] };
 }
 
 /**

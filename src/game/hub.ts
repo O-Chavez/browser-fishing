@@ -144,7 +144,6 @@ export class Hub {
   /** The charter poster on the gate's other side, on maps with Reed's harbour (unset elsewhere). */
   readonly charterSpot: THREE.Vector3 | null = null;
   readonly leaderSpot = new THREE.Vector3();
-  readonly mirrorSpot = new THREE.Vector3();
   readonly campSpot = new THREE.Vector3();
   private leaderCtx!: CanvasRenderingContext2D;
   private leaderTex!: THREE.CanvasTexture;
@@ -178,7 +177,6 @@ export class Hub {
     this.buildProps();
     this.buildLeaderboard(map.leaderboard);
     this.buildThanks(map.leaderboard);
-    this.buildMirror(map.mirror);
     this.buildCampfire(map.campfire);
     this.setLeaders([]);
     this.setSupporters([]);
@@ -578,37 +576,6 @@ export class Hub {
     ctx.fillStyle = '#c98aa4';
     ctx.fillText('Tip jar: ⚙️ Settings', w / 2, h - 18);
     this.thanksTex.needsUpdate = true;
-  }
-
-  private buildMirror(spot: Spot): void {
-    const g = new THREE.Group();
-    const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 });
-    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.07, 8, 28), gold);
-    frame.scale.set(0.8, 1.25, 1);
-    frame.position.y = 1.55;
-    frame.castShadow = true;
-    const glass = new THREE.Mesh(
-      new THREE.CircleGeometry(0.62, 28),
-      new THREE.MeshStandardMaterial({ color: 0xbfe6ff, roughness: 0.05, metalness: 0.9, emissive: 0x2a5a7a, emissiveIntensity: 0.4 }),
-    );
-    glass.scale.set(0.8, 1.25, 1);
-    glass.position.set(0, 1.55, 0.01);
-    for (const lx of [-0.45, 0.45]) {
-      const leg = cyl(0.04, 0.05, 1.0, DARK, 6);
-      leg.position.set(lx, 0.5, -0.1);
-      leg.rotation.z = lx > 0 ? -0.12 : 0.12;
-      g.add(leg);
-    }
-    const base = rbox(1.2, 0.08, 0.5, DARK, 0.03);
-    base.position.y = 0.04;
-    const sign = textPlane(1.1, 0.3, 320);
-    woodSign(sign.ctx, 'WARDROBE');
-    sign.tex.needsUpdate = true;
-    sign.mesh.position.set(0, 2.55, 0);
-    g.add(frame, glass, base, sign.mesh);
-    this.place(g, spot);
-    this.fixed.push({ x: spot.x, z: spot.z, r: 0.5 });
-    this.world(spot, 0, 1.9, this.mirrorSpot);
   }
 
   private buildCampfire(spot: Spot): void {

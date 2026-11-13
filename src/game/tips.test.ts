@@ -58,14 +58,13 @@ describe('loss verdict', () => {
     expect(lossVerdict('snapped', { rod: 'twig', line: 'twine', level: 1 }, null).cause).toBe('Held in the red through a surge');
   });
 
-  it('at sea, names the first level of each track on which the fish is no longer over it', () => {
-    const s = { rodLevel: 3, seaLine: 0 };
-    // A level is one marker: a fish right at the wall is cleared by the next level, one 2 markers past it by the third.
-    expect(seaLossVerdict('snapped', s, { strength: 1, weight: 0 })).toEqual({ title: 'SNAP!', fixes: ['Line too weak → Deep Sea Line +1'] });
-    expect(seaLossVerdict('escaped', { ...s, seaLine: 2 }, { strength: 1.33, weight: 1.33 })).toEqual({ title: 'RAN OFF!', fixes: ['Line too weak → Deep Sea Line +5', 'Rod too weak → Deep Sea Rod +6'] });
-    // A Brutish fish takes its tag's levels too.
-    expect(seaLossVerdict('snapped', s, { strength: 0.2, weight: 1.5 }).fixes).toEqual(['Rod too weak → Deep Sea Rod +7']);
-    expect(seaLossVerdict('escaped', s, { strength: 0.8, weight: 0.8 }).cause).toBe('The fish took all your line');
+  it("at sea, a fish Tough or Too much for the rod names the rod's next step or Abyss level; a Fair one gets a reel tip", () => {
+    const s = { rodStep: 4, abyssLevels: 0 };
+    expect(seaLossVerdict('snapped', s, { strength: 0.9, weight: 0.2 })).toEqual({ title: 'SNAP!', fixes: ['Rod too weak → Deep Sea Rod step 5'] });
+    expect(seaLossVerdict('escaped', s, { strength: 0.3, weight: 0.5 })).toEqual({ title: 'RAN OFF!', fixes: ['Rod too weak → Deep Sea Rod step 5'] });
+    expect(seaLossVerdict('escaped', { rodStep: 8, abyssLevels: 2 }, { strength: 1.4, weight: 1.4 }).fixes).toEqual(['Rod too weak → Deep Sea Rod Abyss level 3']);
+    expect(seaLossVerdict('escaped', s, { strength: 0.4, weight: 0.45 })).toEqual({ title: 'RAN OFF!', cause: 'The fish took all your line', fixes: ['Hold in the green, above the blue'] });
+    expect(seaLossVerdict('snapped', s, { strength: 0, weight: 0 }).cause).toBe('Held in the red through a surge');
   });
   it("words a bait's top fish against the line and rod as the hook toast does, warning from two rungs over", () => {
     const minnow = BAITS.find((b) => b.tier === 3)!;
@@ -139,10 +138,10 @@ describe('rod upgrade hint', () => {
     expect(charterTipDue(s, true)).toBe(false);
   });
 
-  it('gives way to the usual goals once a marker has been reached', () => {
+  it('gives way to the usual goals once a sea fish has been landed', () => {
     const s = newSave();
     s.seaRod = true;
-    s.sea.record = 5;
+    s.dex.snapper = { count: 1, best: 150 };
     expect(chartersToTry(s, true)).toBe(false);
     expect(charterTipDue(s, true)).toBe(false);
   });
