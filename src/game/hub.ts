@@ -22,6 +22,12 @@ export const rbox = (w: number, h: number, d: number, color: number, r = 0.05): 
   return m;
 };
 
+/**
+ * How far behind a board's middle its posts stand: far enough that a post up to 0.1 m thick stays behind the front
+ * of a frame 0.1 m thick or more, where the board's face is.
+ */
+export const BEHIND = 0.14;
+
 export const cyl = (rt: number, rb: number, h: number, color: number, seg = 14): THREE.Mesh => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(color));
   m.castShadow = true;
@@ -327,9 +333,11 @@ export class Hub {
   private buildPoster(gate: Spot, p: Poster): THREE.Vector3 {
     const spot: Spot = { ...this.world(gate, p.side, 0.6), facing: gate.facing } as Spot;
     const g = new THREE.Group();
+    // The posts stand behind the frame (`BEHIND`), which is nailed to their fronts: set in its middle they came
+    // through the picture, being thicker than the frame.
     for (const lx of [-0.95, 0.95]) {
       const post = cyl(0.07, 0.09, 2.6, DARK, 8);
-      post.position.set(lx, 1.3, 0);
+      post.position.set(lx, 1.3, -BEHIND);
       g.add(post);
     }
     const frame = rbox(2.2, 1.55, 0.1, p.frame, 0.04);
@@ -458,9 +466,10 @@ export class Hub {
 
   private buildLeaderboard(spot: Spot): void {
     const g = new THREE.Group();
+    // Posts behind the frame, like the posters' (`BEHIND`), so they don't come through the board's face.
     for (const lx of [-1.0, 1.0]) {
       const post = cyl(0.08, 0.1, 2.8, DARK, 8);
-      post.position.set(lx, 1.4, 0);
+      post.position.set(lx, 1.4, -BEHIND);
       g.add(post);
     }
     const frame = rbox(2.5, 2.0, 0.12, 0x6b4a2b, 0.05);
@@ -544,7 +553,7 @@ export class Hub {
     const g = new THREE.Group();
     for (const lx of [-0.6, 0.6]) {
       const post = cyl(0.06, 0.08, 2.2, DARK, 8);
-      post.position.set(lx, 1.1, 0);
+      post.position.set(lx, 1.1, -BEHIND);
       g.add(post);
     }
     const frame = rbox(1.6, 1.5, 0.1, 0x6b4a2b, 0.04);

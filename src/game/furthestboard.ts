@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { DIVES_OPEN, ZONES } from '../data/dive';
 import type { FurthestRow } from '../net/protocol';
-import { DARK, ball, cyl, mat, rbox, textPlane } from './hub';
+import { BEHIND, DARK, ball, cyl, mat, rbox, textPlane } from './hub';
 import { glowTag } from './nightglow';
 
 /**
@@ -49,7 +49,8 @@ export class FurthestBoard {
   constructor() {
     for (const lx of BOARD_POSTS) {
       const post = cyl(0.08, 0.1, MID + H / 2 + 0.3, DARK, 8);
-      post.position.set(lx, (MID + H / 2 + 0.3) / 2, -0.02);
+      // Behind the frame, so they don't come through the face (`BEHIND`).
+      post.position.set(lx, (MID + H / 2 + 0.3) / 2, -BEHIND);
       this.group.add(post);
     }
     const frame = rbox(W, H, 0.12, B.frame, 0.05);

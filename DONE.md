@@ -2,6 +2,11 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] The boards' posts no longer come through their faces (Oscar, 2026-11-13; done 2026-11-13, branch `quay-east-clear`)
+  - Oscar: make sure the posts of the signs aren't clipping through the signs. Top Anglers, Thanks, the Furthest Out board and the two posters by the gate each stood on posts set in the middle of the frame, and the posts are thicker than the frame, so they showed as two stripes down the face
+  - Built: the posts stand 0.14 m behind the frame's middle (`BEHIND`, `src/game/hub.ts`), so each board is nailed to the front of its posts. The cottages' yard signs and the CHARTERS arch were checked and were clear already
+  - Checked: headless views reading Top Anglers, Thanks and the Furthest Out board, with the builds and smoke above
+
 - [x] 🎨 The campfire reworked: a fire ring (Oscar, 2026-11-13; done 2026-11-13, branch `quay-east-clear`)
   - Oscar: fine with a rework of the firepit social area; it should feel designed and specifically placed. Two layouts were built in the game and shown side by side (the same page as Reed's corner); Oscar picked A, the "fire ring", over B, a rectangular terrace with both boards on a straight back wall. No What's new entry (Oscar)
   - Built: a level round cobbled floor (r 2.75) with a kerb of flat stones, the fire in its middle, and a low stone seat wall with a plank top round the hill side that holds the hill back. Top Anglers and Thanks stand just behind the wall as a pair, each 3.6 m from the fire and 24° either side of the line from the pier's end through the fire. The lane comes in through a gate of two 3.3 m posts with lanterns (glow only, no new lights); string lights run from the gate round above the wall. One log seat on the rim; the water side is open. The two benches are gone (`RING`, `ring` in `MapDef`; `buildRing`, `src/game/town.ts`)
@@ -33,7 +38,7 @@ Finished TODO items, newest first, with what was decided and how each was checke
   - Docs: GAME_DESIGN.md's harbour paragraph. README harbour photo re-taken
   - Checked: the build, 592 tests and smoke 113/113; top-down plans before and after (`scripts/map-plan.ts`: the whole town, the quay's west and east ends) and headless views by day (`scripts/map-views.ts --walk`: w05, w08, w09, e01, e02, r01, r02, r06, w10)
   - Play-test: the two corners' sweep and the 2.2 m width; the few-centimetre dip in the road along the deck's edge; the lane's lamp on the hill side; the bench cluster. The ends of both lanes (Reed's beach, the campfire circle) are being reworked separately
-  - Not re-taken: the README outfits photo (its shot timed out again on a busy machine; the deck's rear edge behind the players is the old ragged one)
+  - README outfits photo re-taken later the same day, once the machine was quiet (it timed out while other headless runs were going)
 
 - [x] Three small fixes from a play test: the smoker's turn, taller chimneys, the wardrobe preview sways (Oscar, 2026-11-13; done 2026-11-13, branch `quay-east-clear`)
   - The stone smoker beside the Smokehouse faced the street; its iron door and coals now face the way the shack does, with its firewood on the street side (a small collider added for the stack) and the pipe's smoke moved with it (`buildSmokehouse`, `src/game/town.ts`)
