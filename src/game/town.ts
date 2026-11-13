@@ -968,15 +968,20 @@ export class Town {
     this.at(g, x, z, facing);
   }
 
-  /** A string of bulbs between two posts `h` tall, from (ax, az) to (bx, bz). */
-  private stringLights(ax: number, az: number, bx: number, bz: number, h: number): void {
+  /**
+   * A string of bulbs from (ax, az) to (bx, bz), `h` above the ground at each end. It hangs between two posts of
+   * its own, or, given `masts` (the height above the ground where each one starts), from thin masts on top of
+   * something that stands there already, which leaves nothing new to walk round.
+   */
+  private stringLights(ax: number, az: number, bx: number, bz: number, h: number, masts?: [number, number]): void {
     // A bulb about every half metre, with the sag of a short string.
     const n = Math.max(8, Math.round(Math.hypot(bx - ax, bz - az) * 2));
-    for (const [x, z] of [[ax, az], [bx, bz]]) {
-      const post = cyl(0.05, 0.06, h, DARK, 6);
-      this.at(post, x, z, 0, groundHeight(x, z) + h / 2);
-      this.solid(x, z, 0.15);
-    }
+    [[ax, az], [bx, bz]].forEach(([x, z], i) => {
+      const from = masts?.[i] ?? 0;
+      const post = masts ? cyl(0.03, 0.035, h - from, DARK, 6) : cyl(0.05, 0.06, h, DARK, 6);
+      this.at(post, x, z, 0, groundHeight(x, z) + (h + from) / 2);
+      if (!masts) this.solid(x, z, 0.15);
+    });
     // Straight from one post top to the other, so a string across a slope hangs like one.
     const ya = groundHeight(ax, az) + h;
     const yb = groundHeight(bx, bz) + h;
@@ -1012,11 +1017,23 @@ export class Town {
     this.pot(12.5, 13.95);
     // A picnic blanket on the slope above Reed's lane (the campfire headland is too narrow for a second one).
     this.blanket(-15, 16.5, -0.3);
-    // String lights across the quay's rear in front of the stalls, over the square, at the gate, and over the campfire
-    // from its lake side to its quay side, the posts behind the benches on the circle's rim. The string is turned a
-    // little off north-south so, seen from the ramp, the quay post stands just clear of Top Anglers instead of in
-    // front of it. Play-test: the posts and the height.
-    this.stringLights(-8, 15.3, 8, 15.3, 3.3);
+    // String lights over the mouth of the main street between the two stalls, over the square, at the gate, and over
+    // the campfire from its lake side to its quay side, the posts behind the benches on the circle's rim. The
+    // stalls' string hangs from masts on their street-side front posts (Marlow's stall in hub.ts, `buildSmokehouse`),
+    // so no post stands on the quay road. The campfire's is turned a little off north-south so, seen from the ramp,
+    // the quay post stands just clear of Top Anglers instead of in front of it. Play-test: the posts and the height.
+    const sh = this.map.smokehouse;
+    if (sh) {
+      const { shop } = this.map.vendor;
+      const corner = (s: Spot, lx: number, lz: number, top: number): [number, number, number] => {
+        const x = s.x + lx * Math.cos(s.facing) + lz * Math.sin(s.facing);
+        const z = s.z - lx * Math.sin(s.facing) + lz * Math.cos(s.facing);
+        return [x, z, standHeight(s.x, s.z) + top - groundHeight(x, z)];
+      };
+      const [ax, az, a] = corner(shop, -1.5, 0.9, 2.5);
+      const [bx, bz, b] = corner(sh, 3.4 / 2 - 0.08, 0.25, 2.3);
+      this.stringLights(ax, az, bx, bz, 3.3, [a, b]);
+    }
     this.stringLights(-4, 32, 4, 32, 3.3);
     this.stringLights(-3.4, 54.5, 3.4, 54.5, 3.1);
     const fire = this.map.campfire;

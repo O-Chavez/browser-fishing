@@ -14,7 +14,8 @@ import { newSave } from '../src/game/state';
 import { MAPS } from '../src/data/maps';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const VITE_PORT = 5298;
+// MAP_PORT picks another port, so two checkouts can stage views at once.
+const VITE_PORT = Number(process.env.MAP_PORT ?? 5298);
 const [outArg, ...only] = process.argv.slice(2);
 if (!outArg) {
   console.error('usage: npx tsx scripts/map-views.ts <out dir> [view ...]');

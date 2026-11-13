@@ -353,7 +353,7 @@ The land hub is a small cozy fishing town wrapped around a cove like a harbour: 
 
 - **Townsfolk**: Old Salty (pier tips), Pip, Granny Wren and Captain Reed. Press E to talk; lines cycle and some change at night.
 - **Messages in bottles**: 7 hidden around town, shore and pier. Each pays 40 coins once; finding all 7 pays a 300 coin bonus. Found bottles are saved per account (`SaveData.bottles`); the server verifies the player is within 4 m.
-- **Coziness**: lantern posts line the quay, the street and the lanes (eight cast real light at night), benches and planters ring the plaza, string lights span the quay's rear, the square, the gate and the campfire's circle, a bench on the east jetty looks across the water to the campfire, a picnic blanket overlooks Reed's lane, and firewood is stacked by Wren's Cottage. Bottles rest on the ground or the deck; the rowboat is moored beside the west jetty.
+- **Coziness**: lantern posts line the quay, the street and the lanes (eight cast real light at night); none stands on a walkway: the quay's front pair and the east jetty's stand on piles in the water a step off the deck's edge, the quay's rear pair are tucked against the stall's barrels and behind the east bench, and the rest stand beside the cobbles. Benches and planters ring the plaza, string lights span the mouth of the main street between the two stalls (from masts on the stalls, no posts on the quay road), the square, the gate and the campfire's circle, a bench on the east jetty looks across the water to the campfire, a picnic blanket overlooks Reed's lane, and firewood is stacked by Wren's Cottage. Bottles rest on the ground or the deck; the rowboat is moored beside the west jetty.
 
 ## 27. Night fishing
 
