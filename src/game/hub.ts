@@ -398,13 +398,13 @@ export class Hub {
     // east jetty's end) stand on their own piles in the water, a step off the deck's edge, out of reach, so they
     // need no collider. The quay's rear two are tucked against things that are solid already: the barrels by the
     // stall, and the back of the bench at the east end. The rest stand beside the cobbles: up the main street to
-    // the square, beside Reed's lane just before his arch, and beside the campfire lane where the village ring's
-    // lane joins it, on the hill side, where it stays out of the view down the lane to the boards (the village's
-    // own posts are in town.ts). Five carry a point light.
+    // the square, beside Reed's lane just before his arch, and in the fork where the village ring's lane meets the
+    // campfire lane, out of the view along the lane to the ring (the village's own posts are in town.ts). Five
+    // carry a point light.
     // Play-test: the spots.
     const piles = [[-4, 9.7], [4, 9.7], [9.05, 4.5]];
     const lit = new Set(['3.6,27.5', '-18.9,5.3']);
-    const posts = [[-8.45, 13.5], [11.2, 13.95], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-18.9, 5.3], [17.3, 8.3]];
+    const posts = [[-8.45, 13.5], [11.2, 13.95], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-18.9, 5.3], [16.5, 13]];
     const lampPost = (x: number, z: number, light: boolean, pile: boolean) => {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
@@ -434,7 +434,7 @@ export class Hub {
     for (const [x, z] of piles) lampPost(x, z, true, true);
     for (const [x, z] of posts) lampPost(x, z, lit.has(`${x},${z}`), false);
     // Barrels and a crate on the quay deck by the stall's end: a working waterfront. The east corner stays clear,
-    // as the campfire ramp leaves the quay there.
+    // as the campfire lane leaves the quay there.
     const barrelGeo = new THREE.LatheGeometry(
       [[0.26, 0], [0.34, 0.2], [0.36, 0.45], [0.34, 0.7], [0.26, 0.9]].map(([x, y]) => new THREE.Vector2(x, y)),
       14,
@@ -629,23 +629,7 @@ export class Hub {
     g.add(this.fireLight);
     this.place(g, spot);
     this.fixed.push({ x: spot.x, z: spot.z, r: 0.8 });
-    // Benches on the lake and quay sides of the fire, inside its cobbled circle (`circles` in maps.ts); the water side
-    // (-x, the cove) stays open and the hill side has the boards.
-    for (const a of [Math.PI, 0]) {
-      const bx = spot.x + Math.sin(a) * 2.4;
-      const bz = spot.z + Math.cos(a) * 2.4;
-      const bench = new THREE.Group();
-      const seat = rbox(1.7, 0.1, 0.5, 0x8a6a40, 0.03);
-      seat.position.y = 0.45;
-      bench.add(seat);
-      for (const lx of [-0.7, 0.7]) {
-        const leg = rbox(0.1, 0.45, 0.4, DARK, 0.02);
-        leg.position.set(lx, 0.22, 0);
-        bench.add(leg);
-      }
-      this.place(bench, { x: bx, z: bz, facing: Math.atan2(spot.x - bx, spot.z - bz) });
-      this.fixed.push({ x: bx, z: bz, r: 0.85 });
-    }
+    // The seats round the fire are the ring's (`buildRing` in town.ts): its seat wall on the hill side and a log.
     // On the open water side, away from the boards' prompt behind the fire.
     this.campSpot.set(spot.x - 1.8, groundHeight(spot.x, spot.z), spot.z);
   }

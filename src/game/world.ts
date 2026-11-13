@@ -17,6 +17,7 @@ import {
   onDock,
   padWeight,
   setAprons,
+  setLevels,
   setIslet,
   setWorn,
   dirtWeight,
@@ -602,6 +603,7 @@ export class World {
     this.indoor = !!map.casino;
     setPad(map.pad);
     setAprons(map.aprons ?? []);
+    setLevels(map.levels ?? []);
     setIslet(map.islet ?? null);
     this.islet = map.islet ?? null;
     // The town's ground is worn to dirt along its paths, round the square and in front of the two stalls.

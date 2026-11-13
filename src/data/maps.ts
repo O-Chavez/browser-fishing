@@ -43,18 +43,37 @@ export const HARBOUR = {
 HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.stand.x - HARBOUR.diveStart.x), -(HARBOUR.stand.z - HARBOUR.diveStart.z));
 
 /**
- * The campfire on the east headland, the town's meeting place: a cobbled circle at the foot of the campfire lane
- * from the quay's east corner, benches on its lake and quay sides, string lights over it, and Top Anglers and Thanks behind
- * the fire on the hill side, turned to the fire, so the fire lights them at night and the cove sees them from the
- * pier and the east jetty. The water side stays open. Play-test: the spots, the turns and the circle's size.
+ * The campfire on the east headland, the town's meeting place: a round cobbled floor, level, dug into the foot of the
+ * hill and built out toward the water, with the fire in its middle (`RING`). A low stone seat wall holds the hill back
+ * round its hill side; Top Anglers and Thanks stand just behind the wall as a pair, the same distance from the fire
+ * and either side of the line from the pier's end through the fire, so the fire lights them at night and the cove
+ * sees them from the pier and the east jetty. The campfire lane from the quay's east corner and the lane from the village ring meet up the slope
+ * and come in between two lantern posts on the quay side. The water side stays open. Play-test: the spots and sizes.
  */
-const CAMPFIRE = { x: 18.6, z: 2.2 };
-/** Each board stands `r` m from the fire, `deg` degrees round from +z (90 is straight up the hill), facing it. */
+const CAMPFIRE = { x: 18.7, z: 3.3 };
+/** A spot `r` m from the fire, `deg` degrees round from +z (90 is straight up the hill), facing it. */
 const byFire = (r: number, deg: number): Spot => {
   const x = CAMPFIRE.x + r * Math.sin((deg * Math.PI) / 180);
   const z = CAMPFIRE.z + r * Math.cos((deg * Math.PI) / 180);
   return { x, z, facing: faceToward(x, z, CAMPFIRE.x, CAMPFIRE.z) };
 };
+/** The campfire's ring, built round `campfire` by town.ts; angles are degrees round from +z, like `byFire`. */
+export interface RingDef {
+  /** Radius of the cobbles; a kerb of flat stones runs round them. */
+  r: number;
+  /** The seat wall's two ends: a string-light post stands at each. */
+  wall: [number, number];
+  /** Where the lane comes in: the gate's other post stands this far round, on the open side of the wall's first end. */
+  gate: number;
+  /** A log seat on the rim past the wall's far end. */
+  log: number;
+}
+const RING: RingDef = { r: 2.75, wall: [11, 117], gate: -35, log: 165 };
+/** Where the lanes meet above the ring, on the line through the middle of the gate, and where that line ends inside the cobbles. */
+const CAMP_GATE = (RING.wall[0] + RING.gate) / 2;
+const CAMP_JUNCTION = byFire(6.2, CAMP_GATE);
+const CAMP_ENTRY = byFire(2.4, CAMP_GATE);
+const CAMP_CAUSEWAY = byFire(5.3, CAMP_GATE);
 
 export interface HouseDef extends Spot {
   /** Wall and roof colours. */
@@ -157,6 +176,10 @@ export interface MapDef {
   clearings?: { x: number; z: number; r: number }[];
   /** Flat sand banks (`Apron` in env.ts) the quay's rear and ends stand on, so the deck meets the ground flush. */
   aprons?: { x0: number; x1: number; z0: number; z1: number; h: number }[];
+  /** Level floors cut into a slope and built out from it (`Level` in env.ts): the campfire's ring. */
+  levels?: { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number }[];
+  /** The campfire's ring (`RING`): its seat wall, gate and string lights. */
+  ring?: RingDef;
   /** A rock islet with a tree and a lantern out in the lake: its centre and the radius casts stop short of. */
   islet?: { x: number; z: number; r: number };
   town: TownDef;
@@ -194,10 +217,10 @@ export const MAPS: MapDef[] = [
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
     gateArrival: { x: 0, z: 50.5, yaw: 0 },
-    // Top Anglers and Thanks stand round the campfire (`CAMPFIRE`): Top Anglers straight up the hill behind the fire
-    // and Thanks beside it toward the quay, far enough round that both clear the headland pine's low branches.
-    leaderboard: byFire(3.8, 82),
-    thanks: byFire(3.7, 39),
+    // Top Anglers and Thanks stand behind the ring's seat wall (`RING`), 24 degrees either side of the line from the
+    // pier's end through the fire: Top Anglers faces the pier and the jetty bench, and clears the headland pine.
+    leaderboard: byFire(3.6, 88),
+    thanks: byFire(3.6, 40),
     // The campfire on the east headland, seen across the water from the jetty bench.
     campfire: { ...CAMPFIRE, facing: 0 },
     // Beside the top of Reed's lane.
@@ -212,13 +235,24 @@ export const MAPS: MapDef[] = [
       { x0: -13.5, x1: 13.5, z0: 13.5, z1: 16.5, h: 0.72 },
       { x0: -16, x1: -11, z0: 9.5, z1: 16.5, h: 0.72 },
       { x0: 11, x1: 16, z0: 9.5, z1: 16.5, h: 0.72 },
-      // The campfire's circle: a sand bank on its water side keeps the cobbles above the waterline. Play-test: the shore.
-      { x0: 16.6, x1: 18.6, z0: 0.6, z1: 3.8, h: 0.6 },
       // Reed's lane on a low bank down the water's edge to his wharf, and the sand behind the wharf level with its
       // boards. Both stop short of the wharf's face, so it stands in water. Play-test: the shore.
       { x0: -18.6, x1: -16.2, z0: 3, z1: 9.5, h: 0.72 },
       { x0: -20.2, x1: -18.6, z0: -4.4, z1: 3, h: 0.72 },
+      // The quay's east bank carried on under the campfire lane and the lane from the village ring, so neither has
+      // a dip to cross where the bank's edge met the foot of the hill.
+      { x0: 15.5, x1: 17.2, z0: 9.6, z1: 12, h: 0.72 },
     ],
+    // The campfire's floor: built up on its water side, where its bank is steeper than the quay's so the shore keeps
+    // close to where it was, and dug into the hill behind the seat wall and the boards. A causeway at the same height
+    // carries the lane from where the lanes meet in through the gate, across the dip between the floor's bank and the
+    // foot of the hill; its bank is steeper still, so the reeds below keep their ground.
+    // Play-test: the height and the shore.
+    levels: [
+      { x: CAMPFIRE.x, z: CAMPFIRE.z, h: 0.85, hw: 3.15, cut: 1, bank: 0.75 },
+      { x: CAMP_CAUSEWAY.x, z: CAMP_CAUSEWAY.z, h: 0.85, hw: 1.15, hd: 2.4, rot: (CAMP_GATE * Math.PI) / 180, cut: 0.4, bank: 1 },
+    ],
+    ring: RING,
     // The eye's target from the pier: 30 m past the T end and a few metres left of the pier's line, so it sits in
     // the first look without standing in front of the cast. Play-test: the spot.
     islet: { x: -4.5, z: -39, r: 6.2 },
@@ -378,25 +412,25 @@ export const MAPS: MapDef[] = [
         { from: [-13.7, 14.5], to: [-14.8, 12.6], w: 2.2 },
         { from: [-14.8, 12.6], to: [-17.2, 8.6], w: 2.2 },
         { from: [-17.2, 8.6], to: [-17.2, 4.45], w: 2.2 },
-        // The campfire lane: its east arm, round the deck's other corner and down into the campfire's circle
-        // (`circles`). The village ring's east lane joins it at (15.5, 8.5).
+        // The campfire lane: its east arm, round the deck's other corner and along the foot of the hill to where the
+        // lanes meet, and from there, narrower, down through the gate into the ring (`circles`).
         { from: [11.6, 15.6], to: [13.7, 14.5], w: 2.2 },
         { from: [13.7, 14.5], to: [14.6, 12.2], w: 2.2 },
-        { from: [14.6, 12.2], to: [15.5, 8.5], w: 2.2 },
-        { from: [15.5, 8.5], to: [17.1, 4.68], w: 2.2 },
+        { from: [14.6, 12.2], to: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], w: 2.2 },
+        { from: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], to: [CAMP_ENTRY.x, CAMP_ENTRY.z], w: 1.6 },
         // The village ring: west from the square between Wren's and the Fishmonger's garden, down past the worm patch into Reed's lane...
         { from: [-4.5, 30.5], to: [-12.5, 28.6], w: 1.6 },
         { from: [-12.5, 28.6], to: [-16.5, 22], w: 1.6 },
         { from: [-16.5, 22], to: [-17, 15], w: 1.6 },
         { from: [-17, 15], to: [-15.5, 11.2], w: 1.6 },
-        // ...and east between the blue house and the Net Mender's garden, down into the campfire lane.
+        // ...and east between the blue house and the Net Mender's garden, down to where it meets the campfire lane.
         { from: [4.8, 31.2], to: [15.5, 31], w: 1.6 },
         { from: [15.5, 31], to: [18.5, 24], w: 1.6 },
         { from: [18.5, 24], to: [18.5, 16], w: 1.6 },
-        { from: [18.5, 16], to: [15.5, 8.5], w: 1.6 },
+        { from: [18.5, 16], to: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], w: 1.6 },
       ],
-      // The campfire's circle, round the fire and its two benches, where the ramp comes down. Play-test: the radius.
-      circles: [{ ...CAMPFIRE, r: 3 }],
+      // The campfire's ring, and a round of cobbles where the three lanes meet above it. Play-test: the radius.
+      circles: [{ ...CAMPFIRE, r: RING.r }, { x: CAMP_JUNCTION.x, z: CAMP_JUNCTION.z, r: 1.2 }],
       benches: [
         // Along the east jetty's edge, looking across the water to the campfire headland.
         { x: 6.9, z: 7.2, facing: Math.PI / 2 },
@@ -459,6 +493,8 @@ MAPS.push({
   smokehouse: undefined,
   clearings: undefined,
   aprons: undefined,
+  levels: undefined,
+  ring: undefined,
   islet: undefined,
   casino: {
     hall: { x: 0, z: 43, w: 34, d: 34 },
@@ -528,6 +564,8 @@ MAPS.push({
   harbour: undefined,
   clearings: undefined,
   aprons: undefined,
+  levels: undefined,
+  ring: undefined,
   islet: undefined,
   town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [], paths: [], benches: [], trees: [] },
 });

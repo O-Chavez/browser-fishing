@@ -36,6 +36,32 @@ const apronHeight = (x: number, z: number): number => {
 };
 
 /**
+ * A level floor on a slope (the campfire's): a disc of radius `hw` or, given `hd`, a box of half sizes `hw` across
+ * and `hd` deep turned `rot` radians. Inside it the ground is `h`. Where the ground was lower it is built up, and
+ * falls away beyond the edge at `bank` per metre (`LEVEL_BANK` if left out) like an apron's bank; where the hill was
+ * higher it is dug down, level for `cut` metres past the edge and from there eased back up into the hill over
+ * `LEVEL_BLEND` metres, with no crease at its foot. `cut` carries the flat past whatever stands at the edge (the
+ * wall that holds the hill back): the terrain's mesh has a vertex every 0.8-1 m here, so it can't turn a corner
+ * any tighter, and would otherwise lean on the wall's foot and lie over the cobbles.
+ */
+export interface Level { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number }
+const LEVEL_BANK = 0.5;
+const LEVEL_BLEND = 1.5;
+let levels: Level[] = [];
+export const setLevels = (l: Level[]): void => {
+  levels = l;
+};
+/** Metres from (x, z) to a level's edge, 0 inside it. */
+const outside = (l: Level, x: number, z: number): number => {
+  const dx = x - l.x;
+  const dz = z - l.z;
+  if (l.hd === undefined) return Math.max(0, Math.hypot(dx, dz) - l.hw);
+  const sin = Math.sin(l.rot ?? 0);
+  const cos = Math.cos(l.rot ?? 0);
+  return Math.hypot(Math.max(0, Math.abs(dx * cos - dz * sin) - l.hw), Math.max(0, Math.abs(dx * sin + dz * cos) - l.hd));
+};
+
+/**
  * Where a town's ground is worn to dirt: along its cobbled paths and round `discs` (the square, the stalls' yards).
  * The rest of the pad is grass. A map without any (`null`) keeps a bare dirt pad.
  */
@@ -134,7 +160,13 @@ export function groundHeight(x: number, z: number): number {
   const blended = raw + (pad.h - raw) * w;
   // Beyond the pad the bank slopes gently into the water instead of dropping off a cliff.
   const bank = pad.h - Math.max(0, Math.hypot(x - pad.x, z - pad.z) - pad.r) * BANK_SLOPE;
-  return Math.min(Math.max(blended, bank, apronHeight(x, z)), deckBed(x, z));
+  let g = Math.max(blended, bank, apronHeight(x, z));
+  for (const l of levels) {
+    const d = outside(l, x, z);
+    g = Math.max(g, l.h - d * (l.bank ?? LEVEL_BANK));
+    if (g > l.h) g = l.h + (g - l.h) * smooth(0, LEVEL_BLEND, d - l.cut);
+  }
+  return Math.min(g, deckBed(x, z));
 }
 
 /**
