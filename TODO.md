@@ -34,6 +34,10 @@ Finished items move to [DONE.md](DONE.md).
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
 
+
+### Economy
+
+- 📋 Economy repass, lake and sea together (Oscar, 2026-11-12): once the charters pay coins that rise steeply by zone (an Abyss fish about 11,500 coins, a matched Abyss charter about 2 million an hour), go over what coins buy everywhere so the casino, cosmetics, upgrades and the Smokehouse stay aligned with what fish pay. Lower fish values are fine if the costs match. For reference: lake fish values have not been lowered since the first commit (a plain top fish sells for about 3,000-9,000 and a shiny one five times that, 15,000-45,000: `RARITY_VALUE`, `SHINY_VALUE`, `sellValue`). Also wanted: a use for Black Pearls once the Abyss is open (a pearl purchase every five Abyss markers to sail further?), and sinks for coins beyond the rod (boat comforts, sea cosmetics from Reed)
 ### Deep sea charters and endgame
 
 - 📋 Deep sea mechanics pass: rework the charters' progression and structure into an endgame without end that stays rewarding and fun, so players want to keep pushing (Oscar, 2026-11-03). Part 1, the edge pays, is 🚧 in Up next (2026-11-11): it took the reward rules, the zones' places and the flat line cost's role, and left the rest of this item for later parts. Today's charter is the working baseline (REELING.md, "The sea mapping"). On the table: a flat line cost per lost fish (built as the baseline, `DIVE.lostMetres`), zone or marker modifiers (more Feisty or Brutish fish, say), boss fish events, reward modifiers (step (c) of the modifier sequence in the reel fight item (DONE.md): a Pearl fish worth a big Black Pearl reward, named at the hook so a fish you'd let run is worth fighting; sized with `scripts/seaeconomy.ts`), and the ideas below (shorter markers, pearls per marker, boat upgrades). Sims to start from: on the reference hands the best pearls an hour comes from short charters well short of the wall, never sinking; with the modifiers on, a lost fish's 25 m makes the line run out a few fish short of the wall
