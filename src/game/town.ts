@@ -678,7 +678,12 @@ export class Town {
     this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
     const cap = cyl(0.14, 0.1, 0.06, DARK, 8);
     cap.position.y = H + 0.2;
-    g.add(lamp, cap);
+    // The lantern casts real light at night: it hangs in front of Reed and above him, so it lights his face for
+    // whoever comes down the lane, and the head of the wharf with him.
+    const glow = new THREE.PointLight(0xffc266, 0, 11, 1.6);
+    glow.position.y = H - 0.15;
+    this.lights.push(glow);
+    g.add(lamp, cap, glow);
     // A lifebuoy (a cream ring with red bands) hung on the beach-side post's outer side, clear of the way through,
     // facing up the lane.
     const BUOY_X = -HALF - 0.24;

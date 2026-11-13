@@ -402,17 +402,18 @@ export class Hub {
   }
 
   private buildProps(): void {
-    // Lamp posts. None stands where players walk. The dock's three (the quay's front either side of the pier, and the
-    // east jetty's end) stand on their own piles in the water, a step off the deck's edge, out of reach, so they
-    // need no collider. The quay's rear two are tucked against things that are solid already: the barrels by the
-    // stall, and the back of the bench at the east end. The rest stand beside the cobbles: up the main street to
+    // Lamp posts. None stands where players walk. The docks' four (the quay's front either side of the pier, the
+    // east jetty's end, and the lake end of Reed's wharf, which lights the wharf and his plane and shows across the
+    // cove) stand on their own piles in the water, a step off the deck's edge, out of reach, so they need no
+    // collider. The quay's two stand off its deck: one behind the quay road beside Marlow's stall, with his barrels,
+    // and one at the back of the bench at the east end. The rest stand beside the cobbles: up the main street to
     // the square, beside Reed's lane just before his arch, and in the fork where the village ring's lane meets the
-    // campfire lane, out of the view along the lane to the ring (the village's own posts are in town.ts). Five
-    // carry a point light.
+    // campfire lane, out of the view along the lane to the ring (the village's own posts are in town.ts). Six
+    // carry a point light: the four on piles and two of the rest.
     // Play-test: the spots.
-    const piles = [[-4, 9.7], [4, 9.7], [9.05, 4.5]];
+    const piles = [[-4, 9.7], [4, 9.7], [9.05, 4.5], [-15.7, -4.3]];
     const lit = new Set(['3.6,27.5', '-18.9,5.3']);
-    const posts = [[-8.45, 13.5], [11.2, 13.95], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-18.9, 5.3], [16.5, 13]];
+    const posts = [[-9.7, 17.3], [11.2, 13.95], [-2.8, 22], [2.8, 22], [3.6, 27.5], [-3.6, 27.5], [-18.9, 5.3], [16.5, 13]];
     const lampPost = (x: number, z: number, light: boolean, pile: boolean) => {
       const lamp = new THREE.Group();
       const pole = cyl(0.05, 0.07, 2.2, DARK, 8);
@@ -441,22 +442,20 @@ export class Hub {
     };
     for (const [x, z] of piles) lampPost(x, z, true, true);
     for (const [x, z] of posts) lampPost(x, z, lit.has(`${x},${z}`), false);
-    // Barrels and a crate on the quay deck by the stall's end: a working waterfront. The east corner stays clear,
-    // as the campfire lane leaves the quay there.
+    // Marlow's stock: two barrels and a crate on the grass at his stall's west end, behind the quay road, with a
+    // lamp post beside them. Nothing stands on the quay's deck or the road but the east bench. Play-test: the spots.
     const barrelGeo = new THREE.LatheGeometry(
       [[0.26, 0], [0.34, 0.2], [0.36, 0.45], [0.34, 0.7], [0.26, 0.9]].map(([x, y]) => new THREE.Vector2(x, y)),
       14,
     );
-    for (const [x, z, s] of [[-8, 13.6, 1], [-8.7, 13.9, 0.85]]) {
+    for (const [x, z, s] of [[-8.8, 17.5, 1], [-9.45, 17.9, 0.85]]) {
       const b = new THREE.Mesh(barrelGeo, mat(0x8a5a30));
       b.scale.setScalar(s);
       b.castShadow = true;
       this.place(b, { x, z, facing: 0 });
       this.fixed.push({ x, z, r: 0.38 * s });
     }
-    // The crate stands toward the water from the deck's rear edge, so the quay road behind it keeps its width past
-    // the stall.
-    const crates = [[-7.1, 13.2, 0.4]] as const;
+    const crates = [[-8.35, 18.2, 0.4]] as const;
     for (const [x, z, rot] of crates) {
       const c = rbox(0.8, 0.7, 0.8, 0x9c7a4a, 0.05);
       this.place(c, { x, z, facing: rot }, 0, 0, standHeight(x, z) + 0.35);

@@ -2,6 +2,14 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Play-test follow-ups: light at Reed's wharf, and Marlow's barrels, crate and lamp off the deck (Oscar, 2026-11-13; done 2026-11-13, branch `quay-east-clear`)
+  - Oscar: a lamp or light by Reed's dock would help it show at night and add to the mood; and the lamp post with the crate and barrels still stood in the middle of the main walkway on the deck by Marlow's stall: move or remove them, whichever fits best without making the night darker
+  - Reed's wharf: the lantern on the CHARTERS arch now casts real light (it hangs in front of Reed and above him, so it lights his face for whoever comes down the lane), and a lamp post on a pile stands in the water at the wharf's lake end, (-15.7, -4.3), like the quay's, lighting the wharf's end and the plane and showing across the cove with its reflection. Both are out of reach, so neither has a collider. Two more point lights on the map; only the eight nearest the player are on at once, as before (`LightPool`)
+  - Marlow's stall: the two barrels, the crate and the lamp post moved off the deck to the grass at the stall's west end, behind the quay road: barrels (-8.8, 17.5) and (-9.45, 17.9), crate (-8.35, 18.2), lamp (-9.7, 17.3). The lamp is 4 m from where it stood and was a glowing bulb without a light of its own, so the quay is no darker. Nothing but the east bench stands on the deck or the road now (`buildProps`, `src/game/hub.ts`)
+  - Docs: GAME_DESIGN.md's Coziness line. README harbour and outfits photos re-taken
+  - Checked: the build, 594 tests and smoke 113/113 (its barrel check moved to the new spot); a plan of the stall's end, and headless views by day and night (`scripts/map-views.ts --walk`: q01, nq1, nr1, nr2, nr3)
+  - Play-test: the wharf lamp's spot and brightness, and three lights close together at the foot of the lane (the lane's lamp, the arch, the wharf); the barrels and lamp beside the stall
+
 - [x] The boards' posts no longer come through their faces (Oscar, 2026-11-13; done 2026-11-13, branch `quay-east-clear`)
   - Oscar: make sure the posts of the signs aren't clipping through the signs. Top Anglers, Thanks, the Furthest Out board and the two posters by the gate each stood on posts set in the middle of the frame, and the posts are thicker than the frame, so they showed as two stripes down the face
   - Built: the posts stand 0.14 m behind the frame's middle (`BEHIND`, `src/game/hub.ts`), so each board is nailed to the front of its posts. The cottages' yard signs and the CHARTERS arch were checked and were clear already

@@ -184,8 +184,8 @@ async function pondChecks(): Promise<void> {
   const blocked = await page.evaluate(() => {
     const cs = (window.__game.world as any).colliders as { x: number; z: number; r: number }[];
     const hit = (x: number, z: number) => cs.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.05);
-    // The pier's bucket, the east jetty's barrel, Reed on his wharf, the seaplane's nose off the wharf's face and a quay barrel.
-    return { bucket: hit(-0.8, 1.6), barrel: hit(8.2, 8.6), reed: hit(-17.2, 0), plane: hit(-15.1, -1.6), stallBarrel: hit(-8, 13.6) };
+    // The pier's bucket, the east jetty's barrel, Reed on his wharf, the seaplane's nose off the wharf's face and a barrel by Marlow's stall.
+    return { bucket: hit(-0.8, 1.6), barrel: hit(8.2, 8.6), reed: hit(-17.2, 0), plane: hit(-15.1, -1.6), stallBarrel: hit(-8.8, 17.5) };
   });
   check('pond: dock props and NPCs can be walked through', !blocked.bucket && !blocked.barrel && !blocked.reed, JSON.stringify(blocked));
   check('pond: shore props still block, and so does the seaplane at the water\'s edge', blocked.stallBarrel && blocked.plane, JSON.stringify(blocked));
