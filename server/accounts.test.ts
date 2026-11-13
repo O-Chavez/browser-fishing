@@ -185,39 +185,50 @@ describe('accounts', () => {
 describe('the Furthest Out board', () => {
   const boardStore = () => {
     const store = new AccountStore();
-    const acct = (name: string, record: number, level = 60) => {
+    /** An account with `parts` boat parts and its furthest Abyss marker; `sailed` lands it a sea fish. */
+    const acct = (name: string, parts: number, record = 0, level = 60, sailed = parts > 0) => {
       const res = store.auth(name, (name + '-token').padEnd(20, 'x'));
       if (!res.ok) throw new Error(res.msg);
-      res.account.save.sea.record = record;
-      res.account.save.level = level;
+      Object.assign(res.account.save, { boatParts: parts, abyssRecord: record, level, seaRod: true });
+      if (sailed) res.account.save.dex.snapper = { count: 1, best: 150 };
       return res.account;
     };
     return { store, acct };
   };
 
-  it('ranks every account by the furthest marker headed home from, with that charter\'s haul, leaving out anyone who never has', () => {
+  it('ranks by boat parts, then by the furthest Abyss marker, with the marker for Abyss players only', () => {
     const { store, acct } = boardStore();
-    acct('Ann', 15, 70).save.sea.haul = { pearls: 21, fish: 15, coins: 20_000 };
-    acct('Bob', 0);
-    acct('Cy', 40, 90).save.sea.haul = { pearls: 96, fish: 40, coins: 65_000 };
-    // A record from before hauls were kept: no pearls or fish on its row.
-    acct('Dee', 15, 55);
+    acct('Ann', 2, 0, 70);
+    acct('Bob', 4, 7, 80);
+    acct('Cy', 4, 12, 90);
+    acct('Dee', 1, 0, 55);
+    // Fitted for the Abyss but never there yet: no marker.
+    acct('Eve', 4, 0, 65);
     expect(store.furthest()).toEqual([
-      { name: 'Cy', level: 90, ledge: 40, pearls: 96, fish: 40 },
-      { name: 'Ann', level: 70, ledge: 15, pearls: 21, fish: 15 },
-      { name: 'Dee', level: 55, ledge: 15 },
+      { name: 'Cy', level: 90, zone: 4, marker: 12 },
+      { name: 'Bob', level: 80, zone: 4, marker: 7 },
+      { name: 'Eve', level: 65, zone: 4 },
+      { name: 'Ann', level: 70, zone: 2 },
+      { name: 'Dee', level: 55, zone: 1 },
     ]);
+  });
+
+  it('lists Shelf players once they have landed a sea fish, and leaves out anyone who never has', () => {
+    const { store, acct } = boardStore();
+    acct('Ann', 0, 0, 30, true);
+    acct('Bob', 0);
+    expect(store.furthest()).toEqual([{ name: 'Ann', level: 30, zone: 0 }]);
   });
 
   it('shows the top FURTHEST_ROWS only', () => {
     const { store, acct } = boardStore();
-    for (let i = 1; i <= FURTHEST_ROWS + 2; i++) acct(`P${i}`, i * 5);
+    for (let i = 1; i <= FURTHEST_ROWS + 2; i++) acct(`P${i}`, 4, i);
     const rows = store.furthest();
     expect(rows).toHaveLength(FURTHEST_ROWS);
-    expect(rows[0]).toMatchObject({ name: `P${FURTHEST_ROWS + 2}`, ledge: (FURTHEST_ROWS + 2) * 5 });
+    expect(rows[0]).toMatchObject({ name: `P${FURTHEST_ROWS + 2}`, marker: FURTHEST_ROWS + 2 });
   });
 
-  it('is empty with no records', () => {
+  it('is empty with no one at sea', () => {
     const { store, acct } = boardStore();
     acct('Ann', 0);
     expect(store.furthest()).toEqual([]);
@@ -225,19 +236,18 @@ describe('the Furthest Out board', () => {
 
   it('keeps its rows cached until told a record changed, and follows renames and deleted accounts', () => {
     const { store, acct } = boardStore();
-    const ann = acct('Ann', 10);
-    const bob = acct('Bob', 5);
+    acct('Ann', 2);
+    const bob = acct('Bob', 1);
     const rows = store.furthest();
     expect(store.furthest()).toBe(rows);
-    bob.save.sea.record = 20;
+    bob.save.boatParts = 3;
     expect(store.furthest()).toBe(rows);
     store.furthestStale();
     expect(store.furthest().map((r) => r.name)).toEqual(['Bob', 'Ann']);
     expect(store.rename(bob, 'Bea')).toBeNull();
     expect(store.furthest()[0].name).toBe('Bea');
     store.forget(bob, ('Bob-token').padEnd(20, 'x'));
-    expect(store.furthest()).toEqual([{ name: 'Ann', level: 60, ledge: 10 }]);
-    expect(ann.save.sea.record).toBe(10);
+    expect(store.furthest()).toEqual([{ name: 'Ann', level: 60, zone: 2 }]);
   });
 });
 

@@ -1,27 +1,21 @@
 import * as THREE from 'three';
-import { DIVES_OPEN } from '../data/dive';
-import { zoneAt } from '../data/sea';
+import { DIVES_OPEN, ZONES } from '../data/dive';
 import type { FurthestRow } from '../net/protocol';
 import { DARK, ball, cyl, mat, rbox, textPlane } from './hub';
 import { glowTag } from './nightglow';
 
 /**
  * The Furthest Out board's look and words, all in one place for play-testing. Where it stands is `HARBOUR.board`
- * in src/data/maps.ts. The board ranks the furthest marker each player headed home from (in code: the deepest
- * ledge surfaced from, `SaveData.sea.record`).
+ * in src/data/maps.ts. The board ranks how far out each player's charters reach: the furthest zone their boat is
+ * fitted for (`SaveData.boatParts`), then the furthest Abyss marker (`abyssRecord`).
  */
 export const FURTHEST_BOARD = {
   title: 'FURTHEST OUT',
-  subtitle: 'furthest marker headed home from',
+  subtitle: 'furthest zone fished',
   /** The empty board, and its second line while charters are closed (`DIVES_OPEN`) or open. */
-  empty: ['No one has headed home', 'from a marker yet'],
+  empty: ['No one has landed', 'a sea fish yet'],
   closed: 'Charters open soon',
   open: 'Sail out with Captain Reed',
-  /**
-   * Under each marker, what the record's charter banked (the numbers on its "Home safe!" card): a Black Pearl, then
-   * this. Records from before the haul was kept leave it out.
-   */
-  haul: (pearls: number, fish: number) => `${pearls.toLocaleString()} · ${fish.toLocaleString()} fish`,
   /** Painted like Reed's seaplane: a sea-green roof and a cream face edged in its red band. */
   roof: 0x6f9e96,
   frame: 0xf3ead8,
@@ -42,24 +36,6 @@ const H = 1.65;
 const MID = 1.75;
 /** The posts, across the board's own frame: the town gives each a collider. */
 export const BOARD_POSTS = [-W / 2 + 0.12, W / 2 - 0.12];
-
-/** The game's Black Pearl (`.bpearl` in style.css) on a canvas: `d` px across, centred on (x, y). */
-function drawPearl(ctx: CanvasRenderingContext2D, x: number, y: number, d: number): void {
-  const r = d / 2;
-  const g = ctx.createRadialGradient(x - r * 0.32, y - r * 0.4, 0, x - r * 0.32, y - r * 0.4, r * 1.6);
-  g.addColorStop(0, '#f6f2ff');
-  g.addColorStop(0.16, '#9d8fc4');
-  g.addColorStop(0.45, '#3a3450');
-  g.addColorStop(0.8, '#14111c');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-  // A faint sea-green rim, like the icon's inset shadow, so it shows on the dark face.
-  ctx.strokeStyle = '#3fe6c899';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-}
 
 /** The Furthest Out board at the harbour: posts, a framed face redrawn from the server's rows, a roof and a lantern. */
 export class FurthestBoard {
@@ -128,13 +104,13 @@ export class FurthestBoard {
     tex.needsUpdate = true;
   }
 
-  /** One row: rank and name, with level and the zone under them, and the marker on the right. */
+  /** One row: rank and name, with level under them, and the zone on the right (the Abyss's marker under it). */
   private row(r: FurthestRow, i: number, w: number): void {
     const ctx = this.face.ctx;
     const L = 34;
     const R = w - 34;
     const y = 130 + i * 52;
-    const marker = `Marker ${r.ledge}`;
+    const marker = (ZONES[r.zone] ?? ZONES[0]).name;
     ctx.textAlign = 'right';
     ctx.font = '800 28px system-ui, sans-serif';
     ctx.fillStyle = i === 0 ? B.gold : B.ink;
@@ -151,13 +127,11 @@ export class FurthestBoard {
     ctx.fillText(name, L, y);
     ctx.font = '600 18px system-ui, sans-serif';
     ctx.fillStyle = B.soft;
-    ctx.fillText(`Lv ${r.level} · ${zoneAt(r.ledge).name}`, L + 30, y + 21);
-    if (r.pearls === undefined || r.fish === undefined) return;
+    ctx.fillText(`Lv ${r.level}`, L + 30, y + 21);
+    if (r.marker === undefined) return;
     ctx.textAlign = 'right';
     ctx.fillStyle = B.ink;
-    const haul = B.haul(r.pearls, r.fish);
-    ctx.fillText(haul, R, y + 21);
-    drawPearl(ctx, R - ctx.measureText(haul).width - 12, y + 15, 16);
+    ctx.fillText(`Marker ${r.marker}`, R, y + 21);
   }
 
   /** No one on the board yet: a dotted route of marker buoys out to sea, and what to do about it. */

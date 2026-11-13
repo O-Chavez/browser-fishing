@@ -1,78 +1,276 @@
 import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
-import { DIVE, SEA_TIERS, ZONES, type Behaviour } from '../data/dive';
+import { ABYSS, BOAT_PARTS, LINE, MARKER, PEARLS, ROD, SPOOL_COINS, ZONES } from '../data/dive';
 import {
-  afterFight, behaviourOdds, canStartAt, diveOn, haulBonus, lineWorn, markerOver, pearlsAt, powInt, rollSeaFish, seaGaps, startDive, surface, zoneAt,
-  type Chart, type SeaGear,
+  abyssLevelCost, afterFight, averageSale, behaviourOdds, canStart, lineCost, markerGrowth, newSpool, nextRodBuy, payAt, pearlMult, pearlsFor, powInt, ratingOf,
+  rodBuyName, rodStepCost, rollSeaFish, seaFightWords, seaFishTier, seaGap, seaGaps, seaRating, seaRodTier, spoolPrice, startDive, stepZone, typicalSale,
+  zoneOpen, type SeaRod,
 } from './dive';
 import { rollSeaCast } from './economy';
 import { mulberry } from './env';
-import { FISH_SPREAD, overGear, TAG_TIERS } from './progression';
-import { GOOD_MAX, Reel, type Gaps, type ReelWear } from './reel';
+import { FISH_SPREAD, TAG_BONUS, TAG_TIERS, rollSize, sellValue } from './progression';
+import { GOOD_MAX, Reel, type Gaps } from './reel';
 import { STYLES, botFight } from './reelbot';
 import { newSave } from './state';
 
-const clean: ReelWear = { lineOut: 0, frays: 0, snapped: false };
-const wear = (lineOut: number, frays = 0, snapped = false): ReelWear => ({ lineOut, frays, snapped });
-const none: SeaGear = { rod: 0, line: 0 };
+const rod = (steps = 0, levels = 0): SeaRod => ({ steps, levels });
+const none = rod();
 
-/** Lands `n` fish with no wear. */
-function land(dive: ReturnType<typeof startDive>, n: number) {
-  for (let i = 0; i < n; i++) {
-    afterFight(dive, 'pewtercod', true, clean);
-    if (dive.state === 'ledge' && i < n - 1) diveOn(dive);
-  }
-  return dive;
-}
-
-describe('sea fight gaps', () => {
-  it('a sea fish is a tier 5 fish at the harbour and a tier higher every 30 fish out, the same all through a marker', () => {
-    expect(seaGaps(0, none)).toEqual({ strength: 0, weight: 0 });
-    expect(seaGaps(4, none)).toEqual(seaGaps(0, none));
-    expect(seaGaps(30, none)).toEqual({ strength: 1, weight: 1 });
-    expect(seaGaps(34, none)).toEqual(seaGaps(30, none));
-    expect(seaGaps(60, none)).toEqual({ strength: 2, weight: 2 });
-    for (let depth = 5; depth < 300; depth += 5) expect(seaGaps(depth, none).strength).toBeGreaterThan(seaGaps(depth - 5, none).strength);
+describe('sea fish and the Deep Sea Rod, in tiers', () => {
+  it('a sea fish is tier 5 on the Shelf and 0.8 more each zone out, the same on strength and weight', () => {
+    expect([0, 1, 2, 3, 4].map((z) => seaFishTier(z))).toEqual([5, 5.8, 6.6, 7.4, 8.2].map((t) => expect.closeTo(t, 9)));
+    // Markers only count in the Abyss.
+    expect(seaFishTier(2, 7)).toBeCloseTo(6.6, 9);
+    expect(seaGaps(3, 0, none)).toEqual({ strength: 2.4, weight: 2.4 });
   });
 
-  it('a Deep Sea Rod level takes weight off and a line level strength, one to one, each worth one marker', () => {
-    const d = seaGaps(30, none), rod = seaGaps(30, { rod: 4, line: 0 }), line = seaGaps(30, { rod: 0, line: 4 });
-    expect(rod).toEqual({ strength: d.strength, weight: seaGaps(10, none).weight });
-    expect(line).toEqual({ strength: seaGaps(10, none).strength, weight: d.weight });
-    expect(SEA_TIERS.level * SEA_TIERS.perTier).toBeCloseTo(DIVE.ledgeEvery);
+  it('each Abyss marker past the first is 0.1 of a tier harder', () => {
+    expect(seaFishTier(ABYSS, 1)).toBeCloseTo(8.2, 9);
+    expect(seaFishTier(ABYSS, 2)).toBeCloseTo(8.3, 9);
+    expect(seaFishTier(ABYSS, 11)).toBeCloseTo(9.2, 9);
+    // Marker 0 or below counts as the first.
+    expect(seaFishTier(ABYSS, 0)).toBeCloseTo(8.2, 9);
   });
 
-  it('the level panels name where sea fish get heavy and too heavy for the gear, a marker further out each level', () => {
-    expect(markerOver(5, 0, 1)).toBe(30);
-    expect(markerOver(5, 0, 2)).toBe(60);
-    for (let level = 0; level < 40; level++) {
-      const m = markerOver(5, level, 1);
-      expect(markerOver(5, level + 1, 1)).toBe(m + DIVE.ledgeEvery);
-      expect(overGear(seaGaps(m, { rod: level, line: level }))).toEqual({ rod: true, line: true });
-      expect(overGear(seaGaps(m - DIVE.ledgeEvery, { rod: level, line: level }))).toEqual({ rod: false, line: false });
-    }
+  it('the rod is tier 5, 0.4 more a step and 0.1 more an Abyss level, on both gaps', () => {
+    expect(seaRodTier(none)).toBe(5);
+    expect(seaRodTier(rod(2))).toBeCloseTo(5.8, 9);
+    expect(seaRodTier(rod(8))).toBeCloseTo(8.2, 9);
+    expect(seaRodTier(rod(8, 3))).toBeCloseTo(8.5, 9);
+    // A zone's two steps bring the rod up to it.
+    for (let z = 1; z < ZONES.length; z++) expect(seaGap(z, 1, rod(2 * z))).toBe(0);
+    expect(seaGap(ABYSS, 4, rod(8, 3))).toBe(0);
   });
 
   it('computes powers by multiplication', () => {
-    expect(powInt(1.01, 0)).toBe(1);
-    expect(powInt(1.01, 70) / Math.pow(1.01, 70)).toBeCloseTo(1, 12);
+    expect(powInt(1.12, 0)).toBe(1);
+    expect(powInt(1.12, 40) / Math.pow(1.12, 40)).toBeCloseTo(1, 12);
+  });
+});
+
+describe('the rating', () => {
+  it('rates a gap Easy to 0.05, Fair to 0.45, Tough to 0.85, then Too much', () => {
+    expect([-1, 0, 0.05, 0.06, 0.4, 0.45, 0.46, 0.8, 0.85, 0.86, 2].map(ratingOf)).toEqual(
+      ['easy', 'easy', 'easy', 'fair', 'fair', 'fair', 'tough', 'tough', 'tough', 'over', 'over'],
+    );
+  });
+
+  it('rates each zone for the rod: a zone in hand, a step short, two short, and further', () => {
+    expect([0, 1, 2, 3, 4].map((z) => seaRating(z, 1, none))).toEqual(['easy', 'tough', 'over', 'over', 'over']);
+    expect(seaRating(1, 0, rod(1))).toBe('fair');
+    expect(seaRating(1, 0, rod(2))).toBe('easy');
+    expect([0, 1, 2, 3, 4].map((z) => seaRating(z, 1, rod(6)))).toEqual(['easy', 'easy', 'easy', 'easy', 'tough']);
+  });
+
+  it('rates Abyss markers by the marker and the Abyss levels', () => {
+    const at = (m: number, levels = 0) => seaRating(ABYSS, m, rod(8, levels));
+    expect([1, 2, 5, 6, 9, 10].map((m) => at(m))).toEqual(['easy', 'fair', 'fair', 'tough', 'tough', 'over']);
+    // Each Abyss level takes a marker's difficulty off.
+    expect(at(6, 1)).toBe('fair');
+    expect(at(10, 5)).toBe('fair');
+  });
+
+  it("words a hooked fish by its own gaps, the bigger one, red only when it's too much", () => {
+    expect(seaFightWords({ strength: 0, weight: 0.03 })).toEqual({ words: 'Easy for your rod', too: false });
+    expect(seaFightWords({ strength: 0.3, weight: 0.1 })).toEqual({ words: 'Fair for your rod', too: false });
+    expect(seaFightWords({ strength: 0.4, weight: 0.7 })).toEqual({ words: 'Tough for your rod', too: false });
+    expect(seaFightWords({ strength: 1.2, weight: 0.4 })).toEqual({ words: 'Too much for your rod', too: true });
+  });
+});
+
+describe('line', () => {
+  it('a hooked fish uses 5 m when the rod handles it, 9 m at Fair and 13 m at Tough, from the typical gap', () => {
+    expect(lineCost(0, 0, none)).toBe(5);
+    expect(lineCost(0, 0, rod(8))).toBe(5);
+    expect(lineCost(1, 0, rod(1))).toBe(9);
+    expect(lineCost(1, 0, none)).toBe(13);
+    expect(lineCost(2, 0, rod(2))).toBe(13);
+    expect(lineCost(ABYSS, 2, rod(8))).toBe(6);
+  });
+
+  it('every charter starts on a 300 m spool, and each fish takes its line: a lost one 25 m more', () => {
+    const d = startDive(1, 0, rod(1));
+    expect(d).toMatchObject({ zone: 1, marker: 0, line: LINE.spool, state: 'fishing' });
+    expect(LINE.spool).toBe(300);
+    expect(afterFight(d, { pearls: 3, coins: 2000 })).toEqual({ cost: 9, marker: false });
+    expect(d.line).toBe(291);
+    expect(afterFight(d, null)).toEqual({ cost: 9 + LINE.lost, marker: false });
+    expect(LINE.lost).toBe(25);
+    expect(d.line).toBe(257);
+    expect(d.tally).toMatchObject({ landed: 1, lost: 1, pearls: 3, coins: 2000 });
+  });
+
+  it('out of line, the charter waits for another spool, which fills it again in the same zone and marker', () => {
+    const d = startDive(ABYSS, 3, rod(8));
+    d.line = 4;
+    afterFight(d, { pearls: 50, coins: 1000 });
+    expect(d).toMatchObject({ line: 0, state: 'out', marker: 3 });
+    // Nothing more is taken while it waits.
+    expect(afterFight(d, null)).toEqual({ cost: 0, marker: false });
+    expect(d.tally.lost).toBe(0);
+    expect(newSpool(d)).toBe(true);
+    expect(d).toMatchObject({ line: LINE.spool, state: 'fishing', zone: ABYSS, marker: 3 });
+    expect(d.tally).toMatchObject({ spools: 2, spoolCoins: 2 * SPOOL_COINS[ABYSS] });
+    expect(newSpool(d)).toBe(false);
+  });
+
+  it('a spool costs the zone\'s price, free on the Shelf, and the cast-off spool counts in the tally', () => {
+    expect([0, 1, 2, 3, 4].map(spoolPrice)).toEqual([0, 14_000, 26_000, 46_000, 83_000]);
+    expect(startDive(2, 0, none).tally).toEqual({ landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: 26_000 });
+  });
+});
+
+describe('pay', () => {
+  it('a fish pays pearls by zone: 1, 3, 8, 20 and 50', () => {
+    expect([0, 1, 2, 3, 4].map((z) => pearlsFor(z, 1))).toEqual([1, 3, 8, 20, 50]);
+    expect(PEARLS.zone).toEqual([1, 3, 8, 20, 50]);
+  });
+
+  it('a Feisty or Brutish fish pays double and a legend five times, multiplying', () => {
+    expect(pearlMult({})).toBe(1);
+    expect(pearlMult({ tag: 'feisty' })).toBe(2);
+    expect(pearlMult({ tag: 'brutish' })).toBe(2);
+    expect(pearlMult({ legend: true })).toBe(5);
+    expect(pearlMult({ tag: 'brutish', legend: true })).toBe(10);
+    expect(pearlsFor(2, 0, { tag: 'feisty' })).toBe(16);
+    expect(pearlsFor(3, 0, { tag: 'feisty', legend: true })).toBe(200);
+  });
+
+  it('in the Abyss, pearls and coins grow 12% a marker past the first', () => {
+    expect(markerGrowth(ABYSS, 1)).toBe(1);
+    expect(markerGrowth(ABYSS, 2)).toBeCloseTo(1.12, 12);
+    expect(markerGrowth(ABYSS, 4)).toBeCloseTo(1.12 ** 3, 12);
+    expect(markerGrowth(2, 9)).toBe(1);
+    expect(pearlsFor(ABYSS, 2)).toBe(56);
+    expect(pearlsFor(ABYSS, 4)).toBe(70);
+    expect(pearlsFor(ABYSS, 4, { tag: 'feisty', legend: true })).toBe(Math.round(500 * 1.12 ** 3));
+    expect(MARKER.grow).toBe(1.12);
+  });
+
+  it("an everyday fish's average sale is about 1,100 / 2,000 / 3,600 / 6,400 / 11,500 coins by zone, and a legend about three times it", () => {
+    const want = [1100, 2000, 3600, 6400, 11_500];
+    const rng = mulberry(4);
+    ZONES.forEach((z, i) => {
+      expect(typicalSale(i) / want[i], z.id).toBeGreaterThan(0.97);
+      expect(typicalSale(i) / want[i], z.id).toBeLessThan(1.03);
+      // The worked-out average is what the size roll gives.
+      const avg = (id: string, n = 4000) => {
+        const f = byId(FISH, id);
+        let s = 0;
+        for (let k = 0; k < n; k++) s += sellValue(f, rollSize(f, rng));
+        return s / n;
+      };
+      const everyday = z.fish.reduce((a, id) => a + avg(id), 0) / z.fish.length;
+      expect(everyday / typicalSale(i), z.id).toBeCloseTo(1, 1);
+      for (const id of z.legends) expect(avg(id) / everyday, id).toBeCloseTo(3, 0);
+    });
+    // Further zones pay more.
+    for (let z = 1; z < ZONES.length; z++) expect(typicalSale(z)).toBeGreaterThan(1.5 * typicalSale(z - 1));
+  });
+
+  it("a landed fish's average sale counts in legends, shinies and Feisty or Brutish fish: about a third over a plain everyday one", () => {
+    const rng = mulberry(9);
+    const s = newSave();
+    ZONES.forEach((z, i) => {
+      expect(averageSale(i) / typicalSale(i), z.id).toBeGreaterThan(1.3);
+      expect(averageSale(i) / typicalSale(i), z.id).toBeLessThan(1.4);
+      // What casts in the zone really sell for, tag bonus included, without the clean-catch bonus.
+      let sum = 0;
+      const n = 40_000;
+      for (let k = 0; k < n; k++) {
+        const roll = rollSeaCast(s, i, i === ABYSS ? 1 : 0, rod(8), rng);
+        sum += sellValue(byId(FISH, roll.fishId!), roll.size, roll.shiny) * (roll.tag ? 1 + TAG_BONUS : 1);
+      }
+      expect(sum / n / averageSale(i), z.id).toBeGreaterThan(0.96);
+      expect(sum / n / averageSale(i), z.id).toBeLessThan(1.04);
+    });
+  });
+
+  it("tells the screens what a fish pays here: a plain fish's pearls and the average coins to three figures, with the Abyss marker's growth", () => {
+    expect(payAt(0, 0)).toEqual({ pearls: 1, coins: Math.round(averageSale(0) / 10) * 10 });
+    expect(payAt(0, 0).coins).toBe(1470);
+    expect(payAt(ABYSS, 1).coins).toBe(Math.round(averageSale(ABYSS) / 100) * 100);
+    expect(payAt(ABYSS, 3)).toEqual({ pearls: 63, coins: Math.round((averageSale(ABYSS) * 1.12 ** 2) / 100) * 100 });
+  });
+});
+
+describe('the Abyss', () => {
+  it('reaches the next marker every 3 fish landed; lost fish and other zones don\'t count', () => {
+    const d = startDive(ABYSS, 1, rod(8));
+    const pay = { pearls: 0, coins: 0 };
+    expect(afterFight(d, pay).marker).toBe(false);
+    afterFight(d, null);
+    expect(afterFight(d, pay).marker).toBe(false);
+    expect(d).toMatchObject({ marker: 1, toNext: 2 });
+    expect(afterFight(d, pay).marker).toBe(true);
+    expect(d).toMatchObject({ marker: 2, toNext: 0 });
+    for (let i = 0; i < 3 * 5; i++) afterFight(d, pay);
+    expect(d.marker).toBe(7);
+    // The line a fish costs follows the marker it's at.
+    expect(lineCost(ABYSS, 7, rod(8))).toBe(11);
+    const kelp = startDive(2, 5, rod(4));
+    for (let i = 0; i < 6; i++) afterFight(kelp, pay);
+    expect(kelp).toMatchObject({ marker: 0, toNext: 0 });
+  });
+
+  it('starts in an open zone, and in the Abyss at marker 1 or any marker up to the furthest reached', () => {
+    const p = { boatParts: 2, abyssRecord: 0 };
+    expect([0, 1, 2, 3, 4].map((z) => canStart(p, z, 0))).toEqual([true, true, true, false, false]);
+    expect(canStart(p, 1)).toBe(true);
+    // No markers outside the Abyss, and nothing odd.
+    expect(canStart(p, 1, 2)).toBe(false);
+    expect(canStart(p, '1', 0)).toBe(false);
+    expect(canStart(p, 1.5, 0)).toBe(false);
+    expect(canStart(p, -1, 0)).toBe(false);
+    const all = { boatParts: 4, abyssRecord: 0 };
+    expect(canStart(all, ABYSS, 1)).toBe(true);
+    expect(canStart(all, ABYSS, 0)).toBe(false);
+    expect(canStart(all, ABYSS, 2)).toBe(false);
+    const far = { boatParts: 4, abyssRecord: 12 };
+    expect([1, 7, 12, 13].map((m) => canStart(far, ABYSS, m))).toEqual([true, true, true, false]);
+    expect(canStart(far, ABYSS, 2.5)).toBe(false);
+    expect(zoneOpen(far, 4)).toBe(true);
+    expect(zoneOpen(p, 3)).toBe(false);
+    expect(startDive(ABYSS, 7, rod(8))).toMatchObject({ marker: 7, toNext: 0 });
+    expect(startDive(1, 7, rod(1)).marker).toBe(0);
+  });
+});
+
+describe('rod steps, Abyss levels and boat parts', () => {
+  it('prices the eight steps, and Abyss levels at 1,000,000 coins growing 12% a level, to the nearest 1,000', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map(rodStepCost)).toEqual([40_000, 90_000, 150_000, 350_000, 600_000, 1_300_000, 1_200_000, 2_400_000]);
+    expect([1, 2, 3, 10].map(abyssLevelCost)).toEqual([1_000_000, 1_120_000, 1_254_000, Math.round(1_000_000 * 1.12 ** 9 / 1000) * 1000]);
+    for (let n = 1; n < 60; n++) expect(abyssLevelCost(n) % 1000).toBe(0);
+    expect(ROD.steps).toBe(8);
+  });
+
+  it('puts a zone\'s two steps on sale with the zone: steps 1-2 the Drop-off ... 7-8 the Abyss', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map(stepZone)).toEqual([1, 1, 2, 2, 3, 3, 4, 4]);
+  });
+
+  it('names the next purchase: a step until all eight, then Abyss levels', () => {
+    expect(nextRodBuy(rod(0))).toEqual({ kind: 'step', n: 1, coins: 40_000, zone: 1 });
+    expect(nextRodBuy(rod(7))).toEqual({ kind: 'step', n: 8, coins: 2_400_000, zone: 4 });
+    expect(nextRodBuy(rod(8))).toEqual({ kind: 'level', n: 1, coins: 1_000_000, zone: ABYSS });
+    expect(nextRodBuy(rod(8, 2))).toMatchObject({ kind: 'level', n: 3, coins: 1_254_000 });
+    expect(rodBuyName(nextRodBuy(rod(4)))).toBe('Deep Sea Rod step 5');
+    expect(rodBuyName(nextRodBuy(rod(8, 2)))).toBe('Deep Sea Rod Abyss level 3');
+  });
+
+  it('has four boat parts for pearls, one opening each zone past the Shelf', () => {
+    expect(BOAT_PARTS.map((p) => p.pearls)).toEqual([30, 150, 1500, 10_000]);
+    expect(BOAT_PARTS.map((p) => p.name)).toEqual(['Storm sail', 'Kelp cutter', 'Deep lamps', 'Iron keel']);
+    expect(BOAT_PARTS).toHaveLength(ZONES.length - 1);
   });
 });
 
 describe('sea zones and bites', () => {
-  it('runs Shelf 1-15, Drop-off 16-40, Kelp Deep 41-80, Twilight 81-150, Abyss 151+', () => {
-    const z = (d: number) => zoneAt(d).id;
-    expect([0, 15, 16, 40, 41, 80, 81, 150, 151, 900].map(z)).toEqual(
-      ['shelf', 'shelf', 'dropoff', 'dropoff', 'kelp', 'kelp', 'twilight', 'twilight', 'abyss', 'abyss'],
-    );
-  });
-
   it('a legend bites about 1 time in 20, the two everyday fish evenly', () => {
     const rng = mulberry(3);
     const n = 6000;
     const count: Record<string, number> = {};
     for (let i = 0; i < n; i++) {
-      const b = rollSeaFish(5, rng);
+      const b = rollSeaFish(0, rng);
       count[b.fish.id] = (count[b.fish.id] ?? 0) + 1;
       expect(b.behaviour).toBeNull();
     }
@@ -86,10 +284,10 @@ describe('sea zones and bites', () => {
     const n = 12000;
     const count: Record<string, number> = {};
     for (let i = 0; i < n; i++) {
-      const id = rollSeaFish(160, rng).fish.id;
+      const id = rollSeaFish(ABYSS, rng).fish.id;
       count[id] = (count[id] ?? 0) + 1;
     }
-    const abyss = ZONES.find((z) => z.id === 'abyss')!;
+    const abyss = ZONES[ABYSS];
     const legends = abyss.legends.reduce((a, id) => a + (count[id] ?? 0), 0) / n;
     expect(legends).toBeGreaterThan(0.04);
     expect(legends).toBeLessThan(0.06);
@@ -97,61 +295,56 @@ describe('sea zones and bites', () => {
     for (const id of abyss.fish) expect(Math.abs((count[id] ?? 0) / n - 0.95 / abyss.fish.length), id).toBeLessThan(0.02);
   });
 
-  it('each zone past the Shelf has its behaviour, and the Abyss mixes all three', () => {
-    const seen = (depth: number) => {
-      const rng = mulberry(9);
-      const s = new Set<string | null>();
-      for (let i = 0; i < 300; i++) s.add(rollSeaFish(depth, rng).behaviour);
-      return [...s].sort();
-    };
-    expect(seen(35)).toEqual(['runner']);
-    expect(seen(60)).toEqual(['thrasher']);
-    expect(seen(100)).toEqual(['sounder']);
-    expect(seen(200)).toEqual(['runner', 'sounder', 'thrasher']);
+  it('each zone past the Shelf has its behaviour, and the Abyss mixes all three evenly', () => {
+    expect(behaviourOdds(0)).toEqual([[null, 1]]);
+    expect(behaviourOdds(1)).toEqual([['runner', 1]]);
+    expect(behaviourOdds(2)).toEqual([['thrasher', 1]]);
+    expect(behaviourOdds(3)).toEqual([['sounder', 1]]);
+    expect(behaviourOdds(ABYSS).map(([b]) => b).sort()).toEqual(['runner', 'sounder', 'thrasher']);
+    const rng = mulberry(9);
+    const seen = new Set<string | null>();
+    for (let i = 0; i < 300; i++) seen.add(rollSeaFish(ABYSS, rng).behaviour);
+    expect([...seen].sort()).toEqual(['runner', 'sounder', 'thrasher']);
   });
 
-  it('a new way of fighting blends in a quarter a marker from the zone above', () => {
-    const share = (depth: number, b: Behaviour | null) => behaviourOdds(depth).filter(([x]) => x === b).reduce((a, [, p]) => a + p, 0);
-    // By the player's markers: the Drop-off starts at 16, inside the marker from 15.
-    expect([16, 20, 25, 30].map((d) => share(d, 'runner'))).toEqual([0.25, 0.5, 0.75, 1]);
-    expect(share(19, 'runner')).toBe(0.25);
-    expect(share(16, null)).toBe(0.75);
-    expect([41, 45, 50, 55].map((d) => share(d, 'runner'))).toEqual([0.75, 0.5, 0.25, 0]);
-    expect(share(151, 'thrasher')).toBeCloseTo(0.25 / 3 + 0.75 * 0);
-    expect(share(151, 'sounder')).toBeCloseTo(0.25 / 3 + 0.75);
-    for (let depth = 0; depth < 300; depth += 3) expect(behaviourOdds(depth).reduce((a, [, p]) => a + p, 0)).toBeCloseTo(1, 9);
-    // And the rolls follow the odds.
-    const rng = mulberry(2);
-    let runners = 0;
-    for (let i = 0; i < 4000; i++) if (rollSeaFish(20, rng).behaviour === 'runner') runners++;
-    expect(runners / 4000).toBeCloseTo(0.5, 1);
-  });
-
-  it('a sea cast fights at the depth\'s gaps over the Deep Sea Rod level, whatever the fish, with its tag and spread and no behaviour for now', () => {
+  it("a sea cast fights at the zone's gaps over the charter's rod, with its tag and spread and no behaviour for now", () => {
     const s = newSave();
     s.seaRod = true;
-    s.rodLevel = 6;
-    for (let depth = 0; depth < 200; depth += 7) {
-      const seed = 100 + depth;
-      const roll = rollSeaCast(s, depth, mulberry(seed));
-      const fish = byId(FISH, roll.fishId!);
-      expect(fish.sea).toBe(true);
-      const g = seaGaps(depth, { rod: 6, line: 0 });
-      expect(Math.abs(roll.d!.strength - g.strength - (roll.tag === 'feisty' ? TAG_TIERS.feisty : 0))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
-      expect(Math.abs(roll.d!.weight - g.weight - (roll.tag === 'brutish' ? TAG_TIERS.brutish : 0))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
-      expect(roll.b).toBeUndefined();
+    for (const [zone, marker, r] of [[0, 0, rod(0)], [2, 0, rod(3)], [ABYSS, 5, rod(8, 1)]] as const) {
+      for (let k = 0; k < 20; k++) {
+        const roll = rollSeaCast(s, zone, marker, r, mulberry(100 + k + zone));
+        const fish = byId(FISH, roll.fishId!);
+        expect(fish.sea).toBe(true);
+        expect(ZONES[zone].fish.concat(ZONES[zone].legends)).toContain(fish.id);
+        const g = seaGaps(zone, marker, r);
+        expect(Math.abs(roll.d!.strength - g.strength - (roll.tag === 'feisty' ? TAG_TIERS.feisty : 0))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+        expect(Math.abs(roll.d!.weight - g.weight - (roll.tag === 'brutish' ? TAG_TIERS.brutish : 0))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+        expect(roll.b).toBeUndefined();
+      }
     }
     for (const z of ZONES) {
       expect(z.fish.length).toBeGreaterThanOrEqual(2);
       expect(z.legends.length).toBeGreaterThanOrEqual(1);
-      // A zone's legends are exactly its legend-flagged fish, and its everyday fish are not.
       for (const id of z.legends) expect(byId(FISH, id).legend, id).toBe(true);
       for (const id of z.fish) expect(byId(FISH, id).legend, id).toBeFalsy();
     }
-    // Every sea fish swims in exactly one zone.
     const listed = ZONES.flatMap((z) => [...z.fish, ...z.legends]);
     expect(new Set(listed).size).toBe(listed.length);
     expect(FISH.filter((f) => f.sea).map((f) => f.id).sort()).toEqual([...listed].sort());
+  });
+
+  it('a bot can fish a spool on the Shelf with the real reel', () => {
+    const rng = mulberry(11), brng = mulberry(12);
+    const d = startDive(0, 0, none);
+    while (d.state === 'fishing') {
+      rollSeaFish(d.zone, rng);
+      const f = botFight(seaGaps(d.zone, d.marker, d.rod), 0.25, STYLES[0], rng, brng);
+      afterFight(d, f.status === 'caught' ? { pearls: 1, coins: 1000 } : null);
+    }
+    expect(d.state).toBe('out');
+    // Shelf fish are Easy on a fresh rod: about 60 to a spool at 5 m each.
+    expect(d.tally.landed).toBeGreaterThan(50);
+    expect(d.tally.landed + d.tally.lost).toBeLessThanOrEqual(LINE.spool / LINE.base);
   });
 });
 
@@ -260,121 +453,5 @@ describe('fight left', () => {
     const tiresAfter = (weight: number) => watch({ weight, strength: 0 }, 1).tiredAt;
     // 20 s of surging one rung over the rod, 30 s two over.
     expect(tiresAfter(2) / tiresAfter(1)).toBeGreaterThan(1.3);
-  });
-});
-
-describe('sea gear messages', () => {
-  it('come with depth and go with levels on the matching track', () => {
-    const over = (depth: number, gear: SeaGear) => overGear(seaGaps(depth, gear));
-    expect(over(10, none)).toEqual({ rod: false, line: false });
-    expect(over(30, none)).toEqual({ rod: true, line: true });
-    expect(over(30, { rod: 0, line: 1 })).toEqual({ rod: true, line: false });
-    expect(over(30, { rod: 1, line: 0 })).toEqual({ rod: false, line: true });
-  });
-});
-
-describe('the dive', () => {
-  it('each landed fish goes one depth deeper and adds 1 + floor(depth / 20) pearls', () => {
-    expect([0, 19, 20, 39, 40, 85].map(pearlsAt)).toEqual([1, 1, 2, 2, 3, 5]);
-    const d = startDive(20);
-    afterFight(d, 'galemackerel', true, clean);
-    expect(d.depth).toBe(21);
-    expect(d.pearls).toBe(2);
-    afterFight(d, 'galemackerel', false, wear(0.5));
-    expect(d.depth).toBe(21);
-    expect(d.pearls).toBe(2);
-  });
-
-  it('stops at a ledge every 5 depths for the choice', () => {
-    const d = land(startDive(0), 4);
-    expect(d.state).toBe('fishing');
-    afterFight(d, 'snapper', true, clean);
-    expect(d.state).toBe('ledge');
-    expect(d.depth).toBe(5);
-    afterFight(d, 'snapper', true, clean); // no fishing at a ledge until diving on
-    expect(d.depth).toBe(5);
-    diveOn(d);
-    land(d, 5);
-    expect(d.state).toBe('ledge');
-    expect(d.ledges).toBe(2);
-  });
-
-  it('the spool wears by the line taken, 25 m a fish lost (snapped or ran off) and 5 m a fray left on a landed fish', () => {
-    expect(lineWorn(wear(0.5), true)).toBe(0.5 * DIVE.metresPerLine);
-    expect(lineWorn(wear(0.5, 1), true)).toBe(0.5 * DIVE.metresPerLine + 5);
-    expect(lineWorn(wear(0.2, 2, true), false)).toBe(0.2 * DIVE.metresPerLine + 25);
-    expect(lineWorn(wear(0.9), false)).toBe(0.9 * DIVE.metresPerLine + 25);
-    const d = startDive(0);
-    afterFight(d, 'snapper', false, wear(0, 2, true));
-    expect(d.line).toBe(DIVE.spool - 25);
-  });
-
-  it('running out of line sinks the unbanked haul, but the fish still come home', () => {
-    const d = land(startDive(0), 7);
-    diveOn(d);
-    expect(d.pearls).toBe(7);
-    for (let i = 0; i < 12; i++) afterFight(d, 'snapper', false, wear(0, 2, true));
-    expect(d.state).toBe('sunk');
-    expect(d.line).toBe(0);
-    expect(d.pearls).toBe(0);
-    expect(d.fish.length).toBe(7);
-    const chart: Chart = { ledges: [], record: 0 };
-    expect(surface(d, chart)).toBeNull();
-    expect(chart).toEqual({ ledges: [], record: 0 });
-  });
-
-  it('a fish landed with the last of the line comes home, but the haul sinks', () => {
-    const d = startDive(0);
-    d.line = 3;
-    afterFight(d, 'grouper', true, wear(0, 1));
-    expect(d.state).toBe('sunk');
-    expect(d.fish).toEqual(['grouper']);
-    expect(d.pearls).toBe(0);
-  });
-
-  it('surfacing banks the haul, +10% for each ledge reached this dive, up to +50%', () => {
-    expect([0, 1, 3, 5, 9].map(haulBonus)).toEqual([1, 1.1, 1.3, 1.5, 1.5]);
-    const chart: Chart = { ledges: [], record: 0 };
-    const d = land(startDive(0), 10);
-    expect(d.pearls).toBe(10);
-    const got = surface(d, chart)!;
-    expect(got.pearls).toBe(12);
-    expect(got.fish.length).toBe(10);
-    expect(d.state).toBe('surfaced');
-  });
-
-  it('can only surface at a ledge', () => {
-    const d = land(startDive(0), 3);
-    expect(surface(d, { ledges: [], record: 0 })).toBeNull();
-    expect(d.state).toBe('fishing');
-  });
-
-  it('surfacing charts the ledge, later dives start there, and the record is the deepest ledge surfaced from', () => {
-    const chart: Chart = { ledges: [], record: 0 };
-    expect(canStartAt(chart, 0)).toBe(true);
-    expect(canStartAt(chart, 10)).toBe(false);
-    expect(surface(land(startDive(0), 10), chart)!.record).toBe(true);
-    expect(chart).toEqual({ ledges: [10], record: 10 });
-    expect(canStartAt(chart, 10)).toBe(true);
-    const deeper = land(startDive(10), 10);
-    expect(deeper.depth).toBe(20);
-    expect(surface(deeper, chart)!.record).toBe(true);
-    const shallow = surface(land(startDive(0), 5), chart)!;
-    expect(shallow.record).toBe(false);
-    expect(chart.ledges.sort((a, b) => a - b)).toEqual([5, 10, 20]);
-    expect(chart.record).toBe(20);
-  });
-
-  it('a bot can dive the Shelf with the real reel', () => {
-    const rng = mulberry(11), brng = mulberry(12);
-    const d = startDive(0);
-    while (d.state === 'fishing') {
-      const bite = rollSeaFish(d.depth, rng);
-      const f = botFight(seaGaps(d.depth, none), 0.25, STYLES[0], rng, brng);
-      afterFight(d, bite.fish.id, f.status === 'caught', { lineOut: f.lineOut, frays: f.frays, snapped: f.status === 'snapped' });
-    }
-    expect(d.state).toBe('ledge');
-    expect(d.depth).toBe(5);
-    expect(d.line).toBeGreaterThan(DIVE.spool - 30);
   });
 });

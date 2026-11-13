@@ -36,7 +36,7 @@ try {
   await sleep(600);
   const say = async (text: string) => { await page.keyboard.press('Enter'); await page.keyboard.type(text); await page.keyboard.press('Enter'); await sleep(300); };
   await say('/login shots shots-dev-pass');
-  await say('/sea 1');
+  await say('/sea 0');
   await page.waitForFunction(() => (window as any).__game.world.sea && document.getElementById('castoff')!.classList.contains('hidden'), { timeout: 20000 });
   await page.addStyleTag({ content: '#hud, #crosshair, #toast, #banner, #tip, #guide, #divehud, #chat, #chatbox, #hotbar { display: none !important; }' });
   // Per render: an optional outside camera and an optional palette laid over what the game just set.
@@ -76,7 +76,7 @@ try {
     };
   });
   type Pal = { skyH: number; skyT: number; shallow: number; deep: number; cloudTop: number; cloudBot: number; hemi: number; sun: number; hemiCol?: number; foam?: number; lamps?: number; fog?: [number, number] };
-  const ZONES: [string, number][] = [['dropoff', 30], ['kelp', 60], ['twilight', 110], ['abyss', 200], ['line41', 46], ['line81', 83], ['line151', 151]];
+  const ZONES: [string, number][] = [['dropoff', 30], ['kelp', 45], ['twilight', 75], ['abyss', 120], ['line36', 41], ['line61', 63], ['line91', 91]];
   const PALS: Record<string, Record<string, Pal> | null> = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
   const only = process.argv[4]?.split(',');
   const views: { v: string; day: number; tp?: [number, number]; look: [number, number]; flash?: boolean; zones?: string[] }[] = [

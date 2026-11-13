@@ -73,9 +73,26 @@ describe('dev commands in a room', () => {
     room.handle(a.id, { t: 'cmd', text: '/fish koi 30 shiny' });
     room.handle(a.id, { t: 'cmd', text: '/rod graphite' });
     room.handle(a.id, { t: 'cmd', text: '/pearls 300' });
+    room.handle(a.id, { t: 'cmd', text: '/rodstep 5' });
+    room.handle(a.id, { t: 'cmd', text: '/abysslevel 3' });
+    room.handle(a.id, { t: 'cmd', text: '/boat 2' });
+    expect(a.save).toMatchObject({ pearls: 300, rodStep: 5, abyssLevels: 3, boatParts: 2 });
+    expect(devLines(a.log).at(-1)).toBe('Boat parts set to 2: Kelp Deep and nearer open.');
+    // Steps and parts stay in range; the old level commands are gone.
+    room.handle(a.id, { t: 'cmd', text: '/rodstep 12' });
+    room.handle(a.id, { t: 'cmd', text: '/boat 9' });
+    expect(a.save).toMatchObject({ rodStep: 8, boatParts: 4 });
+    room.handle(a.id, { t: 'cmd', text: '/rodstep' });
+    expect(devLines(a.log).at(-1)).toBe('Usage: /rodstep 0-8');
     room.handle(a.id, { t: 'cmd', text: '/rodlevel 12' });
+    expect(devLines(a.log).at(-1)).toMatch(/Unknown command \/rodlevel/);
     room.handle(a.id, { t: 'cmd', text: '/linelevel 7' });
-    expect(a.save).toMatchObject({ pearls: 300, rodLevel: 12, seaLine: 7 });
+    expect(devLines(a.log).at(-1)).toMatch(/Unknown command \/linelevel/);
+    room.handle(a.id, { t: 'cmd', text: '/help' });
+    const help = a.log.filter((m) => m.t === 'dev').at(-1)!;
+    const lines = (help as { lines: string[] }).lines.join('\n');
+    for (const c of ['/rodstep 0-8', '/abysslevel N', '/boat 0-4', '/sea <zone 0-4> [marker]']) expect(lines).toContain(c);
+    expect(lines).not.toMatch(/rodlevel|linelevel|ledge/);
     expect(a.save.level).toBe(20);
     expect(a.save.slots.some((s) => s?.k === 'bait' && s.id === 'pearl')).toBe(true);
     expect(a.save.slots.some((s) => s?.k === 'fish' && s.fishId === 'koi' && s.shiny)).toBe(true);
@@ -91,41 +108,47 @@ describe('dev commands in a room', () => {
     expect(devLines(a.log).at(-1)).toMatch(/Fish ids:/);
   });
 
-  it('starts a dive at any depth, only for them, which waits for them on a quick rejoin', () => {
+  it('starts a charter in any zone and Abyss marker, free, only for them, which waits for them on a quick rejoin', () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');
     const b = join('Bob');
     room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
-    room.handle(a.id, { t: 'cmd', text: '/sea 20' });
+    a.save.coins = 7;
+    // Kelp Deep isn't open to Ann, and its spool isn't paid: the console sails anyway.
+    room.handle(a.id, { t: 'cmd', text: '/sea 2' });
     expect(a.save.location).toBe('sea');
-    // The depth reaches the client before the save that moves it, so the sea is built at that depth.
-    const dive = a.log.findIndex((m) => m.t === 'divestate' && m.dive.depth === 20);
-    const dev = a.log.findIndex((m) => m.t === 'dev' && m.depth === 20);
+    expect(a.save.coins).toBe(7);
+    // The charter reaches the client before the save that moves it, so the sea is built for its zone.
+    const dive = a.log.findIndex((m) => m.t === 'divestate' && m.dive.zone === 2);
+    const dev = a.log.findIndex((m) => m.t === 'dev' && m.depth === 48);
     const state = a.log.findIndex((m) => m.t === 'state' && m.save.location === 'sea');
     expect(dive).toBeGreaterThanOrEqual(0);
     expect(dev).toBeGreaterThanOrEqual(0);
     expect(state).toBeGreaterThan(Math.max(dive, dev));
-    expect(devLines(a.log).at(-1)).toBe('Diving from The Drop-off, depth 20.');
+    expect(devLines(a.log).at(-1)).toBe('Sailing to Kelp Deep.');
     expect(b.log.some((m) => m.t === 'dev' || m.t === 'divestate')).toBe(false);
-    // Again at sea: a fresh dive at the new depth.
-    room.handle(a.id, { t: 'cmd', text: '/sea' });
-    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { depth: 1, start: 1, line: 300 } });
-    // /sea 0 sails from the harbour, like a charter from Reed, even while his charters are closed.
+    // Again at sea: a fresh charter, in the Abyss at marker 12, which counts as reached.
+    room.handle(a.id, { t: 'cmd', text: '/sea 4 12' });
+    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { zone: 4, marker: 12, line: 300, state: 'fishing' } });
+    expect(a.log.filter((m) => m.t === 'dev').at(-1)).toMatchObject({ depth: 133 });
+    expect(devLines(a.log).at(-1)).toBe('Sailing to The Abyss, marker 12.');
+    expect(a.save.abyssRecord).toBe(12);
+    // A marker only counts in the Abyss.
+    room.handle(a.id, { t: 'cmd', text: '/sea 1 5' });
+    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { zone: 1, marker: 0 } });
+    for (const bad of ['/sea', '/sea deep', '/sea 4 x']) {
+      room.handle(a.id, { t: 'cmd', text: bad });
+      expect(devLines(a.log).at(-1), bad).toMatch(/Usage/);
+    }
     room.handle(a.id, { t: 'cmd', text: '/sea 0' });
-    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { depth: 0, start: 0 } });
-    room.handle(a.id, { t: 'cmd', text: '/sea' });
-    room.handle(a.id, { t: 'cmd', text: '/sea deep' });
-    expect(devLines(a.log).at(-1)).toMatch(/Usage/);
-    room.handle(a.id, { t: 'cmd', text: '/ledge up' });
-    expect(devLines(a.log).at(-1)).toBe("You're not at a ledge.");
-    // The pond's gate doesn't lead to the sea, and a player who drops out comes back to the dive.
+    // The pond's gate doesn't lead to the sea, and a player who drops out comes back to the charter.
     room.handle(a.id, { t: 'travel', to: 'pond' });
     expect(a.save.location).toBe('sea');
     room.leave(a.id);
     const again = join('Ann');
     expect(again.save.location).toBe('sea');
-    expect(again.log.find((m) => m.t === 'welcome')).toMatchObject({ dive: { depth: 1 } });
-    // Leaving the sea with /tp leaves the dive too.
+    expect(again.log.find((m) => m.t === 'welcome')).toMatchObject({ dive: { zone: 0, marker: 0 } });
+    // Leaving the sea with /tp leaves the charter too.
     room.handle(again.id, { t: 'cmd', text: '/login admin hunter2' });
     room.handle(again.id, { t: 'cmd', text: '/tp pond' });
     room.leave(again.id);

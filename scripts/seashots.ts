@@ -40,7 +40,7 @@ try {
     await sleep(1200);
     await page.screenshot({ path: `${OUT}/${name}.jpg`, type: 'jpeg', quality: 80 });
   }
-  await say('/sea 1');
+  await say('/sea 0');
   await page.waitForFunction(() => (window as any).__game.world.sea && document.getElementById('castoff')!.classList.contains('hidden'), { timeout: 20000 });
   await page.addStyleTag({ content: '#hud, #crosshair, #toast, #banner, #tip, #guide, #divehud, #chat, #chatbox, #hotbar { display: none !important; }' });
   // Camera override: an outside view when set, applied just before each render.
@@ -57,7 +57,7 @@ try {
   type Shot = { name: string; depth: number; day: number; look?: [number, number]; tp?: [number, number]; cam?: number[] };
   const OUTSEA: [number, number] = [0, -0.02];
   const shots: Shot[] = [];
-  const D: [string, number][] = [['shelf', 1], ['dropoff', 20], ['kelp', 60], ['twilight', 110], ['abyss', 200]];
+  const D: [string, number][] = [['shelf', 1], ['dropoff', 20], ['kelp', 45], ['twilight', 75], ['abyss', 120]];
   for (const [n, d] of D) shots.push({ name: `day-${n}-sea`, depth: d, day: 0.45, look: OUTSEA });
   for (const [n, d] of [D[0], D[1], D[3]]) shots.push({ name: `night-${n}-sea`, depth: d, day: 0.75, look: OUTSEA });
   shots.push({ name: 'dusk-shelf-sea', depth: 1, day: Number(process.env.DUSK ?? 0.62), look: OUTSEA });
@@ -74,8 +74,8 @@ try {
   shots.push({ name: 'day-shelf-ext-far', depth: 1, day: 0.45, cam: [10, 9, -34, 0, 3, 0] });
   shots.push({ name: 'night-shelf-ext', depth: 1, day: 0.75, cam: [9, 3.2, -11, 0, 1.4, 0] });
   shots.push({ name: 'dusk-shelf-ext', depth: 1, day: Number(process.env.DUSK ?? 0.62), cam: [9, 3.2, -11, 0, 1.4, 0] });
-  shots.push({ name: 'day-twilight-ext', depth: 110, day: 0.45, cam: [9, 3.2, -11, 0, 1.4, 0] });
-  shots.push({ name: 'night-twilight-fwd', depth: 110, day: 0.75, tp: [-3.5, 0], look: [-Math.PI / 2, 0.05] });
+  shots.push({ name: 'day-twilight-ext', depth: 75, day: 0.45, cam: [9, 3.2, -11, 0, 1.4, 0] });
+  shots.push({ name: 'night-twilight-fwd', depth: 75, day: 0.75, tp: [-3.5, 0], look: [-Math.PI / 2, 0.05] });
   for (const s of shots) {
     await page.evaluate((s) => {
       const G = (window as any).__game;

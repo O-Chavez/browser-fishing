@@ -281,7 +281,7 @@ describe('levels past 50 and ranks', () => {
     expect(nextGoal(12, {}, false, false, true)).toBe('Level 15: the Aurora Rod becomes available');
     expect(nextGoal(16, {}, false, false, true)).toBe("Level 20: the Deep Sea Rod, for Captain Reed's charters");
     expect(nextGoal(16, {}, false, false, false)).toBe(nextGoal(16));
-    expect(nextGoal(20, {}, false, false, true)).toBe("The Deep Sea Rod at the stall: it opens Captain Reed's charters");
+    expect(nextGoal(20, {}, false, false, true)).toBe("The Deep Sea Rod from Captain Reed: it opens his charters");
     expect(nextGoal(20, {}, false, true, true)).toBe("Level 25: Bosun + Oilskin Sou'wester");
     expect(nextGoal(20, {}, true, true, true)).toBe("Take a charter: Captain Reed's seaplane, west beach");
   });
@@ -307,7 +307,7 @@ describe('sea fish', () => {
   const shelf = SEA_FISH.filter((f) => f.locations.includes('shelf'));
   const dropoff = SEA_FISH.filter((f) => f.locations.includes('dropoff'));
   const mid = (f: (typeof FISH)[number]) => sellValue(f, (f.minSize + f.maxSize) / 2);
-  const commons = (list: typeof FISH) => list.filter((f) => f.baseValue < 300);
+  const commons = (list: typeof FISH) => list.filter((f) => !f.legend);
 
   it('has three species at the Shelf and three at the Drop-off, each tier 5', () => {
     expect(shelf.map((f) => f.id)).toEqual(['pewtercod', 'snapper', 'grouper']);
@@ -316,21 +316,20 @@ describe('sea fish', () => {
   });
   it('sells at base value x10 (not the tier 5 x50) with the usual size factor', () => {
     const cod = byId(FISH, 'pewtercod');
-    expect(sellValue(cod, cod.minSize)).toBe(Math.round(140 * 10 * 0.5));
-    expect(sellValue(cod, cod.maxSize)).toBe(Math.round(140 * 10 * 1.5));
+    expect(sellValue(cod, cod.minSize)).toBe(Math.round(cod.baseValue * 10 * 0.5));
+    expect(sellValue(cod, cod.maxSize)).toBe(Math.round(cod.baseValue * 10 * 1.5));
     expect(sellValue(cod, cod.maxSize, true)).toBeGreaterThan(sellValue(cod, cod.maxSize));
   });
-  it('a typical catch is about 1,500 at the Shelf and 2,000 at the Drop-off', () => {
+  it('an everyday catch is about 1,100 at the Shelf and 2,000 at the Drop-off', () => {
     // Mean sale value over rolled sizes (seeded), per species. A random mix with the legend about one catch in ten lands near the targets.
     let seed = 7;
     const rng = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const mean = (f: (typeof FISH)[number]) => { let t = 0; for (let i = 0; i < 4000; i++) t += sellValue(f, rollSize(f, rng)); return t / 4000; };
     const common = (list: typeof FISH) => commons(list).reduce((a, f) => a + mean(f), 0) / commons(list).length;
-    const mixed = (list: typeof FISH) => 0.9 * common(list) + 0.1 * mean(list.find((f) => f.baseValue >= 300)!);
-    expect(mixed(shelf)).toBeGreaterThan(1400);
-    expect(mixed(shelf)).toBeLessThan(1800);
-    expect(mixed(dropoff)).toBeGreaterThan(1850);
-    expect(mixed(dropoff)).toBeLessThan(2300);
+    expect(common(shelf)).toBeGreaterThan(1050);
+    expect(common(shelf)).toBeLessThan(1150);
+    expect(common(dropoff)).toBeGreaterThan(1900);
+    expect(common(dropoff)).toBeLessThan(2100);
     // The legends are the jackpot.
     expect(mean(byId(FISH, 'grouper'))).toBeGreaterThan(2.5 * common(shelf));
     expect(mean(byId(FISH, 'marlin'))).toBeGreaterThan(2.5 * common(dropoff));

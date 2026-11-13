@@ -1,13 +1,13 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
-import { BAITS, DEEP_SEA_LINE, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
-import { ROD_LEVEL, SEA_LINE } from '../data/dive';
+import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_FISH, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
+import { BOAT_PARTS, glowStep } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
-import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, overGear, type Gifts, pickFish, rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, type FishTag, type SpotId } from './progression';
+import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, overGear, type Gifts, pickFish, rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, TAG_BONUS, type FishTag, type SpotId } from './progression';
 import { P, type Gaps, type ReelTune } from './reel';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
-import { rollSeaFish, seaGaps, type SeaGear } from './dive';
+import { nextBoatPart, nextRodBuy, rollSeaFish, seaGaps, zoneOpen, type SeaRod } from './dive';
 import { DIVE, type Behaviour } from '../data/dive';
 import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
@@ -23,13 +23,6 @@ export { clearSlot, freeSlots } from './state';
 export const hasRod = (s: SaveData, id: string): boolean => s.slots.some((sl) => sl?.k === 'rod' && sl.id === id);
 /** Carried in the hotbar or kept in the locker. */
 export const ownsRod = (s: SaveData, id: string): boolean => hasRod(s, id) || s.locker.rods.includes(id);
-
-/**
- * Whether the HUD's Black Pearl box shows: from the first pearl a player earns, and still after spending them all
- * (pearls only go on rod levels, so a level means pearls were earned). Hidden before that, so it doesn't sit at 0
- * through the early game. A new pearl spend should count here too.
- */
-export const showPearlBox = (s: SaveData): boolean => s.pearls > 0 || s.rodLevel > 0 || s.seaLine > 0;
 
 export const LOCKER_CAP = 200;
 
@@ -85,7 +78,7 @@ export function buyRod(s: SaveData, id: string): boolean {
   return true;
 }
 
-/** The pond line on the rod (Twine if the save's is unknown). The Deep Sea Line is only used at sea (`seaLineName`). */
+/** The pond line on the rod (Twine if the save's is unknown). At sea the line is a charter's spool. */
 export const lineOf = (s: Pick<SaveData, 'line'>): Line => LINES.find((l) => l.id === s.line) ?? LINES[0];
 
 /** Whether a pond line is below the one on the rod, so it can't be bought. */
@@ -94,11 +87,12 @@ export const lineBeaten = (s: Pick<SaveData, 'line'>, l: Line): boolean => l.tie
 /** The pond line's name as shown. */
 export const lineName = (s: Pick<SaveData, 'line'>): string => lineOf(s).name;
 
-/** The line a charter fights on, as shown: the Deep Sea Line that comes on the Deep Sea Rod, "Deep Sea Line +3" once levelled. */
-export const seaLineName = (s: Pick<SaveData, 'seaLine'>): string => DEEP_SEA_LINE.name + (s.seaLine > 0 ? ` +${s.seaLine}` : '');
-
-/** The Deep Sea Rod's name as shown, with its level: "Deep Sea Rod +12", or `SEA_ROD_SHORT` for the hotbar and tiles. */
-export const seaRodName = (s: Pick<SaveData, 'rodLevel'>, short = false): string => (short ? SEA_ROD_SHORT : DEEP_SEA_ROD.name) + (s.rodLevel > 0 ? ` +${s.rodLevel}` : '');
+/**
+ * The Deep Sea Rod's name as shown, with its progress: "Deep Sea Rod step 5", "Deep Sea Rod Abyss level 3" past the
+ * last step, or `SEA_ROD_SHORT` for the hotbar and tiles.
+ */
+export const seaRodName = (s: Pick<SaveData, 'rodStep' | 'abyssLevels'>, short = false): string =>
+  (short ? SEA_ROD_SHORT : DEEP_SEA_ROD.name) + (s.abyssLevels > 0 ? ` Abyss level ${s.abyssLevels}` : s.rodStep > 0 ? ` step ${s.rodStep}` : '');
 
 /** What stands between this player's gear and a species: the line to hold it, the rod to land it in good time, the bait to hook it. */
 export function gearNeeds(s: Pick<SaveData, 'rod' | 'line' | 'bait'>, fish: Fish): { line: Line | null; rod: Rod | null; bait: Bait | null } {
@@ -172,10 +166,13 @@ export function equipRod(s: SaveData, id: string): boolean {
   return true;
 }
 
+/** The player has been on a charter that landed a fish: a sea fish is in their Fishdex. */
+export const hasSailed = (s: Pick<SaveData, 'dex'>): boolean => SEA_FISH.some((f) => !!s.dex[f.id]);
+
 /** Charters are open to this player: the Deep Sea Rod is bought. */
 export const ownsSeaRod = (s: Pick<SaveData, 'seaRod'>): boolean => s.seaRod;
 
-/** Buys the Deep Sea Rod at the stall, once: it stays on Reed's boat, so nothing goes in the bag. Rod levels bought before it (on the Aurora Rod) count from now on. */
+/** Buys the Deep Sea Rod from Captain Reed, once: it stays on his boat, so nothing goes in the bag. */
 export function buySeaRod(s: SaveData): boolean {
   const r = DEEP_SEA_ROD;
   if (s.seaRod || s.level < r.unlockLevel || s.coins < r.price) return false;
@@ -184,49 +181,59 @@ export function buySeaRod(s: SaveData): boolean {
   return true;
 }
 
-/** What taking the Deep Sea Rod from +n-1 to +n costs. */
-export function rodLevelCost(n: number): { coins: number; pearls: number } {
-  const L = ROD_LEVEL;
-  return { coins: Math.min(L.coinCap, L.coins + L.coinsPer * n), pearls: L.pearls + L.pearlsPer * n };
+/** The Deep Sea Rod as the sea's rules take it (`SeaRod`): its steps and Abyss levels, none without the rod. */
+export const seaRod = (s: SaveData): SeaRod => (s.seaRod ? { steps: s.rodStep, levels: s.abyssLevels } : { steps: 0, levels: 0 });
+
+/**
+ * Why the rod's next purchase (`nextRodBuy`) can't be bought now, or null when it can: it needs the Deep Sea Rod, a
+ * step needs its zone open (`stepZone`), and both need the coins.
+ */
+export function rodBuyError(s: SaveData): string | null {
+  if (!s.seaRod) return `Rod steps need the ${DEEP_SEA_ROD.name}.`;
+  const b = nextRodBuy(seaRod(s));
+  if (b.kind === 'step' && !zoneOpen(s, b.zone)) return `Step ${b.n} goes on sale once ${BOAT_PARTS[b.zone - 1] ? `the ${BOAT_PARTS[b.zone - 1].name} opens its zone` : 'its zone is open'}.`;
+  if (s.coins < b.coins) return `${b.kind === 'step' ? `Step ${b.n}` : `Abyss level ${b.n}`} costs ${b.coins.toLocaleString('en-US')} coins.`;
+  return null;
 }
 
-/** The next Deep Sea Rod level, paid in coins and Black Pearls. */
-export function levelRod(s: SaveData): boolean {
-  const cost = rodLevelCost(s.rodLevel + 1);
-  if (!s.seaRod || s.coins < cost.coins || s.pearls < cost.pearls) return false;
-  s.coins -= cost.coins;
-  s.pearls -= cost.pearls;
-  s.rodLevel++;
+/** The Deep Sea Rod's next step, paid in coins, once its zone is open (`rodBuyError`). */
+export function buyRodStep(s: SaveData): boolean {
+  const b = nextRodBuy(seaRod(s));
+  if (b.kind !== 'step' || rodBuyError(s)) return false;
+  s.coins -= b.coins;
+  s.rodStep++;
   return true;
 }
 
-/** What taking the Deep Sea Line from +n-1 to +n costs. */
-export function seaLineCost(n: number): { coins: number; pearls: number } {
-  const L = SEA_LINE;
-  return { coins: Math.min(L.coinCap, L.coins + L.coinsPer * n), pearls: L.pearls + L.pearlsPer * n };
-}
-
-/** The next Deep Sea Line level, paid in coins and Black Pearls. Needs the Deep Sea Rod, which the line comes on. */
-export function levelSeaLine(s: SaveData): boolean {
-  const cost = seaLineCost(s.seaLine + 1);
-  if (!s.seaRod || s.coins < cost.coins || s.pearls < cost.pearls) return false;
-  s.coins -= cost.coins;
-  s.pearls -= cost.pearls;
-  s.seaLine++;
+/** The Deep Sea Rod's next Abyss level, paid in coins, once all its steps are bought. */
+export function buyAbyssLevel(s: SaveData): boolean {
+  const b = nextRodBuy(seaRod(s));
+  if (b.kind !== 'level' || rodBuyError(s)) return false;
+  s.coins -= b.coins;
+  s.abyssLevels++;
   return true;
 }
 
-/** The rod level a sea fight uses (`seaGaps`): the Deep Sea Rod's, which is always the rod in hand at sea. */
-export const seaRodLevel = (s: SaveData): number => (s.seaRod ? s.rodLevel : 0);
+/** Why the next boat part (`nextBoatPart`) can't be bought now, or null when it can: the rod first, then the pearls. */
+export function boatPartError(s: SaveData): string | null {
+  const p = nextBoatPart(s.boatParts);
+  if (!p) return 'Every boat part is fitted.';
+  if (!s.seaRod) return `Boat parts need the ${DEEP_SEA_ROD.name}.`;
+  if (s.pearls < p.pearls) return `The ${p.name} needs ${p.pearls.toLocaleString('en-US')} Black Pearls.`;
+  return null;
+}
 
-/** The levels a sea fight is eased by: the rod's (weight) and the Deep Sea Line's (strength). */
-export const seaGear = (s: SaveData): SeaGear => ({ rod: seaRodLevel(s), line: s.seaLine });
+/** The next boat part, paid in Black Pearls: it opens the next zone. */
+export function buyBoatPart(s: SaveData): boolean {
+  const p = nextBoatPart(s.boatParts);
+  if (!p || boatPartError(s)) return false;
+  s.pearls -= p.pearls;
+  s.boatParts++;
+  return true;
+}
 
-/** This rod's level: the save's rod level for the Deep Sea Rod, 0 for the pond rods. */
-export const rodLevelOf = (s: SaveData, id: string): number => (id === ROD_LEVEL.rod ? s.rodLevel : 0);
-
-/** A rod's level as shown after its name: " +12" on a levelled Deep Sea Rod, else nothing. */
-export const rodPlus = (s: SaveData, id: string): string => (rodLevelOf(s, id) > 0 ? ` +${s.rodLevel}` : '');
+/** The Deep Sea Rod's tip glow step (`glowStep`) for this save: none for a pond rod or a rod with no steps. */
+export const seaRodGlow = (s: SaveData, id = DEEP_SEA_ROD.id): number => (id === DEEP_SEA_ROD.id && s.seaRod ? glowStep(s.rodStep, s.abyssLevels) : 0);
 
 /** Equips a bait type: the stack in the bait slot goes back to the locker and a fresh stack comes out. */
 export function equipBait(s: SaveData, id: string): boolean {
@@ -524,19 +531,19 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
 }
 
 /**
- * A cast on a dive: the fish comes from the depth's zone (`rollSeaFish`) and fights at the depth's gaps over the Deep
- * Sea Rod's and Line's levels (`seaGaps`) with its own modifiers (`rollFishGaps`), whatever the bait. No bait is
- * spent. Shinies roll as in the daytime pond, Shiny Lure included; a shiny sea fish is worth more, not harder.
+ * A cast on a charter: the fish comes from the zone (`rollSeaFish`) and fights at the zone's (and Abyss marker's) gaps
+ * over the charter's rod (`seaGaps`) with its own modifiers (`rollFishGaps`), whatever the bait. No bait is spent.
+ * Shinies roll as in the daytime pond, Shiny Lure included; a shiny sea fish is worth more, not harder.
  */
-export function rollSeaCast(s: SaveData, depth: number, rng: () => number = Math.random): Roll {
-  const bite = rollSeaFish(depth, rng);
+export function rollSeaCast(s: SaveData, zone: number, marker: number, rod: SeaRod, rng: () => number = Math.random): Roll {
+  const bite = rollSeaFish(zone, rng);
   const lure = lureOn(s);
   if (lure) s.lure--;
   const size = rollSize(bite.fish, rng);
   const wait = DIVE.biteMin + rng() * DIVE.biteSpread;
   const shiny = lure || rng() < SHINY_CHANCE * shinyMult(s);
   const seed = Math.floor(rng() * 4294967296);
-  const m = rollFishGaps(seaGaps(depth, seaGear(s)), rng);
+  const m = rollFishGaps(seaGaps(zone, marker, rod), rng);
   const tune = fightTune(s);
   return { fishId: bite.fish.id, size, wait, shiny, seed, d: m.d, ...(m.tag ? { tag: m.tag } : {}), ...(tune ? { tune } : {}) };
 }
@@ -567,11 +574,13 @@ export interface CatchResult {
 
 /** A clean catch (landed without fraying the line) is worth this much more. */
 export const CLEAN_BONUS = 0.1;
-/** A Feisty or Brutish fish landed is worth this much more, on top of a clean catch (REELING.md, "Temperament"). */
-export const TAG_BONUS = 0.15;
+export { TAG_BONUS };
 
-/** Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins (dives). */
-export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false, tag: FishTag | null = null): CatchResult {
+/**
+ * Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins
+ * (charters). `grow` multiplies its value on top (an Abyss marker's, `markerGrowth`).
+ */
+export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false, tag: FishTag | null = null, grow = 1): CatchResult {
   const slot = sell ? -1 : freeFishSlot(s);
   if (slot < 0 && !sell) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
@@ -585,7 +594,7 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
   s.dex[fish.id] = { count: (entry?.count ?? 0) + 1, best: Math.max(size, entry?.best ?? 0), ...(shinies ? { shiny: shinies } : {}) };
   s.seen = s.seen.filter((id) => id !== fish.id);
-  const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1) * (tag ? 1 + TAG_BONUS : 1);
+  const mult = catchMult(s) * (clean ? 1 + CLEAN_BONUS : 1) * (tag ? 1 + TAG_BONUS : 1) * grow;
   const item: Slot = { k: 'fish', fishId: fish.id, size, ...(shiny ? { shiny: true } : {}), ...(mult > 1 ? { mult } : {}) };
   const sold = sell ? sellPrice(s, item) : 0;
   if (sell) s.coins += sold;

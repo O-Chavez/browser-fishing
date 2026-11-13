@@ -257,7 +257,7 @@ body.touch #seagear { bottom: 236px; right: 30px; }
 #banner.welcome small { margin-top: 6px; color: var(--cream); }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 
-#purse, #chipbox, #pearlbox { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 9px; border-radius: 999px; background: var(--hud-bg); box-shadow: var(--hud-edge); font-size: 22px; font-weight: 900; color: var(--gold); }
+#purse, #chipbox { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 9px; border-radius: 999px; background: var(--hud-bg); box-shadow: var(--hud-edge); font-size: 22px; font-weight: 900; color: var(--gold); }
 #purse.bump { animation: purseBump .5s ease-out; }
 @keyframes purseBump { 0% { transform: scale(1.18); } 100% { transform: scale(1); } }
 
@@ -280,8 +280,6 @@ body.touch #seagear { bottom: 236px; right: 30px; }
 #chipbox { color: #ff9ad0; }
 #chipbox .chipicon { font-size: 22px; }
 #chipbox.hidden { display: none; }
-#pearlbox { color: #d9d3f0; }
-#pearlbox.hidden { display: none; }
 #spot.hidden { display: none; }
 
 /* ---------- menus: one wood-framed window for the bag, shop, casino counter and join screen ---------- */
@@ -428,6 +426,10 @@ button.perk:hover { background: var(--paper-2); }
 .perk .left { font-size: 12px; font-weight: 900; color: var(--ink-muted); }
 #catch .credit { margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 900; color: #fff; background: #c96a2b; }
 #catch .clean { display: inline-block; margin: -4px 0 8px; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 900; color: #fff; background: #3fa65a; }
+#catch .pearls { margin: 0 0 6px; font-size: 17px; font-weight: 900; color: #23718a; }
+#catch .pearls.muted { font-size: 14px; font-weight: 700; color: var(--ink-muted); }
+#catch .pearls .bpearl { width: 16px; height: 16px; vertical-align: -2px; }
+#catch .pearls .credit { background: #3f8fa6; }
 #catch .clean + .clean { margin-left: 6px; }
 /* the tag bonus in its badge's colour, so what feeds the multiplier reads at a glance */
 #catch .clean.feisty { background: #e0552b; }
@@ -651,6 +653,11 @@ body.touch #chat { top: 108px; }
 body.touch #prompt { pointer-events: auto; bottom: 128px; padding: 14px 24px; box-shadow: 0 0 0 4px var(--gold), 0 8px 18px rgba(0,0,0,.35); }
 body.touch #hotbar { pointer-events: auto; }
 body.touch #catch { z-index: 3; pointer-events: auto; }
+/* A sea fish's card is a line taller (its pearls): set it lower and tighter on a phone, so it stays clear of the charter strip at the top. Pond cards keep their size. */
+body.touch #catch.sea { bottom: 4%; padding: 12px 26px; }
+body.touch #catch.sea h2 { margin: 2px 0; font-size: 26px; }
+body.touch #catch.sea .weight { font-size: 34px; margin: 0 0 6px; }
+body.touch #catch.sea .blurb { margin-bottom: 2px; }
 body.touch[data-phase="reeling"] #hotbar, body.touch[data-phase="reeling"] #heldname { display: none; }
 body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .t-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 12px; }
@@ -682,34 +689,34 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 
 /* ---------- sea trips (src/game/divehud.ts): the strip at sea, Reed's panel, a marker's choice, the end cards ---------- */
 #divehud { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; background: var(--hud-bg); box-shadow: var(--hud-edge), 0 6px 14px rgba(0,0,0,.3); border-radius: 16px; white-space: nowrap; }
-#divehud > div { padding: 7px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+#divehud > div { padding: 7px 14px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
 #divehud > div + div { border-left: 2px solid rgba(255,255,255,.12); }
 #divehud .zone { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fd6e6; font-weight: 900; }
-#divehud .depth { font-size: 22px; font-weight: 900; line-height: 1; }
-#divehud .depth small { font-size: 12px; color: var(--cream-muted); font-weight: 800; margin-right: 5px; }
 #divehud .lab { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--cream-muted); font-weight: 900; }
-#divehud .linerow { display: flex; align-items: center; gap: 10px; }
-#divehud .bar { width: 110px; height: 12px; border-radius: 99px; background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.12); overflow: hidden; }
-#divehud .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(#f2dfb0, #c9a56a); transition: width .5s ease-out; }
+/* A cell's label, with what the last fish cost or paid at its right end: there, it never changes the strip's width. */
+#divehud .labrow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+#divehud .linerow, #divehud .partrow { display: flex; align-items: center; gap: 8px; }
+#divehud .bar, #divehud .pbar { flex: none; width: 110px; height: 12px; border-radius: 99px; background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.12); overflow: hidden; }
+#divehud .bar i, #divehud .pbar i { display: block; height: 100%; border-radius: 99px; transition: width .5s ease-out; }
+#divehud .bar i { background: linear-gradient(#f2dfb0, #c9a56a); }
 #divehud .line.low .bar i { background: linear-gradient(#ffc36b, #e08a2b); }
 #divehud .line.danger .bar i { background: linear-gradient(#ff8a70, #d9442b); }
 #divehud .line.danger .m { color: #ff9b7a; }
-#divehud .m { font-size: 16px; font-weight: 900; }
-#divehud .worn { font-size: 13px; font-weight: 900; color: #ff9b7a; animation: wornIn .3s ease-out both; }
+#divehud .m, #divehud .pn { font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
+#divehud .worn { font-size: 12px; font-weight: 900; line-height: 1; color: #ff6f5e; animation: wornIn .3s ease-out both; }
 @keyframes wornIn { from { opacity: 0; transform: translateY(-4px); } }
 #divehud .haul { font-size: 19px; font-weight: 900; display: flex; align-items: center; gap: 6px; }
-#divehud .grow { font-size: 12px; font-weight: 900; padding: 1px 7px; border-radius: 99px; background: var(--gold); color: var(--gold-ink); }
-#divehud .dcoins { font-size: 15px; color: var(--cream-muted); margin-left: 4px; display: flex; align-items: center; gap: 4px; }
-#divehud .at { font-size: 15px; font-weight: 900; }
-/* Next-marker trail: a fish per catch between markers, then the flag. Tweak the grey-out and pop here. */
-#divehud .trail { --off-opacity: .35; --off-flag-opacity: .55; --off-filter: grayscale(1); --pop-ms: .6s; display: flex; align-items: center; gap: 1px; font-size: 15px; line-height: 1; }
-#divehud .trailrow { display: flex; align-items: center; gap: 8px; }
-#divehud .trailrow .lab { font-size: 10px; letter-spacing: 1px; min-width: 185px; white-space: nowrap; flex: none; }
-#divehud .trail i { font-style: normal; opacity: var(--off-opacity); filter: var(--off-filter); transition: opacity .3s, filter .3s; }
-#divehud .trail i.flag { opacity: var(--off-flag-opacity); }
-#divehud .trail i.on { opacity: 1; filter: none; }
-#divehud .trail i.pop { animation: trailPop var(--pop-ms) ease-out both; }
-@keyframes trailPop { 0% { transform: scale(.5); opacity: .3; } 55% { transform: scale(1.35); opacity: 1; } 100% { transform: scale(1); } }
+/* the next boat part's progress in Black Pearls: lilac, and teal once Captain Reed can fit it */
+#divehud .pbar i { background: linear-gradient(#d6ccf7, #8f7fd0); }
+#divehud .pbar.full i { background: linear-gradient(#a5f3e2, #3fc9ae); }
+#divehud .part.ready .lab { color: #8ff0dc; }
+#divehud .partrow .bpearl { width: 15px; height: 15px; }
+#divehud .gain { font-size: 12px; font-weight: 900; line-height: 1; color: #8fd6e6; animation: wornIn .3s ease-out both; }
+#divehud .pn.pop { display: inline-block; animation: pnumPop .6s ease-out both; }
+@keyframes pnumPop { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
+#divehud .v { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 900; line-height: 1.2; }
+#divehud .pips { letter-spacing: 3px; font-size: 13px; color: #8fd6e6; }
+#divehud .rate { font-size: 13px; padding: 1px 9px; }
 /* Under the reel gauge's words (the gauge is centred on the screen), so the top stays the charter's. */
 #divetag { position: absolute; top: calc(50% + 190px); left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 99px; background: #c96a2b; color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 2px var(--wood-900), 0 4px 10px rgba(0,0,0,.3); white-space: nowrap; }
 #divetag span { font-weight: 700; opacity: .9; }
@@ -724,7 +731,24 @@ body.touch #divetag { top: calc(50% + 152px); font-size: 12px; }
 #fishtag.brutish { --a: #5b8fc4; --b: #3f6f9e; --d: #2a4d72; }
 @keyframes tag-in { 0% { opacity: 0; transform: scale(.4); } 100% { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { #fishtag { animation: none; } }
-#divehud:not(.hidden) ~ #chat { top: 112px; }
+/* The strip is centred at the top of the screen, about 700px wide. The chat (top right) drops under it unless the
+   screen is wide enough for both. On a screen too narrow for it to clear the level and coins, it sits under them,
+   still centred, and the chat and the fishing hints go under it. */
+#divehud:not(.hidden) ~ #chat { top: 88px; }
+@media (min-width: 1520px) { #divehud:not(.hidden) ~ #chat { top: 16px; } }
+@media (max-width: 1319px) {
+  #divehud { top: 84px; }
+  #divehud:not(.hidden) ~ #chat, #divehud:not(.hidden) ~ #ctx { top: 156px; }
+}
+@media (max-width: 760px) { #divehud { transform: translateX(-50%) scale(.8); transform-origin: top center; } }
+/* Touch mode is 1400px wide and a phone shows it at about 0.6x: the strip is centred between the level and coins and
+   the buttons at the top right, a size larger, and leaves out this charter's coins (the purse counts them) to fit. */
+body.touch #divehud { top: 18px; transform: translateX(-50%) scale(1.2); transform-origin: top center; }
+body.touch #divehud .earn { display: none; }
+body.touch #divehud:not(.hidden) ~ #chat { top: 108px; }
+/* The dev fps meter sits at the top centre: under the strip while it's there. */
+body:has(#divehud:not(.hidden)) #fps { top: 100px; }
+@media (max-width: 1319px) { body:not(.touch):has(#divehud:not(.hidden)) #fps { top: 8px; } }
 
 #menu.dive .win { width: min(560px, 94vw); }
 #menu.dive .sheet { padding: 16px 24px 20px; }
@@ -752,14 +776,68 @@ body.touch .dcard .btn kbd { display: none; }
 .dcard .big .bpearl { width: 34px; height: 34px; }
 .dcard .big.lost { color: #8a7a6a; text-decoration: line-through; text-decoration-thickness: 3px; }
 .dcard .why { margin: 6px 0 10px; padding: 10px 14px; border-radius: 12px; background: #fde3d8; color: #8a2f1d; font-weight: 800; font-size: 15px; }
-.reed .say { margin: 0 0 6px; font-style: italic; color: var(--ink-muted); font-size: 15px; }
-.reed .zlab { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 900; color: var(--ink-muted); margin: 10px 0 6px; }
-.reed .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.reed .chip { min-width: 64px; padding: 8px 12px; border-radius: 12px; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.15); font: inherit; font-weight: 900; font-size: 15px; color: var(--ink); text-align: center; cursor: pointer; }
-.reed .chip small { display: block; font-size: 11px; color: var(--ink-muted); font-weight: 800; }
-.reed .chip.sel { background: var(--gold); box-shadow: 0 0 0 3px var(--wood-600); }
-.reed .chip.rec::after { content: '★'; margin-left: 4px; color: var(--gold-dark); }
-.reed .detail { margin: 14px 0; padding: 10px 14px; border-radius: 12px; background: var(--paper-2); font-size: 14px; line-height: 1.5; }
+.reed .say { margin: 0 0 8px; font-style: italic; color: var(--ink-muted); font-size: 15px; }
+/* a rating as a pill: Easy green, Fair teal, Tough amber, Too much red */
+.rate { display: inline-block; align-self: flex-start; padding: 2px 9px; border-radius: 99px; color: #fff; font-size: 12px; font-weight: 900; line-height: 1.3; white-space: nowrap; }
+.rate.easy { background: #46b866; } .rate.fair { background: #2f8ea3; } .rate.tough { background: #e79a2c; color: #3a2716; } .rate.over { background: #d9523a; }
+/* Reed's chart: a card for each zone, shelf light teal to abyss dark indigo */
+#menu.reedwin .win { width: min(820px, 96vw); }
+.reed .zcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 8px; }
+.reed .zcard { display: flex; flex-direction: column; min-width: 0; padding: 0; border-radius: 12px; overflow: hidden; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.14); font: inherit; color: var(--ink); text-align: left; }
+.reed button.zcard { cursor: pointer; }
+.reed button.zcard:hover { filter: brightness(1.04); }
+.reed .zcard.sel { box-shadow: 0 0 0 3px var(--wood-800), 0 0 0 6px var(--gold); }
+.reed .zcard .top { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 30px; padding: 3px 8px; color: #fff; font-weight: 900; font-size: 13px; line-height: 1.15; }
+.reed .zcard.z0 .top { background: #7fd0d4; color: #0e3f44; } .reed .zcard.z1 .top { background: #4aa3b8; } .reed .zcard.z2 .top { background: #5b8f6a; } .reed .zcard.z3 .top { background: #6a5a9c; } .reed .zcard.z4 .top { background: #2b2a55; }
+.reed .zcard .in { display: flex; flex-direction: column; gap: 5px; padding: 8px 9px 10px; font-size: 13px; font-weight: 800; }
+.reed .zcard .in small { font-size: 12px; font-weight: 700; color: var(--ink-muted); }
+.reed .zcard .pay { line-height: 1.35; font-size: 12.5px; }
+.reed .zcard .pay .amts { white-space: nowrap; display: inline-flex; align-items: center; gap: 3px; }
+.reed .zcard .pay .af { color: var(--ink-muted); font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+.reed .zcard .pay .bpearl, .reed .mstep .bpearl, .reed .row .bpearl, .reed .foot .bpearl { width: 13px; height: 13px; vertical-align: -2px; }
+.reed .zcard.locked .in { opacity: .6; }
+.reed .zcard.locked .opens { color: var(--ink); }
+.reed .mstep { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; padding: 6px 12px; border-radius: 12px; background: var(--paper-2); font-size: 14px; font-weight: 800; }
+.reed .mstep .lab { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-muted); font-weight: 900; }
+.reed .mstep b { min-width: 84px; text-align: center; font-size: 16px; }
+.reed .mstep .of { color: var(--ink-muted); font-size: 12px; }
+.reed .mstep .pay { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.reed .step { width: 30px; height: 30px; border-radius: 10px; background: var(--gold); color: var(--gold-ink); box-shadow: 0 3px 0 var(--gold-dark); font: inherit; font-size: 18px; font-weight: 900; line-height: 1; cursor: pointer; }
+.reed .step:disabled { background: var(--paper-3); color: var(--ink-muted); box-shadow: none; opacity: .5; cursor: default; }
+.reed .rows { margin: 10px 0 0; display: grid; gap: 8px; }
+.reed .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.1); font-size: 14px; font-weight: 800; }
+.reed .row > div { min-width: 0; flex: 1 1 180px; }
+.reed .row small { display: block; font-size: 12px; font-weight: 700; color: var(--ink-muted); }
+.reed .row .btn { flex: none; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 14px; font-size: 14px; white-space: nowrap; }
+.reed .btn small, .dcard .btn small { display: block; font-size: 11.5px; font-weight: 800; opacity: .9; }
+.reed .btn.off, .dcard .btn.off { background: var(--paper-2); color: var(--ink-muted); box-shadow: none; }
+.reed .btn .bpearl, .reed .btn .coin, .dcard .btn .bpearl, .dcard .btn .coin { width: 13px; height: 13px; vertical-align: -2px; }
+.reed .btns { margin-top: 12px; }
+.reed .btns .btn, .dcard .btns .btn { justify-content: center; }
+.reed .foot { margin-top: 10px; }
+/* a boat part's progress in Black Pearls, on Reed's row and the cards after fishing (the strip at sea has its own colours) */
+.prog { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prog .bpearl { width: 13px; height: 13px; }
+.pbar { flex: none; display: inline-block; width: 120px; height: 10px; border-radius: 99px; background: rgba(58,39,22,.16); overflow: hidden; }
+.pbar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(#a898e0, #6f5fb8); }
+.pbar.full i { background: linear-gradient(#5fd6bd, #2fa98f); }
+.reed .row .prog { margin-top: 6px; }
+.reed .row .prog .pbar { flex: 1 1 auto; max-width: 240px; }
+.dcard .row.part small { display: block; font-size: 12px; font-weight: 800; color: #1f7a68; }
+.reed .foot .coin { width: 13px; height: 13px; vertical-align: -2px; }
+.dcard .row.net { background: var(--paper-2); }
+.dcard .note { margin: 0 0 14px; }
+.signpost { margin: 0 0 8px; padding: 8px 12px; border-radius: 12px; background: #d8ecef; font-size: 13px; font-weight: 800; color: #1f5a66; }
+.zrow { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 6px 0 8px; }
+.zrow .rate { font-size: 11px; padding: 1px 7px; }
+.zrow .zr { display: inline-flex; flex-direction: column; gap: 2px; }
+.zrow .zr small { font-size: 11px; font-weight: 800; color: var(--ink-muted); }
+.reed .detail p { margin: 0 0 6px; }
+.reed .detail p:last-child { margin: 0; }
+.reed .detail { display: block; margin: 14px 0; padding: 10px 14px; border-radius: 12px; background: var(--paper-2); font-size: 14px; line-height: 1.5; }
 .reed .foot { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-muted); font-weight: 800; margin-top: 12px; }
 .seastrip { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px; background: #d8ecef; font-size: 14px; font-weight: 800; }
 .seastrip .btn { flex: none; padding: 8px 14px; font-size: 14px; }
+
+/* Reed's chart: keep "23 fish a spool" on one line, so a card's line breaks at the dot. */
+.reed .nb { white-space: nowrap; }

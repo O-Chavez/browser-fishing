@@ -14,9 +14,9 @@ export interface SeaZone {
 export const SEA_ZONES: SeaZone[] = [
   { id: 'shelf', name: 'The Shelf', from: 1 },
   { id: 'dropoff', name: 'The Drop-off', from: 16 },
-  { id: 'kelp', name: 'Kelp Deep', from: 41 },
-  { id: 'twilight', name: 'The Twilight', from: 81 },
-  { id: 'abyss', name: 'The Abyss', from: 151 },
+  { id: 'kelp', name: 'Kelp Deep', from: 36 },
+  { id: 'twilight', name: 'The Twilight', from: 61 },
+  { id: 'abyss', name: 'The Abyss', from: 91 },
 ];
 
 export const zoneAt = (depth: number): SeaZone => {
@@ -24,6 +24,20 @@ export const zoneAt = (depth: number): SeaZone => {
   for (const s of SEA_ZONES) if (depth >= s.from) z = s;
   return z;
 };
+
+/**
+ * The depth the sea is drawn at for a charter's zone (0 the Shelf ... 4 the Abyss) and Abyss marker: about the middle
+ * of each zone's stretch of looks (`SEA_LOOK_DEPTH`), and in the Abyss `abyss.from + abyss.per·(marker − 1)`, rougher
+ * each marker, up to `abyss.cap`.
+ */
+export const SEA_LOOK_DEPTH = { zones: [8, 26, 48, 76], abyss: { from: 100, per: 3, cap: 250 } };
+
+export function seaDepthFor(zone: number, marker = 1): number {
+  const z = Math.max(0, Math.min(SEA_ZONES.length - 1, Math.floor(zone)));
+  const a = SEA_LOOK_DEPTH.abyss;
+  if (z < SEA_LOOK_DEPTH.zones.length) return SEA_LOOK_DEPTH.zones[z];
+  return Math.min(a.cap, a.from + a.per * (Math.max(1, Math.floor(marker)) - 1));
+}
 
 /**
  * How rough the sea and sky are at each depth: 0 is the pond's calm sky over a choppy sea, 0.6 the
@@ -36,11 +50,11 @@ export const zoneAt = (depth: number): SeaZone => {
 export const MOOD_POINTS: [depth: number, mood: number][] = [
   [1, 0],
   [16, 0.6],
-  [40, 1],
-  [80, 1.35],
-  [150, 1.85],
-  [200, 2],
-  [350, 2.25],
+  [35, 1],
+  [60, 1.35],
+  [90, 1.85],
+  [120, 2],
+  [210, 2.25],
 ];
 
 export function seaMood(depth: number): number {
@@ -109,15 +123,15 @@ export const DEEP_LOOKS = {
 
 /**
  * Where each look is fully in, by marker; between two stops the looks blend, so a zone's colours ease in over the
- * markers either side of its line (41, 81, 151) instead of snapping.
+ * markers either side of its line (36, 61, 91) instead of snapping.
  */
 export const DEEP_LOOK_STOPS: [depth: number, look: DeepLook][] = [
-  [40, DEEP_LOOKS.dropoff],
-  [52, DEEP_LOOKS.kelp],
-  [74, DEEP_LOOKS.kelp],
-  [92, DEEP_LOOKS.twilight],
-  [140, DEEP_LOOKS.twilight],
-  [162, DEEP_LOOKS.abyss],
+  [35, DEEP_LOOKS.dropoff],
+  [42, DEEP_LOOKS.kelp],
+  [56, DEEP_LOOKS.kelp],
+  [65, DEEP_LOOKS.twilight],
+  [86, DEEP_LOOKS.twilight],
+  [97, DEEP_LOOKS.abyss],
 ];
 
 const mixHex = (a: number, b: number, t: number): number => {
@@ -148,11 +162,11 @@ export function deepLookAt(mood: number): DeepLook {
  * How dark the sky gets at night out at sea (Oscar, 2026-10-31: much darker the further out). One knob
  * block to tweak: `points` are [league, darkness 0..1] (eased between), and `floor` is the share of the
  * sky's light that is left at the darkest (full night, darkness 1): 0 is pitch black, 0.05 a faint
- * indigo. Darkness 0 is the old look (75% dimmed at night); the Twilight (81) and the Abyss (151) sit
+ * indigo. Darkness 0 is the old look (75% dimmed at night); the Twilight (61) and the Abyss (91) sit
  * near black. Days are untouched: it only scales with how night it is.
  */
 export const SEA_NIGHT_DARK = {
-  points: [[1, 0], [16, 0.3], [41, 0.7], [81, 0.92], [151, 1]] as [league: number, dark: number][],
+  points: [[1, 0], [16, 0.3], [36, 0.7], [61, 0.92], [91, 1]] as [league: number, dark: number][],
   floor: 0.04,
 };
 
@@ -175,7 +189,7 @@ export const nightSkyKeep = (n: number, dark: number): number =>
   1 - n * (0.75 + (1 - SEA_NIGHT_DARK.floor - 0.75) * dark);
 
 /**
- * How hard spray hits the screen when the bow slams into a wave (0..1): from about depth 28 (mood 0.75)
+ * How hard spray hits the screen when the bow slams into a wave (0..1): from about depth 23 (mood 0.75)
  * to soaked by the Abyss, so the waves feel more treacherous the deeper the dive (Oscar, 2026-10-31).
  */
 export const SCREEN_SPRAY = { from: 0.75, to: 2 };
@@ -184,7 +198,7 @@ export const SCREEN_SPRAY = { from: 0.75, to: 2 };
 export const stormAt = (mood: number): number => smooth(1, 2.15, mood);
 
 /**
- * How hard it rains (0..1): from Kelp Deep's first markers (mood 1 is marker 40), a steady rain there, heavier in
+ * How hard it rains (0..1): from Kelp Deep's first markers (mood 1 is marker 35), a steady rain there, heavier in
  * the Twilight and lashing in the Abyss.
  */
 export const rainAt = (mood: number): number => 0.5 * smooth(1, 1.12, mood) + 0.5 * smooth(1.2, 2, mood);
@@ -225,8 +239,8 @@ export const SHELF_FAR = { color: 0x1668a8, haze: 0.2, until: 0.6 };
  */
 export const KELP = { rafts: 0.55, forest: 1, color: 0x7a5a1e, shade: 0x3d2e12 };
 
-/** How much of the kelp shows (0..1): it comes in over Kelp Deep's first markers and thins out before the Twilight's line (81). */
-export const kelpAt = (mood: number): number => smooth(seaMood(41), seaMood(49), mood) * (1 - smooth(seaMood(72), seaMood(81), mood));
+/** How much of the kelp shows (0..1): it comes in over Kelp Deep's first markers and thins out before the Twilight's line (61). */
+export const kelpAt = (mood: number): number => smooth(seaMood(36), seaMood(41), mood) * (1 - smooth(seaMood(55), seaMood(61), mood));
 
 /** How often lightning strikes (0..1): from the Abyss's first depths (mood 1.85), more often the deeper. */
 export const lightningAt = (mood: number): number => smooth(1.8, 2.2, mood);

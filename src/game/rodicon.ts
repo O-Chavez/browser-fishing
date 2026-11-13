@@ -1,4 +1,4 @@
-import { glowColor, glowStep } from '../data/dive';
+import { glowColor } from '../data/dive';
 
 /** Rod shaft colours by tier, matching the tier colours used across the UI (`--t1`..`--t5`). */
 const SHAFT = ['#b9b9b9', '#4cd964', '#4a90e2', '#b05ce6', '#ffc933'];
@@ -25,11 +25,11 @@ export function rodIcon(tier: number): string {
 
 /**
  * The Deep Sea Rod, in the same style: a stout navy blank with sea-teal wraps, a chunky brass lever reel with its red
- * drag lever, and a gimbal butt; a levelled rod's glow at the tip.
+ * drag lever, and a gimbal butt; its glow step's glow at the tip (`seaRodGlow`).
  */
-export function seaRodIcon(rodLevel = 0): string {
+export function seaRodIcon(glow = 0): string {
   const O = '#2a1b0f';
-  return `<svg class="rodico" viewBox="0 0 40 40" aria-hidden="true">${tipGlow(rodLevel, 'under', 33, 8)}
+  return `<svg class="rodico" viewBox="0 0 40 40" aria-hidden="true">${tipGlow(glow, 'under', 33, 8)}
     <path d="M12 28 Q22 15 33 8" fill="none" stroke="${O}" stroke-width="6.4" stroke-linecap="round"/>
     <path d="M12 28 Q22 15 33 8" fill="none" stroke="#36548f" stroke-width="3.8" stroke-linecap="round"/>
     <path d="M20 19.6 l1.8 1.6 M26 13.6 l1.6 1.6" stroke="#3fc7b4" stroke-width="2.2" stroke-linecap="round"/>
@@ -39,13 +39,12 @@ export function seaRodIcon(rodLevel = 0): string {
     <rect x="9" y="26" width="12" height="9" rx="3.6" fill="#d9a441" stroke="${O}" stroke-width="1.6"/>
     <path d="M12.5 26 v9 M17.5 26 v9" stroke="#a87a2c" stroke-width="1.2"/>
     <path d="M20 27 l3.6 -3" stroke="#e5533d" stroke-width="2.2" stroke-linecap="round"/>
-    <circle cx="33" cy="8" r="1.8" fill="#d9a441" stroke="${O}" stroke-width=".8"/>${tipGlow(rodLevel, 'over', 33, 8)}
+    <circle cx="33" cy="8" r="1.8" fill="#d9a441" stroke="${O}" stroke-width=".8"/>${tipGlow(glow, 'over', 33, 8)}
   </svg>`;
 }
 
-/** A levelled rod's glow at the icon's tip (x, y), in its glow step's colour (a rainbow from the last step): a halo under the rod, a bright dot over it. */
-function tipGlow(rodLevel: number, part: 'under' | 'over', x: number, y: number): string {
-  const step = glowStep(rodLevel);
+/** A stepped-up rod's glow at the icon's tip (x, y), in its glow step's colour (a rainbow from the last step): a halo under the rod, a bright dot over it. */
+function tipGlow(step: number, part: 'under' | 'over', x: number, y: number): string {
   if (step < 1) return '';
   const c = glowColor(step);
   const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;

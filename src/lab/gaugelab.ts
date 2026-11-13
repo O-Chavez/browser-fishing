@@ -4,7 +4,6 @@
  * and the reference hands (`HANDS` in reelbot.ts) beside it. Every fight is logged with its button presses, to export
  * for `scripts/fitlab.ts`.
  */
-import { lineWorn } from '../game/dive';
 import { mulberry } from '../game/env';
 import { drawFightGauge } from '../game/fightgauge';
 import { FIGHT_DT, HoldLog, P, Reel, type Gaps, type ReelTune } from '../game/reel';
@@ -60,7 +59,8 @@ interface FightRecord {
   frays: number;
   secs: number;
   lineOut: number;
-  metres: number;
+  /** Metres of spool the fight took, in logs from before charters' line was a cost a fish. */
+  metres?: number;
 }
 const LOG_KEY = 'gaugeLab.fights';
 const log: FightRecord[] = JSON.parse(localStorage.getItem(LOG_KEY) ?? '[]');
@@ -129,7 +129,6 @@ function record(status: string): void {
     frays: r.wear.frays,
     secs: Math.round(r.elapsed * 10) / 10,
     lineOut: Math.round(r.wear.lineOut * 1000) / 1000,
-    metres: Math.round(lineWorn(r.wear, r.status === 'caught') * 10) / 10,
   });
   localStorage.setItem(LOG_KEY, JSON.stringify(log));
   buildPanel();
@@ -255,7 +254,7 @@ function stats(r: Reel): void {
     ['Seed', String(seed)],
     ['Time', `${r.elapsed.toFixed(1)} s`],
     ['Line won', `${Math.round(r.progress * 100)}%`],
-    ['Line taken', `${r.wear.lineOut.toFixed(2)} · ${lineWorn(r.wear, r.status === 'caught').toFixed(0)} m of spool`],
+    ['Line taken', r.wear.lineOut.toFixed(2)],
     ['Frays', `${r.wear.frays} / 2`],
     ['Strain on the next mark', `${Math.round(Math.min(1, Math.max(0, r.strain * 2 - r.wear.frays)) * 100)}%`],
     ['Pull marker (full build-up)', r.surgePulls[1].toFixed(2)],

@@ -5,7 +5,7 @@ import { TITLES } from '../data/ranks';
 import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isTip } from './tips';
-import type { Chart } from './dive';
+import { BOAT_PARTS, ROD } from '../data/dive';
 
 export interface DexEntry {
   count: number;
@@ -95,17 +95,21 @@ export interface SaveData {
   bottles: string[];
   /** Casino currency, earned by turning fish in at the prize shop. */
   chips: number;
-  /** Black Pearls, banked from sea dives and spent on rod levels. Never sold anywhere. */
+  /** Black Pearls, paid by sea fish as they land and spent on boat parts (`BOAT_PARTS`). Never sold anywhere. */
   pearls: number;
   /**
    * The Deep Sea Rod (`DEEP_SEA_ROD`) is bought: charters are open to this player. It's no bag item; it stays on Reed's
    * boat and is in hand at sea.
    */
   seaRod: boolean;
-  /** The Deep Sea Rod's level (+N), bought at the stall; each makes sea fish lighter (see `ROD_LEVEL`). Saves from before the rod levelled the Aurora Rod; those levels carried over. */
-  rodLevel: number;
-  /** The Deep Sea Line's level (+N), bought at the stall; each makes sea fish pull weaker (see `SEA_LINE`). Sea only. */
-  seaLine: number;
+  /** The Deep Sea Rod's steps (0 to `ROD.steps`), bought from Captain Reed with coins; each is `ROD.step` of a tier at sea. */
+  rodStep: number;
+  /** The Deep Sea Rod's Abyss levels past its last step, endless, bought from Reed with coins (`ROD.level` of a tier each). */
+  abyssLevels: number;
+  /** Boat parts bought from Reed with Black Pearls (0 to 4, `BOAT_PARTS`): zone z of the sea is open with z of them. */
+  boatParts: number;
+  /** The furthest Abyss marker a charter has reached (0 before the Abyss); Abyss charters may start at any marker up to it. */
+  abyssRecord: number;
   /** Casino perks owned (see `PERKS`). */
   perks: string[];
   /** Shiny Lure casts left. */
@@ -125,24 +129,7 @@ export interface SaveData {
    * The dev console's `/backpay` pays it out; `paid` keeps it from being paid twice.
    */
   backPay: { xp: number; paid: boolean; /** Which estimate made `xp` (see `BACKPAY_VERSION`). */ v?: number };
-  /**
-   * Sea dives (`src/game/dive.ts`): the ledges charted by surfacing there, where later dives may start, and the deepest.
-   * `haul` is what the charter that set the record banked, for the Furthest Out board; records from before it have none.
-   */
-  sea: SeaChart;
 }
-
-/**
- * What a charter banked when it headed home, as its "Home safe!" card shows it (`endHtml`, divehud.ts): the haul's
- * Black Pearls with their growth, and the fish landed and sold along the way and their coins.
- */
-export interface RecordHaul {
-  pearls: number;
-  fish: number;
-  coins: number;
-}
-
-export type SeaChart = Chart & { haul?: RecordHaul };
 
 export interface BestCatch {
   fishId: string;
@@ -174,8 +161,10 @@ export const newSave = (): SaveData => ({
   chips: 0,
   pearls: 0,
   seaRod: false,
-  rodLevel: 0,
-  seaLine: 0,
+  rodStep: 0,
+  abyssLevels: 0,
+  boatParts: 0,
+  abyssRecord: 0,
   perks: [],
   lure: 0,
   lureOff: false,
@@ -185,7 +174,6 @@ export const newSave = (): SaveData => ({
   gifts: { provisions: 0, fares: 0 },
   smoke: newSmoke(),
   backPay: { xp: 0, paid: true },
-  sea: { ledges: [], record: 0 },
 });
 
 /** Empty fish slots. Bait and rods have their own slots, so only fish fill these. */
@@ -246,31 +234,18 @@ function cleanSmoke(raw: unknown): Smoke {
 }
 
 /**
- * Keeps whole, positive ledge depths (each once, shallowest first) and a record no shallower than the deepest. The
- * record's haul stays only if it's whole and the record didn't move; saves from before it have none.
+ * The sea's progress from before charters were places (Oscar, 2026-11-12), for `migrate`: the old Deep Sea Rod and
+ * Line levels became rod steps, one for every `OLD_LEVELS_A_STEP` levels of the two together, and the furthest marker
+ * headed home from (`sea.record`) became the boat parts whose zones it had reached (`OLD_RECORD_PARTS`).
  */
-function cleanChart(raw: unknown): SeaChart {
-  const c = (raw ?? {}) as Partial<SeaChart>;
-  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
-  const ledges = [...new Set(Array.isArray(c.ledges) ? c.ledges.filter(ok) : [])].sort((a, b) => a - b);
-  const record = Math.max(ok(c.record) ? c.record : 0, ledges.at(-1) ?? 0);
-  const h = c.haul;
-  const whole = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
-  const haul = h && typeof h === 'object' && record > 0 && record === c.record && whole(h.pearls) && whole(h.fish) && whole(h.coins)
-    ? { pearls: h.pearls, fish: h.fish, coins: h.coins } : null;
-  return { ledges, record, ...(haul ? { haul } : {}) };
-}
+export const OLD_LEVELS_A_STEP = 4.8;
+export const OLD_RECORD_PARTS = [16, 41, 81, 151];
 
-/**
- * After heading home from marker `ledge`: keeps this charter's haul as the record's, if it set a new record, or if it
- * matched the record with a bigger haul (more pearls, then more coins). True when the haul was kept.
- */
-export function keepRecordHaul(sea: SeaChart, ledge: number, newRecord: boolean, haul: RecordHaul): boolean {
-  if (ledge !== sea.record) return false;
-  const old = sea.haul;
-  if (!newRecord && old && (haul.pearls < old.pearls || (haul.pearls === old.pearls && haul.coins <= old.coins))) return false;
-  sea.haul = { ...haul };
-  return true;
+/** Saves from before: the old fields (`rodLevel`, `seaLine`, `sea`), read only here. */
+interface OldSea {
+  rodLevel?: unknown;
+  seaLine?: unknown;
+  sea?: { record?: unknown };
 }
 
 /**
@@ -357,8 +332,16 @@ export function migrate(raw: object): SaveData {
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
   out.pearls = Number.isFinite(out.pearls) ? Math.max(0, Math.floor(out.pearls)) : 0;
-  out.rodLevel = Number.isFinite(out.rodLevel) ? Math.max(0, Math.floor(out.rodLevel)) : 0;
-  out.seaLine = Number.isFinite(out.seaLine) ? Math.max(0, Math.floor(out.seaLine)) : 0;
+  // The sea's progress: saves from before charters were places get rod steps from their old rod and line levels and
+  // boat parts from their furthest marker; a save that has the new fields keeps them, so this happens once.
+  const old = data as OldSea;
+  const whole = (n: unknown, hi = Infinity): number | null => (typeof n === 'number' && Number.isFinite(n) ? Math.min(hi, Math.max(0, Math.floor(n))) : null);
+  const oldLevels = (whole(old.rodLevel) ?? 0) + (whole(old.seaLine) ?? 0);
+  out.rodStep = whole(data.rodStep, ROD.steps) ?? Math.min(ROD.steps, Math.floor(oldLevels / OLD_LEVELS_A_STEP));
+  const record = whole(old.sea?.record) ?? 0;
+  out.boatParts = whole(data.boatParts, BOAT_PARTS.length) ?? OLD_RECORD_PARTS.filter((m) => record >= m).length;
+  out.abyssLevels = whole(data.abyssLevels) ?? 0;
+  out.abyssRecord = whole(data.abyssRecord) ?? 0;
   out.seaRod = out.seaRod === true;
   out.lureOff = out.lureOff === true;
   // Saves from before the tips only get them if they haven't started playing yet.
@@ -376,7 +359,7 @@ export function migrate(raw: object): SaveData {
   }
   // Saves from before the Deep Sea Rod: the Deep Sea Line held tier 5 in the pond once spooled, and it's sea only now,
   // so a pond line under Moonsilk becomes Moonsilk and no one's pond fishing gets worse.
-  if (data.seaRod === undefined && out.seaLine > 0 && (LINES.find((l) => l.id === out.line)?.tier ?? 1) < 5) out.line = 'moonsilk';
+  if (data.seaRod === undefined && (whole(old.seaLine) ?? 0) > 0 && (LINES.find((l) => l.id === out.line)?.tier ?? 1) < 5) out.line = 'moonsilk';
   layoutSlots(out, slotCount(out));
   if (!Array.isArray(out.owned)) out.owned = [];
   out.seen = Array.isArray(data.seen) ? [...new Set(data.seen.filter((id): id is string => typeof id === 'string' && FISH.some((f) => f.id === id) && !out.dex[id]))] : [];
@@ -397,12 +380,11 @@ export function migrate(raw: object): SaveData {
     : out.level >= FLAT_LEVEL ? { xp: backPayXp(out.dex, xpPastFlat(out)), paid: false, v: BACKPAY_VERSION }
     : { xp: 0, paid: true };
   for (const e of Object.values(out.dex)) if (e && e.shiny !== undefined) e.shiny = count(e.shiny);
-  out.sea = cleanChart(data.sea);
   // Accounts from before faces get a random one.
   if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
   out.look = cleanLook(out.look, out.owned);
-  // Leftovers from older layouts and the removed Town Fund.
-  for (const k of ['baitStock', 'inventory', 'ownedRods', 'fund', 'contributed']) delete out[k];
+  // Leftovers from older layouts, the removed Town Fund and the old charters (pearl rescale, rod and line levels, charted markers).
+  for (const k of ['baitStock', 'inventory', 'ownedRods', 'fund', 'contributed', 'pearlsV', 'rodLevel', 'seaLine', 'sea']) delete out[k];
   return out;
 }
 

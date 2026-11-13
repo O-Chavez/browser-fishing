@@ -1,7 +1,8 @@
 import { RENAME_COOLDOWN_MS, waitText, type CasinoRecord, type CasinoRecords, type FurthestRow, type Gamble, type HallRow } from '../src/net/protocol';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { payBack } from '../src/game/economy';
+import { ABYSS } from '../src/data/dive';
+import { hasSailed, payBack } from '../src/game/economy';
 import { XP_TO_FLAT, applyXp, earnedXp } from '../src/game/progression';
 import { migrate, newSave, type SaveData } from '../src/game/state';
 import { rudeName } from './chat';
@@ -222,17 +223,15 @@ export class AccountStore {
   }
 
   /**
-   * The Furthest Out board: the furthest marker each account headed home from (the deepest ledge surfaced from,
-   * `save.sea.record`) and what that charter banked, online or not, furthest first. Cached until `furthestStale`.
+   * The Furthest Out board: how far out each account's charters reach, online or not, furthest first: by boat parts
+   * (the furthest zone open, `save.boatParts`), then by the furthest Abyss marker (`save.abyssRecord`). Accounts with
+   * a boat part, or that have landed a sea fish (`hasSailed`), are on it. Cached until `furthestStale`.
    */
   furthest(): FurthestRow[] {
     return (this.furthestRows ??= [...this.accounts.values()]
-      .filter((a) => a.save.sea.record > 0)
-      .map((a) => {
-        const h = a.save.sea.haul;
-        return { name: a.name, level: a.save.level, ledge: a.save.sea.record, ...(h ? { pearls: h.pearls, fish: h.fish } : {}) };
-      })
-      .sort((a, b) => b.ledge - a.ledge || a.name.localeCompare(b.name))
+      .filter((a) => a.save.boatParts > 0 || a.save.abyssRecord > 0 || hasSailed(a.save))
+      .map((a): FurthestRow => ({ name: a.name, level: a.save.level, zone: a.save.boatParts, ...(a.save.boatParts >= ABYSS && a.save.abyssRecord > 0 ? { marker: a.save.abyssRecord } : {}) }))
+      .sort((a, b) => b.zone - a.zone || (b.marker ?? 0) - (a.marker ?? 0) || a.name.localeCompare(b.name))
       .slice(0, FURTHEST_ROWS));
   }
 

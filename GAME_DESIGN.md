@@ -511,6 +511,8 @@ Planned 2026-10-30; the build steps are the "Endgame step N of 8" items in TODO.
 
 Two goals (decided 2026-10-30): charters get harder but never impossible, and every trip gives the player something good and a clear next thing to go for.
 
+**As built, the trip differs from the plan below** (REELING.md, "A place to earn", merged 2026-11-13): the sea is a place to earn. A charter is fished in one zone on a 300 m spool of line bought from Reed; every hooked fish uses line, less as the rod improves; fish pay coins and Black Pearls by zone; coins buy line and the Deep Sea Rod's eight steps, pearls buy the four boat parts that open zones; only the Abyss has markers, endless rod levels and the Furthest Out board. The plan's zone twists, milestones, titles and boat comforts are still to come (TODO.md).
+
 **The gear** (as built, 2026-11-01): charters need the **Deep Sea Rod**, bought once at Marlow's stall's Sea gear tab (level 20, 100,000 coins: the next grind after the Aurora Rod), which is what pays for charter access. It stays on Reed's boat and is the only thing in hand at sea (the hotbar waits as it was until home), and comes with the Deep Sea Line; both level with Black Pearls (REELING.md, "Decisions so far"). The Aurora Rod is the pond's top rod.
 
 **The trip**
