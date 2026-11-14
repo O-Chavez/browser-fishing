@@ -7,7 +7,7 @@ import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, over
 import { P, type Gaps, type ReelTune } from './reel';
 import type { DishId, StageId } from '../data/smokehouse';
 import { buff, openStages, serveGifts, shinyMult } from './smoke';
-import { nextBoatPart, nextRodBuy, rollSeaFish, seaGaps, zoneOpen, type SeaRod } from './dive';
+import { nextBoatPart, nextHoldBuy, nextRodBuy, rollSeaFish, seaGaps, zoneOpen, type SeaRod } from './dive';
 import { DIVE, type Behaviour } from '../data/dive';
 import { BAIT_SLOT, BAIT_STACK, ROD_SLOT, clearSlot, freeFishSlot, freeSlots, slotCount, type SaveData, type Slot } from './state';
 
@@ -78,7 +78,7 @@ export function buyRod(s: SaveData, id: string): boolean {
   return true;
 }
 
-/** The pond line on the rod (Twine if the save's is unknown). At sea the line is a charter's spool. */
+/** The pond line on the rod (Twine if the save's is unknown). */
 export const lineOf = (s: Pick<SaveData, 'line'>): Line => LINES.find((l) => l.id === s.line) ?? LINES[0];
 
 /** Whether a pond line is below the one on the rod, so it can't be bought. */
@@ -211,6 +211,27 @@ export function buyAbyssLevel(s: SaveData): boolean {
   if (b.kind !== 'level' || rodBuyError(s)) return false;
   s.coins -= b.coins;
   s.abyssLevels++;
+  return true;
+}
+
+/**
+ * Why the hold's next level (`nextHoldBuy`) can't be bought now, or null when it can: there is one past the top, level
+ * n needs zone n open (`holdZone`), and it needs the coins.
+ */
+export function holdBuyError(s: SaveData): string | null {
+  const b = nextHoldBuy(s.holdLevel);
+  if (!b) return 'You have the biggest hold.';
+  if (!zoneOpen(s, b.zone)) return `Hold level ${b.n} goes on sale once the ${BOAT_PARTS[b.zone - 1].name} opens its zone.`;
+  if (s.coins < b.coins) return `Hold level ${b.n} costs ${b.coins.toLocaleString('en-US')} coins.`;
+  return null;
+}
+
+/** The hold's next level, paid in coins, once its zone is open (`holdBuyError`): one level at a time, in order. */
+export function buyHoldLevel(s: SaveData): boolean {
+  const b = nextHoldBuy(s.holdLevel);
+  if (!b || holdBuyError(s)) return false;
+  s.coins -= b.coins;
+  s.holdLevel++;
   return true;
 }
 

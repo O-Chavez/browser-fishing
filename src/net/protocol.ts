@@ -44,27 +44,24 @@ export interface DiveView {
   marker: number;
   /** In the Abyss, fish landed toward the next marker, out of `MARKER.every`; 0 elsewhere. */
   toNext: number;
-  /** Metres of line left on the spool (of `LINE.spool`). */
-  line: number;
-  /** Fishing, or out of line: another spool (`spool`) or head home. */
+  /** The fish the hold takes this charter (`holdFish`, fixed at casting off); landed so far is `tally.landed`. */
+  hold: number;
+  /** Fishing, or the hold is full: the only way on is heading home. */
   state: DiveState;
   /** How the zone (and marker) reads for the charter's rod (`seaRating`). */
   rating: Rating;
-  /** Metres of line a hooked fish uses here (`lineCost`); one that gets away takes `LINE.lost` more. */
-  fishLine: number;
   /** What a fish pays here (`payAt`): a plain fish's Black Pearls, and a landed fish's average coins, legends, shinies and tags counted in. */
   pay: { pearls: number; coins: number };
-  /** Coins another spool costs here (`spoolPrice`). */
-  spool: number;
-  /** The charter so far: fish landed and lost, pearls and coins they paid, spools bought and their coins. */
+  /** Captain Reed's fee for this zone (`charterFee`), paid on casting off. */
+  fee: number;
+  /** The charter so far: fish landed and lost, pearls and coins they paid, the fee paid and the shiny fish landed. */
   tally: Tally;
   /**
    * Pearls the last fish paid (`pearlsFor`: doubled for a Feisty or Brutish fish, five times for a legend): present
    * after a landed fish; absent after a lost fish and on a fresh charter.
    */
   gain?: number;
-  /** Metres of line the last fish used, and why it was lost if it was. */
-  cost?: number;
+  /** Why the last fish was lost, if it was. */
   lost?: LossReason | 'gone';
 }
 
@@ -96,11 +93,13 @@ export type ClientMsg =
   | { t: 'buyline'; id: string }
   /**
    * From Captain Reed (within `DIVE.standRange` of his stand): the Deep Sea Rod (`buySeaRod`), its next step
-   * (`buyRodStep`) or Abyss level (`buyAbyssLevel`), and the next boat part (`buyBoatPart`).
+   * (`buyRodStep`) or Abyss level (`buyAbyssLevel`), the hold's next level (`buyHoldLevel`), and the next boat part
+   * (`buyBoatPart`).
    */
   | { t: 'buysearod' }
   | { t: 'rodstep' }
   | { t: 'abysslevel' }
+  | { t: 'holdlevel' }
   | { t: 'boatpart' }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
@@ -126,13 +125,14 @@ export type ClientMsg =
   | { t: 'cast'; x: number; z: number; perfect?: boolean }
   /** `h`: the button over the fight, one bit per 1/60 s step (`HoldLog`); the server replays it to check the catch. */
   | { t: 'catch'; h: string }
-  /** A fish got away (or the cast ended). On a dive `h` is the lost fight's button log, which the line pays for. */
+  /** A fish got away (or the cast ended). On a charter `h` is the lost fight's button log, which tells a missed strike from a fish that got away. */
   | { t: 'lost'; h?: string }
-  /** Start a charter at Captain Reed's seaplane in an open zone, and in the Abyss at a marker up to the furthest (`canStart`); pays the zone's spool. */
+  /**
+   * Start a charter at Captain Reed's seaplane in an open zone, and in the Abyss at a marker up to the furthest
+   * (`canStart`); pays the zone's fee (`charterFee`), and the hold's size (`holdFish`) is fixed for the charter.
+   */
   | { t: 'dive'; zone: number; marker?: number }
-  /** Out of line on a charter: buy another spool at the zone's price and fish on. */
-  | { t: 'spool' }
-  /** End the charter and fly home, at any time outside a fight. Nothing is lost. */
+  /** End the charter and fly home, at any time outside a fight, the only way on once the hold is full. Nothing is lost; the fee isn't refunded. */
   | { t: 'headhome' }
   /** Spin the Lucky Wheel with the fish in hotbar slot i. */
   | { t: 'wheel'; i: number }
@@ -209,7 +209,7 @@ export type ServerMsg =
   | { t: 'moved'; id: number; map: string; dive?: number }
   /** The server refused a move (too far, too fast): the player goes back here. */
   | { t: 'pos'; x: number; z: number }
-  /** The player's charter after a fight or a new spool. Sent before the save that takes them to sea. */
+  /** The player's charter after a fight. Sent before the save that takes them to sea. */
   | { t: 'divestate'; dive: DiveView }
   /** The charter is over; the save that brings the player back to the harbour follows. */
   | { t: 'diveend'; end: DiveEnd }

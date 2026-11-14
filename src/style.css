@@ -705,25 +705,24 @@ body.touch #guide, body.touch #guide.show { left: 24px; bottom: 210px; max-width
 #divehud > div + div { border-left: 2px solid rgba(255,255,255,.12); }
 #divehud .zone { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #8fd6e6; font-weight: 900; }
 #divehud .lab { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--cream-muted); font-weight: 900; }
-/* A cell's label, with what the last fish cost or paid at its right end: there, it never changes the strip's width. */
+/* A cell's label, with what the last fish added or paid at its right end: there, it never changes the strip's width. */
 #divehud .labrow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-#divehud .linerow, #divehud .partrow { display: flex; align-items: center; gap: 8px; }
+#divehud .holdrow, #divehud .partrow { display: flex; align-items: center; gap: 8px; }
 #divehud .bar, #divehud .pbar { flex: none; width: 110px; height: 12px; border-radius: 99px; background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.12); overflow: hidden; }
 #divehud .bar i, #divehud .pbar i { display: block; height: 100%; border-radius: 99px; transition: width .5s ease-out; }
 #divehud .bar i { background: linear-gradient(#f2dfb0, #c9a56a); }
-#divehud .line.low .bar i { background: linear-gradient(#ffc36b, #e08a2b); }
-#divehud .line.danger .bar i { background: linear-gradient(#ff8a70, #d9442b); }
-#divehud .line.danger .m { color: #ff9b7a; }
+#divehud .hold.full .bar i { background: linear-gradient(#a5f3e2, #3fc9ae); }
+#divehud .hold.full .lab, #divehud .hold.full .m { color: #8ff0dc; }
 #divehud .m, #divehud .pn { font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
-#divehud .worn { font-size: 12px; font-weight: 900; line-height: 1; color: #ff6f5e; animation: wornIn .3s ease-out both; }
-@keyframes wornIn { from { opacity: 0; transform: translateY(-4px); } }
+#divehud .plus { font-size: 12px; font-weight: 900; line-height: 1; color: #f2dfb0; animation: noteIn .3s ease-out both; }
+@keyframes noteIn { from { opacity: 0; transform: translateY(-4px); } }
 #divehud .haul { font-size: 19px; font-weight: 900; display: flex; align-items: center; gap: 6px; }
 /* the next boat part's progress in Black Pearls: lilac, and teal once Captain Reed can fit it */
 #divehud .pbar i { background: linear-gradient(#d6ccf7, #8f7fd0); }
 #divehud .pbar.full i { background: linear-gradient(#a5f3e2, #3fc9ae); }
 #divehud .part.ready .lab { color: #8ff0dc; }
 #divehud .partrow .bpearl { width: 15px; height: 15px; }
-#divehud .gain { font-size: 12px; font-weight: 900; line-height: 1; color: #8fd6e6; animation: wornIn .3s ease-out both; }
+#divehud .gain { font-size: 12px; font-weight: 900; line-height: 1; color: #8fd6e6; animation: noteIn .3s ease-out both; }
 #divehud .pn.pop { display: inline-block; animation: pnumPop .6s ease-out both; }
 @keyframes pnumPop { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
 #divehud .v { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 900; line-height: 1.2; }
@@ -855,5 +854,3 @@ body.touch .dcard .btn kbd { display: none; }
 .seastrip { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px; background: #d8ecef; font-size: 14px; font-weight: 800; }
 .seastrip .btn { flex: none; padding: 8px 14px; font-size: 14px; }
 
-/* Reed's chart: keep "23 fish a spool" on one line, so a card's line breaks at the dot. */
-.reed .nb { white-space: nowrap; }

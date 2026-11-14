@@ -360,8 +360,8 @@ export const MAPS: MapDef[] = [
           name: 'Captain Reed', face: 'grin', ...HARBOUR.stand, coat: 0x2f4f4f, hat: 0x2b2b2b,
           // Talking to Reed opens his charter panel (`reedHtml`, src/game/divehud.ts), which leads with his next line.
           lines: [
-            'A charter runs on one spool of line. Every fish you hook uses some. Shelf line is free.',
-            'Further out, fish pay more and fight harder. Coins buy line and a better rod.',
+            'A charter lasts till my hold is full. A fish that gets away takes no room. The Shelf is free.',
+            'Further out, fish pay more and fight harder. Coins buy a bigger hold and a better rod.',
             'Black Pearls buy the boat part that opens the next zone.',
             'The Abyss has no end. Every third fish takes us a marker further.',
           ],

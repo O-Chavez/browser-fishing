@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
-import { ABYSS, BOAT_PARTS, LINE, MARKER, PEARLS, ROD, SPOOL_COINS, ZONES } from '../data/dive';
+import { ABYSS, BOAT_PARTS, CHARTER_FEE, HOLD, MARKER, PEARLS, ROD, ZONES } from '../data/dive';
 import {
-  abyssLevelCost, afterFight, averagePearls, averageSale, behaviourOdds, canStart, lineCost, markerGrowth, newSpool, nextRodBuy, payAt, pearlMult, pearlsFor, powInt, ratingOf,
-  rodBuyName, rodStepCost, rollSeaFish, seaFightWords, seaFishTier, seaGap, seaGaps, seaRating, seaRodTier, spoolPrice, startDive, stepZone, typicalSale,
+  abyssLevelCost, afterFight, averagePearls, averageSale, behaviourOdds, canStart, charterFee, holdFish, holdLevelCost, holdZone, markerGrowth, nextHoldBuy, nextRodBuy, payAt,
+  pearlMult, pearlsFor, powInt, ratingOf, rodBuyName, rodStepCost, rollSeaFish, seaFightWords, seaFishTier, seaGap, seaGaps, seaRating, seaRodTier, startDive, stepZone, typicalSale,
   zoneOpen, type SeaRod,
 } from './dive';
 import { rollSeaCast } from './economy';
@@ -78,30 +78,19 @@ describe('the rating', () => {
   });
 });
 
-describe('line', () => {
-  it('a hooked fish uses 5 m when the rod handles it, 9 m at Fair and 13 m at Tough, from the typical gap', () => {
-    expect(lineCost(0, 0, none)).toBe(5);
-    expect(lineCost(0, 0, rod(8))).toBe(5);
-    expect(lineCost(1, 0, rod(1))).toBe(9);
-    expect(lineCost(1, 0, none)).toBe(13);
-    expect(lineCost(2, 0, rod(2))).toBe(13);
-    expect(lineCost(ABYSS, 2, rod(8))).toBe(6);
-  });
-
-  it('every charter starts on a 300 m spool, and each fish takes its line: a lost one 25 m more', () => {
-    const d = startDive(1, 0, rod(1));
-    expect(d).toMatchObject({ zone: 1, marker: 0, line: LINE.spool, state: 'fishing' });
-    expect(LINE.spool).toBe(300);
-    expect(afterFight(d, { pearls: 3, coins: 2000 })).toEqual({ cost: 9, marker: false });
-    expect(d.line).toBe(291);
-    expect(afterFight(d, null)).toEqual({ cost: 9 + LINE.lost, marker: false });
-    expect(LINE.lost).toBe(25);
-    expect(d.line).toBe(257);
-    expect(d.tally).toMatchObject({ landed: 1, lost: 1, pearls: 3, coins: 2000 });
+describe('the hold and the fee', () => {
+  it('a charter lands a set number of fish: a lost one takes no place in the hold', () => {
+    const d = startDive(1, 0, rod(1), 15);
+    expect(d).toMatchObject({ zone: 1, marker: 0, hold: 15, state: 'fishing' });
+    expect(afterFight(d, { pearls: 3, coins: 2000 })).toEqual({ marker: false });
+    expect(afterFight(d, null)).toEqual({ marker: false });
+    expect(afterFight(d, null)).toEqual({ marker: false });
+    expect(d.tally).toMatchObject({ landed: 1, lost: 2, pearls: 3, coins: 2000 });
+    expect(d.state).toBe('fishing');
   });
 
   it('the tally counts the shiny fish landed, not plain or lost ones', () => {
-    const d = startDive(1, 0, rod(1));
+    const d = startDive(1, 0, rod(1), 10);
     expect(d.tally.shiny).toBe(0);
     afterFight(d, { pearls: 15, coins: 9000, shiny: true });
     afterFight(d, { pearls: 3, coins: 2000 });
@@ -110,29 +99,48 @@ describe('line', () => {
     afterFight(d, { pearls: 30, coins: 18_000, shiny: true });
     expect(d.tally).toMatchObject({ landed: 4, lost: 1, shiny: 2, pearls: 51 });
     // A charter from before the count was kept starts it at the next shiny.
-    const old = startDive(1, 0, rod(1));
+    const old = startDive(1, 0, rod(1), 10);
     delete (old.tally as Partial<typeof old.tally>).shiny;
     afterFight(old, { pearls: 15, coins: 9000, shiny: true });
     expect(old.tally.shiny).toBe(1);
   });
 
-  it('out of line, the charter waits for another spool, which fills it again in the same zone and marker', () => {
-    const d = startDive(ABYSS, 3, rod(8));
-    d.line = 4;
+  it('once the landed fish fill the hold the charter is full, in the same zone and marker, and takes nothing more', () => {
+    const d = startDive(ABYSS, 3, rod(8), 10);
+    for (let i = 0; i < 9; i++) afterFight(d, { pearls: 50, coins: 1000 });
+    afterFight(d, null);
+    expect(d.state).toBe('fishing');
     afterFight(d, { pearls: 50, coins: 1000 });
-    expect(d).toMatchObject({ line: 0, state: 'out', marker: 3 });
-    // Nothing more is taken while it waits.
-    expect(afterFight(d, null)).toEqual({ cost: 0, marker: false });
-    expect(d.tally.lost).toBe(0);
-    expect(newSpool(d)).toBe(true);
-    expect(d).toMatchObject({ line: LINE.spool, state: 'fishing', zone: ABYSS, marker: 3 });
-    expect(d.tally).toMatchObject({ spools: 2, spoolCoins: 2 * SPOOL_COINS[ABYSS] });
-    expect(newSpool(d)).toBe(false);
+    // Ten landed: three markers on and one fish toward the next, so the markers still move on as the hold fills.
+    expect(d).toMatchObject({ state: 'full', zone: ABYSS, marker: 6, toNext: 1, tally: { landed: 10, lost: 1, pearls: 500 } });
+    expect(afterFight(d, { pearls: 50, coins: 1000 })).toEqual({ marker: false });
+    expect(afterFight(d, null)).toEqual({ marker: false });
+    expect(d.tally).toMatchObject({ landed: 10, lost: 1, pearls: 500, coins: 10_000 });
   });
 
-  it('a spool costs the zone\'s price, free on the Shelf, and the cast-off spool counts in the tally', () => {
-    expect([0, 1, 2, 3, 4].map(spoolPrice)).toEqual([0, 14_000, 26_000, 46_000, 83_000]);
-    expect(startDive(2, 0, none).tally).toEqual({ landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: 26_000, shiny: 0 });
+  it('the fee is the zone\'s, free on the Shelf, and the tally keeps the fee paid on casting off', () => {
+    expect([0, 1, 2, 3, 4].map(charterFee)).toEqual([0, 7_000, 14_000, 27_000, 54_000]);
+    expect(CHARTER_FEE).toHaveLength(ZONES.length);
+    expect(startDive(2, 0, none, 20).tally).toEqual({ landed: 0, lost: 0, pearls: 0, coins: 0, fee: 14_000, shiny: 0 });
+    expect(startDive(0, 0, none, 10).tally.fee).toBe(0);
+  });
+
+  it('the hold takes 10 fish, and 5 more a level to 30; levels past the top or below 0 are clamped', () => {
+    expect([0, 1, 2, 3, 4].map(holdFish)).toEqual([10, 15, 20, 25, 30]);
+    expect(holdFish(-1)).toBe(10);
+    expect(holdFish(9)).toBe(30);
+    expect(holdFish(1.7)).toBe(15);
+    expect(holdFish(NaN)).toBe(10);
+    expect(HOLD.fish).toHaveLength(ZONES.length);
+  });
+
+  it('hold level n costs its coins and goes on sale with zone n, one at a time to level 4', () => {
+    expect([1, 2, 3, 4].map(holdLevelCost)).toEqual([25_000, 300_000, 8_000_000, 10_000_000]);
+    expect([1, 2, 3, 4].map(holdZone)).toEqual([1, 2, 3, 4]);
+    expect(nextHoldBuy(0)).toEqual({ n: 1, fish: 15, coins: 25_000, zone: 1 });
+    expect(nextHoldBuy(2)).toEqual({ n: 3, fish: 25, coins: 8_000_000, zone: 3 });
+    expect(nextHoldBuy(3)).toEqual({ n: 4, fish: 30, coins: 10_000_000, zone: ABYSS });
+    expect(nextHoldBuy(4)).toBeNull();
   });
 });
 
@@ -207,8 +215,8 @@ describe('pay', () => {
     expect(MARKER.grow).toBe(1.12);
   });
 
-  it("an everyday fish's average sale is about 1,100 / 2,000 / 3,600 / 6,400 / 11,500 coins by zone, and a legend about three times it", () => {
-    const want = [1100, 2000, 3600, 6400, 11_500];
+  it("an everyday fish's average sale is about 1,100 / 2,500 / 5,100 / 10,100 / 20,200 coins by zone, and a legend about three times it", () => {
+    const want = [1100, 2500, 5100, 10_100, 20_200];
     const rng = mulberry(4);
     ZONES.forEach((z, i) => {
       expect(typicalSale(i) / want[i], z.id).toBeGreaterThan(0.97);
@@ -224,8 +232,8 @@ describe('pay', () => {
       expect(everyday / typicalSale(i), z.id).toBeCloseTo(1, 1);
       for (const id of z.legends) expect(avg(id) / everyday, id).toBeCloseTo(3, 0);
     });
-    // Further zones pay more.
-    for (let z = 1; z < ZONES.length; z++) expect(typicalSale(z)).toBeGreaterThan(1.5 * typicalSale(z - 1));
+    // Further zones pay more: from the Drop-off on, about twice the zone before.
+    for (let z = 1; z < ZONES.length; z++) expect(typicalSale(z)).toBeGreaterThan(1.9 * typicalSale(z - 1));
   });
 
   it("a landed fish's average sale counts in legends, shinies and Feisty or Brutish fish: about a third over a plain everyday one", () => {
@@ -248,7 +256,7 @@ describe('pay', () => {
 
   it("tells the screens what a fish pays here: a plain fish's pearls and the average coins to three figures, with the Abyss marker's growth", () => {
     expect(payAt(0, 0)).toEqual({ pearls: 1, coins: Math.round(averageSale(0) / 10) * 10 });
-    expect(payAt(0, 0).coins).toBe(1470);
+    expect([0, 1, 2, 3, 4].map((z) => payAt(z, 0).coins)).toEqual([1470, 3400, 6800, 13_600, 27_200]);
     expect(payAt(ABYSS, 1).coins).toBe(Math.round(averageSale(ABYSS) / 100) * 100);
     expect(payAt(ABYSS, 3)).toEqual({ pearls: 63, coins: Math.round((averageSale(ABYSS) * 1.12 ** 2) / 100) * 100 });
   });
@@ -256,7 +264,7 @@ describe('pay', () => {
 
 describe('the Abyss', () => {
   it('reaches the next marker every 3 fish landed; lost fish and other zones don\'t count', () => {
-    const d = startDive(ABYSS, 1, rod(8));
+    const d = startDive(ABYSS, 1, rod(8), 30);
     const pay = { pearls: 0, coins: 0 };
     expect(afterFight(d, pay).marker).toBe(false);
     afterFight(d, null);
@@ -266,9 +274,9 @@ describe('the Abyss', () => {
     expect(d).toMatchObject({ marker: 2, toNext: 0 });
     for (let i = 0; i < 3 * 5; i++) afterFight(d, pay);
     expect(d.marker).toBe(7);
-    // The line a fish costs follows the marker it's at.
-    expect(lineCost(ABYSS, 7, rod(8))).toBe(11);
-    const kelp = startDive(2, 5, rod(4));
+    // The rating follows the marker it's at.
+    expect(seaRating(ABYSS, 7, rod(8))).toBe('tough');
+    const kelp = startDive(2, 5, rod(4), 20);
     for (let i = 0; i < 6; i++) afterFight(kelp, pay);
     expect(kelp).toMatchObject({ marker: 0, toNext: 0 });
   });
@@ -291,15 +299,15 @@ describe('the Abyss', () => {
     expect(canStart(far, ABYSS, 2.5)).toBe(false);
     expect(zoneOpen(far, 4)).toBe(true);
     expect(zoneOpen(p, 3)).toBe(false);
-    expect(startDive(ABYSS, 7, rod(8))).toMatchObject({ marker: 7, toNext: 0 });
-    expect(startDive(1, 7, rod(1)).marker).toBe(0);
+    expect(startDive(ABYSS, 7, rod(8), 10)).toMatchObject({ marker: 7, toNext: 0 });
+    expect(startDive(1, 7, rod(1), 10).marker).toBe(0);
   });
 });
 
 describe('rod steps, Abyss levels and boat parts', () => {
-  it('prices the eight steps, and Abyss levels at 1,000,000 coins growing 12% a level, to the nearest 1,000', () => {
-    expect([1, 2, 3, 4, 5, 6, 7, 8].map(rodStepCost)).toEqual([40_000, 90_000, 150_000, 350_000, 900_000, 2_000_000, 2_400_000, 4_800_000]);
-    expect([1, 2, 3, 10].map(abyssLevelCost)).toEqual([1_000_000, 1_120_000, 1_254_000, Math.round(1_000_000 * 1.12 ** 9 / 1000) * 1000]);
+  it('prices the eight steps, and Abyss levels at 1,750,000 coins growing 12% a level, to the nearest 1,000', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map(rodStepCost)).toEqual([50_000, 110_000, 200_000, 500_000, 1_400_000, 4_000_000, 4_200_000, 8_400_000]);
+    expect([1, 2, 3, 10].map(abyssLevelCost)).toEqual([1_750_000, 1_960_000, 2_195_000, Math.round(1_750_000 * 1.12 ** 9 / 1000) * 1000]);
     for (let n = 1; n < 60; n++) expect(abyssLevelCost(n) % 1000).toBe(0);
     expect(ROD.steps).toBe(8);
   });
@@ -309,16 +317,16 @@ describe('rod steps, Abyss levels and boat parts', () => {
   });
 
   it('names the next purchase: a step until all eight, then Abyss levels', () => {
-    expect(nextRodBuy(rod(0))).toEqual({ kind: 'step', n: 1, coins: 40_000, zone: 1 });
-    expect(nextRodBuy(rod(7))).toEqual({ kind: 'step', n: 8, coins: 4_800_000, zone: 4 });
-    expect(nextRodBuy(rod(8))).toEqual({ kind: 'level', n: 1, coins: 1_000_000, zone: ABYSS });
-    expect(nextRodBuy(rod(8, 2))).toMatchObject({ kind: 'level', n: 3, coins: 1_254_000 });
+    expect(nextRodBuy(rod(0))).toEqual({ kind: 'step', n: 1, coins: 50_000, zone: 1 });
+    expect(nextRodBuy(rod(7))).toEqual({ kind: 'step', n: 8, coins: 8_400_000, zone: 4 });
+    expect(nextRodBuy(rod(8))).toEqual({ kind: 'level', n: 1, coins: 1_750_000, zone: ABYSS });
+    expect(nextRodBuy(rod(8, 2))).toMatchObject({ kind: 'level', n: 3, coins: 2_195_000 });
     expect(rodBuyName(nextRodBuy(rod(4)))).toBe('Deep Sea Rod step 5');
     expect(rodBuyName(nextRodBuy(rod(8, 2)))).toBe('Deep Sea Rod Abyss level 3');
   });
 
   it('has four boat parts for pearls, one opening each zone past the Shelf', () => {
-    expect(BOAT_PARTS.map((p) => p.pearls)).toEqual([30, 150, 3000, 25_000]);
+    expect(BOAT_PARTS.map((p) => p.pearls)).toEqual([25, 150, 3000, 25_000]);
     expect(BOAT_PARTS.map((p) => p.name)).toEqual(['Storm sail', 'Kelp cutter', 'Deep lamps', 'Iron keel']);
     expect(BOAT_PARTS).toHaveLength(ZONES.length - 1);
   });
@@ -393,18 +401,18 @@ describe('sea zones and bites', () => {
     expect(FISH.filter((f) => f.sea).map((f) => f.id).sort()).toEqual([...listed].sort());
   });
 
-  it('a bot can fish a spool on the Shelf with the real reel', () => {
+  it('a bot can fill a hold on the Shelf with the real reel', () => {
     const rng = mulberry(11), brng = mulberry(12);
-    const d = startDive(0, 0, none);
+    const d = startDive(0, 0, none, 10);
     while (d.state === 'fishing') {
       rollSeaFish(d.zone, rng);
       const f = botFight(seaGaps(d.zone, d.marker, d.rod), 0.25, STYLES[0], rng, brng);
       afterFight(d, f.status === 'caught' ? { pearls: 1, coins: 1000 } : null);
     }
-    expect(d.state).toBe('out');
-    // Shelf fish are Easy on a fresh rod: about 60 to a spool at 5 m each.
-    expect(d.tally.landed).toBeGreaterThan(50);
-    expect(d.tally.landed + d.tally.lost).toBeLessThanOrEqual(LINE.spool / LINE.base);
+    expect(d.state).toBe('full');
+    // Shelf fish are Easy on a fresh rod: the hold fills with few lost on the way.
+    expect(d.tally.landed).toBe(10);
+    expect(d.tally.lost).toBeLessThan(5);
   });
 });
 

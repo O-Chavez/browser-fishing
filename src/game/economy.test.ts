@@ -764,20 +764,20 @@ describe('rod steps and Abyss levels', () => {
     s.boatParts = 1;
     expect(eco.buyRodStep(s)).toBe(true);
     expect(eco.buyRodStep(s)).toBe(true);
-    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 130_000, pearls: 100_000 });
+    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 160_000, pearls: 100_000 });
     // Step 3 waits for Kelp Deep.
     expect(eco.buyRodStep(s)).toBe(false);
     expect(eco.rodBuyError(s)).toMatch(/Kelp cutter/);
     s.boatParts = 2;
     expect(eco.buyRodStep(s)).toBe(true);
-    expect(s).toMatchObject({ rodStep: 3, coins: 10_000_000 - 280_000 });
+    expect(s).toMatchObject({ rodStep: 3, coins: 10_000_000 - 360_000 });
   });
 
   it('refuses a step without the coins or the Deep Sea Rod', () => {
-    const s = owner({ boatParts: 4, coins: 39_999 });
+    const s = owner({ boatParts: 4, coins: 49_999 });
     expect(eco.buyRodStep(s)).toBe(false);
-    expect(eco.rodBuyError(s)).toMatch(/40,000/);
-    s.coins = 40_000;
+    expect(eco.rodBuyError(s)).toMatch(/50,000/);
+    s.coins = 50_000;
     expect(eco.buyRodStep(s)).toBe(true);
     expect(s).toMatchObject({ rodStep: 1, coins: 0 });
     const none = Object.assign(newSave(), { level: 20, coins: 1e7, boatParts: 4 });
@@ -794,8 +794,8 @@ describe('rod steps and Abyss levels', () => {
     const before = s.coins;
     expect(eco.buyAbyssLevel(s)).toBe(true);
     expect(eco.buyAbyssLevel(s)).toBe(true);
-    expect(s).toMatchObject({ abyssLevels: 2, coins: before - 1_000_000 - 1_120_000 });
-    s.coins = 1_253_999;
+    expect(s).toMatchObject({ abyssLevels: 2, coins: before - 1_750_000 - 1_960_000 });
+    s.coins = 2_194_999;
     expect(eco.buyAbyssLevel(s)).toBe(false);
     expect(s.abyssLevels).toBe(2);
   });
@@ -819,11 +819,48 @@ describe('rod steps and Abyss levels', () => {
   });
 });
 
+describe('the hold', () => {
+  const owner = (o: Partial<SaveData> = {}) => Object.assign(newSave(), { level: 20, seaRod: true, coins: 0 }, o);
+
+  it('sells its levels one at a time, in order, each once its zone is open, for coins', () => {
+    const s = owner({ coins: 20_000_000 });
+    expect(s.holdLevel).toBe(0);
+    // Level 1 is the Drop-off's: not on sale with the Shelf alone.
+    expect(eco.holdBuyError(s)).toBe('Hold level 1 goes on sale once the Storm sail opens its zone.');
+    expect(eco.buyHoldLevel(s)).toBe(false);
+    s.boatParts = 1;
+    expect(eco.buyHoldLevel(s)).toBe(true);
+    expect(s).toMatchObject({ holdLevel: 1, coins: 20_000_000 - 25_000 });
+    // Level 2 waits for Kelp Deep.
+    expect(eco.buyHoldLevel(s)).toBe(false);
+    expect(eco.holdBuyError(s)).toMatch(/Kelp cutter/);
+    s.boatParts = 4;
+    for (const n of [2, 3, 4]) {
+      expect(eco.buyHoldLevel(s)).toBe(true);
+      expect(s.holdLevel).toBe(n);
+    }
+    expect(s.coins).toBe(20_000_000 - 25_000 - 300_000 - 8_000_000 - 10_000_000);
+    // There is no level past the fourth.
+    expect(eco.holdBuyError(s)).toBe('You have the biggest hold.');
+    expect(eco.buyHoldLevel(s)).toBe(false);
+    expect(s.holdLevel).toBe(4);
+  });
+
+  it('refuses a level without the coins', () => {
+    const s = owner({ boatParts: 2, holdLevel: 1, coins: 299_999 });
+    expect(eco.holdBuyError(s)).toBe('Hold level 2 costs 300,000 coins.');
+    expect(eco.buyHoldLevel(s)).toBe(false);
+    s.coins = 300_000;
+    expect(eco.buyHoldLevel(s)).toBe(true);
+    expect(s).toMatchObject({ holdLevel: 2, coins: 0 });
+  });
+});
+
 describe('boat parts', () => {
   const owner = (o: Partial<SaveData> = {}) => Object.assign(newSave(), { level: 20, seaRod: true }, o);
 
-  it('opens the zones one by one for Black Pearls: 30, 150, 3,000 and 25,000', () => {
-    const s = owner({ pearls: 30 + 150 + 3000 + 25_000 + 7, coins: 5 });
+  it('opens the zones one by one for Black Pearls: 25, 150, 3,000 and 25,000', () => {
+    const s = owner({ pearls: 25 + 150 + 3000 + 25_000 + 7, coins: 5 });
     for (const left of [150 + 3000 + 25_000 + 7, 3000 + 25_000 + 7, 25_000 + 7, 7]) {
       expect(eco.buyBoatPart(s)).toBe(true);
       expect(s.pearls).toBe(left);
@@ -834,9 +871,9 @@ describe('boat parts', () => {
   });
 
   it('refuses a part without the pearls or the Deep Sea Rod', () => {
-    const s = owner({ pearls: 29, coins: 1e9 });
+    const s = owner({ pearls: 24, coins: 1e9 });
     expect(eco.buyBoatPart(s)).toBe(false);
-    expect(eco.boatPartError(s)).toMatch(/Storm sail needs 30 Black Pearls/);
+    expect(eco.boatPartError(s)).toMatch(/Storm sail needs 25 Black Pearls/);
     const none = Object.assign(newSave(), { pearls: 1000 });
     expect(eco.buyBoatPart(none)).toBe(false);
     expect(none.boatParts).toBe(0);
@@ -866,7 +903,7 @@ describe('the sea in old saves', () => {
   /** A save from before charters were places: rod and line levels, a chart, maybe pearls counted the old way. */
   const old = (o: Record<string, unknown>) => {
     const s = { ...newSave(), ...o } as Record<string, unknown>;
-    for (const k of ['rodStep', 'abyssLevels', 'boatParts', 'abyssRecord', 'seaV']) delete s[k];
+    for (const k of ['rodStep', 'abyssLevels', 'holdLevel', 'boatParts', 'abyssRecord', 'seaV']) delete s[k];
     return s;
   };
   /** A save from the rebuilt charters but before the sea reset (`SEA_VERSION`): progress carried over or earned since. */
@@ -876,11 +913,11 @@ describe('the sea in old saves', () => {
     return s;
   };
 
-  it('resets the sea once for saves from before SEA_VERSION: rod steps, Abyss levels, boat parts, Abyss record and pearls', () => {
-    const m = migrate(unreset({ seaRod: true, rodStep: 5, abyssLevels: 3, boatParts: 4, abyssRecord: 12, pearls: 4200, coins: 98765, level: 40 }));
-    expect(m).toMatchObject({ seaRod: true, rodStep: 0, abyssLevels: 0, boatParts: 0, abyssRecord: 0, pearls: 0, coins: 98765, level: 40, seaV: SEA_VERSION });
+  it('resets the sea once for saves from before SEA_VERSION: rod steps, Abyss levels, hold, boat parts, Abyss record and pearls', () => {
+    const m = migrate(unreset({ seaRod: true, rodStep: 5, abyssLevels: 3, holdLevel: 3, boatParts: 4, abyssRecord: 12, pearls: 4200, coins: 98765, level: 40 }));
+    expect(m).toMatchObject({ seaRod: true, rodStep: 0, abyssLevels: 0, holdLevel: 0, boatParts: 0, abyssRecord: 0, pearls: 0, coins: 98765, level: 40, seaV: SEA_VERSION });
     const pre = migrate(old({ pearls: 350, pearlsV: 1, coins: 1234, rodLevel: 10, seaLine: 10, seaRod: true, sea: { ledges: [5, 45], record: 45 } }));
-    expect(pre).toMatchObject({ pearls: 0, coins: 1234, seaRod: true, rodStep: 0, boatParts: 0, abyssLevels: 0, abyssRecord: 0 });
+    expect(pre).toMatchObject({ pearls: 0, coins: 1234, seaRod: true, rodStep: 0, holdLevel: 0, boatParts: 0, abyssLevels: 0, abyssRecord: 0 });
     for (const k of ['pearlsV', 'rodLevel', 'seaLine', 'sea']) expect(pre, k).not.toHaveProperty(k);
   });
 
@@ -904,8 +941,14 @@ describe('the sea in old saves', () => {
     const once = migrate(unreset({ seaRod: true, rodStep: 5, boatParts: 3, pearls: 77 }));
     expect(migrate(once)).toEqual(once);
     expect(migrate(JSON.parse(JSON.stringify(once)))).toEqual(once);
-    const later = { ...once, rodStep: 7, boatParts: 4, abyssLevels: 2, abyssRecord: 9, pearls: 31, dex: { snapper: { count: 2, best: 150 } } };
-    expect(migrate(later)).toMatchObject({ rodStep: 7, boatParts: 4, abyssLevels: 2, abyssRecord: 9, pearls: 31, dex: { snapper: { count: 2, best: 150 } } });
+    const later = { ...once, rodStep: 7, holdLevel: 3, boatParts: 4, abyssLevels: 2, abyssRecord: 9, pearls: 31, dex: { snapper: { count: 2, best: 150 } } };
+    expect(migrate(later)).toMatchObject({ rodStep: 7, holdLevel: 3, boatParts: 4, abyssLevels: 2, abyssRecord: 9, pearls: 31, dex: { snapper: { count: 2, best: 150 } } });
+  });
+
+  it('starts a save from before the hold at hold level 0, its sea progress kept', () => {
+    const s = { ...newSave(), seaRod: true, rodStep: 4, boatParts: 2, pearls: 120 } as Record<string, unknown>;
+    delete s.holdLevel;
+    expect(migrate(s)).toMatchObject({ holdLevel: 0, rodStep: 4, boatParts: 2, pearls: 120 });
   });
 
   it('leaves a new save as it is', () => {
@@ -915,6 +958,9 @@ describe('the sea in old saves', () => {
 
   it('cleans bad values on the new fields', () => {
     expect(migrate({ ...newSave(), rodStep: 12, boatParts: 9, abyssLevels: -1, abyssRecord: 3.7 })).toMatchObject({ rodStep: 8, boatParts: 4, abyssLevels: 0, abyssRecord: 3 });
+    // The hold's level: a whole number from 0 to 4.
+    const hold = (holdLevel: unknown) => migrate({ ...newSave(), holdLevel } as unknown as SaveData).holdLevel;
+    expect([9, -2, 2.6, 'big', null, NaN, Infinity, 3].map(hold)).toEqual([4, 0, 2, 0, 0, 0, 0, 3]);
     expect(migrate({ ...newSave(), pearls: -5, seaRod: 'yes' })).toMatchObject({ pearls: 0, seaRod: false });
     expect(migrate({ ...newSave(), pearls: 41.7, seaRod: true })).toMatchObject({ pearls: 41, seaRod: true });
   });

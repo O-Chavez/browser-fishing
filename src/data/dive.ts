@@ -1,7 +1,8 @@
 /**
  * Charter tuning (Oscar, 2026-11-12: the charters are a place to earn). A charter is fished in one zone the player
- * picked; its fish pay coins and Black Pearls by zone, and every fish hooked uses line off a spool that costs coins.
- * Coins buy the Deep Sea Rod's steps and Abyss levels (`ROD`), pearls buy the boat parts that open zones
+ * picked for Captain Reed's fee (`CHARTER_FEE`); its fish pay coins and Black Pearls by zone, and it lasts until the
+ * boat's hold is full (`HOLD`, Oscar, 2026-11-14: a hold of landed fish replaced spools of line). Coins buy the hold's
+ * levels, the Deep Sea Rod's steps and its Abyss levels (`ROD`), pearls buy the boat parts that open zones
  * (`BOAT_PARTS`), all from Captain Reed. Only the Abyss has markers (`ABYSS`). The rules are in `src/game/dive.ts`;
  * every number is here, to tune after a play test.
  */
@@ -76,12 +77,13 @@ export const ROD = {
   /**
    * Coins for steps 1 to 8. A zone's two steps come in while its fish earn the next boat part (`BOAT_PARTS`), so the
    * first ones are cheap and the first two zones pass quickly. From Kelp Deep the plain path is long on purpose: Shiny
-   * Lures are how a player speeds it up (Oscar, 2026-11-13: the Abyss at about 5 hours is the lured player's time; about
-   * 8 plain). A best estimate, to revisit after a play test (`scripts/seaeconomy.ts`).
+   * Lures are how a player speeds it up (Oscar, 2026-11-13: the Abyss at about 5 hours is the lured player's time).
+   * Raised with the zones' coins (Oscar, 2026-11-14), so the coins a charter earns still have a use. A best estimate,
+   * to revisit after a play test (`scripts/seaeconomy.ts`).
    */
-  stepCoins: [40_000, 90_000, 150_000, 350_000, 900_000, 2_000_000, 2_400_000, 4_800_000],
+  stepCoins: [50_000, 110_000, 200_000, 500_000, 1_400_000, 4_000_000, 4_200_000, 8_400_000],
   /** Abyss level n costs `levelCoins × levelGrow^(n−1)` coins, to the nearest `levelRound`. */
-  levelCoins: 1_000_000,
+  levelCoins: 1_750_000,
   levelGrow: 1.12,
   levelRound: 1000,
   /**
@@ -99,14 +101,17 @@ export const ROD = {
 export const RATING = { easy: 0.05, fair: 0.45, tough: 0.85 };
 
 /**
- * Line: every charter starts on one spool of `spool` metres, the same in every zone. Every hooked fish uses `base`
- * metres when it's no harder than the rod, else `base + perTier·g` (rounded) for a typical fish's gap g there (9 m at
- * Fair, 13 m at Tough); a fish that gets away takes `lost` more. A missed strike and frays cost nothing.
+ * The boat's hold: a charter lasts until it has landed `fish[level]` fish (Oscar, 2026-11-14: a set number of landed
+ * fish for a fee, in place of spools of line). A fish that gets away takes no place, and a full hold can only head
+ * home. One hold, levelled like the rod's steps: level 0 to start, and level n (1 to 4) on sale from Captain Reed for
+ * `coins[n − 1]` once zone n is open, one level at a time. The size is fixed for a charter at casting off. The
+ * Twilight's level is the place for coins that pile up while the Iron keel's pearls are earned: 4,000,000 left about
+ * 6 million idle in Oscar's play test (2026-11-14), so it costs 8,000,000, with rod step 6 raised to match.
  */
-export const LINE = { spool: 300, base: 5, perTier: 10, lost: 25 };
+export const HOLD = { fish: [10, 15, 20, 25, 30], coins: [25_000, 300_000, 8_000_000, 10_000_000] };
 
-/** Coins for a spool, by zone: paid on casting off and for each spool after. Free on the Shelf. */
-export const SPOOL_COINS = [0, 14_000, 26_000, 46_000, 83_000];
+/** Captain Reed's fee for a charter, by zone, paid on casting off. Free on the Shelf. */
+export const CHARTER_FEE = [0, 7_000, 14_000, 27_000, 54_000];
 
 /**
  * Black Pearls a landed fish pays, by zone (`pearlsFor`). A Feisty or Brutish fish (`rollTag`, one in 8) pays `tag`
@@ -132,10 +137,11 @@ export const MARKER = { every: 3, grow: 1.12 };
  * open quickly (Oscar, 2026-11-13): the first part after 5 to 10 minutes on the Shelf, the next 15 to 30 minutes on.
  * From Kelp Deep the plain path is long on purpose, and Shiny Lures (a shiny pays `PEARLS.shiny` times) are how a
  * player speeds it up: the Abyss at about 5 hours is the lured player's time (Oscar, 2026-11-13). A best estimate, to
- * revisit after a play test (`scripts/seaeconomy.ts`). Working names, flagged for Oscar to rename.
+ * revisit after a play test (`scripts/seaeconomy.ts`). The Storm sail went from 30 to 25 pearls with the hold (Oscar,
+ * 2026-11-14), since a Shelf charter now lands 10 fish. Working names, flagged for Oscar to rename.
  */
 export const BOAT_PARTS = [
-  { id: 'sail', name: 'Storm sail', pearls: 30 },
+  { id: 'sail', name: 'Storm sail', pearls: 25 },
   { id: 'cutter', name: 'Kelp cutter', pearls: 150 },
   { id: 'lamps', name: 'Deep lamps', pearls: 3000 },
   { id: 'keel', name: 'Iron keel', pearls: 25_000 },

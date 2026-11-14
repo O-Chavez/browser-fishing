@@ -17,6 +17,7 @@
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
 import charterChart from '../assets/images/news/charter-chart.jpg';
+import charterHold from '../assets/images/news/charter-hold.jpg';
 import charterLures from '../assets/images/news/charter-lures.jpg';
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
@@ -40,6 +41,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 10,
+    date: '2026-11-14',
+    title: 'Charters fill a hold',
+    image: charterHold,
+    alt: "Captain Reed's chart: each zone card shows what a fish pays and the fee, and under the Deep Sea Rod a new row reads Hold, 20 fish, next 25 fish a charter, on sale when the Twilight opens; the Cast off button says 20 fish, fee 7,000 coins",
+    body: [
+      "Charters no longer run on a spool of line. Each charter fills <b>the hold</b>: land that many fish and the boat heads home. A fish that gets away takes no room, so a hard zone costs you time, not fish. <b>Captain Reed</b> charges a small fee from <b>the Drop-off</b> on; the Shelf stays free.",
+      "The hold starts at 10 fish. Reed sells a bigger one as each zone opens, five fish more each time, up to 30 in <b>the Abyss</b>. Find it on his chart under the Deep Sea Rod.",
+      "Further out now pays clearly more: from the Drop-off on, a zone's fish are worth about twice the zone before, and the rod's steps and Abyss levels cost more to match. Steps you've already bought are yours.",
+    ],
+  },
   {
     id: 9,
     date: '2026-11-14',

@@ -79,10 +79,16 @@ describe('dev commands in a room', () => {
     room.handle(a.id, { t: 'cmd', text: '/boat 2' });
     expect(a.save).toMatchObject({ pearls: 300, rodStep: 5, abyssLevels: 3, boatParts: 2 });
     expect(devLines(a.log).at(-1)).toBe('Boat parts set to 2: Kelp Deep and nearer open.');
+    room.handle(a.id, { t: 'cmd', text: '/hold 3' });
+    expect(a.save.holdLevel).toBe(3);
+    expect(devLines(a.log).at(-1)).toBe('Hold set to level 3: 25 fish a charter.');
+    room.handle(a.id, { t: 'cmd', text: '/hold' });
+    expect(devLines(a.log).at(-1)).toBe('Usage: /hold 0-4');
     // Steps and parts stay in range; the old level commands are gone.
     room.handle(a.id, { t: 'cmd', text: '/rodstep 12' });
     room.handle(a.id, { t: 'cmd', text: '/boat 9' });
-    expect(a.save).toMatchObject({ rodStep: 8, boatParts: 4 });
+    room.handle(a.id, { t: 'cmd', text: '/hold 7' });
+    expect(a.save).toMatchObject({ rodStep: 8, boatParts: 4, holdLevel: 4 });
     room.handle(a.id, { t: 'cmd', text: '/rodstep' });
     expect(devLines(a.log).at(-1)).toBe('Usage: /rodstep 0-8');
     room.handle(a.id, { t: 'cmd', text: '/rodlevel 12' });
@@ -92,7 +98,7 @@ describe('dev commands in a room', () => {
     room.handle(a.id, { t: 'cmd', text: '/help' });
     const help = a.log.filter((m) => m.t === 'dev').at(-1)!;
     const lines = (help as { lines: string[] }).lines.join('\n');
-    for (const c of ['/rodstep 0-8', '/abysslevel N', '/boat 0-4', '/sea <zone 0-4> [marker]']) expect(lines).toContain(c);
+    for (const c of ['/rodstep 0-8', '/abysslevel N', '/hold 0-4', '/fill', '/boat 0-4', '/sea <zone 0-4> [marker]']) expect(lines).toContain(c);
     expect(lines).not.toMatch(/rodlevel|linelevel|ledge/);
     expect(a.save.level).toBe(20);
     expect(a.save.slots.some((s) => s?.k === 'bait' && s.id === 'pearl')).toBe(true);
@@ -109,16 +115,17 @@ describe('dev commands in a room', () => {
     expect(devLines(a.log).at(-1)).toMatch(/Fish ids:/);
   });
 
-  it('starts a charter in any zone and Abyss marker, free, only for them, which waits for them on a quick rejoin', () => {
+  it('starts a charter in any zone and Abyss marker, with no fee, only for them, which waits for them on a quick rejoin', () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');
     const b = join('Bob');
     room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
     a.save.coins = 7;
-    // Kelp Deep isn't open to Ann, and its spool isn't paid: the console sails anyway.
+    // Kelp Deep isn't open to Ann, and its fee isn't paid: the console sails anyway, with her hold.
     room.handle(a.id, { t: 'cmd', text: '/sea 2' });
     expect(a.save.location).toBe('sea');
     expect(a.save.coins).toBe(7);
+    expect(a.log.find((m) => m.t === 'divestate')).toMatchObject({ dive: { zone: 2, hold: 10, fee: 14_000, tally: { fee: 0 } } });
     // The charter reaches the client before the save that moves it, so the sea is built for its zone.
     const dive = a.log.findIndex((m) => m.t === 'divestate' && m.dive.zone === 2);
     const dev = a.log.findIndex((m) => m.t === 'dev' && m.depth === 48);
@@ -130,10 +137,14 @@ describe('dev commands in a room', () => {
     expect(b.log.some((m) => m.t === 'dev' || m.t === 'divestate')).toBe(false);
     // Again at sea: a fresh charter, in the Abyss at marker 12, which counts as reached.
     room.handle(a.id, { t: 'cmd', text: '/sea 4 12' });
-    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { zone: 4, marker: 12, line: 300, state: 'fishing' } });
+    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { zone: 4, marker: 12, hold: 10, state: 'fishing' } });
     expect(a.log.filter((m) => m.t === 'dev').at(-1)).toMatchObject({ depth: 133 });
     expect(devLines(a.log).at(-1)).toBe('Sailing to The Abyss, marker 12.');
     expect(a.save.abyssRecord).toBe(12);
+    // /fill leaves the hold one fish short of full, landed count only; nothing else in the tally moves.
+    room.handle(a.id, { t: 'cmd', text: '/fill' });
+    expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { hold: 10, state: 'fishing', tally: { landed: 9, pearls: 0, coins: 0 } } });
+    expect(devLines(a.log).at(-1)).toBe('The hold is one fish short of full.');
     // A marker only counts in the Abyss.
     room.handle(a.id, { t: 'cmd', text: '/sea 1 5' });
     expect(a.log.filter((m) => m.t === 'divestate').at(-1)).toMatchObject({ dive: { zone: 1, marker: 0 } });
@@ -152,6 +163,8 @@ describe('dev commands in a room', () => {
     // Leaving the sea with /tp leaves the charter too.
     room.handle(again.id, { t: 'cmd', text: '/login admin hunter2' });
     room.handle(again.id, { t: 'cmd', text: '/tp pond' });
+    room.handle(again.id, { t: 'cmd', text: '/fill' });
+    expect(devLines(again.log).at(-1)).toBe('Not on a charter that is fishing.');
     room.leave(again.id);
     expect(join('Ann').save.location).toBe('pond');
   });

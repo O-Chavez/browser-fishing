@@ -11,8 +11,8 @@ import * as smoke from '../src/game/smoke';
 import { SmokeStats } from './smokestats';
 import { mulberry } from '../src/game/env';
 import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type Gaps, type ReelTune } from '../src/game/reel';
-import { lineCost, pearlsFor, spoolPrice } from '../src/game/dive';
-import { DIVE, LINE } from '../src/data/dive';
+import { charterFee, pearlsFor } from '../src/game/dive';
+import { DIVE } from '../src/data/dive';
 import { HARBOUR } from '../src/data/maps';
 
 const conn = () => {
@@ -205,8 +205,8 @@ describe('Room economy', () => {
     expect(s.rodStep).toBe(0);
     expect(last(a.c, 'notice').msg).toMatch(/Storm sail/);
     room.handle(a.id, { t: 'boatpart' });
-    expect(s).toMatchObject({ boatParts: 1, pearls: 70 });
-    expect(last(a.c, 'state').save).toMatchObject({ boatParts: 1, pearls: 70 });
+    expect(s).toMatchObject({ boatParts: 1, pearls: 75 });
+    expect(last(a.c, 'state').save).toMatchObject({ boatParts: 1, pearls: 75 });
     // The next part needs 150 pearls.
     room.handle(a.id, { t: 'boatpart' });
     expect(s.boatParts).toBe(1);
@@ -214,13 +214,44 @@ describe('Room economy', () => {
     room.handle(a.id, { t: 'rodstep' });
     room.handle(a.id, { t: 'rodstep' });
     room.handle(a.id, { t: 'rodstep' });
-    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 130_000 });
+    expect(s).toMatchObject({ rodStep: 2, coins: 10_000_000 - 160_000 });
     // Abyss levels come after the eighth step.
     room.handle(a.id, { t: 'abysslevel' });
     expect(s.abyssLevels).toBe(0);
     Object.assign(s, { rodStep: 8, boatParts: 4 });
     room.handle(a.id, { t: 'abysslevel' });
-    expect(s).toMatchObject({ abyssLevels: 1, coins: 10_000_000 - 130_000 - 1_000_000 });
+    expect(s).toMatchObject({ abyssLevels: 1, coins: 10_000_000 - 160_000 - 1_750_000 });
+  });
+
+  it("sells the hold's levels at Captain Reed only, in order, each once its zone is open, saying why not", () => {
+    const { room, join, atShop } = setup();
+    const a = join('Ann');
+    const s = a.acct.save;
+    Object.assign(s, { level: 20, seaRod: true, coins: 1_000_000 });
+    // Not at the stall.
+    atShop(a);
+    s.boatParts = 1;
+    room.handle(a.id, { t: 'holdlevel' });
+    expect(s).toMatchObject({ holdLevel: 0, coins: 1_000_000 });
+    room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
+    room.handle(a.id, { t: 'holdlevel' });
+    expect(s).toMatchObject({ holdLevel: 1, coins: 975_000 });
+    expect(last(a.c, 'state').save).toMatchObject({ holdLevel: 1, coins: 975_000 });
+    // Level 2 waits for Kelp Deep.
+    room.handle(a.id, { t: 'holdlevel' });
+    expect(s.holdLevel).toBe(1);
+    expect(last(a.c, 'notice').msg).toMatch(/Hold level 2 goes on sale once the Kelp cutter/);
+    s.boatParts = 4;
+    room.handle(a.id, { t: 'holdlevel' });
+    expect(s).toMatchObject({ holdLevel: 2, coins: 675_000 });
+    // Level 3 costs 8,000,000 coins.
+    room.handle(a.id, { t: 'holdlevel' });
+    expect(s).toMatchObject({ holdLevel: 2, coins: 675_000 });
+    expect(last(a.c, 'notice').msg).toBe('Hold level 3 costs 8,000,000 coins.');
+    Object.assign(s, { holdLevel: 4, coins: 1e9 });
+    room.handle(a.id, { t: 'holdlevel' });
+    expect(s).toMatchObject({ holdLevel: 4, coins: 1e9 });
+    expect(last(a.c, 'notice').msg).toBe('You have the biggest hold.');
   });
 
   it('a pond fish lost to a gear wall is noted in the Fishdex as seen', () => {
@@ -1175,7 +1206,7 @@ describe('charters', () => {
     expect(states(a)).toEqual([]);
   });
 
-  it("starts only at Captain Reed's seaplane, with the Deep Sea Rod, in an open zone, paying its spool", () => {
+  it("starts only at Captain Reed's seaplane, with the Deep Sea Rod, in an open zone, paying its fee", () => {
     const t = setup();
     t.room.chartersOpen = true;
     const a = t.join('Ann');
@@ -1194,10 +1225,10 @@ describe('charters', () => {
     t.room.handle(a.id, { t: 'dive', zone: 1 });
     expect(last(a.c, 'notice').msg).toMatch(/fitted for/);
     s.boatParts = 1;
-    // Its spool costs 14,000 coins.
-    s.coins = 13_999;
+    // Its fee is 7,000 coins.
+    s.coins = 6_999;
     t.room.handle(a.id, { t: 'dive', zone: 1 });
-    expect(last(a.c, 'notice').msg).toMatch(/14,000/);
+    expect(last(a.c, 'notice').msg).toBe('A charter here costs 7,000 coins.');
     expect(s.location).toBe('pond');
     for (const bad of [{ zone: 1, marker: 3 }, { zone: '1' }, { zone: 9 }, {}]) {
       t.room.handle(a.id, { t: 'dive', ...bad } as never);
@@ -1206,13 +1237,13 @@ describe('charters', () => {
     s.coins = 20_000;
     t.room.handle(a.id, { t: 'dive', zone: 1 });
     expect(s.location).toBe('sea');
-    expect(s.coins).toBe(6_000);
+    expect(s.coins).toBe(13_000);
     // The charter arrives before the save that takes the player to sea.
     const dive = a.c.log.findIndex((m) => m.t === 'divestate');
     expect(a.c.log.findLastIndex((m) => m.t === 'state')).toBeGreaterThan(dive);
     expect(lastDive(a)).toMatchObject({
-      zone: 1, marker: 0, toNext: 0, line: LINE.spool, state: 'fishing', rating: 'tough', fishLine: 13, spool: 14_000,
-      tally: { landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: 14_000, shiny: 0 },
+      zone: 1, marker: 0, toNext: 0, hold: 10, state: 'fishing', rating: 'tough', fee: 7_000,
+      tally: { landed: 0, lost: 0, pearls: 0, coins: 0, fee: 7_000, shiny: 0 },
     });
     expect(lastDive(a).pay.pearls).toBe(3);
     expect(lastDive(a).gain).toBeUndefined();
@@ -1238,7 +1269,7 @@ describe('charters', () => {
     expect(last(a.c, 'castok')).toBeTruthy();
   });
 
-  it('sells each fish as it lands and pays its pearls at once, each one using its line', () => {
+  it('sells each fish as it lands and pays its pearls at once, each one taking its place in the hold', () => {
     const t = setup();
     const a = diver(t);
     t.room.handle(a.id, { t: 'dive', zone: 0 });
@@ -1251,12 +1282,12 @@ describe('charters', () => {
     expect(s.slots.slice(2).every((x) => !x)).toBe(true);
     expect(s.coins).toBeGreaterThan(coins + 500);
     expect(Object.keys(s.dex).some((id) => FISH.find((f) => f.id === id)?.sea)).toBe(true);
-    // A Shelf fish on a fresh rod: Easy, 5 m of line and a pearl, on the save already.
-    expect(lastDive(a)).toMatchObject({ line: LINE.spool - 5, cost: 5, gain: 1, rating: 'easy', state: 'fishing', tally: { landed: 1, pearls: 1, coins: s.coins - coins } });
+    // A Shelf fish on a fresh rod: Easy, one of the hold's 10 and a pearl, on the save already.
+    expect(lastDive(a)).toMatchObject({ hold: 10, gain: 1, rating: 'easy', state: 'fishing', tally: { landed: 1, pearls: 1, coins: s.coins - coins, fee: 0 } });
     expect(s.pearls).toBe(1);
     expect(last(a.c, 'state').save.pearls).toBe(1);
     for (let i = 0; i < 4; i++) fight(t, a);
-    expect(lastDive(a)).toMatchObject({ line: LINE.spool - 25, tally: { landed: 5, pearls: 5 } });
+    expect(lastDive(a)).toMatchObject({ state: 'fishing', tally: { landed: 5, pearls: 5 } });
     expect(s.pearls).toBe(5);
   });
 
@@ -1359,21 +1390,23 @@ describe('charters', () => {
     expect(s.location).toBe('pond');
     t.room.handle(a.id, { t: 'dive', zone: 4, marker: 1 });
     expect(s.location).toBe('sea');
-    expect(s.coins).toBe(1_000_000 - spoolPrice(4));
+    expect(s.coins).toBe(1_000_000 - charterFee(4));
+    expect(charterFee(4)).toBe(54_000);
     expect(s.abyssRecord).toBe(1);
     fight(t, a);
     fight(t, a);
     expect(lastDive(a)).toMatchObject({ marker: 1, toNext: 2, gain: 50 });
     const coins = s.coins;
     fight(t, a);
-    expect(lastDive(a)).toMatchObject({ marker: 2, toNext: 0, gain: 50, rating: 'fair', fishLine: lineCost(4, 2, { steps: 8, levels: 0 }) });
+    expect(lastDive(a)).toMatchObject({ marker: 2, toNext: 0, gain: 50, rating: 'fair' });
     const plain = s.coins - coins;
     expect(s.abyssRecord).toBe(2);
     // At marker 2 a fish pays 12% more: the same fish (the rolls are fixed) sells for 12% more too.
     fight(t, a);
     expect(lastDive(a).gain).toBe(pearlsFor(4, 2));
     expect(lastDive(a).gain).toBe(56);
-    expect(s.coins - coins - plain).toBe(Math.round(plain * 1.12));
+    // To the coin: each sale is rounded.
+    expect(Math.abs(s.coins - coins - plain - plain * 1.12)).toBeLessThanOrEqual(1);
     t.room.handle(a.id, { t: 'headhome' });
     expect(last(a.c, 'diveend').end).toMatchObject({ why: 'home', zone: 4, marker: 2 });
     // The next charter may start at marker 2, not 3.
@@ -1384,17 +1417,16 @@ describe('charters', () => {
     expect(lastDive(a)).toMatchObject({ zone: 4, marker: 2, toNext: 0 });
   });
 
-  it("uses the zone's line for every hooked fish, 25 m more for a lost one, and nothing for a missed strike", () => {
+  it('counts a hooked fish that got away, taking no place in the hold, and nothing for a missed strike', () => {
     const t = setup();
     const a = diver(t);
     a.acct.save.boatParts = 1;
-    a.acct.save.coins = 14_000;
+    a.acct.save.coins = 7_000;
     t.room.handle(a.id, { t: 'dive', zone: 1 });
-    // The Drop-off on a fresh rod is Tough: 13 m a fish, and a lost one 38 m.
     const f = fight(t, a, false);
     expect(f.reel.status).toBe('escaped');
-    expect(lastDive(a)).toMatchObject({ lost: 'ran', cost: 13 + LINE.lost, line: LINE.spool - 38, tally: { landed: 0, lost: 1 } });
-    // Pulled in before the bite, or missed the strike: no fight, no line.
+    expect(lastDive(a)).toMatchObject({ lost: 'ran', state: 'fishing', tally: { landed: 0, lost: 1 } });
+    // Pulled in before the bite, or missed the strike: no fight, nothing counted.
     const n = states(a).length;
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     t.room.handle(a.id, { t: 'lost' });
@@ -1406,14 +1438,14 @@ describe('charters', () => {
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     t.advance(last(a.c, 'castok').wait * 1000 + 10_000);
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
-    expect(lastDive(a)).toMatchObject({ cost: 38, lost: 'gone', line: LINE.spool - 76 });
-    // A caught fish reported as lost still uses its line, but isn't landed.
+    expect(lastDive(a)).toMatchObject({ lost: 'gone', tally: { landed: 0, lost: 2 } });
+    // A caught fish reported as lost isn't landed.
     t.advance(last(a.c, 'castok').wait * 1000);
     const ok = last(a.c, 'castok');
     const won = playFight(ok.d!, ok.seed!, undefined);
     t.advance(won.ms);
     t.room.handle(a.id, { t: 'lost', h: won.h });
-    expect(lastDive(a)).toMatchObject({ lost: 'gone', tally: { landed: 0, lost: 3 } });
+    expect(lastDive(a)).toMatchObject({ lost: 'gone', state: 'fishing', tally: { landed: 0, lost: 3 } });
   });
 
   it('a sea fish lost over the rod is noted in the Fishdex as seen, one the rod handles is not', () => {
@@ -1429,45 +1461,46 @@ describe('charters', () => {
     expect(a.acct.save.seen).toEqual([last(a.c, 'castok').fishId]);
   });
 
-  it('waits out of line for another spool at the zone\'s price, or heads home losing nothing', () => {
+  it("fills the hold with the save's hold level, then waits, full, to head home losing nothing", () => {
     const t = setup();
     const a = diver(t);
     const s = a.acct.save;
-    Object.assign(s, { boatParts: 1, coins: 30_000 });
+    Object.assign(s, { boatParts: 1, holdLevel: 1, coins: 30_000 });
     t.room.handle(a.id, { t: 'dive', zone: 1 });
-    a.acct.dive!.dive.line = 10;
+    expect(s.coins).toBe(23_000);
+    expect(lastDive(a)).toMatchObject({ hold: 15, state: 'fishing', fee: 7_000, tally: { fee: 7_000 } });
+    // The hold's size is fixed at casting off: a level bought meanwhile doesn't change it.
+    s.holdLevel = 2;
+    for (let i = 0; i < 14; i++) fight(t, a);
+    fight(t, a, false);
+    expect(lastDive(a)).toMatchObject({ state: 'fishing', tally: { landed: 14, lost: 1 } });
     fight(t, a);
-    expect(lastDive(a)).toMatchObject({ line: 0, state: 'out', tally: { landed: 1 } });
+    expect(lastDive(a)).toMatchObject({ hold: 15, state: 'full', tally: { landed: 15, lost: 1 } });
     const pearls = s.pearls;
-    expect(pearls).toBe(3);
-    // Out of line: no more casts, and the charter waits on the boat.
+    expect(pearls).toBe(45);
+    // Full: no more casts, and the charter waits on the boat.
+    const n = states(a).length;
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
-    expect(last(a.c, 'castfail').msg).toMatch(/Out of line/);
+    expect(last(a.c, 'castfail').msg).toBe('Your hold is full: head home.');
+    expect(states(a)).toHaveLength(n);
     expect(s.location).toBe('sea');
     t.advance(60 * 60_000);
     t.room.snapshot();
     expect(a.acct.dive).toBeDefined();
-    // Another spool costs the Drop-off's 14,000 coins.
+    // There's no buying another hold: the old spool message does nothing.
     const coins = s.coins;
-    t.room.handle(a.id, { t: 'spool' });
-    expect(s.coins).toBe(coins - 14_000);
-    expect(lastDive(a)).toMatchObject({ line: LINE.spool, state: 'fishing', tally: { spools: 2, spoolCoins: 28_000 } });
-    expect(lastDive(a).cost).toBeUndefined();
-    // Only when out of line.
-    t.room.handle(a.id, { t: 'spool' });
-    expect(s.coins).toBe(coins - 14_000);
-    a.acct.dive!.dive.line = 5;
-    fight(t, a, false);
-    expect(lastDive(a).state).toBe('out');
-    s.coins = 13_999;
-    t.room.handle(a.id, { t: 'spool' });
-    expect(last(a.c, 'notice').msg).toMatch(/14,000/);
-    expect(lastDive(a).state).toBe('out');
-    // Heading home loses nothing: the pearls and coins are the player's already.
+    t.room.handle(a.id, { t: 'spool' } as never);
+    expect(s.coins).toBe(coins);
+    expect(lastDive(a).state).toBe('full');
+    // Heading home loses nothing: the pearls and coins are the player's already, and the fee isn't refunded.
     t.room.handle(a.id, { t: 'headhome' });
-    expect(last(a.c, 'diveend').end).toEqual({ why: 'home', zone: 1, marker: 0, tally: { landed: 1, lost: 1, pearls: 3, coins: lastDive(a).tally.coins, spools: 2, spoolCoins: 28_000, shiny: 0 } });
-    expect(s).toMatchObject({ location: 'pond', pearls: 3, coins: 13_999 });
+    expect(last(a.c, 'diveend').end).toEqual({ why: 'home', zone: 1, marker: 0, tally: { landed: 15, lost: 1, pearls: 45, coins: lastDive(a).tally.coins, fee: 7_000, shiny: 0 } });
+    expect(s).toMatchObject({ location: 'pond', pearls: 45, coins });
     expect(a.acct.dive).toBeUndefined();
+    // The next charter casts off with the level bought since.
+    atReed(t, a);
+    t.room.handle(a.id, { t: 'dive', zone: 0 });
+    expect(lastDive(a)).toMatchObject({ hold: 20, fee: 0, tally: { fee: 0 } });
   });
 
   it('heads home at any time outside a fight: a cast still waiting for its bite is reeled in, a fish on the line is not left', () => {
@@ -1484,12 +1517,12 @@ describe('charters', () => {
     t.room.handle(a.id, { t: 'lost' });
     // A cast before its bite is fine, and costs nothing.
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
-    const line = lastDive(a).line;
+    const tally = lastDive(a).tally;
     t.room.handle(a.id, { t: 'headhome' });
     expect(s.location).toBe('pond');
     expect(last(a.c, 'diveend').end).toMatchObject({ why: 'home', zone: 0, tally: { landed: 1, pearls: 1 } });
+    expect(last(a.c, 'diveend').end.tally).toEqual(tally);
     expect(last(a.c, 'state').save.pearls).toBe(1);
-    expect(line).toBe(LINE.spool - 5);
   });
 
   it('waits two minutes for an angler who drops out, then simply ends', () => {
@@ -1497,7 +1530,7 @@ describe('charters', () => {
     let a = diver(t);
     t.room.handle(a.id, { t: 'dive', zone: 0 });
     fight(t, a);
-    // Leaving with a fish on the line loses it, and the line pays.
+    // Leaving with a fish on the line loses it.
     t.room.handle(a.id, { t: 'cast', x: 0, z: -8 });
     t.advance(last(a.c, 'castok').wait * 1000 + 5000);
     t.room.leave(a.id);
@@ -1505,7 +1538,7 @@ describe('charters', () => {
     a = t.join('Ann');
     expect(a.acct.save.location).toBe('sea');
     const w = last(a.c, 'welcome');
-    expect(w.dive).toMatchObject({ lost: 'gone', line: LINE.spool - 5 - 5 - LINE.lost, tally: { landed: 1, lost: 1, pearls: 1 } });
+    expect(w.dive).toMatchObject({ lost: 'gone', hold: 10, tally: { landed: 1, lost: 1, pearls: 1 } });
     fight(t, a);
     t.room.leave(a.id);
     t.advance(DIVE.holdMs + 1000);

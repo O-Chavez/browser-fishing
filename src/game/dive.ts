@@ -1,9 +1,10 @@
-// Charter rules (Oscar, 2026-11-12: the charters are a place to earn). A charter is fished in one zone; its fish pay
-// coins and Black Pearls by zone, each hooked fish uses line off a spool bought with coins, and the Abyss alone has
-// markers that get harder and pay more. Nothing is at risk: what a fish pays is the player's as it lands.
+// Charter rules (Oscar, 2026-11-12: the charters are a place to earn). A charter is fished in one zone for Captain
+// Reed's fee; its fish pay coins and Black Pearls by zone, it lasts until the boat's hold is full of landed fish
+// (Oscar, 2026-11-14), and the Abyss alone has markers that get harder and pay more. Nothing is at risk: what a fish
+// pays is the player's as it lands.
 // Pure logic for the server and the screens; no Math.pow, so the server and the client agree. Numbers in data/dive.ts.
 import { byId, DEEP_SEA_ROD, FISH, type Fish } from '../data/content';
-import { ABYSS, BOAT_PARTS, DIVE, LINE, MARKER, PEARLS, RATING, ROD, SEA_TIERS, SPOOL_COINS, ZONES, type Behaviour, type Zone } from '../data/dive';
+import { ABYSS, BOAT_PARTS, CHARTER_FEE, DIVE, HOLD, MARKER, PEARLS, RATING, ROD, SEA_TIERS, ZONES, type Behaviour, type Zone } from '../data/dive';
 import { sellValue, SHINY_CHANCE, SHINY_VALUE, TAG_BONUS, TAG_CHANCE, type FishTag } from './progression';
 import type { Gaps } from './reel';
 
@@ -74,17 +75,35 @@ export function seaFightWords(d: Gaps): { words: string; too: boolean } {
 /** A hooked sea fish's own rating: the bigger of its two gaps (`ratingOf`). */
 export const seaFightRating = (d: Gaps): Rating => ratingOf(Math.max(d.strength, d.weight));
 
-/**
- * Metres of line a hooked fish uses here (`LINE`), from the typical gap rather than the fish's own rolls: `base` when
- * the fish is no harder than the rod, else `base + perTier·g` rounded. A fish that gets away takes `LINE.lost` more.
- */
-export function lineCost(zone: number, marker: number, rod: SeaRod): number {
-  const g = seaGap(zone, marker, rod);
-  return g <= 0 ? LINE.base : Math.round(LINE.base + LINE.perTier * g);
+/** Captain Reed's fee for a charter in this zone (`CHARTER_FEE`), paid on casting off: free on the Shelf. */
+export const charterFee = (zone: number): number => CHARTER_FEE[zone] ?? 0;
+
+/** The hold's top level (`HOLD`): 4, the Abyss's. */
+export const HOLD_LEVELS = HOLD.fish.length - 1;
+
+/** Fish the hold takes at this level (`HOLD.fish`), the level clamped to 0 to `HOLD_LEVELS`. */
+export const holdFish = (level: number): number => HOLD.fish[Math.max(0, Math.min(HOLD_LEVELS, Math.floor(level) || 0))];
+
+/** Coins for hold level n (1 to `HOLD_LEVELS`). */
+export const holdLevelCost = (n: number): number => HOLD.coins[n - 1];
+
+/** The zone whose opening puts hold level n on sale: zone n (the Drop-off sells level 1 ... the Abyss level 4). */
+export const holdZone = (n: number): number => n;
+
+/** The hold's next level, for the screens: its number, the fish it takes, its coins and the zone that puts it on sale. */
+export interface HoldBuy {
+  n: number;
+  fish: number;
+  coins: number;
+  zone: number;
 }
 
-/** Coins for a spool in this zone (`SPOOL_COINS`). */
-export const spoolPrice = (zone: number): number => SPOOL_COINS[zone] ?? 0;
+/** The hold's next level from this one (`HoldBuy`), or null at the top level: there are no endless hold levels. */
+export function nextHoldBuy(level: number): HoldBuy | null {
+  if (level >= HOLD_LEVELS) return null;
+  const n = Math.max(0, Math.floor(level) || 0) + 1;
+  return { n, fish: holdFish(n), coins: holdLevelCost(n), zone: holdZone(n) };
+}
 
 /** How many times more a fish pays at this Abyss marker (`MARKER.grow` a marker past the first); 1 outside the Abyss. */
 export const markerGrowth = (zone: number, marker: number): number => (zone === ABYSS ? powInt(MARKER.grow, markerIn(zone, marker) - 1) : 1);
@@ -263,15 +282,14 @@ export interface Tally {
   /** Black Pearls and coins the landed fish paid. */
   pearls: number;
   coins: number;
-  /** Spools bought, the one cast off on included, and the coins they cost. */
-  spools: number;
-  spoolCoins: number;
+  /** Captain Reed's fee, paid on casting off (`charterFee`); not refunded on heading home early. */
+  fee: number;
   /** The shiny fish landed. */
   shiny: number;
 }
 
-/** Fishing, or out of line: waiting for another spool or for the player to head home. */
-export type DiveState = 'fishing' | 'out';
+/** Fishing, or the hold is full: the only way on is heading home (there is no buying another hold). */
+export type DiveState = 'fishing' | 'full';
 
 export interface Dive {
   zone: number;
@@ -279,19 +297,19 @@ export interface Dive {
   marker: number;
   /** Fish landed toward the next Abyss marker (0 to `MARKER.every` − 1); 0 elsewhere. */
   toNext: number;
-  /** Metres left on the spool. */
-  line: number;
+  /** The fish the hold takes (`holdFish`), fixed at casting off; fish landed so far are `tally.landed`. */
+  hold: number;
   state: DiveState;
   /** The rod the charter fishes with, fixed at casting off (nothing is bought at sea). */
   rod: SeaRod;
   tally: Tally;
 }
 
-/** A new charter in a zone (and Abyss marker) on its first spool, bought for `spoolPrice`. */
-export function startDive(zone: number, marker: number, rod: SeaRod): Dive {
+/** A new charter in a zone (and Abyss marker) with a hold of `hold` fish (`holdFish`), its fee (`charterFee`) paid. */
+export function startDive(zone: number, marker: number, rod: SeaRod, hold: number): Dive {
   return {
-    zone, marker: markerIn(zone, marker), toNext: 0, line: LINE.spool, state: 'fishing', rod: { steps: rod.steps, levels: rod.levels },
-    tally: { landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: spoolPrice(zone), shiny: 0 },
+    zone, marker: markerIn(zone, marker), toNext: 0, hold, state: 'fishing', rod: { steps: rod.steps, levels: rod.levels },
+    tally: { landed: 0, lost: 0, pearls: 0, coins: 0, fee: charterFee(zone), shiny: 0 },
   };
 }
 
@@ -304,15 +322,13 @@ export interface Landing {
 }
 
 /**
- * Applies a finished fight, with `landing` for a landed fish (null for one that got away): the line it used
- * (`lineCost`, plus `LINE.lost` for a lost fish), the tally, and in the Abyss the fish toward the next marker, which
- * it reaches every `MARKER.every` fish. With the line gone the charter waits, out of line. Returns the metres used and
- * whether a new marker was reached.
+ * Applies a finished fight, with `landing` for a landed fish (null for one that got away): the tally, and in the Abyss
+ * the fish toward the next marker, which it reaches every `MARKER.every` fish. A fish that gets away takes no place in
+ * the hold; once the landed fish fill it the charter waits, full, for the player to head home. Returns whether a new
+ * marker was reached.
  */
-export function afterFight(d: Dive, landing: Landing | null): { cost: number; marker: boolean } {
-  if (d.state !== 'fishing') return { cost: 0, marker: false };
-  const cost = lineCost(d.zone, d.marker, d.rod) + (landing ? 0 : LINE.lost);
-  d.line = Math.max(0, d.line - cost);
+export function afterFight(d: Dive, landing: Landing | null): { marker: boolean } {
+  if (d.state !== 'fishing') return { marker: false };
   let marker = false;
   if (landing) {
     d.tally.landed++;
@@ -325,17 +341,7 @@ export function afterFight(d: Dive, landing: Landing | null): { cost: number; ma
       d.marker++;
       marker = true;
     }
+    if (d.tally.landed >= d.hold) d.state = 'full';
   } else d.tally.lost++;
-  if (d.line <= 0) d.state = 'out';
-  return { cost, marker };
-}
-
-/** Out of line: another spool (bought for `spoolPrice`) and on fishing in the same zone and marker. */
-export function newSpool(d: Dive): boolean {
-  if (d.state !== 'out') return false;
-  d.line = LINE.spool;
-  d.state = 'fishing';
-  d.tally.spools++;
-  d.tally.spoolCoins += spoolPrice(d.zone);
-  return true;
+  return { marker };
 }

@@ -1,6 +1,6 @@
 # Play-test notes: sea charters
 
-Feedback from players testing the charters after the rework ("A place to earn", merged 2026-11-13), what was checked against the game, and what Oscar decided in the workshop that followed (2026-11-13). The boost is built (DONE.md, "Shiny Lures as the charters' boost"); the hold and the zone coin retune are not.
+Feedback from players testing the charters after the rework ("A place to earn", merged 2026-11-13), what was checked against the game, and what Oscar decided in the workshop that followed (2026-11-13). The boost is built (DONE.md, "Shiny Lures as the charters' boost"), and so are the hold and the zone coin retune (DONE.md, "The hold and the charter coin retune", 2026-11-14).
 
 - A note that becomes work moves to [TODO.md](TODO.md) and is ticked here with a pointer to it.
 - New feedback goes under **Inbox** at the bottom as it comes in, in the player's words, and is sorted into a numbered note later.
@@ -11,10 +11,10 @@ Feedback from players testing the charters after the rework ("A place to earn", 
 | # | Note | Status |
 |---|------|--------|
 | 1 | Shiny fish at sea don't seem to pay more coins | Built: a shiny sea fish pays five times the pearls too. The coins already worked |
-| 2 | A fish quota by hull instead of spools of line | Decided: a hold replaces line. Size, fee and upgrades still to set |
+| 2 | A fish quota by hull instead of spools of line | Built: a hold of 10 to 30 fish replaces line, a level a zone, for a fee |
 | 3 | Something to buy that raises pearls a fish | Built: no new purchase. The Shiny Lure is the boost |
-| 4 | Early zones pay more coins than the ones after | Target decided: a new zone pays clearly more from Fair. Numbers still to set |
-| 5 | The pearl jump after Kelp Deep needs goals in between | Partly answered by the boost and Reed's chart. The upgrade ladder is still open |
+| 4 | Early zones pay more coins than the ones after | Built: from the Drop-off a zone's fish pay about twice the zone before |
+| 5 | The pearl jump after Kelp Deep needs goals in between | Answered by the boost, Reed's chart and the hold's levels. To check in play |
 
 ---
 
@@ -92,7 +92,7 @@ Best guess at what the players saw: the pearls line on the catch card reading "d
 
 ## 2. A fish quota by hull instead of spools of line
 
-- [ ] Build the hold (size, fee and upgrades still to set)
+- [x] Built the hold (DONE.md, "The hold and the charter coin retune", 2026-11-14; REELING.md, "The hold and the coin retune")
 
 **Reported:** replace line with a hull quota: a set number of fish per charter for the fee, raised by upgrading the hull.
 
@@ -119,7 +119,7 @@ Best guess at what the players saw: the pearls line on the catch card reading "d
 
 ## 4. Early zones pay more coins than the ones after
 
-- [ ] Retune with the hold
+- [x] Retuned with the hold (DONE.md, 2026-11-14): from the Drop-off on a zone's fish pay about twice the zone before, and a new zone at Fair earns about 26 to 28% more coins an hour than the zone before at Easy (careful hand)
 
 **Reported:** for one charter, the first zone returned far more coins than the next ones, at least up to Kelp Deep. "I think I just make way more money sticking to the early zones."
 
@@ -161,7 +161,7 @@ Per spool after paying for it: the Shelf 93k (free spool); the Drop-off 37k at T
 
 ## 5. The pearl jump after Kelp Deep needs goals in between
 
-- [ ] The upgrade ladder, with the hold and the retune
+- [x] With the hold (DONE.md, 2026-11-14): the 25-fish hold is the Twilight's place for spare coins (8 million after Oscar's first play of it); the longest wait between purchases before the Abyss is about 2.7 hours plain and 1.8 lured at the sim's coins. To check in play
 
 **Reported:** the pearls needed to get past Kelp Deep are a big jump. It needs interim goals: mini-grinds inside the pearl grind, a breadcrumb trail.
 
@@ -203,3 +203,4 @@ Checked against the numbers (not yet decided):
 - 60 fish is the Easy case only (300 m at 5 m a fish). A zone at Fair gives 33 and at Tough 17, so a new zone's charters are already about half as long.
 - Proposed in reply: one hold on the boat, on the rod's pattern (a bigger hold goes on sale as each zone opens, priced in that zone's coins), 20 fish growing by 5 a zone to 40, with the Twilight's hold level priced to take the coin surplus so the rod's steps need not rise. Not a hold per zone.
 - Oscar on the size (2026-11-14): "making it smaller might not be a bad idea." So the plan starts below 20 to 40: try 10 growing by 5 a zone to 30, and 15 to 30 beside it. A smaller hold makes each level worth more, since the fee and the flight out are a bigger share of a short charter. To check in the plan: how short the first charters on the Shelf get, and the Abyss, where a marker comes every 3 fish landed, so the hold would cap how far out a charter reaches.
+- **Decided (2026-11-14, built the same day):** Oscar approved the plan: a hold of 10 fish growing by 5 a zone to 30 (25,000 / 300,000 / 4,000,000 / 8,000,000 coins, raised to 8,000,000 / 10,000,000 for the last two, with rod step 6 at 4,000,000, after his play test showed coins still piling up in the Twilight), a fee of two average fish of the zone (free on the Shelf), coins a fish about doubling a zone from the Drop-off, the rod's steps and Abyss levels raised with the coins, and the Storm sail at 25 pearls. A full hold ends the charter (no buying another), and existing players start at 10 fish. The numbers are in REELING.md, "The hold and the coin retune".

@@ -265,7 +265,7 @@ export class Rig {
     this.root.position.copy(this.b.at);
   }
 
-  /** How full the Deep Sea Rod's spool looks, 0-1: the charter's line left. */
+  /** How full the Deep Sea Rod's reel looks, 0-1. At sea it stays full: charters fill a hold, not a spool. */
   setSpool(fill: number): void {
     const r = SPOOL_EMPTY + (SPOOL_FULL - SPOOL_EMPTY) * Math.max(0, Math.min(1, fill));
     this.spool.scale.set(1, r, r);

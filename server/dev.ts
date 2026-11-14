@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS } from '../src/data/content';
 import type { MapDef } from '../src/data/maps';
-import { ABYSS, BOAT_PARTS, ROD, ZONES } from '../src/data/dive';
+import { ABYSS, BOAT_PARTS, HOLD, ROD, ZONES } from '../src/data/dive';
 import { seaDepthFor } from '../src/data/sea';
 import * as eco from '../src/game/economy';
 import { DISHES } from '../src/data/smokehouse';
@@ -57,8 +57,13 @@ export interface DevTarget {
   setTime(f: number | null): void;
   /** The depth the sea's look follows (`seaDepthFor`), for this player only. */
   setDepth(depth: number): void;
-  /** Starts a charter in this zone and Abyss marker (any, open or not) without paying, ending one under way. */
+  /**
+   * Starts a charter in this zone and Abyss marker (any, open or not) without paying the fee, ending one under way. Its
+   * hold is the save's (`/hold`).
+   */
   dive(zone: number, marker: number): void;
+  /** The charter under way, one fish short of a full hold (its landed count only), so the next landing fills it. False with no charter fishing. */
+  fill(): boolean;
   clearDig(): void;
   /** Puts the player at a spot on their map, past the server's move check. */
   place(x: number, z: number): void;
@@ -67,10 +72,10 @@ export interface DevTarget {
 export const TIMES: Record<string, number> = { day: 0.2, dusk: 0.5, night: 0.7, dawn: 0.93 };
 
 export const HELP = [
-  '/coins N · /chips N · /pearls N · /level N · /rodstep 0-8 · /abysslevel N · /boat 0-4',
+  '/coins N · /chips N · /pearls N · /level N · /rodstep 0-8 · /abysslevel N · /hold 0-4 · /fill · /boat 0-4',
   '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
-  '/sea <zone 0-4> [marker] (start a charter there, free; 0 is the Shelf, 4 the Abyss)',
+  '/sea <zone 0-4> [marker] (start a charter there, no fee; 0 is the Shelf, 4 the Abyss)',
   '/dig (reset worm cooldown) · /tips (show the new-player tips again) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
   '/lakestats (chips per lake hour, Shiny Lures and charters, per player)',
@@ -119,6 +124,16 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       s.abyssLevels = n;
       return ok(`Deep Sea Rod set to Abyss level ${n}.`);
     }
+    case 'hold': {
+      const top = HOLD.fish.length - 1;
+      const n = int(args[0], 0, top);
+      if (n === null) return say(`Usage: /hold 0-${top}`);
+      s.holdLevel = n;
+      return ok(`Hold set to level ${n}: ${HOLD.fish[n]} fish a charter.`);
+    }
+    case 'fill':
+      // Silent on the save: the charter's view goes to the player with it.
+      return t.fill() ? { lines: ['The hold is one fish short of full.'], changed: false } : say('Not on a charter that is fishing.');
     case 'boat': {
       const n = int(args[0], 0, BOAT_PARTS.length);
       if (n === null) return say(`Usage: /boat 0-${BOAT_PARTS.length}`);

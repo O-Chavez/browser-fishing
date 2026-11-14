@@ -320,7 +320,7 @@ describe('sea fish', () => {
     expect(sellValue(cod, cod.maxSize)).toBe(Math.round(cod.baseValue * 10 * 1.5));
     expect(sellValue(cod, cod.maxSize, true)).toBeGreaterThan(sellValue(cod, cod.maxSize));
   });
-  it('an everyday catch is about 1,100 at the Shelf and 2,000 at the Drop-off', () => {
+  it('an everyday catch is about 1,100 at the Shelf and 2,500 at the Drop-off', () => {
     // Mean sale value over rolled sizes (seeded), per species. A random mix with the legend about one catch in ten lands near the targets.
     let seed = 7;
     const rng = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -328,8 +328,8 @@ describe('sea fish', () => {
     const common = (list: typeof FISH) => commons(list).reduce((a, f) => a + mean(f), 0) / commons(list).length;
     expect(common(shelf)).toBeGreaterThan(1050);
     expect(common(shelf)).toBeLessThan(1150);
-    expect(common(dropoff)).toBeGreaterThan(1900);
-    expect(common(dropoff)).toBeLessThan(2100);
+    expect(common(dropoff)).toBeGreaterThan(2400);
+    expect(common(dropoff)).toBeLessThan(2650);
     // The legends are the jackpot.
     expect(mean(byId(FISH, 'grouper'))).toBeGreaterThan(2.5 * common(shelf));
     expect(mean(byId(FISH, 'marlin'))).toBeGreaterThan(2.5 * common(dropoff));

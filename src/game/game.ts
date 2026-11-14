@@ -44,7 +44,7 @@ import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from 
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, catchPearlsHtml, endHtml, headHomeHtml, outHtml, ratePill, ratingToast, rodProgress, reedHtml, reedMarkerPick, reedZone, startText, whereText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { nextBoatPart, nextRodBuy, RATING_NAMES, rodBuyName, seaRating, zoneOpen } from './dive';
+import { holdFish, nextBoatPart, nextRodBuy, RATING_NAMES, rodBuyName, seaRating, zoneOpen } from './dive';
 import { drawFightGauge } from './fightgauge';
 import { Player } from './player';
 import {
@@ -96,7 +96,7 @@ import { seaDepthFor, zoneAt } from '../data/sea';
 import { CAST_OFF_CARD, cardColours } from './castoffcard';
 import { RESTART_PROBE_TIMEOUT_MS, waitForRestart } from './restart';
 import { dayFraction } from './daynight';
-import { ABYSS, DIVES_OPEN, LINE, ZONES, glowColor } from '../data/dive';
+import { ABYSS, DIVES_OPEN, ZONES, glowColor } from '../data/dive';
 
 type Phase =
   | 'idle'
@@ -446,19 +446,19 @@ export class Game {
       onCastFail: (msg) => {
         if (this.phase === 'flying' || this.phase === 'swing') this.reset(msg);
       },
-      // The sea follows the zone and marker; the strip shows the charter, and the spool's-out card waits for the catch card.
+      // The sea follows the zone and marker; the strip shows the charter, and the Hold's full card waits for the catch card.
       onDive: (d) => {
         const before = this.diveHud.view;
         this.seaDepth = seaDepthFor(d.zone, d.marker);
         this.world.setDepth(this.seaDepth);
-        const out = d.state === 'out' && before?.state !== 'out';
+        const out = d.state === 'full' && before?.state !== 'full';
         if (!before) this.diveRecord = this.s.abyssRecord;
         this.diveHud.set(d);
         if (before && d.zone === ABYSS && d.marker > before.marker) this.reachMarker(d.marker);
         else if (!before) this.world.atMarker = false;
         if (out) this.diveDue = 'marker';
-        else if (d.state !== 'out' && this.diveDue === 'marker') this.diveDue = null;
-        if (this.menuOpen && (this.tab === 'marker' || this.tab === 'headhome') && d.state !== (this.tab === 'marker' ? 'out' : 'fishing')) this.closeMenu();
+        else if (d.state !== 'full' && this.diveDue === 'marker') this.diveDue = null;
+        if (this.menuOpen && (this.tab === 'marker' || this.tab === 'headhome') && d.state !== (this.tab === 'marker' ? 'full' : 'fishing')) this.closeMenu();
       },
       onDiveEnd: (end) => {
         this.diveEnd = end;
@@ -1029,8 +1029,8 @@ export class Game {
         this.escClosedAt = performance.now();
         return this.closeMenu();
       }
-      // STOP-GAP: out of line by key: 1 another spool, 2 heads home.
-      if (this.menuOpen && this.tab === 'marker' && !e.repeat && /^(?:Digit|Numpad)[12]$/.test(e.code)) return e.code.endsWith('1') ? this.buySpool() : this.headHome();
+      // STOP-GAP: the hold's full by key: 1 or 2 heads home.
+      if (this.menuOpen && this.tab === 'marker' && !e.repeat && /^(?:Digit|Numpad)[12]$/.test(e.code)) return this.headHome();
       if (e.repeat || this.menuOpen || !this.active) return;
       // By key position, not e.key: holding Shift to sprint turns "1" into "!".
       const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
@@ -1210,7 +1210,6 @@ export class Game {
       this.diveMarkerPick = reedMarkerPick(this.s, this.diveMarkerPick) + (act === 'markerup' ? 1 : -1);
     }
     else if (act === 'castoff') return this.castOffFrom(Number(id));
-    else if (act === 'spool') return this.buySpool();
     else if (act === 'askhome') this.tab = 'headhome';
     else if (act === 'headhome') return this.headHome();
     else if (act === 'color') this.recolor(Number(id));
@@ -1239,6 +1238,7 @@ export class Game {
     else if (act === 'buyrod' || act === 'buybait' || act === 'buyline') this.buy(act === 'buyrod' ? 'rod' : act === 'buyline' ? 'line' : 'bait', id!);
     else if (act === 'buysearod') this.buySeaRod();
     else if (act === 'rodstep' || act === 'abysslevel') this.buyRodUp();
+    else if (act === 'holdlevel') this.buyHoldUp();
     else if (act === 'boatpart') this.buyBoatPart();
     this.persist();
     this.refreshHud();
@@ -1353,6 +1353,18 @@ export class Game {
     if (!(b.kind === 'step' ? eco.buyRodStep(s) : eco.buyAbyssLevel(s))) return;
     this.net.send({ t: b.kind === 'step' ? 'rodstep' : 'abysslevel' });
     this.toast(`Bought ${rodBuyName(b)}`, 3);
+    audio.jingle('rare');
+  }
+
+  /** STOP-GAP: the hold's next level, from Captain Reed with coins. */
+  private buyHoldUp(): void {
+    if (this.spin) return;
+    const s = this.s;
+    const why = eco.holdBuyError(s);
+    if (why) return this.toast(why);
+    if (!eco.buyHoldLevel(s)) return;
+    this.net.send({ t: 'holdlevel' });
+    this.toast(`Your hold takes ${holdFish(s.holdLevel)} fish`, 3);
     audio.jingle('rare');
   }
 
@@ -1796,13 +1808,6 @@ export class Game {
     this.buoyTimer = window.setTimeout(() => (this.world.atMarker = false), 7000);
   }
 
-  /** Out of line: another spool. */
-  private buySpool(): void {
-    if (this.diveHud.view?.state !== 'out') return this.closeMenu();
-    this.net.send({ t: 'spool' });
-    this.closeMenu();
-  }
-
   private headHome(): void {
     if (this.phase !== 'idle') return this.toast('Reel in first.');
     this.net.send({ t: 'headhome' });
@@ -1813,18 +1818,20 @@ export class Game {
   private seaStrip(): string {
     const v = this.diveHud.view;
     if (!this.map.sea || !v) return '';
-    const btn = v.state === 'out'
-      ? `<button class="btn" data-tab="marker">Spool's out</button>`
+    const full = v.state === 'full';
+    const btn = full
+      ? `<button class="btn" data-tab="marker">Hold's full</button>`
       : `<button class="btn" data-act="askhome"${this.phase === 'idle' ? '' : ' disabled'}>Head home</button>`;
-    return `<div class="seastrip"><span>⛵ Charter · ${whereText(v.zone, v.marker)} · ${Math.floor(v.line)} m of line.</span>${btn}</div>`;
+    const room = Math.max(0, v.hold - v.tally.landed);
+    return `<div class="seastrip"><span>⛵ Charter · ${whereText(v.zone, v.marker)} · ${full ? 'the hold is full' : `room for ${room} more fish`}.</span>${btn}</div>`;
   }
 
-  /** Opens the spool's-out card or the end card once nothing else is on screen: no catch card, menu or "Casting off". */
+  /** Opens the Hold's full card or the end card once nothing else is on screen: no catch card, menu or "Casting off". */
   private showDiveDue(): void {
     if (!this.diveDue || this.phase !== 'idle' || this.menuOpen || this.castOffAt !== null || !$('castoff').classList.contains('hidden') || !$('join').classList.contains('hidden')) return;
     const tab = this.diveDue;
     this.diveDue = null;
-    if (tab === 'marker' && this.diveHud.view?.state !== 'out') return;
+    if (tab === 'marker' && this.diveHud.view?.state !== 'full') return;
     this.openMenu(tab);
   }
 
@@ -2255,7 +2262,7 @@ export class Game {
       if (dc < 2.8) spots.push({ d: dc - 2, label: smoke.smokerOpen(this.s) ? `Mags Cinder's Smokehouse · smoke fish to sell or snack on${smoke.kitchenOpen(this.s) ? ', cook dishes' : ''}` : `Mags Cinder's Smokehouse · opens at level ${SMOKE_LEVEL}`, act: () => this.openSmokehouse() });
     }
 
-    if (this.diveHud.view?.state === 'out') spots.push({ d: -50, label: 'Out of line · another spool or head home', act: () => this.openMenu('marker') });
+    if (this.diveHud.view?.state === 'full') spots.push({ d: -50, label: "Hold's full · head home", act: () => this.openMenu('marker') });
 
     const c = this.map.casino;
     this.updateTable(walking);
@@ -2334,7 +2341,7 @@ export class Game {
       {
         if (this.spin || performance.now() < this.castLockUntil) return;
         if (this.map.casino) return this.tableClick();
-        if (this.diveHud.view?.state === 'out') return this.openMenu('marker');
+        if (this.diveHud.view?.state === 'full') return this.openMenu('marker');
         const can = eco.canCastAt(this.s, !!this.map.sea);
         if (can === 'nobait' && eco.canDig(this.s)) return this.toast(eco.DIG_HINT, 5);
         if (can !== 'ok') return this.toast(eco.CAST_MESSAGES[can]);
@@ -2537,7 +2544,6 @@ export class Game {
     const rating = this.diveHud.view?.rating ?? 'fair';
     const match = this.map.sea ? { words: '', too: rating === 'over' } : matchupWords(this.fightD);
     this.diveHud.fight(this.map.sea ? { b: this.fightB, pull: null, match: `${RATING_NAMES[rating]} for your rod`, too: rating === 'over' } : null);
-    if (this.map.sea) this.diveHud.hook();
     this.holds = new HoldLog();
     this.reelAcc = 0;
     this.topTierBanner(this.hooked!, 'hooked', this.hookedShiny);
@@ -2718,8 +2724,8 @@ export class Game {
       w.rig.setKind(sea ? 'sea' : 'pond');
       w.rig.setLook(step > 0 ? glowColor(step) : this.rod.color, this.rod.tier, step);
     }
-    // The Deep Sea Rod's spool shows the charter's line left.
-    if (sea) w.rig.setSpool((this.diveHud.view?.line ?? LINE.spool) / LINE.spool);
+    // The Deep Sea Rod's reel stays full at sea: a charter counts fish in the hold, not line.
+    if (sea) w.rig.setSpool(1);
     if (this.carry && this.carry.key !== key) {
       w.camera.remove(this.carry.obj);
       this.carry = null;
@@ -4385,7 +4391,7 @@ export class Game {
           : `<p class="peek-lock">🎣 Get the ${rod.name} from Captain Reed on the west beach (${rod.price.toLocaleString()} ${COIN})</p>`;
     return `<div class="peek"><img src="${charterPreview}" alt="The Kraken rearing out of the storm waves far out at sea">
       <div class="peek-text"><h3>Sail out to the deep sea</h3>
-        <p>Captain Reed flies you out to sea from the west beach. Buy a spool of line, then land fish: they sell on the spot and pay Black Pearls, and every fish you hook uses line off the spool.</p>
+        <p>Captain Reed flies you out to sea from the west beach for a fee. Land fish until his hold is full: they sell on the spot and pay Black Pearls. A bigger hold from Reed lands more fish a charter.</p>
         <p>Further out, fish pay more and fight harder. Pearls open the next zone: the Drop-off, Kelp Deep, the Twilight, then the Abyss, which has no end.</p>
         ${status}</div></div>`;
   }

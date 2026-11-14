@@ -5,7 +5,7 @@ import { TITLES } from '../data/ranks';
 import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, sellValue, xpPastFlat, type Gifts } from './progression';
 import { TIP_IDS, isSeenId } from './tips';
-import { BOAT_PARTS, ROD } from '../data/dive';
+import { BOAT_PARTS, HOLD, ROD } from '../data/dive';
 
 export interface DexEntry {
   count: number;
@@ -106,6 +106,11 @@ export interface SaveData {
   rodStep: number;
   /** The Deep Sea Rod's Abyss levels past its last step, endless, bought from Reed with coins (`ROD.level` of a tier each). */
   abyssLevels: number;
+  /**
+   * The boat's hold level (0 to 4, `HOLD`), bought from Reed with coins: a charter lands `HOLD.fish[holdLevel]` fish.
+   * Level n goes on sale once zone n is open. Saves from before the hold start at 0 (Oscar, 2026-11-14).
+   */
+  holdLevel: number;
   /** Boat parts bought from Reed with Black Pearls (0 to 4, `BOAT_PARTS`): zone z of the sea is open with z of them. */
   boatParts: number;
   /** The furthest Abyss marker a charter has reached (0 before the Abyss); Abyss charters may start at any marker up to it. */
@@ -165,6 +170,7 @@ export const newSave = (): SaveData => ({
   seaRod: false,
   rodStep: 0,
   abyssLevels: 0,
+  holdLevel: 0,
   boatParts: 0,
   abyssRecord: 0,
   seaV: SEA_VERSION,
@@ -337,6 +343,7 @@ export function migrate(raw: object): SaveData {
   const old = data as OldSea;
   const whole = (n: unknown, hi = Infinity): number | null => (typeof n === 'number' && Number.isFinite(n) ? Math.min(hi, Math.max(0, Math.floor(n))) : null);
   out.rodStep = whole(data.rodStep, ROD.steps) ?? 0;
+  out.holdLevel = whole(data.holdLevel, HOLD.fish.length - 1) ?? 0;
   out.boatParts = whole(data.boatParts, BOAT_PARTS.length) ?? 0;
   out.abyssLevels = whole(data.abyssLevels) ?? 0;
   out.abyssRecord = whole(data.abyssRecord) ?? 0;
@@ -388,11 +395,12 @@ export function migrate(raw: object): SaveData {
 }
 
 /**
- * Sends the sea back to the start (`SEA_VERSION`): no rod steps, Abyss levels, boat parts, Abyss record or pearls, and
- * no sea fish in the Fishdex. A best catch from the sea becomes the best pond record left, at its plain sale value.
+ * Sends the sea back to the start (`SEA_VERSION`): no rod steps, Abyss levels, hold levels, boat parts, Abyss record or
+ * pearls, and no sea fish in the Fishdex. A best catch from the sea becomes the best pond record left, at its plain
+ * sale value.
  */
 function resetSea(out: SaveData): void {
-  Object.assign(out, { rodStep: 0, abyssLevels: 0, boatParts: 0, abyssRecord: 0, pearls: 0, seaV: SEA_VERSION });
+  Object.assign(out, { rodStep: 0, abyssLevels: 0, holdLevel: 0, boatParts: 0, abyssRecord: 0, pearls: 0, seaV: SEA_VERSION });
   for (const f of FISH) if (f.sea) delete out.dex[f.id];
   if (!out.best || !FISH.find((f) => f.id === out.best!.fishId)?.sea) return;
   out.best = null;

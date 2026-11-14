@@ -5,7 +5,7 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot, type FishTag } from '../src/game/progression';
-import { afterFight, canStart, markerGrowth, newSpool, pearlsFor, spoolPrice } from '../src/game/dive';
+import { afterFight, canStart, charterFee, holdFish, markerGrowth, pearlsFor } from '../src/game/dive';
 import { replayFight, type Gaps, type LossReason, type ReelTune } from '../src/game/reel';
 import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type FurthestRow, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, WHEEL_MS, type RouletteBet } from '../src/data/casino';
@@ -283,7 +283,7 @@ export class Room {
       case 'buyrod':
         changed = this.atVendor(m) && this.stocks(m).rods.includes(str(msg.id)) && eco.buyRod(s, str(msg.id));
         break;
-      // Captain Reed sells the Deep Sea Rod, its steps and Abyss levels, and the boat parts.
+      // Captain Reed sells the Deep Sea Rod, its steps and Abyss levels, the hold's levels, and the boat parts.
       case 'buysearod':
         changed = this.atReed(m) && eco.buySeaRod(s);
         break;
@@ -292,6 +292,9 @@ export class Room {
         break;
       case 'abysslevel':
         changed = this.atReed(m) && this.ok(m, eco.rodBuyError(s)) && eco.buyAbyssLevel(s);
+        break;
+      case 'holdlevel':
+        changed = this.atReed(m) && this.ok(m, eco.holdBuyError(s)) && eco.buyHoldLevel(s);
         break;
       case 'boatpart':
         changed = this.atReed(m) && this.ok(m, eco.boatPartError(s)) && eco.buyBoatPart(s);
@@ -437,7 +440,7 @@ export class Room {
         m.pending = null;
         this.syncCarry(m);
         if (!p) return;
-        // On a charter, the line pays for the fish. At the pond a fish lost to a gear wall is noted in the Fishdex, but
+        // On a charter, a fish that got away is counted in the tally. At the pond a fish lost to a gear wall is noted in the Fishdex, but
         // only if the replayed log shows a fight that ended in a snap or a run-off: a cast reeled in early saw nothing.
         if (!this.runOf(m)) {
           const fight = typeof msg.h === 'string' && msg.h ? replayFight(p.d, p.seed, msg.h, p.tune) : null;
@@ -451,9 +454,6 @@ export class Room {
       }
       case 'dive':
         changed = this.startDive(m, msg.zone, msg.marker ?? 0);
-        break;
-      case 'spool':
-        changed = this.spool(m);
         break;
       case 'headhome':
         changed = this.headHome(m);
@@ -588,7 +588,14 @@ export class Room {
       dive: (zone, marker) => {
         m.acct.dive = undefined;
         m.pending = null;
-        this.launch(m, zone, marker);
+        this.launch(m, zone, marker, true);
+      },
+      fill: () => {
+        const run = this.runOf(m);
+        if (!run || run.dive.state !== 'fishing') return false;
+        run.dive.tally.landed = Math.max(run.dive.tally.landed, run.dive.hold - 1);
+        m.conn.send({ t: 'divestate', dive: diveView(run) });
+        return true;
       },
       clearDig: () => this.dugAt.delete(m.acct),
       place: (x, z) => this.place(m.info.id, x, z),
@@ -692,7 +699,7 @@ export class Room {
 
   /**
    * Starts a charter at Captain Reed's seaplane for a player who owns the Deep Sea Rod: in an open zone, and in the
-   * Abyss at a marker up to the furthest (`canStart`), paying the zone's spool.
+   * Abyss at a marker up to the furthest (`canStart`), paying the zone's fee (`charterFee`).
    */
   private startDive(m: Member, zone: unknown, marker: unknown): boolean {
     const s = m.acct.save;
@@ -701,17 +708,21 @@ export class Room {
     if (!eco.ownsSeaRod(s)) return this.deny(m, `Charters need the ${DEEP_SEA_ROD.name}.`);
     if (!canStart(s, zone, marker)) return this.deny(m, zone === ABYSS ? 'Reed sails to any Abyss marker up to your furthest.' : "Reed only sails to the zones your boat is fitted for.");
     const z = zone as number;
-    const price = spoolPrice(z);
-    if (s.coins < price) return this.deny(m, `A spool for this zone costs ${price.toLocaleString('en-US')} coins.`);
-    s.coins -= price;
+    const fee = charterFee(z);
+    if (s.coins < fee) return this.deny(m, `A charter here costs ${fee.toLocaleString('en-US')} coins.`);
+    s.coins -= fee;
     return this.launch(m, z, marker as number);
   }
 
-  /** Puts the player on a new charter's sea. The charter's state goes first, so the sea is built for its zone. */
-  private launch(m: Member, zone: number, marker: number): boolean {
+  /**
+   * Puts the player on a new charter's sea, with the hold their save's level takes (`holdFish`), fixed for the charter.
+   * `free`: the dev console's, whose tally shows no fee. The charter's state goes first, so the sea is built for its zone.
+   */
+  private launch(m: Member, zone: number, marker: number, free = false): boolean {
     const sea = this.seaMap();
     if (!sea) return false;
-    const run = newRun(zone, marker, m.acct.name, eco.seaRod(m.acct.save));
+    const run = newRun(zone, marker, m.acct.name, eco.seaRod(m.acct.save), holdFish(m.acct.save.holdLevel));
+    if (free) run.dive.tally.fee = 0;
     m.acct.dive = run;
     m.info.dive = run.id;
     this.noteAbyss(m, run);
@@ -725,20 +736,6 @@ export class Room {
   private noteAbyss(m: Member, run: DiveRun): void {
     const s = m.acct.save;
     if (run.dive.zone === ABYSS && run.dive.marker > s.abyssRecord) s.abyssRecord = run.dive.marker;
-  }
-
-  /** Out of line: another spool at the zone's price, and fishing on in the same zone and marker. */
-  private spool(m: Member): boolean {
-    const run = this.runOf(m);
-    const s = m.acct.save;
-    if (!run || run.dive.state !== 'out') return false;
-    const price = spoolPrice(run.dive.zone);
-    if (s.coins < price) return this.deny(m, `Another spool costs ${price.toLocaleString('en-US')} coins.`);
-    s.coins -= price;
-    newSpool(run.dive);
-    run.cost = run.lost = run.gain = undefined;
-    m.conn.send({ t: 'divestate', dive: diveView(run) });
-    return true;
   }
 
   /** Ends the charter and flies home, at any time outside a fight: a cast still waiting for its bite is reeled in. Nothing is lost. */
@@ -765,8 +762,8 @@ export class Room {
 
   /**
    * Applies a finished fight to the charter: a landed fish's pearls (`pearlsFor`, with its tag and whether it's a
-   * legend or shiny) go to the save now, beside the coins it sold for (`coins`), and the line pays for the fish
-   * (`afterFight`), which counts a shiny in the tally. The pearls are kept as `gain` for the HUD. An Abyss marker
+   * legend or shiny) go to the save now, beside the coins it sold for (`coins`), and the fish goes in the tally
+   * (`afterFight`): a landed one takes its place in the hold, and a shiny is counted. The pearls are kept as `gain` for the HUD. An Abyss marker
    * reached is kept as the record.
    */
   private fightOver(m: Member, run: DiveRun, p: Pending, landed: boolean, coins = 0, lost?: LossReason | 'gone'): void {
@@ -776,7 +773,6 @@ export class Room {
     if (pearls > 0) lakeOf(m.acct).pearls += pearls;
     const res = afterFight(d, landed ? { pearls, coins, shiny: p.shiny } : null);
     run.gain = landed ? pearls : undefined;
-    run.cost = res.cost;
     run.lost = lost;
     if (res.marker) this.noteAbyss(m, run);
     m.conn.send({ t: 'divestate', dive: diveView(run) });
@@ -784,7 +780,8 @@ export class Room {
 
   /**
    * A fish lost on a charter. With no button log, a cast dropped soon after the bite missed the strike and costs
-   * nothing; anything else was hooked, and costs its line and the lost fish's. True if the charter changed.
+   * nothing; anything else was hooked, and is a fish that got away (it takes no place in the hold). True if the
+   * charter changed.
    */
   private seaLost(m: Member, p: Pending, h: unknown): boolean {
     const run = this.runOf(m)!;
@@ -970,7 +967,7 @@ export class Room {
     };
     const run = this.runOf(m);
     if (!run) return fail("You're not on a charter. Book one at Captain Reed's stand.");
-    if (run.dive.state !== 'fishing') return fail('Out of line: buy another spool, or head home.');
+    if (run.dive.state !== 'fishing') return fail('Your hold is full: head home.');
     const can = finite(x, z) ? eco.canCastAt(s, true) : 'hands';
     if (can !== 'ok') return fail(eco.CAST_MESSAGES[can]);
     this.abandon(m);
@@ -1004,7 +1001,7 @@ export class Room {
     if (!fight || why) {
       console.warn(`catch refused (${why}): ${m.acct.name}, ${p.fishId} at gaps ${JSON.stringify(p.d)}`);
       this.setAct(m, null);
-      // On a charter, a fish that wasn't really landed was still hooked: it costs its line and the lost fish's.
+      // On a charter, a fish that wasn't really landed was still hooked: it counts as one that got away.
       if (run) this.fightOver(m, run, p, false, 0, fight?.reason ?? 'gone');
       return !!run;
     }

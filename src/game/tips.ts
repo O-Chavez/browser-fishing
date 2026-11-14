@@ -113,7 +113,7 @@ export function tipText(id: TipId, s: Pick<SaveData, 'level' | 'slots' | 'locker
     case 'snack':
       return `Smoked fish ready! Eat one from your <b>Bag</b> (${touch ? 'the 🎒 button' : '<kbd>Tab</kbd>'}) for ⭐ more XP on every catch.`;
     case 'charter':
-      return 'Your Deep Sea Rod is waiting on <b>Captain Reed</b>\'s seaplane! Find him on the <b>west beach</b>, buy a spool of line and cast off: the further out, the more the fish pay.';
+      return 'Your Deep Sea Rod is waiting on <b>Captain Reed</b>\'s seaplane! Find him on the <b>west beach</b> and cast off: the Shelf is free, and the further out, the more the fish pay.';
     case 'dish': {
       // Names the player's own tier 3 catch, so the next Fish Cakes is easy to picture.
       const t3 = FISH.filter((f) => f.tier === 3 && s.dex[f.id]).sort((a, b) => s.dex[b.id]!.count - s.dex[a.id]!.count)[0];

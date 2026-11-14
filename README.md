@@ -26,9 +26,9 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 **📈 Level up from Worm to Moon Pearl.** Sell your catch, buy better bait, line and rods, and reach new tiers of fish. Levels have no cap: from level 20 you earn nautical ranks, from Deckhand to Admiral at 50 and on to Lord of the Deep at 150. None of it is pay-to-win: everything is earned on the water.
 
-**⚓ Charter out to the deep sea.** At level 20, **Captain Reed** on the west beach sells the **Deep Sea Rod** and takes you out on a charter. Pick one of five zones, from **the Shelf** to **the Abyss**, and cast off. Each charter runs on a **spool** of line: every fish you hook uses a few metres, one that gets away takes 25 m more, and when the spool is out you buy another or head home. Fish pay coins and **Black Pearls**. Coins buy line and the rod's eight steps, and pearls fill the bar for four **boat parts** that open the zones one by one. Only the Abyss has **markers**: every three fish you land takes you one further out, where the fish fight harder and pay more. The rarest sea fish are legends, up to **the Kraken**, and the **Furthest Out** board by Reed's lane shows how far each angler's boat reaches.
+**⚓ Charter out to the deep sea.** At level 20, **Captain Reed** on the west beach sells the **Deep Sea Rod** and takes you out on a charter. Pick one of five zones, from **the Shelf** to **the Abyss**, and cast off. Each charter fills Reed's **hold** for a small fee: 10 fish to start, up to 30 as you buy bigger holds, and a fish that gets away takes no room. Fish pay coins and **Black Pearls**, and each zone out pays about twice the coins of the one before. Coins buy the hold and the rod's eight steps, and pearls fill the bar for four **boat parts** that open the zones one by one. Only the Abyss has **markers**: every three fish you land takes you one further out, where the fish fight harder and pay more. The rarest sea fish are legends, up to **the Kraken**, and the **Furthest Out** board by Reed's lane shows how far each angler's boat reaches.
 
-![Captain Reed's chart: a card for each of the five zones with how it rates for your rod, what a fish pays and the price of a spool, then the Deep Sea Rod's step, the next boat part and a Cast off button](src/assets/images/news/charter-chart.jpg)
+![Captain Reed's chart: a card for each of the five zones with how it rates for your rod, what a fish pays and the fee, then the Deep Sea Rod's step, the hold, the next boat part and a Cast off button](src/assets/images/news/charter-hold.jpg)
 
 **🎰 Welcome to Casino Cove.** Reach level 15 and the gate to the casino opens. Put a fish on the line at **roulette** or **blackjack** and push its value as high as 16×, or lose it all. Spin the **Lucky Wheel** with a fish and it comes back worth ×5, ×2 or half as much, or it's gone. Trade your winnings for chips and spend them on perks like Lucky Charms, Quick-Reel Gloves and Shiny Lures.
 
@@ -55,7 +55,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 - Online multiplayer with global chat
 - 19 lake fish across 5 tiers and 23 sea fish across 5 zones, plus rare shiny variants
 - 5 rods, 5 lines and 5 baits, plus the Deep Sea Rod, and levels with no cap
-- Deep sea charters: five zones, spools of line, a rod with eight steps, boat parts and endless Abyss markers
+- Deep sea charters: five zones, a hold that grows, a rod with eight steps, boat parts and endless Abyss markers
 - Day/night cycle with night-only fish
 - Casino Cove with roulette, blackjack, the Lucky Wheel and a perk shop
 - A Smokehouse that turns spare fish into snacks and dishes that buff your catches
