@@ -46,6 +46,8 @@ export const GLOVES_CONTROL = 1.35;
 export const LANTERN_NIGHT_LUCK = 1.3;
 /** Guaranteed-shiny casts in one Shiny Lure pack. */
 export const LURE_CHARGES = 3;
+/** Packs the Prize Counter's bulk button buys in one press (10 packs: 30 casts). */
+export const LURE_BULK_PACKS = 10;
 
 export const PERKS: Perk[] = [
   { id: 'vest', name: 'Tackle Vest', desc: `+${VEST_SLOTS} hotbar slots`, chips: 40, icon: '🦺' },
@@ -54,7 +56,7 @@ export const PERKS: Perk[] = [
   { id: 'charm3', name: 'Lucky Charm III', desc: charmDesc('charm3'), chips: 200, requires: 'charm2', icon: '🍀' },
   { id: 'gloves', name: 'Quick-Reel Gloves', desc: 'Reel in fish faster', chips: 60, icon: '🧤' },
   { id: 'lantern', name: 'Night Owl Lantern', desc: 'Better luck with night fish', chips: 50, icon: '🏮' },
-  { id: 'lure', name: 'Shiny Lure', desc: `${LURE_CHARGES} casts that always hook a shiny`, chips: 15, consumable: true, icon: '✨' },
+  { id: 'lure', name: 'Shiny Lure', desc: `${LURE_CHARGES} casts that always hook a shiny, at the lake or at sea`, chips: 15, consumable: true, icon: '✨' },
 ];
 
 export const perkById = (id: string): Perk | undefined => PERKS.find((p) => p.id === id);

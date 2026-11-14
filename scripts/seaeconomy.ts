@@ -8,11 +8,12 @@
 //     coins), and heads home to buy as soon as it can, giving up what's left of the spool, printing when each zone
 //     opens and each rod step is bought.
 // The Abyss is fished at its first marker. A spool is counted as a charter of its own (the flight out, `CHARTER`).
-// Coins count a shiny's worth at its odds (`SHINY`), so a cell isn't swung by the few it happens to roll.
+// Coins and pearls count a shiny's worth at its odds (`SHINY`, `SHINY_PEARLS`: a natural shiny, no Shiny Lure), so a
+// cell isn't swung by the few it happens to roll.
 // Run: npx tsx scripts/seaeconomy.ts [fights a cell, default 120]; START=<coins> brings coins from the lake;
 // HANDS=careful,skilled picks the hands. To try other prices without editing the data: PARTS=30,220,1500,8000 (the
-// four boat parts, in pearls) and STEPS=40,80,180,350,600,1300,1200,2400 (the rod's eight steps, in thousands of coins).
-import { BOAT_PARTS, LINE, ROD, ZONES } from '../src/data/dive';
+// four boat parts, in pearls) and STEPS=40,90,150,350,900,2000,2400,4800 (the rod's eight steps, in thousands of coins).
+import { BOAT_PARTS, LINE, PEARLS, ROD, ZONES } from '../src/data/dive';
 import { lineCost, pearlsFor, RATING_NAMES, rodStepCost, rollSeaFish, seaGaps, seaRating, spoolPrice, stepZone, type SeaRod } from '../src/game/dive';
 import { CLEAN_BONUS, TAG_BONUS } from '../src/game/economy';
 import { mulberry } from '../src/game/env';
@@ -26,6 +27,8 @@ const START = Number(process.env.START ?? 0);
 const hands = (process.env.HANDS ?? 'careful,skilled').split(',') as Hand[];
 /** What the shiny chance adds to a fish's sale, on average. */
 const SHINY = 1 + SHINY_CHANCE * (SHINY_VALUE - 1);
+/** And to its pearls (`PEARLS.shiny`). */
+const SHINY_PEARLS = 1 + SHINY_CHANCE * (PEARLS.shiny - 1);
 if (process.env.PARTS) process.env.PARTS.split(',').forEach((p, i) => (BOAT_PARTS[i].pearls = Number(p)));
 if (process.env.STEPS) ROD.stepCoins = process.env.STEPS.split(',').map((c) => Number(c) * 1000);
 
@@ -55,7 +58,7 @@ function cell(hand: Hand, zone: number, steps: number): Cell {
       metres += lineCost(zone, marker, rod) + (ok ? 0 : LINE.lost);
       if (!ok) continue;
       landed++;
-      pearls += pearlsFor(zone, marker, { tag: m.tag, legend: !!bite.fish.legend });
+      pearls += pearlsFor(zone, marker, { tag: m.tag, legend: !!bite.fish.legend }) * SHINY_PEARLS;
       coins += Math.round(sellValue(bite.fish, size) * SHINY * (f.frays === 0 ? 1 + CLEAN_BONUS : 1) * (m.tag ? 1 + TAG_BONUS : 1));
     }
     const cost = landed ? metres / landed : Infinity;

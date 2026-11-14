@@ -144,7 +144,10 @@ export type ClientMsg =
   | { t: 'bj'; a: 'deal' | 'hit' | 'stand' | 'double'; i?: number }
   /** Turn the fish in slot i in at the prize shop for chips. */
   | { t: 'cashout'; i: number }
-  | { t: 'buyperk'; id: string }
+  /** Turn in every hotbar fish worth a chip or more. */
+  | { t: 'cashoutall' }
+  /** Buy a perk; `count` packs of a consumable at once (1 or the bulk count, default 1). */
+  | { t: 'buyperk'; id: string; count?: number }
   /** Switch the Shiny Lure on or off (off saves its charges). */
   | { t: 'lure'; on: boolean }
   /** Smokehouse: put the fish in hotbar slot i on the smoker. */

@@ -73,6 +73,7 @@ export const HELP = [
   '/sea <zone 0-4> [marker] (start a charter there, free; 0 is the Shelf, 4 the Abyss)',
   '/dig (reset worm cooldown) · /tips (show the new-player tips again) · /smoke (finish the smoker) · /smoke <fish> [N]',
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
+  '/lakestats (chips per lake hour, Shiny Lures and charters, per player)',
   '/resetpass <name> <new password>',
   '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
 ];

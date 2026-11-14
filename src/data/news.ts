@@ -17,6 +17,7 @@
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
 import charterChart from '../assets/images/news/charter-chart.jpg';
+import charterLures from '../assets/images/news/charter-lures.jpg';
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
@@ -39,6 +40,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 9,
+    date: '2026-11-14',
+    title: 'Shiny Lures at sea',
+    image: charterLures,
+    alt: "Captain Reed's chart with Kelp Deep picked: under the next boat part's bar a line reads about 5 charters to the Deep lamps, about 2 with Shiny Lures, and a new row shows 46 Shiny Lures with a switch set to On",
+    body: [
+      "A shiny sea fish now pays five times the <b>Black Pearls</b> as well as five times the coins. A <b>Shiny Lure</b> from the casino's <b>Prize Counter</b> works on a charter as it does at the lake: every bite is a shiny until the lures run out.",
+      "<b>Captain Reed's</b> chart now says how many charters away your next <b>boat part</b> is, and how many with Shiny Lures, and shows the lures you hold with a switch to save them for later. At the Prize Counter you can buy 30 casts at once, and <b>Turn in all</b> trades every fish in your hotbar for chips in one press.",
+      "From <b>Kelp Deep</b> on, the way out is longer: the <b>Deep lamps</b> and the <b>Iron keel</b> take more Black Pearls and the Deep Sea Rod's last four steps cost more coins. What you've already bought is yours. Fishing the lake for chips and bringing lures to sea is the quick way there.",
+    ],
+  },
   {
     id: 8,
     date: '2026-11-13',

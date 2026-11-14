@@ -822,9 +822,9 @@ describe('rod steps and Abyss levels', () => {
 describe('boat parts', () => {
   const owner = (o: Partial<SaveData> = {}) => Object.assign(newSave(), { level: 20, seaRod: true }, o);
 
-  it('opens the zones one by one for Black Pearls: 30, 150, 1,500 and 10,000', () => {
-    const s = owner({ pearls: 30 + 150 + 1500 + 10_000 + 7, coins: 5 });
-    for (const left of [150 + 1500 + 10_000 + 7, 1500 + 10_000 + 7, 10_000 + 7, 7]) {
+  it('opens the zones one by one for Black Pearls: 30, 150, 3,000 and 25,000', () => {
+    const s = owner({ pearls: 30 + 150 + 3000 + 25_000 + 7, coins: 5 });
+    for (const left of [150 + 3000 + 25_000 + 7, 3000 + 25_000 + 7, 25_000 + 7, 7]) {
       expect(eco.buyBoatPart(s)).toBe(true);
       expect(s.pearls).toBe(left);
     }

@@ -1,6 +1,6 @@
 # Play-test notes: sea charters
 
-Feedback from players testing the charters after the rework ("A place to earn", merged 2026-11-13), what was checked against the game, and what Oscar decided in the workshop that followed (2026-11-13). Nothing here is built yet.
+Feedback from players testing the charters after the rework ("A place to earn", merged 2026-11-13), what was checked against the game, and what Oscar decided in the workshop that followed (2026-11-13). The boost is built (DONE.md, "Shiny Lures as the charters' boost"); the hold and the zone coin retune are not.
 
 - A note that becomes work moves to [TODO.md](TODO.md) and is ticked here with a pointer to it.
 - New feedback goes under **Inbox** at the bottom as it comes in, in the player's words, and is sorted into a numbered note later.
@@ -10,9 +10,9 @@ Feedback from players testing the charters after the rework ("A place to earn", 
 
 | # | Note | Status |
 |---|------|--------|
-| 1 | Shiny fish at sea don't seem to pay more coins | Decided: a shiny sea fish pays five times the pearls too. The coins already work |
+| 1 | Shiny fish at sea don't seem to pay more coins | Built: a shiny sea fish pays five times the pearls too. The coins already worked |
 | 2 | A fish quota by hull instead of spools of line | Decided: a hold replaces line. Size, fee and upgrades still to set |
-| 3 | Something to buy that raises pearls a fish | Decided: no new purchase. The Shiny Lure is the boost |
+| 3 | Something to buy that raises pearls a fish | Built: no new purchase. The Shiny Lure is the boost |
 | 4 | Early zones pay more coins than the ones after | Target decided: a new zone pays clearly more from Fair. Numbers still to set |
 | 5 | The pearl jump after Kelp Deep needs goals in between | Partly answered by the boost and Reed's chart. The upgrade ladder is still open |
 
@@ -26,7 +26,7 @@ Feedback from players testing the charters after the rework ("A place to earn", 
 
 1. A shiny sea fish pays five times the coins and the Black Pearls. Today it pays five times the coins and no extra pearls (`pearlsFor`, `src/game/dive.ts`), so a lure opens zones no faster.
 2. The Shiny Lure stays as it is: 15 chips for 3 casts, one lure a fish, at the lake and in every zone. Also sold 30 at a time for 150 chips.
-3. Reed's chart shows it: the holds to the next boat part plain and with Shiny Lures ("About 12 holds to the Deep lamps · about 3 with Shiny Lures"), the lures held, and the on/off switch. The Prize Counter tile reads "Casts that always hook a shiny, at the lake or at sea."
+3. Reed's chart shows it: the charters to the next boat part plain and with Shiny Lures ("About 5 charters to the Deep lamps · about 2 with Shiny Lures"; it will say holds once the hold is built), the lures held, and the on/off switch. The Prize Counter tile reads "Casts that always hook a shiny, at the lake or at sea."
 
 **Why the lure's price stays flat:** a lured lake fish averages 9.5 chips (only 16% of plain casts and 34% of perfect casts hook a top-tier fish), so luring a whole hold costs about as much lake time as fishing it, in every zone. Neither a hold's length nor lake income grows by zone. Every dearer-by-zone option came out barely faster than playing plain.
 
@@ -40,16 +40,13 @@ Feedback from players testing the charters after the rework ("A place to earn", 
 
 These rest on a scratch simulation of the lake (the game's fish values, tier odds and fight lengths; a fight of 5 to 6 s, a bite at 3.3 s) with assumed times around it: 7 s to cast, strike and read the card, 45 to 90 s for a casino round trip per hotbar of fish. The middle rate, about 570 chips an hour net of lures, is good to about 30% either way; the low and high cases (220 and 925) are four times apart. The perfect-cast rate moves it most. The scratch simulations are kept in `docs/charter-boost/sims/` (`lake.ts` for the lake rate, `journey.ts` for plain against lured, `hold.ts` for the hold, `bj.ts` for blackjack); `npx tsx docs/charter-boost/sims/lake.ts` reprints the table.
 
-**Build order:**
+**Built (2026-11-13, branch `charter-boost`):** shiny pearls; the chart line and the lure row with its switch at Reed's; the Prize Counter wording, 30 casts at once and "Turn in all"; the shiny count on the cards after fishing; the prices below; `/lakestats` in the dev console; a What's new entry.
 
-1. Shiny pearls; the chart line and the lure switch at Reed's; the Prize Counter wording; buying 30 at once; a What's new entry.
-2. "Turn in all" at the Prize Counter; a lured-fish count on the "Home safe!" card.
-3. A play test that logs chips per lake hour, then the boat part prices.
-4. The Abyss, when it is designed. Until then the same lure works there.
+**Still to do:** a play test that reads chips per lake hour from `/lakestats` and checks the prices against it (TODO.md, Up next), and the Abyss, when it is designed. Until then the same lure works there.
 
 **Oscar's decisions (2026-11-13):**
 
-- The Abyss opening at about 5 hours is the lured player's time. So the plain path gets longer, and the later boat parts go up. A first candidate from the review: Deep lamps 3,000, Iron keel 25,000, rod steps 5 to 8 at 900k / 2.0M / 2.4M / 4.8M, which gave plain 2.6 h and 8.4 h to the Twilight and the Abyss, and lured 2.0 h and 5.0 h at the middle lake rate. Set the real prices with the sim once lake rates are logged from play. Play testers already called the Twilight leg long on the plain path, so check that an 8-hour plain path is wanted before shipping it.
+- The Abyss opening at about 5 hours is the lured player's time, so the plain path is longer. Oscar asked for a best estimate now, to change later if a play test shows it is needed. Set: Deep lamps 3,000 and Iron keel 25,000 pearls, rod steps 5 to 8 at 900k / 2.0M / 2.4M / 4.8M coins. That gives plain 2.6 h and 8.4 h to the Twilight and the Abyss, and lured 2.0 h and 5.0 h at the middle lake rate. Play testers already called the Twilight leg long on the plain path, so watch whether an 8-hour plain path reads as wanted.
 - The walks between the pier and the Prize Counter stay as they are. One hold's lures take about 33 lured lake fish, seven hotbar loads with the Tackle Vest (five fish) and eleven without (three); one reviewer called that a tedious task. Oscar: it isn't a bad thing. In his own play he would catch a very valuable fish (about 50,000 coins), gamble it, and turn the result in for lures; a win feels like more than a loss costs, and it keeps gambling in the loop while staying fun. A 50,000-coin fish is 50 chips, 10 lured casts; doubled on the Lucky Wheel it is 20, and on the five-times wedge 50, more than a hold's worth. The wheel is a fair bet, so it changes the swings, not the average pace.
 - Lost fish take no place in the hold.
 - Shiny Lures keep working at the lake.
@@ -81,7 +78,7 @@ These rest on a scratch simulation of the lake (the game's fish values, tier odd
 
 ## 1. Shiny fish at sea don't seem to pay more coins
 
-- [ ] Shiny pearls (the plan's first build step)
+- [x] Shiny pearls, built with the boost (DONE.md)
 
 **Reported:** the shiny bonus doesn't seem to change a sea fish's value the way it does at the lake. Shiny fish raise the pearls but not the coins.
 

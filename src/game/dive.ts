@@ -89,18 +89,38 @@ export const spoolPrice = (zone: number): number => SPOOL_COINS[zone] ?? 0;
 /** How many times more a fish pays at this Abyss marker (`MARKER.grow` a marker past the first); 1 outside the Abyss. */
 export const markerGrowth = (zone: number, marker: number): number => (zone === ABYSS ? powInt(MARKER.grow, markerIn(zone, marker) - 1) : 1);
 
-/** What sets one landed fish's pearls beside where it was landed: a Feisty or Brutish tag, and whether it's a legend. */
+/**
+ * What sets one landed fish's pearls beside where it was landed: a Feisty or Brutish tag, whether it's a legend, and
+ * whether it's shiny.
+ */
 export interface PearlFish {
   tag?: FishTag | null;
   legend?: boolean;
+  shiny?: boolean;
 }
 
-/** How many times a plain fish's pearls this fish pays: `PEARLS.tag` for a tag, `PEARLS.legend` for a legend, both multiplying. */
-export const pearlMult = (fish: PearlFish): number => (fish.tag ? PEARLS.tag : 1) * (fish.legend ? PEARLS.legend : 1);
+/**
+ * How many times a plain fish's pearls this fish pays: `PEARLS.tag` for a tag, `PEARLS.legend` for a legend and
+ * `PEARLS.shiny` for a shiny, all multiplying.
+ */
+export const pearlMult = (fish: PearlFish): number =>
+  (fish.tag ? PEARLS.tag : 1) * (fish.legend ? PEARLS.legend : 1) * (fish.shiny ? PEARLS.shiny : 1);
 
 /** Black Pearls a landed fish pays here: the zone's (`PEARLS.zone`), times `pearlMult`, times the Abyss marker's growth, rounded. */
 export const pearlsFor = (zone: number, marker: number, fish: PearlFish = {}): number =>
   Math.round(PEARLS.zone[zone] * pearlMult(fish) * markerGrowth(zone, marker));
+
+/**
+ * The Black Pearls a landed fish pays here on average, unrounded, for Reed's chart: the zone's (`PEARLS.zone`) with the
+ * Abyss marker's growth, and the odds of a Feisty or Brutish fish (`TAG_CHANCE`), a legend (`DIVE.legendChance`) and a
+ * shiny counted in: the natural `SHINY_CHANCE`, or every fish shiny when `lured` (a Shiny Lure on every cast).
+ */
+export function averagePearls(zone: number, marker: number, lured = false): number {
+  const tag = 1 + TAG_CHANCE * (PEARLS.tag - 1);
+  const legend = 1 + DIVE.legendChance * (PEARLS.legend - 1);
+  const shiny = lured ? PEARLS.shiny : 1 + SHINY_CHANCE * (PEARLS.shiny - 1);
+  return PEARLS.zone[zone] * markerGrowth(zone, marker) * tag * legend * shiny;
+}
 
 /** Bins for `meanSale`'s average over a fish's sizes. */
 const SIZE_BINS = 200;
@@ -246,6 +266,8 @@ export interface Tally {
   /** Spools bought, the one cast off on included, and the coins they cost. */
   spools: number;
   spoolCoins: number;
+  /** The shiny fish landed. */
+  shiny: number;
 }
 
 /** Fishing, or out of line: waiting for another spool or for the player to head home. */
@@ -269,7 +291,7 @@ export interface Dive {
 export function startDive(zone: number, marker: number, rod: SeaRod): Dive {
   return {
     zone, marker: markerIn(zone, marker), toNext: 0, line: LINE.spool, state: 'fishing', rod: { steps: rod.steps, levels: rod.levels },
-    tally: { landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: spoolPrice(zone) },
+    tally: { landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: spoolPrice(zone), shiny: 0 },
   };
 }
 
@@ -277,6 +299,8 @@ export function startDive(zone: number, marker: number, rod: SeaRod): Dive {
 export interface Landing {
   pearls: number;
   coins: number;
+  /** Whether the landed fish was shiny, for the tally's count. */
+  shiny?: boolean;
 }
 
 /**
@@ -294,6 +318,8 @@ export function afterFight(d: Dive, landing: Landing | null): { cost: number; ma
     d.tally.landed++;
     d.tally.pearls += landing.pearls;
     d.tally.coins += landing.coins;
+    // A charter from before the count was kept has none yet.
+    if (landing.shiny) d.tally.shiny = (d.tally.shiny ?? 0) + 1;
     if (d.zone === ABYSS && ++d.toNext >= MARKER.every) {
       d.toNext = 0;
       d.marker++;

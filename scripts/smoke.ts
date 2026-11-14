@@ -1009,7 +1009,7 @@ async function tripChecks(): Promise<void> {
   check("charter: a hooked fish takes its line as the fight starts, and a landed one pays coins and moves the boat part's progress on the strip", seen.includes('reeling') && hooked.includes('295 m') && hooked.includes('−5 m') && after.includes('295 m') && /This charter\s*[1-9]/.test(after) && pearls1 > pearls0, `${seen.join(',')} · ${hooked} · ${after} · pearls ${pearls0} -> ${pearls1}`);
 
   const card: string = await page.evaluate(() => (window as any).__card);
-  check('charter: a landed sea fish shows its pearls on the catch card', /Sea fish · sold on the spot/.test(card) && /\+(?:1|2|5|10)\b/.test(card) && card.includes('XP') && !/undefined|NaN|easy water/.test(card), card);
+  check('charter: a landed sea fish shows its pearls on the catch card', /Sea fish · sold on the spot/.test(card) && /\+(?:1|2|5|10|25|50)\b/.test(card) && card.includes('XP') && !/undefined|NaN|easy water/.test(card), card);
 
   // Head home from the Bag: asks once, says the line left isn't refunded, then the end card.
   await page.evaluate(() => window.__game.openMenu('inventory'));

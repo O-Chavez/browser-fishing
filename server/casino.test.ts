@@ -252,6 +252,68 @@ describe('casino tables', () => {
     expect(p.acct.save.chips).toBeLessThan(chips);
   });
 
+  it('buys lures in bulk and turns in all fish, only at the prize counter and only for valid counts', () => {
+    const { room, p } = seat('Fay');
+    const save = p.acct.save;
+    save.chips = 400;
+    room.handle(p.id, { t: 'buyperk', id: 'lure', count: 10 });
+    expect(save.lure).toBe(0);
+    room.handle(p.id, { t: 'cashoutall' });
+    expect(save.chips).toBe(400);
+    goTo(room, p.id, casino.casino!.prizes);
+    room.handle(p.id, { t: 'buyperk', id: 'lure', count: 10 });
+    expect(save.lure).toBe(30);
+    expect(save.chips).toBe(250);
+    for (const count of [0, 2, 5, 11, -10, 1.5, '10', null]) room.handle(p.id, { t: 'buyperk', id: 'lure', count } as never);
+    expect(save.lure).toBe(30);
+    expect(save.chips).toBe(250);
+    room.handle(p.id, { t: 'buyperk', id: 'gloves', count: 10 });
+    expect(save.perks).not.toContain('gloves');
+    expect(save.chips).toBe(250);
+    room.handle(p.id, { t: 'buyperk', id: 'lure', count: 1 });
+    expect(save.lure).toBe(33);
+    expect(save.chips).toBe(235);
+    const fishCount = save.slots.filter((x) => x?.k === 'fish').length;
+    room.handle(p.id, { t: 'cashoutall' });
+    expect(save.chips).toBeGreaterThan(235);
+    expect(save.slots.filter((x) => x?.k === 'fish').length).toBeLessThan(fishCount);
+  });
+
+  it('counts chips turned in and lure casts bought for /lakestats, and nothing else', () => {
+    const { room, p } = seat('Gus');
+    const save = p.acct.save;
+    save.chips = 400;
+    // Away from the counter nothing counts.
+    room.handle(p.id, { t: 'cashout', i: 2 });
+    room.handle(p.id, { t: 'buyperk', id: 'lure', count: 10 });
+    expect(p.acct.lake?.chips ?? 0).toBe(0);
+    expect(p.acct.lake?.bought ?? 0).toBe(0);
+    goTo(room, p.id, casino.casino!.prizes);
+    const first = save.chips;
+    room.handle(p.id, { t: 'cashout', i: 2 });
+    const one = Math.round((save.chips - first) * 10) / 10;
+    expect(one).toBeGreaterThan(0);
+    expect(p.acct.lake).toMatchObject({ chips: one, bought: 0 });
+    // A perk that isn't a lure, and a refused bulk count, buy no casts.
+    room.handle(p.id, { t: 'buyperk', id: 'gloves' });
+    room.handle(p.id, { t: 'buyperk', id: 'lure', count: 5 });
+    expect(p.acct.lake!.bought).toBe(0);
+    room.handle(p.id, { t: 'buyperk', id: 'lure' });
+    expect(p.acct.lake!.bought).toBe(3);
+    // A bulk buy counts its charges: 10 packs of 3.
+    room.handle(p.id, { t: 'buyperk', id: 'lure', count: 10 });
+    expect(p.acct.lake!.bought).toBe(33);
+    // Chips spent buying don't count as turned in.
+    expect(p.acct.lake!.chips).toBe(one);
+    // "Turn in all" adds what it gave.
+    save.slots[3] = { k: 'fish', fishId: dear.id, size: dear.maxSize };
+    const before = save.chips;
+    room.handle(p.id, { t: 'cashoutall' });
+    const all = Math.round((save.chips - before) * 10) / 10;
+    expect(all).toBeGreaterThan(0);
+    expect(p.acct.lake!.chips).toBeCloseTo(one + all, 5);
+  });
+
   it('sells casino cosmetics for chips only, and only at the prize counter', () => {
     const { room, p } = seat('Eve');
     p.acct.save.chips = 1000;

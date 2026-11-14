@@ -394,6 +394,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 ### Chips
 - A separate currency in the account save. Chips are earned only by turning fish in at the prize shop and are spent only on casino unlocks and casino-only cosmetics. Coins keep buying rods, bait and the stall's cosmetics.
 - One config holds the fish-to-chip rate and unlock prices so the grind can be tuned.
+- "Turn in all" at the Prize Counter turns in every hotbar fish worth a chip or more in one press.
 
 ### Casino unlocks (bought with chips)
 | Item | Effect | Type |
@@ -401,7 +402,7 @@ The endgame. A separate **Casino map** replaces the Forest Lake as the pond's `n
 | Tackle Vest | +2 inventory slots | permanent |
 | Lucky Charms (3 tiers) | +5/10/15% value on every fish caught after buying (applied at catch, not at sale) | permanent, total bonus capped |
 | Quick-Reel Gloves | shorter reel time | permanent |
-| Shiny Lure | N charges, each guarantees a shiny catch | consumable, re-bought |
+| Shiny Lure | 3 casts a pack, each hooks a shiny, at the lake or at sea (where a shiny pays five times the coins and the Black Pearls); sold one pack or ten at a time | consumable, re-bought |
 | Night Owl Lantern | better night-fish luck | permanent |
 | Cosmetics | casino-only outfits (High Roller tab, see section 33) | permanent |
 
@@ -515,7 +516,7 @@ Planned 2026-10-30; the build steps are the "Endgame step N of 8" items in TODO.
 
 Two goals (decided 2026-10-30): charters get harder but never impossible, and every trip gives the player something good and a clear next thing to go for.
 
-**As built, the trip differs from the plan below** (REELING.md, "A place to earn", merged 2026-11-13): the sea is a place to earn. A charter is fished in one zone on a 300 m spool of line bought from Reed; every hooked fish uses line, less as the rod improves; fish pay coins and Black Pearls by zone; coins buy line and the Deep Sea Rod's eight steps, pearls buy the four boat parts that open zones; only the Abyss has markers, endless rod levels and the Furthest Out board. The plan's zone twists, milestones, titles and boat comforts are still to come (TODO.md).
+**As built, the trip differs from the plan below** (REELING.md, "A place to earn", merged 2026-11-13): the sea is a place to earn. A charter is fished in one zone on a 300 m spool of line bought from Reed; every hooked fish uses line, less as the rod improves; fish pay coins and Black Pearls by zone; coins buy line and the Deep Sea Rod's eight steps, pearls buy the four boat parts that open zones; only the Abyss has markers, endless rod levels and the Furthest Out board. **The boost** (2026-11-13; REELING.md, "The boost"; PLAYTEST.md): playing charters straight is the slow base loop, and Shiny Lures are how a player speeds it up. A shiny sea fish pays five times the coins and the pearls, the lure costs the same in every zone, and Reed's chart counts the charters to the next boat part plain and with Shiny Lures and shows the lures held with their switch. The boat parts cost 30 / 150 / 3,000 / 25,000 pearls, so the plain path to the Abyss is about 8 hours and a lured one about 5. `/lakestats` in the dev console reports chips per lake hour from real play, to check the prices. The plan's zone twists, milestones, titles and boat comforts are still to come (TODO.md).
 
 **The gear** (as built, 2026-11-01): charters need the **Deep Sea Rod**, bought once at Marlow's stall's Sea gear tab (level 20, 100,000 coins: the next grind after the Aurora Rod), which is what pays for charter access. It stays on Reed's boat and is the only thing in hand at sea (the hotbar waits as it was until home), and comes with the Deep Sea Line; both level with Black Pearls (REELING.md, "Decisions so far"). The Aurora Rod is the pond's top rod.
 

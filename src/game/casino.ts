@@ -1,6 +1,6 @@
 import { CHIP_COINS, ROULETTE_PAY, ROULETTE_POCKETS, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
 import { clearSlot, fishValue } from './economy';
-import type { SaveData } from './state';
+import type { SaveData, Slot } from './state';
 
 /** Pure casino rules. The server runs these; nothing here touches the network or the DOM. */
 
@@ -54,6 +54,20 @@ export function cashOut(s: SaveData, i: number): number {
   s.chips = Math.round((s.chips + chips) * 10) / 10;
   clearSlot(s, i);
   return chips;
+}
+
+/** Slots holding a fish worth a chip or more, which "Turn in all" takes. */
+export const cashOutSlots = (s: SaveData): number[] => s.slots.flatMap((it, i) => (cashOutError(s, i) === null && it ? [i] : []));
+
+/** The chips "Turn in all" would give, to one decimal. */
+export const cashOutAllChips = (s: SaveData): number =>
+  Math.round(cashOutSlots(s).reduce((a, i) => a + chipsFor(fishValue(s.slots[i] as Extract<Slot, { k: 'fish' }>)), 0) * 10) / 10;
+
+/** Turns in every fish worth a chip or more, last slot first so indexes stay valid; returns the chips given. */
+export function cashOutAll(s: SaveData): number {
+  let total = 0;
+  for (const i of cashOutSlots(s).reverse()) total += cashOut(s, i);
+  return Math.round(total * 10) / 10;
 }
 
 // ---------- roulette ----------

@@ -3,6 +3,7 @@ import { MAPS } from '../src/data/maps';
 import type { ServerMsg } from '../src/net/protocol';
 import { AccountStore } from './accounts';
 import { DevGate, TIMES } from './dev';
+import { lakeReport } from './lakestats';
 import { markTip } from '../src/game/tips';
 import { Room } from './room';
 
@@ -212,5 +213,67 @@ describe('dev commands in a room', () => {
     expect(devLines(a.log).at(-1)).toMatch(/^Dish ids: fishcakes/);
     room.handle(a.id, { t: 'cmd', text: '/smokestats' });
     expect(devLines(a.log).at(-1)).toBe('No Smokehouse stats on this server.');
+  });
+});
+
+describe('/lakestats', () => {
+  const run = (store: AccountStore) => {
+    const room = new Room('r', MAPS);
+    room.devGate = new DevGate({ user: 'admin', pass: 'hunter2' });
+    room.lakeReport = () => lakeReport(store.lakeRows());
+    const res = store.auth('Dev', 'token-token-token-Dev');
+    if (!res.ok) throw new Error(res.msg);
+    const log: ServerMsg[] = [];
+    const id = room.join({ send: (m) => log.push(m) }, res.account);
+    room.handle(id, { t: 'cmd', text: '/login admin hunter2' });
+    log.length = 0;
+    room.handle(id, { t: 'cmd', text: '/lakestats' });
+    return log.flatMap((m) => (m.t === 'dev' ? m.lines : []));
+  };
+
+  it('says so when nobody has anything to report', () => {
+    expect(run(new AccountStore())).toEqual(['No lake stats yet: nobody has turned in a fish, bought a lure or gone on a charter.']);
+  });
+
+  it('works out the rates for a hand-worked case, with a total', () => {
+    // Ann: 2 lake hours, 1,140 chips = 570 an hour. 60 sea casts, 45 lured, 1.5 sea hours, 300 pearls = 200 an hour.
+    const ann = { lakeSec: 7200, seaSec: 5400, chips: 1140, bought: 90, lakeLures: 60, seaLures: 45, seaHooks: 60, pearls: 300 };
+    // Bob: a quarter hour, 100 chips = 400 an hour, never sailed (no sea rates to divide).
+    const bob = { lakeSec: 900, chips: 100 };
+    // Cy only watched: no chips, no lures, no charter, so no line.
+    const cy = { lakeSec: 3600 };
+    const rows = [{ name: 'Ann', lake: ann }, { name: 'Bob', lake: bob as never }, { name: 'Cy', lake: cy as never }, { name: 'Old' }];
+    expect(lakeReport(rows)).toEqual([
+      '🎣 Lake stats (counted since they shipped):',
+      'Ann: lake 2h · 1140 chips (570/h) · lures 90 bought, 60 lake, 45 sea · sea 1.5h · 75% lured · 200 pearls/h',
+      'Bob: lake 0.3h · 100 chips (400/h) · lures 0 bought, 0 lake, 0 sea · sea 0h · -% lured · - pearls/h',
+      'All 2: lake 2.3h · 1240 chips (551/h) · lures 90 bought, 60 lake, 45 sea · sea 1.5h · 75% lured · 200 pearls/h',
+    ]);
+  });
+
+  it('guards every division by zero', () => {
+    const [, ann, total] = lakeReport([{ name: 'Ann', lake: { lakeSec: 0, seaSec: 0, chips: 0, bought: 3, lakeLures: 0, seaLures: 0, seaHooks: 0, pearls: 0 } }]);
+    expect(ann).toBe('Ann: lake 0h · 0 chips (-/h) · lures 3 bought, 0 lake, 0 sea · sea 0h · -% lured · - pearls/h');
+    expect(total).toMatch(/^All 1: /);
+  });
+
+  it('loads an account saved before the counters, and prints it once it has counted', () => {
+    const old = new AccountStore({ ann: { name: 'Ann', tokens: ['x'], save: {} }, bob: { name: 'Bob', tokens: ['y'], lake: { chips: 'lots', lakeSec: -5, bought: 6, bogus: 1 }, save: {} } });
+    expect(old.lakeRows()).toEqual([{ name: 'Ann', lake: undefined }, { name: 'Bob', lake: { lakeSec: 0, seaSec: 0, chips: 0, bought: 6, lakeLures: 0, seaLures: 0, seaHooks: 0, pearls: 0 } }]);
+    expect(run(old)).toEqual([
+      '🎣 Lake stats (counted since they shipped):',
+      'Bob: lake 0h · 0 chips (-/h) · lures 6 bought, 0 lake, 0 sea · sea 0h · -% lured · - pearls/h',
+      'All 1: lake 0h · 0 chips (-/h) · lures 6 bought, 0 lake, 0 sea · sea 0h · -% lured · - pearls/h',
+    ]);
+  });
+
+  it('keeps the counters through a save and load, and out of the save data', () => {
+    const store = new AccountStore();
+    const res = store.auth('Ann', 'token-token-token-Ann');
+    if (!res.ok) throw new Error(res.msg);
+    res.account.lake = { lakeSec: 10, seaSec: 0, chips: 5, bought: 3, lakeLures: 1, seaLures: 0, seaHooks: 0, pearls: 0 };
+    const again = new AccountStore(store.snapshot());
+    expect(again.lakeRows()[0].lake).toEqual(res.account.lake);
+    expect(res.account.save).not.toHaveProperty('lake');
   });
 });

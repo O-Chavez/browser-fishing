@@ -75,9 +75,11 @@ export const ROD = {
   level: 0.1,
   /**
    * Coins for steps 1 to 8. A zone's two steps come in while its fish earn the next boat part (`BOAT_PARTS`), so the
-   * first ones are cheap (Oscar, 2026-11-13).
+   * first ones are cheap and the first two zones pass quickly. From Kelp Deep the plain path is long on purpose: Shiny
+   * Lures are how a player speeds it up (Oscar, 2026-11-13: the Abyss at about 5 hours is the lured player's time; about
+   * 8 plain). A best estimate, to revisit after a play test (`scripts/seaeconomy.ts`).
    */
-  stepCoins: [40_000, 90_000, 150_000, 350_000, 600_000, 1_300_000, 1_200_000, 2_400_000],
+  stepCoins: [40_000, 90_000, 150_000, 350_000, 900_000, 2_000_000, 2_400_000, 4_800_000],
   /** Abyss level n costs `levelCoins × levelGrow^(n−1)` coins, to the nearest `levelRound`. */
   levelCoins: 1_000_000,
   levelGrow: 1.12,
@@ -108,12 +110,14 @@ export const SPOOL_COINS = [0, 14_000, 26_000, 46_000, 83_000];
 
 /**
  * Black Pearls a landed fish pays, by zone (`pearlsFor`). A Feisty or Brutish fish (`rollTag`, one in 8) pays `tag`
- * times and a legend (one bite in 20) `legend` times; both multiply.
+ * times, a legend (one bite in 20) `legend` times and a shiny (one in 20, or every fish on a Shiny Lure) `shiny` times;
+ * all three multiply (Oscar, 2026-11-13: a shiny sea fish pays five times the pearls as well as the coins).
  */
 export const PEARLS = {
   zone: [1, 3, 8, 20, 50],
   tag: 2,
   legend: 5,
+  shiny: 5,
 };
 
 /**
@@ -124,15 +128,17 @@ export const MARKER = { every: 3, grow: 1.12 };
 
 /**
  * The boat parts that open zones, fitted by Captain Reed for Black Pearls: zone z needs z of them, in this order.
- * Pearls buy nothing else, so the screens show them as progress to the next part, not as a purse. The prices taper in
- * (Oscar, 2026-11-13): the first part after 5 to 10 minutes on the Shelf, the next 15 to 30 minutes on, then an hour
- * to an hour and a half, then two to three hours (`scripts/seaeconomy.ts`). Working names, flagged for Oscar to rename.
+ * Pearls buy nothing else, so the screens show them as progress to the next part, not as a purse. The first two zones
+ * open quickly (Oscar, 2026-11-13): the first part after 5 to 10 minutes on the Shelf, the next 15 to 30 minutes on.
+ * From Kelp Deep the plain path is long on purpose, and Shiny Lures (a shiny pays `PEARLS.shiny` times) are how a
+ * player speeds it up: the Abyss at about 5 hours is the lured player's time (Oscar, 2026-11-13). A best estimate, to
+ * revisit after a play test (`scripts/seaeconomy.ts`). Working names, flagged for Oscar to rename.
  */
 export const BOAT_PARTS = [
   { id: 'sail', name: 'Storm sail', pearls: 30 },
   { id: 'cutter', name: 'Kelp cutter', pearls: 150 },
-  { id: 'lamps', name: 'Deep lamps', pearls: 1500 },
-  { id: 'keel', name: 'Iron keel', pearls: 10_000 },
+  { id: 'lamps', name: 'Deep lamps', pearls: 3000 },
+  { id: 'keel', name: 'Iron keel', pearls: 25_000 },
 ];
 
 export const DIVE = {

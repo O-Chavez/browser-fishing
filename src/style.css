@@ -835,6 +835,10 @@ body.touch .dcard .btn kbd { display: none; }
 .pbar.full i { background: linear-gradient(#5fd6bd, #2fa98f); }
 .reed .row .prog { margin-top: 6px; }
 .reed .row .prog .pbar { flex: 1 1 auto; max-width: 240px; }
+/* Reed's chart: how many charters the next part is, the Shiny Lures held with the Bag's switch, and the hint without them */
+.reed .row small.far { margin-top: 5px; }
+.reed .row .perk { flex: none; font: inherit; color: var(--ink); cursor: pointer; }
+.reed .row.quiet { background: var(--paper-2); box-shadow: none; font-size: 13px; font-weight: 700; color: var(--ink-muted); }
 .dcard .row.part small { display: block; font-size: 12px; font-weight: 800; color: #1f7a68; }
 .reed .foot .coin { width: 13px; height: 13px; vertical-align: -2px; }
 .dcard .row.net { background: var(--paper-2); }

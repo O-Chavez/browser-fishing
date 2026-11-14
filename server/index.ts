@@ -15,6 +15,7 @@ import { guarded } from './guard';
 import { createShutdown, type ShutdownConn } from './shutdown';
 import { Room } from './room';
 import { SmokeStats } from './smokestats';
+import { lakeReport } from './lakestats';
 import { createStorage } from './storage';
 
 const storage = createStorage(process.env, fileURLToPath(new URL('./', import.meta.url)));
@@ -145,6 +146,7 @@ function room(name: string): Room {
     r.backPay = backPay;
     r.smokeStats = smokeStats;
     r.smokeReport = () => smokeStats.report([...rooms.values()].flatMap((x) => x.onlineSaves()));
+    r.lakeReport = () => lakeReport(accounts.lakeRows());
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     r.testHooks = process.env.TEST_HOOKS === '1';
     rooms.set(name, r);

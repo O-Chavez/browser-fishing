@@ -82,8 +82,8 @@ import {
   dishById, smokeSeconds, stageById, type BuffKind, type Dish, type DishId, type StageId,
 } from '../data/smokehouse';
 import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type Gaps, type ReelTune } from './reel';
-import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, PERKS, ROULETTE_PAY, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
-import { blackjackVerdict, chipsFor, doubleCost, type BlackjackView } from './casino';
+import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, LURE_BULK_PACKS, LURE_CHARGES, PERKS, ROULETTE_PAY, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
+import { blackjackVerdict, cashOutAllChips, cashOutSlots, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
 import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type SaveData } from './state';
 import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
@@ -1186,7 +1186,8 @@ export class Game {
       this.confirmDish = null;
     }
     else if (pick) this.pick[pick as keyof typeof this.pick] = id;
-    else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id! });
+    else if (act === 'perk') this.casinoSend({ t: 'buyperk', id: id!, ...(btn.dataset.count ? { count: Number(btn.dataset.count) } : {}) });
+    else if (act === 'cashoutall') this.casinoSend({ t: 'cashoutall' });
     else if (act === 'smokeall') return this.smokeAll();
     else if (act === 'sellsmoked' || act === 'sellsmokedall') return this.sellSmoked(id!, act === 'sellsmokedall');
     else if (act === 'eat' || act === 'eatall') return this.eat(id!, act === 'eatall');
@@ -2034,6 +2035,13 @@ export class Game {
         : s.chips < p.chips
           ? this.btn(`Need ${p.chips} chips`, '', 'plain', true)
           : this.btn(`Buy for ${p.chips} chips`, `data-act="perk" data-id="${p.id}"`);
+    // The consumable lure also sells a bulk pack: LURE_BULK_PACKS packs in one press.
+    const bulkChips = p.chips * LURE_BULK_PACKS;
+    const bulk = p.consumable && !locked
+      ? s.chips < bulkChips
+        ? this.btn(`Need ${bulkChips} chips`, '', 'plain', true)
+        : this.btn(`Buy ${LURE_CHARGES * LURE_BULK_PACKS} · ${bulkChips} chips`, `data-act="perk" data-id="${p.id}" data-count="${LURE_BULK_PACKS}"`)
+      : '';
     const detail = this.detail({
       icon: p.icon,
       name: p.name,
@@ -2041,7 +2049,7 @@ export class Game {
       badge: `<span class="badge" style="--c:var(--t${tierOf(p.chips)})">${p.consumable ? 'Consumable' : 'Permanent'} · ${p.chips} chips</span>`,
       body: p.id === 'lure' ? `<div class="have">Charges left: <b>${s.lure}</b></div>` : '',
       note: p.desc,
-      actions: action,
+      actions: action + bulk,
     });
     return `<div class="cols"><div class="main"><h4>Casino unlocks</h4><div class="tiles">${tiles}</div></div>${detail}</div>${this.sellStrip()}`;
   }
@@ -2648,7 +2656,7 @@ export class Game {
       <h2 style="color:${color}">${shiny ? '✨ ' : ''}${fish.name}</h2>
       <p class="blurb">${FISH_BLURB[fish.id] ?? ''}</p>
       <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean ${this.fightTag}">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
-      ${fish.sea && this.fightAt ? catchPearlsHtml(this.fightAt.zone, this.fightAt.marker, { tag: this.fightTag, legend }) : ''}
+      ${fish.sea && this.fightAt ? catchPearlsHtml(this.fightAt.zone, this.fightAt.marker, { tag: this.fightTag, legend, shiny }) : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
@@ -4799,8 +4807,11 @@ export class Game {
   /** Bottom strip in the shop and at the prize counter: how to sell or turn in fish. */
   private sellStrip(): string {
     const fish = this.s.slots.filter((x): x is Extract<SaveData['slots'][number], { k: 'fish' }> => x?.k === 'fish');
-    if (this.tab === 'casino')
-      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> click one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} ${COIN} of fish value.</span></div>`;
+    if (this.tab === 'casino') {
+      const n = cashOutSlots(this.s).length;
+      const all = n ? this.btn(`Turn in all ${n} · ${this.chipsText(cashOutAllChips(this.s))} chips`, 'data-act="cashoutall"', 'ok') : '';
+      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> click one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} ${COIN} of fish value.</span>${all}</div>`;
+    }
     const total = fish.reduce((a, f) => a + eco.sellPrice(this.s, f), 0);
     const all = fish.length ? this.btn(`Sell all ${fish.length} · ${total.toLocaleString()} ${COIN}`, 'data-act="sellall"', 'ok') : '';
     return `<div class="strip"><span>🐟 <b>Sell fish:</b> click one in your hotbar below${fish.length ? '' : ' (you have none right now)'}.</span>${all}</div>`;

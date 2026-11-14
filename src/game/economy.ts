@@ -1,4 +1,4 @@
-import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
+import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_BULK_PACKS, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
 import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
 import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_FISH, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { BOAT_PARTS, glowStep } from '../data/dive';
@@ -328,14 +328,19 @@ export function sellSlot(s: SaveData, i: number): boolean {
   return true;
 }
 
-/** Spends chips on a casino perk. Consumables stack; everything else is bought once. */
-export function buyPerk(s: SaveData, id: string): boolean {
+/**
+ * Spends chips on a casino perk. Consumables stack; everything else is bought once. `count` is the packs of a
+ * consumable bought at once: 1, or `LURE_BULK_PACKS` for the bulk button; anything else, or more than 1 of a
+ * permanent perk, buys nothing.
+ */
+export function buyPerk(s: SaveData, id: string, count = 1): boolean {
   const p = perkById(id);
-  if (!p || s.chips < p.chips) return false;
+  if (count !== 1 && !(count === LURE_BULK_PACKS && p?.consumable)) return false;
+  if (!p || s.chips < p.chips * count) return false;
   if (p.requires && !s.perks.includes(p.requires)) return false;
   if (!p.consumable && s.perks.includes(p.id)) return false;
-  s.chips = Math.round((s.chips - p.chips) * 10) / 10;
-  if (p.id === 'lure') s.lure += LURE_CHARGES;
+  s.chips = Math.round((s.chips - p.chips * count) * 10) / 10;
+  if (p.id === 'lure') s.lure += LURE_CHARGES * count;
   else s.perks.push(p.id);
   // Extra slots holding leftover fish become ordinary ones first.
   if (p.id === 'vest') while (s.slots.length < slotCount(s)) s.slots.push(null);

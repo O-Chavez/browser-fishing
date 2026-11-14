@@ -3,7 +3,7 @@
 import { DEEP_SEA_ROD } from '../data/content';
 import { ABYSS, BEHAVIOURS, BOAT_PARTS, DIVE, LINE, MARKER, ZONES, type Behaviour } from '../data/dive';
 import type { DiveEnd, DiveView } from '../net/protocol';
-import { lineCost, nextBoatPart, nextRodBuy, payAt, pearlMult, pearlsFor, RATING_NAMES, seaRating, spoolPrice, zoneOpen, type PearlFish, type Rating, type SeaRod } from './dive';
+import { averagePearls, lineCost, nextBoatPart, nextRodBuy, payAt, pearlMult, pearlsFor, RATING_NAMES, seaRating, spoolPrice, zoneOpen, type PearlFish, type Rating, type SeaRod } from './dive';
 import type { LossReason } from './reel';
 import { COIN, PEARL } from './format';
 
@@ -27,11 +27,15 @@ export const whereText = (zone: number, marker: number): string => `${ZONES[zone
 /** Where a charter sails to, for the "Casting off" card. */
 export const startText = (v: Pick<DiveView, 'zone' | 'marker'> | null): string => (v ? whereText(v.zone, v.marker) : 'Out to sea');
 
-/** The pearls line on a sea fish's catch card: what it paid here, and why when it paid more. */
+/**
+ * The pearls line on a sea fish's catch card: what it paid here, and why when it paid more ("double: Feisty", "five
+ * times: shiny", "50 times: shiny Brutish legend").
+ */
 export function catchPearlsHtml(zone: number, marker: number, fish: PearlFish): string {
   const m = pearlMult(fish);
   const tag = fish.tag === 'feisty' ? 'Feisty' : fish.tag === 'brutish' ? 'Brutish' : '';
-  const why = m <= 1 ? '' : fish.legend ? `${m === 5 ? 'five' : m === 10 ? 'ten' : `${m}`} times: ${tag ? `${tag} ` : ''}legend` : `double: ${tag}`;
+  const what = [fish.shiny ? 'shiny' : '', tag, fish.legend ? 'legend' : ''].filter(Boolean).join(' ');
+  const why = m <= 1 ? '' : m === 2 ? `double: ${what}` : `${m === 5 ? 'five' : m === 10 ? 'ten' : `${m}`} times: ${what}`;
   return `<div class="pearls">${PEARL} +${pearlsFor(zone, marker, fish)}${why ? `<small class="credit">${why}</small>` : ''}</div>`;
 }
 
@@ -232,6 +236,9 @@ export interface ReedSave {
   abyssLevels: number;
   boatParts: number;
   abyssRecord: number;
+  /** Shiny Lure casts held, and whether they're switched off (saved for later). */
+  lure: number;
+  lureOff: boolean;
 }
 
 const rodOf = (s: Pick<ReedSave, 'rodStep' | 'abyssLevels'>): SeaRod => ({ steps: s.rodStep, levels: s.abyssLevels });
@@ -265,6 +272,60 @@ export function reedZone(s: Pick<ReedSave, 'boatParts' | 'rodStep' | 'abyssLevel
 
 /** How many fish one spool lasts at this line cost. */
 export const fishPerSpool = (cost: number): number => Math.floor(LINE.spool / cost);
+
+/** Shiny Lures come up on Reed's chart once this zone is open: the first two zones pass quickly without them. */
+const LURE_ZONE = ZONES.findIndex((z) => z.id === 'kelp');
+
+/** How many charters the next boat part is, fishing one zone: plain, and with a Shiny Lure on every cast. */
+export interface PartCharters {
+  part: string;
+  plain: number;
+  lured: number;
+}
+
+/**
+ * The charters still to fish for the next boat part in this zone (and Abyss marker), each one spool: the pearls still
+ * needed over what a spool pays here for this rod, rounded up. A spool pays the fish it lasts (`fishPerSpool`) times a
+ * fish's average pearls (`averagePearls`, every fish shiny when lured). Null with the boat fully fitted, the part
+ * already ready to fit, or the zone Too much for the rod.
+ */
+export function chartersToPart(s: Pick<ReedSave, 'pearls' | 'boatParts' | 'rodStep' | 'abyssLevels'>, zone: number, marker: number): PartCharters | null {
+  const p = partProgress(s);
+  if (!p || p.ready) return null;
+  const r = rodOf(s);
+  const m = zone === ABYSS ? marker : 0;
+  if (seaRating(zone, m, r) === 'over') return null;
+  const fish = fishPerSpool(lineCost(zone, m, r));
+  const left = p.need - p.have;
+  // A hair under, so a spool that pays exactly what's left reads as that many charters and not one more.
+  const count = (lured: boolean) => Math.max(1, Math.ceil(left / (fish * averagePearls(zone, m, lured)) - 1e-9));
+  return { part: p.name, plain: count(false), lured: count(true) };
+}
+
+/**
+ * Reed's line under the boat part's bar: "About 12 charters to the Deep lamps · about 3 with Shiny Lures". The lured
+ * half once Kelp Deep is open, and only when it's fewer. Empty when `chartersToPart` has nothing to say.
+ */
+export function chartersText(s: Pick<ReedSave, 'pearls' | 'boatParts' | 'rodStep' | 'abyssLevels'>, zone: number, marker: number): string {
+  const c = chartersToPart(s, zone, marker);
+  if (!c) return '';
+  const lured = zoneOpen(s, LURE_ZONE) && c.lured < c.plain ? ` · about ${num(c.lured)} with Shiny Lures` : '';
+  return `About ${plural(c.plain, 'charter')} to the ${c.part}${lured}`;
+}
+
+/**
+ * Reed's row for the Shiny Lures held, with the same on/off switch as the Bag's (`data-act="lure"`). Holding none, a
+ * quiet hint once Kelp Deep is open, else nothing.
+ */
+export function lureRowHtml(s: Pick<ReedSave, 'lure' | 'lureOff' | 'boatParts'>): string {
+  if (s.lure <= 0) {
+    return zoneOpen(s, LURE_ZONE)
+      ? '<div class="row quiet"><div>✨ Shiny Lures from the Prize Counter work out here: every fish a shiny, five times the coins and Black Pearls.</div></div>'
+      : '';
+  }
+  const on = !s.lureOff;
+  return `<div class="row lures"><div>✨ ${plural(s.lure, 'Shiny Lure')}<small>${on ? `Every bite is a shiny until ${s.lure === 1 ? 'it runs' : 'they run'} out` : 'Saved for later'}</small></div><button class="perk lure${on ? '' : ' off'}" data-act="lure" aria-pressed="${on}" title="Click to turn ${on ? 'off' : 'on'}"><b>${on ? 'On' : 'Off'}</b><span class="sw"></span></button></div>`;
+}
 
 /** What the rod's next purchase changes, in plain words, for the zone it belongs to. */
 export function nextRodText(s: Pick<ReedSave, 'rodStep' | 'abyssLevels'>, marker: number): string {
@@ -313,8 +374,9 @@ function zoneCard(s: ReedSave, i: number, picked: boolean, marker: number): stri
 }
 
 /**
- * Captain Reed's panel: the chart of the five zones (a card each, open ones to pick), the rod and the boat's next
- * part, and the way out to sea. Without the Deep Sea Rod he sells it and says what a charter is. While charters are
+ * Captain Reed's panel: the chart of the five zones (a card each, open ones to pick), the rod, the boat's next part
+ * and how many charters in the picked zone it is (`chartersText`), the Shiny Lures held (`lureRowHtml`), and the way
+ * out to sea. Without the Deep Sea Rod he sells it and says what a charter is. While charters are
  * closed, that his seaplane isn't ready yet.
  */
 export function reedHtml(o: { say: string; s: ReedSave; pick: number; open: boolean; marker?: number }): string {
@@ -352,8 +414,9 @@ export function reedHtml(o: { say: string; s: ReedSave; pick: number; open: bool
       ? `<button class="btn off" disabled><span>${needCoins(buy.coins - s.coins)}</span><small>of ${num(buy.coins)}</small></button>`
       : `<button class="btn ok" data-act="${buy.kind === 'step' ? 'rodstep' : 'abysslevel'}"><span>Upgrade</span><small>${COIN} ${num(buy.coins)}</small></button>`;
   const part = partProgress(s);
+  const far = chartersText(s, o.pick, marker);
   const partRow = part
-    ? `<div class="row"><div>⛵ Next boat part: ${part.name}<small>Opens ${lower(ZONES[part.zone].name)}</small><span class="prog">${partBar(part)}</span></div>${
+    ? `<div class="row"><div>⛵ Next boat part: ${part.name}<small>Opens ${lower(ZONES[part.zone].name)}</small><span class="prog">${partBar(part)}</span>${far ? `<small class="far">${far}</small>` : ''}</div>${
         part.ready
           ? `<button class="btn ok" data-act="boatpart"><span>Fit it</span><small>${PEARL} ${num(part.need)}</small></button>`
           : `<button class="btn off" disabled><span>${PEARL} ${num(part.need - part.have)} to go</span></button>`
@@ -365,7 +428,7 @@ export function reedHtml(o: { say: string; s: ReedSave; pick: number; open: bool
     : `<button class="btn off" disabled><span>${needCoins(price - s.coins)}</span><small>for the spool</small></button>`;
   return `<div class="reed"><p class="say">"${o.say}"</p>
     <div class="zcards">${cards}</div>${abyss}
-    <div class="rows"><div class="row"><div>🎣 ${rodProgress(s)}<small>${nextRodText(s, marker)}</small></div>${rodBtn}</div>${partRow}</div>
+    <div class="rows"><div class="row"><div>🎣 ${rodProgress(s)}<small>${nextRodText(s, marker)}</small></div>${rodBtn}</div>${partRow}${lureRowHtml(s)}</div>
     <div class="btns"><button class="btn plain" data-act="close">Not now</button>${go}</div>
     <div class="foot"><span>${COIN} ${num(s.coins)} coins</span></div></div>`;
 }
@@ -379,6 +442,9 @@ function partRowHtml(s: PartSave | null): string {
   if (!p) return '';
   return `<div class="row part${p.ready ? ' ready' : ''}"><span>⛵ ${p.name}${p.ready ? '<small>Ready: see Captain Reed</small>' : ''}</span><span class="prog">${partBar(p)}</span></div>`;
 }
+
+/** The cards' row for the shiny fish a charter has landed; nothing before the first. */
+const shinyRowHtml = ({ shiny = 0 }: { shiny?: number }): string => (shiny > 0 ? `<div class="row">✨ Shiny fish <b>${num(shiny)}</b></div>` : '');
 
 /** The hint on the spool's-out card: when the zone isn't Easy and the next rod purchase is on sale and would cut the line a fish uses. */
 export function outHint(v: DiveView, s: OutSave): string {
@@ -403,6 +469,7 @@ export function outHtml(v: DiveView, s: OutSave): string {
     <div class="sub">${plural(t.landed, 'fish', 'fish')} landed · ${t.lost} got away</div>
     <div class="big">${PEARL}+${num(t.pearls)}</div>
     <div class="rows">
+      ${shinyRowHtml(t)}
       <div class="row">Coins from fish <b>${COIN} ${signed(t.coins)}</b></div>
       <div class="row">Line · ${plural(t.spools, 'spool')} <b>${t.spoolCoins ? `${COIN} ${signed(-t.spoolCoins)}` : 'free'}</b></div>
       ${partRowHtml(s)}
@@ -435,6 +502,7 @@ export function endHtml(e: DiveEnd, record = false, s: PartSave | null = null): 
     <div class="big">${PEARL}+${num(t.pearls)}</div>
     <div class="rows">
       <div class="row">Fish landed <b>${num(t.landed)}</b></div>
+      ${shinyRowHtml(t)}
       <div class="row">Fish that got away <b>${num(t.lost)}</b></div>
       <div class="row">Coins from fish <b>${COIN} ${signed(t.coins)}</b></div>
       <div class="row">Line · ${plural(t.spools, 'spool')} <b>${t.spoolCoins ? `${COIN} ${signed(-t.spoolCoins)}` : 'free'}</b></div>

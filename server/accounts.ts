@@ -6,6 +6,7 @@ import { hasSailed, payBack } from '../src/game/economy';
 import { XP_TO_FLAT, applyXp, earnedXp } from '../src/game/progression';
 import { migrate, newSave, type SaveData } from '../src/game/state';
 import { rudeName } from './chat';
+import { cleanLake, type LakeCounts } from './lakestats';
 import type { DiveRun } from './dive';
 import { Lockout } from './lockout';
 
@@ -27,6 +28,8 @@ export interface Account {
   supporter?: number;
   /** The player's biggest single casino win and loss, for the casino record board. Kept outside the save so a reset keeps it. */
   casino?: { win?: Gamble; loss?: Gamble };
+  /** Play-test counters for `/lakestats` (`server/lakestats.ts`). Kept outside the save so a reset keeps them. */
+  lake?: LakeCounts;
   /** When the name last changed, for the rename cooldown. */
   renamed?: number;
   /** The name before the last change, lowercase, so browsers that still have it saved follow the account. */
@@ -90,11 +93,11 @@ export class AccountStore {
     private now: () => number = Date.now,
   ) {
     this.lock = new Lockout(5, 50, 15 * 60_000, now);
-    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; casino?: Account['casino']; renamed?: number; prev?: string; save: unknown };
+    type Stored = { name: string; hash?: string; tokens?: string[]; pw?: PassHash; supporter?: number; casino?: Account['casino']; lake?: LakeCounts; renamed?: number; prev?: string; save: unknown };
     for (const [k, a] of Object.entries(raw) as [string, Stored][]) {
       // Older saves kept a single token `hash`.
       const tokens = Array.isArray(a?.tokens) ? a.tokens : a?.hash ? [a.hash] : null;
-      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...pick(a), save: migrate(a.save as SaveData), online: false });
+      if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...pick(a), ...(a.lake ? { lake: cleanLake(a.lake) } : {}), save: migrate(a.save as SaveData), online: false });
     }
   }
 
@@ -337,6 +340,11 @@ export class AccountStore {
     );
   }
 
+  /** Every account's name and `/lakestats` counters. */
+  lakeRows(): { name: string; lake?: LakeCounts }[] {
+    return [...this.accounts.values()].map((a) => ({ name: a.name, lake: a.lake }));
+  }
+
   /** The data to persist if anything changed since the last call, else null. */
   takeDirty(): Record<string, unknown> | null {
     if (!this.dirty) return null;
@@ -350,10 +358,11 @@ export class AccountStore {
 }
 
 /** The optional account fields, left out when unset so the saved JSON stays small. */
-const pick = (a: Pick<Account, 'pw' | 'supporter' | 'casino' | 'renamed' | 'prev'>) => ({
+const pick = (a: Pick<Account, 'pw' | 'supporter' | 'casino' | 'lake' | 'renamed' | 'prev'>) => ({
   ...(a.pw ? { pw: a.pw } : {}),
   ...(a.supporter ? { supporter: a.supporter } : {}),
   ...(a.casino ? { casino: a.casino } : {}),
+  ...(a.lake ? { lake: a.lake } : {}),
   ...(a.renamed ? { renamed: a.renamed } : {}),
   ...(a.prev ? { prev: a.prev } : {}),
 });

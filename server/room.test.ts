@@ -517,6 +517,38 @@ describe('shinies & fishing spots', () => {
     expect(last(a.c, 'castok').shiny).toBe(true);
     expect(a.acct.save.lure).toBe(1);
   });
+  it('counts lure casts spent at the lake for /lakestats, only when a lure is spent', () => {
+    const { room, join } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(a.acct.lake?.lakeLures ?? 0).toBe(0);
+    a.acct.save.lure = 2;
+    room.handle(a.id, { t: 'lure', on: false });
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(a.acct.lake?.lakeLures ?? 0).toBe(0);
+    room.handle(a.id, { t: 'lure', on: true });
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(a.acct.lake).toMatchObject({ lakeLures: 1, seaLures: 0, seaHooks: 0 });
+  });
+
+  it('counts online seconds at the lake side and, once on a charter, at sea', () => {
+    const t = setup();
+    t.room.chartersOpen = true;
+    const a = t.join('Ann');
+    t.advance(30_000);
+    t.room.snapshot();
+    expect(a.acct.lake).toMatchObject({ lakeSec: 30, seaSec: 0 });
+    const s = a.acct.save;
+    s.seaRod = true;
+    s.coins = 100_000;
+    t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
+    t.room.handle(a.id, { t: 'dive', zone: 0 });
+    expect(s.location).toBe('sea');
+    t.advance(20_000);
+    t.room.snapshot();
+    expect(a.acct.lake).toMatchObject({ lakeSec: 30, seaSec: 20 });
+  });
+
   it('flags a perfect cast in the roll', () => {
     const { room, join } = setup() as ReturnType<typeof setup>;
     const a = join('Ann');
@@ -1180,7 +1212,7 @@ describe('charters', () => {
     expect(a.c.log.findLastIndex((m) => m.t === 'state')).toBeGreaterThan(dive);
     expect(lastDive(a)).toMatchObject({
       zone: 1, marker: 0, toNext: 0, line: LINE.spool, state: 'fishing', rating: 'tough', fishLine: 13, spool: 14_000,
-      tally: { landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: 14_000 },
+      tally: { landed: 0, lost: 0, pearls: 0, coins: 0, spools: 1, spoolCoins: 14_000, shiny: 0 },
     });
     expect(lastDive(a).pay.pearls).toBe(3);
     expect(lastDive(a).gain).toBeUndefined();
@@ -1245,22 +1277,74 @@ describe('charters', () => {
     fight(t, a);
     expect(last(a.c, 'castok').tag).toBeUndefined();
     expect(lastDive(a)).toMatchObject({ gain: 8, tally: { pearls: 24 } });
-    // Under 1 in 20 is the zone's legend, tagged too: ten times.
+    // Under 1 in 20 is the zone's legend, tagged too, and the same roll makes it shiny: 2 × 5 × 5, fifty times.
     t.setRoll(0.01);
     fight(t, a);
     expect(FISH.find((f) => f.id === last(a.c, 'castok').fishId)?.legend).toBe(true);
-    expect(lastDive(a)).toMatchObject({ gain: 80, tally: { pearls: 104 } });
+    expect(last(a.c, 'castok')).toMatchObject({ tag: 'feisty', shiny: true });
+    expect(lastDive(a)).toMatchObject({ gain: 400, tally: { pearls: 424, shiny: 1 } });
     // A lost fish pays nothing and sends no gain.
     t.setRoll(0.1);
     fight(t, a, false);
-    expect(lastDive(a)).toMatchObject({ tally: { landed: 3, lost: 1, pearls: 104 } });
+    expect(lastDive(a)).toMatchObject({ tally: { landed: 3, lost: 1, pearls: 424 } });
     expect(lastDive(a).gain).toBeUndefined();
     expect(lastDive(a).lost).toBeTruthy();
-    expect(a.acct.save.pearls).toBe(104);
+    expect(a.acct.save.pearls).toBe(424);
     // Heading home settles nothing more: every fish was credited as it landed.
     t.room.handle(a.id, { t: 'headhome' });
     expect(last(a.c, 'diveend').end).toEqual({ why: 'home', zone: 2, marker: 0, tally: lastDive(a).tally });
-    expect(a.acct.save.pearls).toBe(104);
+    expect(a.acct.save.pearls).toBe(424);
+  });
+
+  it('counts sea casts, lured ones and the pearls landed for /lakestats', () => {
+    const t = setup();
+    const a = diver(t);
+    const s = a.acct.save;
+    Object.assign(s, { boatParts: 2, rodStep: 4, coins: 30_000, pearls: 0 });
+    t.room.handle(a.id, { t: 'dive', zone: 2 });
+    t.setRoll(0.5);
+    s.lure = 1;
+    fight(t, a);
+    // The lured cast is a sea one: it leaves the lake counter alone.
+    expect(a.acct.lake).toMatchObject({ lakeLures: 0, seaLures: 1, seaHooks: 1, pearls: 40 });
+    fight(t, a);
+    expect(a.acct.lake).toMatchObject({ lakeLures: 0, seaLures: 1, seaHooks: 2, pearls: 48 });
+    // A fish lost on the line is a hooked cast but earns no pearls.
+    fight(t, a, false);
+    expect(a.acct.lake).toMatchObject({ seaHooks: 3, pearls: 48 });
+  });
+
+  it('pays a shiny five times the pearls into the save and counts it in the tally; a plain fish neither', () => {
+    const t = setup();
+    const a = diver(t);
+    const s = a.acct.save;
+    Object.assign(s, { boatParts: 2, rodStep: 4, coins: 30_000, pearls: 0 });
+    t.room.handle(a.id, { t: 'dive', zone: 2 });
+    // A roll of 0.5 is an everyday fish with no tag and no natural shiny: a Shiny Lure makes it shiny.
+    t.setRoll(0.5);
+    s.lure = 1;
+    fight(t, a);
+    expect(last(a.c, 'castok')).toMatchObject({ shiny: true });
+    expect(last(a.c, 'castok').tag).toBeUndefined();
+    expect(s.lure).toBe(0);
+    expect(lastDive(a)).toMatchObject({ gain: 40, tally: { landed: 1, pearls: 40, shiny: 1 } });
+    expect(s.pearls).toBe(40);
+    expect(last(a.c, 'state').save.pearls).toBe(40);
+    fight(t, a);
+    expect(last(a.c, 'castok').shiny).toBe(false);
+    expect(lastDive(a)).toMatchObject({ gain: 8, tally: { landed: 2, pearls: 48, shiny: 1 } });
+    expect(s.pearls).toBe(48);
+    t.room.handle(a.id, { t: 'headhome' });
+    expect(last(a.c, 'diveend').end.tally).toMatchObject({ landed: 2, shiny: 1, pearls: 48 });
+  });
+
+  it("reads a held charter's tally from before the shiny count as none", () => {
+    const t = setup();
+    const a = diver(t);
+    t.room.handle(a.id, { t: 'dive', zone: 0 });
+    delete (a.acct.dive!.dive.tally as { shiny?: number }).shiny;
+    t.room.handle(a.id, { t: 'headhome' });
+    expect(last(a.c, 'diveend').end.tally.shiny).toBe(0);
   });
 
   it('in the Abyss reaches a marker every 3 fish, pays 12% more a marker, keeps the furthest, and starts up to it', () => {
@@ -1381,7 +1465,7 @@ describe('charters', () => {
     expect(lastDive(a).state).toBe('out');
     // Heading home loses nothing: the pearls and coins are the player's already.
     t.room.handle(a.id, { t: 'headhome' });
-    expect(last(a.c, 'diveend').end).toEqual({ why: 'home', zone: 1, marker: 0, tally: { landed: 1, lost: 1, pearls: 3, coins: lastDive(a).tally.coins, spools: 2, spoolCoins: 28_000 } });
+    expect(last(a.c, 'diveend').end).toEqual({ why: 'home', zone: 1, marker: 0, tally: { landed: 1, lost: 1, pearls: 3, coins: lastDive(a).tally.coins, spools: 2, spoolCoins: 28_000, shiny: 0 } });
     expect(s).toMatchObject({ location: 'pond', pearls: 3, coins: 13_999 });
     expect(a.acct.dive).toBeUndefined();
   });

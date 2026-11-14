@@ -1,5 +1,5 @@
 import { DIVE } from '../src/data/dive';
-import { lineCost, payAt, seaRating, spoolPrice, startDive, type Dive, type SeaRod } from '../src/game/dive';
+import { lineCost, payAt, seaRating, spoolPrice, startDive, type Dive, type SeaRod, type Tally } from '../src/game/dive';
 import type { LossReason } from '../src/game/reel';
 import type { DiveEnd, DiveView } from '../src/net/protocol';
 
@@ -32,12 +32,15 @@ export function newRun(zone: number, marker: number, name: string, rod: SeaRod):
 /** True once a charter has waited longer than `DIVE.holdMs` for its angler. */
 export const expired = (run: DiveRun, now: number): boolean => run.heldAt !== null && now - run.heldAt > DIVE.holdMs;
 
+/** A copy of the charter's tally for a message, with no shiny count read as 0 (a charter from before it was kept). */
+const tallyOf = (run: DiveRun): Tally => ({ ...run.dive.tally, shiny: run.dive.tally.shiny ?? 0 });
+
 export function diveView(run: DiveRun): DiveView {
   const d = run.dive;
   const v: DiveView = {
     id: run.id, zone: d.zone, marker: d.marker, toNext: d.toNext, line: d.line, state: d.state,
     rating: seaRating(d.zone, d.marker, d.rod), fishLine: lineCost(d.zone, d.marker, d.rod), pay: payAt(d.zone, d.marker),
-    spool: spoolPrice(d.zone), tally: { ...d.tally },
+    spool: spoolPrice(d.zone), tally: tallyOf(run),
   };
   if (run.cost !== undefined) v.cost = run.cost;
   if (run.lost) v.lost = run.lost;
@@ -46,4 +49,4 @@ export function diveView(run: DiveRun): DiveView {
 }
 
 /** The end card's message: why the charter ended, where, and its tally. Nothing is settled here: fish paid as they landed. */
-export const diveEnd = (run: DiveRun, why: DiveEnd['why']): DiveEnd => ({ why, zone: run.dive.zone, marker: run.dive.marker, tally: { ...run.dive.tally } });
+export const diveEnd = (run: DiveRun, why: DiveEnd['why']): DiveEnd => ({ why, zone: run.dive.zone, marker: run.dive.marker, tally: tallyOf(run) });

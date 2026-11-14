@@ -18,6 +18,7 @@ import type { Account } from './accounts';
 import { ChatGate } from './chat';
 import { DevGate, runDev } from './dev';
 import { diveEnd, diveView, expired, newRun, type DiveRun } from './dive';
+import { lakeOf } from './lakestats';
 import type { SmokeStats } from './smokestats';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
@@ -145,6 +146,8 @@ export class Room {
   smokeStats: SmokeStats | null = null;
   /** Dev console `/smokestats`; the server reports across every room. */
   smokeReport: () => string[] = () => ['No Smokehouse stats on this server.'];
+  /** Dev console `/lakestats`; the server reports from the account store. */
+  lakeReport: () => string[] = () => ['No lake stats on this server.'];
   /** Scripted runs (smoke, screenshots, trailer): the test hook's teleports may use `/goto` without the dev login. Never on in production. */
   testHooks = false;
   /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
@@ -402,12 +405,26 @@ export class Room {
         if (this.atCasino(m, 'prizes')) {
           const bad = cas.cashOutError(s, int(msg.i));
           if (bad) m.conn.send({ t: 'notice', msg: bad });
-          else changed = cas.cashOut(s, int(msg.i)) > 0;
+          else {
+            const chips = cas.cashOut(s, int(msg.i));
+            changed = chips > 0;
+            lakeOf(m.acct).chips += chips;
+          }
         }
         break;
-      case 'buyperk':
-        changed = this.atCasino(m, 'prizes') && eco.buyPerk(s, str(msg.id));
+      case 'cashoutall':
+        if (this.atCasino(m, 'prizes')) {
+          const chips = cas.cashOutAll(s);
+          changed = chips > 0;
+          lakeOf(m.acct).chips += chips;
+        }
         break;
+      case 'buyperk': {
+        const lures = s.lure;
+        changed = this.atCasino(m, 'prizes') && eco.buyPerk(s, str(msg.id), msg.count === undefined ? 1 : typeof msg.count === 'number' ? msg.count : NaN);
+        if (s.lure > lures) lakeOf(m.acct).bought += s.lure - lures;
+        break;
+      }
       case 'cast':
         changed = this.cast(m, msg.x, msg.z, msg.perfect === true);
         break;
@@ -545,6 +562,7 @@ export class Room {
       return reply([this.setSupporter(who, !off)]);
     }
     if (cmd === 'smokestats') return reply(this.smokeReport());
+    if (cmd === 'lakestats') return reply(this.lakeReport());
     if (cmd === 'backpay') {
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply(this.backPay(args[0] === 'apply'));
@@ -747,14 +765,16 @@ export class Room {
 
   /**
    * Applies a finished fight to the charter: a landed fish's pearls (`pearlsFor`, with its tag and whether it's a
-   * legend) go to the save now, beside the coins it sold for (`coins`), and the line pays for the fish (`afterFight`).
-   * The pearls are kept as `gain` for the HUD. An Abyss marker reached is kept as the record.
+   * legend or shiny) go to the save now, beside the coins it sold for (`coins`), and the line pays for the fish
+   * (`afterFight`), which counts a shiny in the tally. The pearls are kept as `gain` for the HUD. An Abyss marker
+   * reached is kept as the record.
    */
   private fightOver(m: Member, run: DiveRun, p: Pending, landed: boolean, coins = 0, lost?: LossReason | 'gone'): void {
     const d = run.dive;
-    const pearls = landed ? pearlsFor(d.zone, d.marker, { tag: p.tag ?? null, legend: !!byId(FISH, p.fishId).legend }) : 0;
+    const pearls = landed ? pearlsFor(d.zone, d.marker, { tag: p.tag ?? null, legend: !!byId(FISH, p.fishId).legend, shiny: p.shiny }) : 0;
     if (landed) m.acct.save.pearls += pearls;
-    const res = afterFight(d, landed ? { pearls, coins } : null);
+    if (pearls > 0) lakeOf(m.acct).pearls += pearls;
+    const res = afterFight(d, landed ? { pearls, coins, shiny: p.shiny } : null);
     run.gain = landed ? pearls : undefined;
     run.cost = res.cost;
     run.lost = lost;
@@ -902,6 +922,8 @@ export class Room {
     const now = this.now();
     const s = m.acct.save;
     const worn = smoke.tickBuffs(s, now - m.smokeAt);
+    // Online time for `/lakestats`, by where they spent it: on a charter or at the lake side.
+    lakeOf(m.acct)[this.runOf(m) ? 'seaSec' : 'lakeSec'] += (now - m.smokeAt) / 1000;
     m.smokeAt = now;
     const done = smoke.collect(s, now);
     if (done.length) m.conn.send({ t: 'notice', msg: `🔥 Smoked ${smokedText(done)}: it's in your Pantry.` });
@@ -930,7 +952,9 @@ export class Room {
       m.conn.send({ t: 'castfail', msg: eco.CAST_MESSAGES[can === 'ok' ? 'nobait' : can] });
       return false;
     }
+    const lures = m.acct.save.lure;
     const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
+    if (m.acct.save.lure < lures) lakeOf(m.acct).lakeLures += lures - m.acct.save.lure;
     m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
@@ -951,7 +975,11 @@ export class Room {
     if (can !== 'ok') return fail(eco.CAST_MESSAGES[can]);
     this.abandon(m);
     if (!this.runOf(m)) return true;
+    const lures = s.lure;
     const roll = eco.rollSeaCast(s, run.dive.zone, run.dive.marker, run.dive.rod, this.rng);
+    const lake = lakeOf(m.acct);
+    lake.seaLures += lures - s.lure;
+    if (roll.fishId) lake.seaHooks++;
     m.pending = { fishId: roll.fishId!, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.b ? { b: roll.b } : {}), ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) };
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });

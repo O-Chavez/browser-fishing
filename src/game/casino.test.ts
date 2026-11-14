@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHIP_COINS, WHEEL_WEDGES } from '../data/casino';
+import { CHIP_COINS, LURE_BULK_PACKS, LURE_CHARGES, WHEEL_WEDGES } from '../data/casino';
 import { FISH } from '../data/content';
 import * as cas from './casino';
 import * as eco from './economy';
@@ -85,6 +85,44 @@ describe('prize shop', () => {
     expect(s.lure).toBe(6);
     s.chips = 0;
     expect(eco.buyPerk(s, 'gloves')).toBe(false);
+  });
+
+  it('buys ten lure packs at once for ten times the price, and nothing otherwise', () => {
+    const s = newSave();
+    s.chips = 200;
+    expect(eco.buyPerk(s, 'lure', LURE_BULK_PACKS)).toBe(true);
+    expect(s.lure).toBe(LURE_CHARGES * LURE_BULK_PACKS);
+    expect(s.lure).toBe(30);
+    expect(s.chips).toBe(50);
+    expect(eco.buyPerk(s, 'lure', LURE_BULK_PACKS)).toBe(false);
+    expect(s.lure).toBe(30);
+    expect(s.chips).toBe(50);
+    for (const bad of [0, 2, 9, 11, -1, 1.5, NaN]) expect(eco.buyPerk(s, 'lure', bad)).toBe(false);
+    s.chips = 5000;
+    expect(eco.buyPerk(s, 'gloves', LURE_BULK_PACKS)).toBe(false);
+    expect(s.perks).toEqual([]);
+    expect(s.chips).toBe(5000);
+  });
+
+  it('"Turn in all" takes every fish worth a chip, leaves the cheap ones and adds the chips to one decimal', () => {
+    const s = newSave();
+    s.slots[0] = fish(6);
+    s.slots[1] = { k: 'fish', fishId: FISH[0].id, size: FISH[0].minSize };
+    s.slots[2] = fish(9);
+    const a = cas.chipsFor(eco.fishValue(s.slots[0] as ReturnType<typeof fish>));
+    const b = cas.chipsFor(eco.fishValue(s.slots[2] as ReturnType<typeof fish>));
+    expect(cas.cashOutSlots(s)).toEqual([0, 2]);
+    const expected = Math.round((a + b) * 10) / 10;
+    expect(cas.cashOutAllChips(s)).toBe(expected);
+    expect(cas.cashOutAll(s)).toBe(expected);
+    expect(s.chips).toBe(expected);
+    expect(s.slots[0]).toBeNull();
+    expect(s.slots[1]).not.toBeNull();
+    expect(s.slots[2]).toBeNull();
+    expect(cas.cashOutAll(s)).toBe(0);
+    const empty = newSave();
+    expect(cas.cashOutAll(empty)).toBe(0);
+    expect(empty.chips).toBe(0);
   });
 
   it('charms raise the value of fish when they are caught', () => {
