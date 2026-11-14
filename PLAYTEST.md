@@ -190,3 +190,16 @@ Per spool after paying for it: the Shelf 93k (free spool); the Drop-off 37k at T
 ## Inbox
 
 <!-- New feedback goes here as it comes in, in the player's words, with the date and who said it. -->
+
+**Oscar, 2026-11-14, first play of the boost (the Twilight, a rod that makes it Easy, 40 Shiny Lures on one charter):**
+
+- "A full charter at the twilight with 40 shiny lures netted me 5400 pearls and 2.2m coins. The pacing doesnt feel inherently bad - we might need to increase the cost of rod upgrades a bit to match the new coin pacing."
+- "Not sure if we still want to integrate the hull aspect - I feel like ammount of fish that can be caught should be significantly lower per trip. At the twilight with a rod that makes the zone easy, i get about 60 fish. Adding hull upgrades would give another thing to use coins with (right now no real use for them). Not sure how we want to do that, if each zone gets its own hull/progression or if theres going to be some wacky scaling."
+
+Checked against the numbers (not yet decided):
+
+- The pearls match the rules: 40 lured fish at 135 pearls each on average is 5,400. That charter is 22% of the Iron keel (25,000), so about 4.6 such charters.
+- The coins ran about a quarter over the sim, which counts no dishes or charms. At that rate the keel's pearls arrive with about 10.2M coins earned, against 7.2M for the Twilight's two rod steps: a surplus of about 3M, 40%, with nothing to buy until the Abyss's rod levels.
+- 60 fish is the Easy case only (300 m at 5 m a fish). A zone at Fair gives 33 and at Tough 17, so a new zone's charters are already about half as long.
+- Proposed in reply: one hold on the boat, on the rod's pattern (a bigger hold goes on sale as each zone opens, priced in that zone's coins), 20 fish growing by 5 a zone to 40, with the Twilight's hold level priced to take the coin surplus so the rod's steps need not rise. Not a hold per zone.
+- Oscar on the size (2026-11-14): "making it smaller might not be a bad idea." So the plan starts below 20 to 40: try 10 growing by 5 a zone to 30, and 15 to 30 beside it. A smaller hold makes each level worth more, since the fee and the flight out are a bigger share of a short charter. To check in the plan: how short the first charters on the Shelf get, and the Abyss, where a marker comes every 3 fish landed, so the hold would cap how far out a charter reaches.
