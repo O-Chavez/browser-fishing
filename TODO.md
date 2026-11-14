@@ -22,6 +22,9 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] Make the dev console login safe for screen sharing (Oscar, 2026-11-13): `/login` on its own in the chat opens a prompt for the username and password, both starred out as they're typed, so nothing readable shows to anyone watching
   - Today `/login user pass` is typed in full into the chat box, readable while typing; only the echoed line hides the password (`send` in the `ChatBox` setup, `src/game/game.ts`; `src/game/chatbox.ts`). The server check stays as it is (`command` in `server/room.ts`, `devGate.login`)
   - Keep the prompt's values out of the chat log and the chat input's history. `/resetpass <name> <new password>` shows its new password the same way while typing; decide whether it gets the same prompt
+- [ ] Stop the catch toasts spamming players: only announce another player's catch when it beats that player's own personal record (Oscar, 2026-11-14)
+  - Today every rare-or-better or shiny fish anyone lands in the same place pops a "<name> caught a …" toast (`onAct` in `src/game/game.ts`, from the `hold` act set in `Room.land`, `server/room.ts`). The server already knows when a catch is a personal best (`record` from `applyCatch`, `src/game/economy.ts`: bigger than that fish's best in the Fishdex); send that flag with the act and toast only on it
+  - Decide whether a first catch of a species (`first`) or a new best catch overall (`SaveData.best`) also counts, and whether shinies still always announce
 ## Ideas
 
 <!-- Add new ideas under the matching area. Move one into Up next when you decide to do it. -->
