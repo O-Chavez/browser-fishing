@@ -1903,6 +1903,8 @@ export class Game {
       delete this.pick.cos;
       delete this.pick.ccos;
     }
+    // So does the Bag, each time the menu opens (Tab, the bag button); a tile picked stays while flipping between tabs.
+    if (tab === 'inventory' && !this.menuOpen) delete this.pick.bag;
     this.keepTab = true;
     this.holding = false;
     this.keys.clear();
@@ -4275,8 +4277,8 @@ export class Game {
     else hint = 'Maxed out - every fish in the lake can bite.';
     const pips = TIERS.map((_, i) => `<span class="pip${i < reach ? ' on' : ''}" style="--c:var(--t${i + 1})">${i + 1}</span>`).join('');
     const vendor = this.map.vendor.name;
-    // Until the player picks something, show the rod in use (recomputed, since the save can change underneath).
-    const sel = this.pick.bag ?? `rod:${s.rod}`;
+    // Until the player picks a tile, the panel shows their own character (Oscar: so they see their look more often).
+    const sel = this.pick.bag ?? '';
 
     const rods = RODS.map((r) => {
       const equipped = eco.hasRod(s, r.id) && s.rod === r.id;
@@ -4309,7 +4311,12 @@ export class Game {
         ${this.perksHtml()}
         ${this.pantryHtml()}
         <p class="foot">Hotbar slot 1 holds the rod you fish with and slot 2 your bait; the rest are for fish. Everything else waits in your tackle locker: pick it here to swap it in.</p>
-      </div>${this.bagDetail(sel)}</div>`;
+      </div>${sel ? this.bagDetail(sel) : this.lookDetail()}</div>`;
+  }
+
+  /** The Bag's panel before a tile is picked: your character, to turn with a drag (Oscar: nothing else under it). */
+  private lookDetail(): string {
+    return `<aside class="detail look"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><div class="hero"><span class="ic" style="--c:var(--t1)">🪞</span><div><b>Your look</b></div></div></aside>`;
   }
 
   /** Charms and casino perks that are working for you, and what they add up to. */
