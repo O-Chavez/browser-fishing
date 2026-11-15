@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Cut per-frame garbage in `World`: `updateDaylight` no longer allocates `THREE.Color`s and the `colliders` getter no longer rebuilds its array every frame (done 2026-11-14, branch `world-frame-garbage`)
+  - Changed: the fixed colours in `updateDaylight` are module constants and the ones built from the sea look use scratch colours (same blend maths); `World.colliders` and `Hub.colliders` (when the gate is shut) reuse one joined array through `ColliderList` (`src/game/colliderlist.ts`), rebuilt only when a source list is swapped or its length changes, so map changes and later pushes are picked up
+  - Checked: `ColliderList` unit tests, build, tests. No benchmark was run, by Oscar's choice, since the gain is likely below what the bench can measure
 - [x] Remove the CHARTERS poster by the pond gate and move its explanation to the Furthest Out board (Oscar, 2026-11-13; done 2026-11-14, branch `charters-poster-to-board`)
   - Removed `POSTERS.charters`, `charterSpot` and the poster's interaction (`src/game/hub.ts`, `src/game/game.ts`); the casino poster stays where it is (Oscar's call). The Furthest Out board now has "Furthest Out · take a look" (a step in front of its face, within 3 m), opening the same `charters` panel (`chartersHtml`, renamed from `chartersPosterHtml`); it sits 5 m from the CHARTERS arch and 8 m from Reed, so nothing else competes. GAME_DESIGN.md mentions it; smoke and screenshots never used the poster, README images don't show it
   - Checked: headless screenshots of the pond gate (casino poster only), the board's prompt and the open panel; build, tests, smoke
