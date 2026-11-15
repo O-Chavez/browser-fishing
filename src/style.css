@@ -466,6 +466,7 @@ button.perk:hover { background: var(--paper-2); }
 .detail .have { font-size: 14px; font-weight: 800; }
 /* The try-on preview takes the window height left after the item details and sell strip, so Buy stays above the strip. */
 .detail #pv-slot canvas.preview { height: clamp(120px, calc(var(--win-h) - 400px), 300px); }
+.detail.look .drag-hint { margin: -8px 0 0; font-size: 12px; font-weight: 400; text-align: center; }
 .badge { display: inline-block; font-size: 11px; font-weight: 900; padding: 2px 8px; border-radius: 6px; color: #fff; background: var(--c); }
 .stat { font-size: 14px; font-weight: 800; }
 .srow { display: flex; justify-content: space-between; margin-bottom: 4px; }
