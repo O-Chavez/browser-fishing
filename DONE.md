@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Cut per-frame garbage in `World`: `updateDaylight` no longer allocates `THREE.Color`s and the `colliders` getter no longer rebuilds its array every frame (done 2026-11-14, branch `world-frame-garbage`)
+  - Changed: the fixed colours in `updateDaylight` are module constants and the ones built from the sea look use scratch colours (same blend maths); `World.colliders` and `Hub.colliders` (when the gate is shut) reuse one joined array through `ColliderList` (`src/game/colliderlist.ts`), rebuilt only when a source list is swapped or its length changes, so map changes and later pushes are picked up
+  - Checked: `ColliderList` unit tests, build, tests. No benchmark was run, by Oscar's choice, since the gain is likely below what the bench can measure
 - [x] Stop the catch toasts spamming players: only announce another player's catch when it beats that player's own personal record (Oscar, 2026-11-14; done 2026-11-14, branch `catch-toast-records`)
   - Decided: another player's catch toasts only when it is bigger than that player's previous best of the species (the Fishdex record, `record` from `applyCatch`); a first catch of a species is no record, and `SaveData.best` doesn't count. The rare-or-better filter stays on top, so common and uncommon fish never announce. Shinies no longer always announce: a shiny announces only when it is also a rare+ record, and keeps its "✨ SHINY " prefix. The player's own catch card is unchanged
   - Built: the `hold` act carries `rec: true` (only when true) from `Room.land`, charter catches included (same path); `announcesCatch` in `economy.ts` is the toast rule, used by `onAct`; the `carry` act (held slot) never toasted. GAME_DESIGN.md (Shiny fish) updated

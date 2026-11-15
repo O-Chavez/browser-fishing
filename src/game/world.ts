@@ -40,8 +40,30 @@ import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
 
 import { dayFraction, nightness, twilight } from './daynight';
+import { ColliderList } from './colliderlist';
 import { groundTexture, plankTexture, speckleTexture } from './textures';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
+const NO_COLLIDERS: Circle[] = [];
+
+// Fixed colours for the daylight blend, and scratch colours for the ones built from a look.
+const NIGHT_H = new THREE.Color(0x152649);
+const NIGHT_T = new THREE.Color(0x050a19);
+const DUSK_H = new THREE.Color(0xff8a4a);
+const DUSK_T = new THREE.Color(0x5a4a8a);
+const FLASH = new THREE.Color(0xd9d2f2);
+const SUN_LOW = new THREE.Color(0xff9a55);
+const WHITE = new THREE.Color(0xffffff);
+const HEMI_NIGHT = new THREE.Color(0x7088cc);
+const DECK = new THREE.Color(0xb08458);
+const GROUND_NIGHT = new THREE.Color(0x1d2a48);
+const SUN_NIGHT = new THREE.Color(0x84a0ff);
+const CLOUD_NIGHT = new THREE.Color(0x26304f);
+const CLOUD_DUSK = new THREE.Color(0xffb890);
+const CLOUD_SEA = new THREE.Color(0xc4bac6);
+const DOCK_LAMP = new THREE.Color(0xffd27a);
+const scratchColor = new THREE.Color();
+const scratchLook = new THREE.Color();
 
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.38, -0.85).normalize();
 /** The moon rides over the water too, off to the sun's right, so its path on the water is in view from the pier and the boat's rail. */
@@ -510,10 +532,8 @@ export class World {
     this.night = n;
     const b = this.base;
     const u = this.waterU;
-    const nightH = new THREE.Color(0x152649);
-    const nightT = new THREE.Color(0x050a19);
-    u.uSkyH.value.copy(b.sky).lerp(nightH, n).lerp(new THREE.Color(0xff8a4a), tw * 0.7);
-    u.uSkyT.value.copy(b.top).lerp(nightT, n).lerp(new THREE.Color(0x5a4a8a), tw * 0.35);
+    u.uSkyH.value.copy(b.sky).lerp(NIGHT_H, n).lerp(DUSK_H, tw * 0.7);
+    u.uSkyT.value.copy(b.top).lerp(NIGHT_T, n).lerp(DUSK_T, tw * 0.35);
     // At sea the mood brings in a warm lilac-grey overcast and closer fog (never cold steel grey); past the
     // Drop-off each deep zone has its own sky (DEEP_LOOKS).
     const m = this.sea ? Math.min(1, this.mood) : 0;
@@ -521,8 +541,8 @@ export class World {
     if (m > 0) {
       // Night out at sea darkens steeply with the league (SEA_NIGHT_DARK).
       const keep = nightSkyKeep(n, nightDarkAt(this.mood)) * (1 + (look.nightLift - 1) * n);
-      u.uSkyH.value.lerp(new THREE.Color(look.skyH).multiplyScalar(keep), m);
-      u.uSkyT.value.lerp(new THREE.Color(look.skyT).multiplyScalar(keep), m);
+      u.uSkyH.value.lerp(scratchLook.set(look.skyH).multiplyScalar(keep), m);
+      u.uSkyT.value.lerp(scratchLook.set(look.skyT).multiplyScalar(keep), m);
     }
     // Past the Drop-off the fog closes in.
     const gloom = this.sea ? gloomAt(this.mood) : 0;
@@ -532,9 +552,8 @@ export class World {
     // A lightning strike lights the whole sky for a moment.
     const flash = this.sea?.lightning.flash ?? 0;
     if (flash > 0) {
-      const glow = new THREE.Color(0xd9d2f2);
-      u.uSkyH.value.lerp(glow, 0.7 * flash);
-      u.uSkyT.value.lerp(glow, 0.5 * flash);
+      u.uSkyH.value.lerp(FLASH, 0.7 * flash);
+      u.uSkyT.value.lerp(FLASH, 0.5 * flash);
     }
     u.uFogColor.value.copy(u.uSkyH.value);
     const fog = this.scene.fog as THREE.Fog | null;
@@ -545,7 +564,7 @@ export class World {
     }
     u.uShallow.value.copy(b.water).multiplyScalar(1 - 0.75 * n);
     u.uDeep.value.copy(b.deep).multiplyScalar(1 - 0.67 * n);
-    u.uSunCol.value.set(0xfff2d8).lerp(new THREE.Color(0xff9a55), tw).multiplyScalar(1 - n);
+    u.uSunCol.value.set(0xfff2d8).lerp(SUN_LOW, tw).multiplyScalar(1 - n);
     // No sun glare through the deep zones' cloud.
     u.uSunCol.value.multiplyScalar(look.glare);
     const el = 0.38 * (1 - n) + 0.13 * n + 0.1 * tw;
@@ -553,19 +572,19 @@ export class World {
     // By day each deep zone sets its own light (as a share of the Drop-off's); nights dim with the gloom.
     const dayK = (v: number, at1: number, nightK: number) => (1 - n) * (v / at1) + n * nightK;
     this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * dayK(look.hemi, DEEP_LOOKS.dropoff.hemi, 1 - 0.3 * gloom) + 2.5 * flash;
-    this.hemi.color.copy(b.top).lerp(new THREE.Color(0xffffff), 0.5).lerp(new THREE.Color(look.hemiCol), m).lerp(new THREE.Color(0x7088cc), n);
+    this.hemi.color.copy(b.top).lerp(WHITE, 0.5).lerp(scratchLook.set(look.hemiCol), m).lerp(HEMI_NIGHT, n);
     // At sea the light bouncing up comes off the deck's warm planks, so the shaded inside of the rails reads warm, not grey.
-    if (this.sea) this.hemi.groundColor.copy(b.water).multiplyScalar(0.5).lerp(new THREE.Color(0xb08458), 0.75).lerp(new THREE.Color(0x1d2a48), n);
-    else this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(new THREE.Color(0x1d2a48), n);
+    if (this.sea) this.hemi.groundColor.copy(b.water).multiplyScalar(0.5).lerp(DECK, 0.75).lerp(GROUND_NIGHT, n);
+    else this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(GROUND_NIGHT, n);
     this.sun.intensity = (3 * (1 - n) + 0.72 * n) * (1 - 0.55 * m) * dayK(look.sun, DEEP_LOOKS.dropoff.sun, 1 - 0.4 * gloom);
-    this.sun.color.set(0xfff0d6).lerp(new THREE.Color(0xff9a55), tw * 0.8).lerp(new THREE.Color(0x84a0ff), n);
-    this.cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5).lerp(new THREE.Color(0xc4bac6).multiplyScalar(1 - 0.7 * n), m);
+    this.sun.color.set(0xfff0d6).lerp(SUN_LOW, tw * 0.8).lerp(SUN_NIGHT, n);
+    this.cloudMat.color.set(0xffffff).lerp(CLOUD_NIGHT, n).lerp(CLOUD_DUSK, tw * 0.5).lerp(scratchColor.copy(CLOUD_SEA).multiplyScalar(1 - 0.7 * n), m);
     // Clear nights at sea get the pond's full starfield; the overcast rolling in toward the Drop-off hides it.
     const clearNight = Math.max(0, (n - 0.4) / 0.6) * (1 - THREE.MathUtils.smoothstep(m, 0.35, 0.65));
     (this.stars.material as THREE.PointsMaterial).opacity = (this.brightStars.material as THREE.PointsMaterial).opacity = clearNight;
     // The moon comes out with the stars, and goes behind the same overcast.
     u.uMoonCol.value.set(MOON.color).multiplyScalar(clearNight * MOON.path);
-    this.dockGlow.color.set(0x6a5a3a).lerp(new THREE.Color(0xffd27a), 0.35 + 0.65 * n);
+    this.dockGlow.color.set(0x6a5a3a).lerp(DOCK_LAMP, 0.35 + 0.65 * n);
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
@@ -1303,8 +1322,10 @@ export class World {
 
   // The dock's crate, bucket, barrel, rope and lantern posts are decoration only: the dock is
   // narrow, and snagging on them made walking out to fish a chore.
+  private readonly collidersJoined = new ColliderList();
+
   get colliders(): Circle[] {
-    return [...this.trees, ...(this.hub?.colliders ?? []), ...(this.town?.colliders ?? []), ...(this.hall?.colliders ?? [])];
+    return this.collidersJoined.get([this.trees, this.hub?.colliders ?? NO_COLLIDERS, this.town?.colliders ?? NO_COLLIDERS, this.hall?.colliders ?? NO_COLLIDERS]);
   }
 
   surface(x: number, z: number): number {

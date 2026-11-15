@@ -8,6 +8,7 @@ import { glowTag } from './nightglow';
 import { buildFish } from './fishmodel';
 import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
+import { ColliderList } from './colliderlist';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import charterPreview from '../assets/images/charter-preview.jpg';
 
@@ -191,8 +192,10 @@ export class Hub {
     mergeStatic(this.group, [this.npc, ...this.hanging]);
   }
 
+  private readonly joined = new ColliderList();
+
   get colliders(): Circle[] {
-    return this.locked ? [...this.fixed, ...this.gateBlock] : this.fixed;
+    return this.locked ? this.joined.get([this.fixed, this.gateBlock]) : this.fixed;
   }
 
   private place(obj: THREE.Object3D, spot: Spot, lx = 0, lz = 0, y?: number): THREE.Object3D {
