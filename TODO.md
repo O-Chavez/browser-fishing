@@ -54,7 +54,6 @@ Finished items move to [DONE.md](DONE.md).
 - A trophy for landed legends, and chat lines for zones and legends (from the charter rework, 2026-11-12)
 - 📋 Whether the lake's rod and line merge into one track too (Oscar's play-test note, 2026-11-12: rod plus line may be one track too many): at sea the rod carries both now; the lake keeps its rods and lines
 - 🎨 Reed's chart could show what each zone holds, its fish and legends, caught or not, so the zones read as something to collect as well as to earn in (what's left of "Make the charter's words and zones clear", Oscar, 2026-11-01; `zoneCard`, `src/game/divehud.ts`). Mockups first
-- Show the player's Black Pearls next to their coins at the bottom of Reed's chart (Oscar, 2026-11-14): the foot shows only the coins today (`<div class="foot">`, the chart's last line in `src/game/divehud.ts`), so the pearls the boat parts cost aren't in view beside them
 - Sounds for the sea's new atmosphere (from pass 3 of the deep sea art pass, 2026-11-10): rain on the deck from Kelp Deep on (a noise bed in `seaSound`, `src/game/audio.ts`, following `rainAt`), gull cries on the Shelf, and a bell or a soft chime from the marker buoy as it comes alongside
 - 🎨 A gull or two perched on the boat's rail or mast on the Shelf, taking off when a player walks up (from pass 3, 2026-11-10); today they only circle (`Gulls`, `src/game/seaatmo.ts`)
 - 🎨 The marker buoy could show the marker's number, and its lamp could glow on the water under it at night (from pass 3, 2026-11-10; `MarkerBuoy`, `src/game/seaatmo.ts`)

@@ -428,7 +428,7 @@ export function reedHtml(o: { say: string; s: ReedSave; pick: number; open: bool
     <div class="zcards">${cards}</div>${abyss}
     <div class="rows"><div class="row"><div>🎣 ${rodProgress(s)}<small>${nextRodText(s, marker)}</small></div>${rodBtn}</div>${holdRowHtml(s)}${partRow}${lureRowHtml(s)}</div>
     <div class="btns"><button class="btn plain" data-act="close">Not now</button>${go}</div>
-    <div class="foot"><span>${COIN} ${num(s.coins)} coins</span></div></div>`;
+    <div class="foot"><span>${COIN} ${num(s.coins)} coins</span><span>${PEARL} ${num(s.pearls)} Black Pearls</span></div></div>`;
 }
 
 /** What the Hold's full card needs of the save: the coins and pearls on hand, and the rod and boat as they stand. */

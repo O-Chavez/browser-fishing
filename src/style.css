@@ -871,7 +871,7 @@ body.touch .dcard .btn kbd { display: none; }
 .reed .detail p { margin: 0 0 6px; }
 .reed .detail p:last-child { margin: 0; }
 .reed .detail { display: block; margin: 14px 0; padding: 10px 14px; border-radius: 12px; background: var(--paper-2); font-size: 14px; line-height: 1.5; }
-.reed .foot { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-muted); font-weight: 800; margin-top: 12px; }
+.reed .foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; font-size: 13px; color: var(--ink-muted); font-weight: 800; margin-top: 12px; }
 .seastrip { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px; background: #d8ecef; font-size: 14px; font-weight: 800; }
 .seastrip .btn { flex: none; padding: 8px 14px; font-size: 14px; }
 

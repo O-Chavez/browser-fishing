@@ -229,9 +229,9 @@ describe('charter screens', () => {
       expect(lureRowHtml({ lure: 0, lureOff: true, boatParts: 2 })).toContain('Prize Counter');
     });
 
-    it("ends with the player's coins; the pearls are the boat row's", () => {
+    it("ends with the player's coins and Black Pearls", () => {
       const foot = text(/<div class="foot">[\s\S]*?<\/div>/.exec(chart(mid()))![0]);
-      expect(foot).toBe('341,000 coins');
+      expect(foot).toBe('341,000 coins 2,520 Black Pearls');
     });
 
     it("works out the next part's progress, carrying pearls past its price", () => {
