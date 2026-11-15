@@ -157,6 +157,9 @@ const MAX_HOLD_PITCH = 1.5;
 /** The longest the join card waits on the shader warm-up after the server lets you in ("Loading…"), so a stuck one can't keep you out. A play-test default. */
 const JOIN_WARM_CAP_MS = 10_000;
 
+/** Where an angler is, by map id, for the Anglers tab's Online now list. The sea map is only ever a charter. */
+const WHERE: Record<string, string> = { pond: '🎣 At the lake', casino: '🎰 At the casino', sea: '⛵ On a charter' };
+
 export class Game {
   private s: SaveData = load();
   private world: World;
@@ -1643,10 +1646,10 @@ export class Game {
   }
 
   /** Everyone online with their level, highest first. */
-  private leaders(): { name: string; level: number; color: number; face: FaceId; me: boolean; title: string | null }[] {
+  private leaders(): { name: string; level: number; color: number; face: FaceId; me: boolean; title: string | null; where: string }[] {
     const face = (f: string) => (isFace(f) ? f : 'smile');
-    const rows = [{ name: this.net.name, level: this.s.level, color: this.s.look.color, face: face(this.s.look.face), me: true, title: titleName(this.s.title) }];
-    for (const p of this.net.players.values()) rows.push({ name: p.name, level: p.level ?? 1, color: p.look.color, face: face(p.look.face), me: false, title: titleName(p.title) });
+    const rows = [{ name: this.net.name, level: this.s.level, color: this.s.look.color, face: face(this.s.look.face), me: true, title: titleName(this.s.title), where: WHERE[this.map.id] ?? '' }];
+    for (const p of this.net.players.values()) rows.push({ name: p.name, level: p.level ?? 1, color: p.look.color, face: face(p.look.face), me: false, title: titleName(p.title), where: WHERE[p.map] ?? '' });
     return rows.sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
   }
 
@@ -4556,7 +4559,7 @@ export class Game {
     const rows = this.leaders()
       .map(
         (p, i) =>
-          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><div class="who2"><b>${escapeHtml(p.name)}${this.heart(p.name)}${p.me ? ' <span class="you">you</span>' : ''}</b>${p.title ? `<span class="ttl">${p.title}</span>` : ''}</div><span class="lv">Lv ${p.level}</span></div>`,
+          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><div class="who2"><b>${escapeHtml(p.name)}${this.heart(p.name)}${p.me ? ' <span class="you">you</span>' : ''}</b>${p.title ? `<span class="ttl">${p.title}</span>` : ''}${p.where ? `<span>${p.where}</span>` : ''}</div><span class="lv">Lv ${p.level}</span></div>`,
       )
       .join('');
     const head = this.net.connected ? `<b>${this.net.players.size + 1}</b> online now` : 'Playing offline - join a server to fish with others.';
