@@ -6,10 +6,10 @@ import { DOCK_TOP, groundHeight, standHeight } from './env';
 import { mergeStatic } from './merge';
 import { glowTag } from './nightglow';
 import { buildFish } from './fishmodel';
-import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
 import { ColliderList } from './colliderlist';
 import casinoPreview from '../assets/images/casino-preview.jpg';
+import { buildBaitShop, dressMarlow, SHOP_SOLIDS } from './baitshop';
 
 export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
   new THREE.MeshLambertMaterial({ color, ...extra });
@@ -212,118 +212,37 @@ export class Hub {
     return out.set(x, standHeight(x, z), z);
   }
 
+  /** Marlow's BAIT & TACKLE shack (`buildBaitShop`, baitshop.ts) and Marlow at its window. */
   private buildStall(shop: Spot, npcSpot: Spot): void {
-    const stall = new THREE.Group();
-    const counter = rbox(3.2, 1.0, 1.0, WOOD, 0.08);
-    counter.position.y = 0.5;
-    const top = rbox(3.4, 0.1, 1.2, DARK, 0.04);
-    top.position.y = 1.03;
-    const back = rbox(3.2, 2.3, 0.14, 0x7a5a38, 0.04);
-    back.position.set(0, 1.15, -1.5);
-    stall.add(counter, top, back);
-
-    for (const lx of [-1.5, 1.5]) {
-      for (const lz of [0.9, -1.5]) {
-        const post = cyl(0.07, 0.08, 2.5, DARK, 8);
-        post.position.set(lx, 1.25, lz);
-        stall.add(post);
-      }
-    }
-
-    // Striped half-cylinder awning
-    const stripes = 8;
-    const L = 3.8;
-    for (let i = 0; i < stripes; i++) {
-      const geo = new THREE.CylinderGeometry(1.35, 1.35, L / stripes, 16, 1, true, 0, Math.PI)
-        .rotateZ(Math.PI / 2)
-        .translate(-L / 2 + ((i + 0.5) * L) / stripes, 0, 0);
-      const m = new THREE.Mesh(geo, mat(i % 2 ? 0xf3e6c8 : 0xd9534f, { side: THREE.DoubleSide }));
-      m.scale.y = 0.45;
-      m.position.set(0, 2.45, -0.3);
-      m.castShadow = true;
-      stall.add(m);
-    }
-
-    // A lantern on each front post, lit at night like the lamp posts.
-    for (const lx of [-1.5, 1.5]) {
-      const lantern = ball(0.12, 0xffd27a);
-      const lm = lantern.material as THREE.MeshLambertMaterial;
-      lm.emissive.set(0xffb84a);
-      this.lampMats.push(lm);
-      lantern.position.set(lx, 2.05, 1.05);
-      glowTag(lantern, 0.75);
-      stall.add(lantern);
-    }
-
-    const sign = textPlane(2.4, 0.6, 512);
-    woodSign(sign.ctx, 'BAIT & TACKLE');
-    sign.tex.needsUpdate = true;
-    sign.mesh.position.set(0, 3.2, 0.25);
-    sign.mesh.rotation.x = -0.12;
-    stall.add(sign.mesh);
-
-    // Fish hanging from the awning edge
-    const fishList = [FISH[1], FISH[4]];
-    fishList.forEach((f, i) => {
-      const hang = new THREE.Group();
+    // Two fish hang under the eaves at the front corners and sway (`update`).
+    const hang = (i: number) => {
+      const f = [FISH[1], FISH[4]][i];
+      const h = new THREE.Group();
       const fish = buildFish(f.color, false, false, f.tier, f.id);
       fish.group.scale.setScalar(0.5);
       fish.group.rotation.x = Math.PI / 2;
       fish.group.position.y = -0.35;
       const line = cyl(0.008, 0.008, 0.25, 0xdddddd, 4);
       line.position.y = -0.1;
-      hang.add(line, fish.group);
-      hang.position.set(-1.3 + i * 2.6, 2.2, 1.0);
-      this.hanging.push(hang);
-      stall.add(hang);
-    });
-
-    this.place(stall, shop);
-    for (const lx of [-1.1, 0, 1.1]) {
-      const c = this.world(shop, lx, 0);
-      this.fixed.push({ x: c.x, z: c.z, r: 0.75 });
+      h.add(line, fish.group);
+      this.hanging.push(h);
+      return h;
+    };
+    this.place(buildBaitShop(this.lampMats, hang), shop);
+    for (const [lx, lz, r] of [[-1.1, 0, 0.75], [0, 0, 0.75], [1.1, 0, 0.75], ...SHOP_SOLIDS]) {
+      const c = this.world(shop, lx, lz);
+      this.fixed.push({ x: c.x, z: c.z, r });
     }
     this.world(shop, 0, 2.3, this.vendorSpot);
 
-    // Shopkeeper
-    const npc = this.npc;
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.55, 8, 14), mat(0x2e8b8b));
-    body.position.y = 1.05;
-    body.scale.z = 0.85;
-    body.castShadow = true;
-    const apron = rbox(0.5, 0.72, 0.06, 0xf3e6c8, 0.03);
-    apron.position.set(0, 0.98, 0.25);
-    npc.add(body, apron);
-    this.head.position.y = 1.78;
-    this.head.add(faceHead(0.22, this.map.vendor.face));
-    // A short beard below the mouth, so the painted smile still shows.
-    const beard = ball(0.15, 0xeeeeee, 1, 0.75, 0.7);
-    beard.position.set(0, -0.17, 0.08);
-    this.head.add(beard);
-    const brim = cyl(0.42, 0.42, 0.035, 24, 24);
-    brim.material = mat(0xe3c26d);
-    brim.position.y = 0.17;
-    const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(0.25, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2),
-      mat(0xe3c26d),
-    );
-    dome.position.y = 0.17;
-    const band = cyl(0.255, 0.255, 0.05, 0xb5473a, 18);
-    band.position.y = 0.2;
-    this.head.add(brim, dome, band);
-    npc.add(this.head);
-    for (const sx of [-1, 1]) {
-      const sh = new THREE.Vector3(sx * 0.33, 1.4, 0);
-      const hand = new THREE.Vector3(sx * 0.34, 1.07, 0.55);
-      const fist = ball(0.095, SKIN);
-      fist.position.copy(hand);
-      npc.add(limb(sh, hand, 0.09, 0x2e8b8b), fist);
-    }
-    this.place(npc, npcSpot);
-    this.npcHome.copy(npc.position);
+    // Marlow animates (a breath, his head turning to the player), so he stays out of the hub's merge; his own
+    // static parts are baked together instead, the head's and the body's apart.
+    dressMarlow(this.npc, this.head, this.map.vendor.face);
+    mergeStatic(this.head, []);
+    mergeStatic(this.npc, [this.head]);
+    this.place(this.npc, npcSpot);
+    this.npcHome.copy(this.npc.position);
     this.npcYaw = npcSpot.facing;
-    const nc = this.world(npcSpot, 0, 0.4);
-    this.fixed.push({ x: nc.x, z: nc.z, r: 0.5 });
   }
 
   /** A framed poster beside the gate, so newer players can see what's waiting (`POSTERS`). */

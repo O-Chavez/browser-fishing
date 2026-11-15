@@ -210,9 +210,10 @@ export const MAPS: MapDef[] = [
     vendor: {
       name: 'Marlow',
       face: 'joy',
-      // Behind the quay's west half, turned toward the pier root; Marlow stands behind the counter.
+      // Behind the quay's west half, turned toward the pier root; Marlow stands inside the shack at its window
+      // (`KEEPER_Z` in baitshop.ts).
       shop: { x: -5.5, z: 17.5, facing: 2.4 },
-      npc: { x: -5.5 - 1.4 * Math.sin(2.4), z: 17.5 - 1.4 * Math.cos(2.4), facing: 2.4 },
+      npc: { x: -5.5 - 0.85 * Math.sin(2.4), z: 17.5 - 0.85 * Math.cos(2.4), facing: 2.4 },
     },
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
