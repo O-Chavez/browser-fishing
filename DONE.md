@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] The Anglers tab's Online now list says where each angler is (Oscar, 2026-11-15; done 2026-11-15, branch `online-now-location`)
+  - Each row has a muted line under the name and title: "🎣 At the lake", "🎰 At the casino" or "⛵ On a charter", from the map every client already gets for each player (`PlayerInfo.map`, kept current by `moved`), so no server or protocol change. The list re-renders when someone travels, as it already did on `onPlayers`. The zone fished isn't shown, since clients only get a charter's instance id
+  - Checked: type-check; headless render of the row markup with the game's stylesheet. No What's new entry (small adjustment)
 - [x] The player's Wardrobe shows only the cosmetics they own (Oscar, 2026-11-15; done 2026-11-15, branch `wardrobe-owned-only`)
   - `wardrobeHtml` no longer adds the greyed tiles for rank outfits not earned yet ("🔒 Level 35") or for Captain Reed's legend and zone pieces not bought yet ("🔒 Land the Kraken", "🔒 At Reed's"); a slot with nothing owned keeps its "Nothing yet" line. What's ahead still shows at Marlow's stall, the Prize Counter and Reed's Wardrobe tab. The Title row still lists locked ranks greyed with their level
   - Checked: build; tests 689/690 (the reel fan-of-hands test fails on main too); headless render of a level 22 player owning only their outfit: Hats and Shirts show just the worn piece, Pets reads "Nothing yet". README Wardrobe shot not re-taken (filed in TODO.md, Bugs and tooling). No What's new entry (small adjustment)
