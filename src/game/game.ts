@@ -365,6 +365,8 @@ export class Game {
     });
     canvas.addEventListener('webglcontextrestored', () => $('offline').classList.add('hidden'));
     this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name));
+    // Builds the legend pieces in idle moments and compiles them, so the first one worn nearby doesn't stall.
+    this.avatars.warmLegends((o) => this.world.warm(o));
     this.dropsView = new DropsView(this.world.scene, (x, z) => this.world.surface(x, z));
     const q = new URLSearchParams(location.search);
     const urlName = q.get('name');
@@ -1580,8 +1582,10 @@ export class Game {
   private tryOn(el: HTMLElement, on: boolean): void {
     const card = el.closest<HTMLElement>('[data-try]');
     if (!card || !this.preview) return;
-    const [slot, id] = card.dataset.try!.split(':');
-    this.preview.set(on ? { ...this.previewLook(), [slot]: id } : this.previewLook());
+    const [slot, id, shade] = card.dataset.try!.split(':');
+    const shadow = this.previewShadow();
+    if (!on) this.preview.set(this.previewLook(), shadow);
+    else this.preview.set({ ...this.previewLook(), [slot]: id }, [...shadow.filter((x) => cosById(x)?.slot !== slot), ...(shade ? [id] : [])]);
   }
 
   /** Everyone online with their level, highest first. */
@@ -3540,7 +3544,7 @@ export class Game {
     const slot = document.getElementById('pv-slot');
     if (slot) {
       const pv = this.getPreview();
-      pv.set(this.previewLook());
+      pv.set(this.previewLook(), this.previewShadow());
       slot.appendChild(pv.canvas);
       pv.start();
     } else if ($('join').classList.contains('hidden')) this.preview?.stop();
@@ -3732,6 +3736,13 @@ export class Game {
             ? cosById(this.pick.rcos)
             : undefined;
     return c ? { ...this.s.look, [c.slot]: c.id } : this.s.look;
+  }
+
+  /** Items the preview draws as silhouettes: the piece picked at Reed's, if its set isn't reached yet. */
+  private previewShadow(): string[] {
+    if (this.tab !== 'reed' || this.reedTab !== 'wardrobe') return [];
+    const c = cosById(this.pick.rcos);
+    return c && eco.reedOffer(this.s, c) === 'unseen' ? [c.id] : [];
   }
 
   // ---------- shared pieces ----------
@@ -4861,14 +4872,15 @@ export class Game {
   }
 
   /**
-   * Captain Reed's Wardrobe tab, on the stall's Cosmetics pattern: the preview, what he sells (`reedCosmetics`: the sea
-   * legends' pieces for now) as one row a set in landing order, and the picked item's panel with its state
-   * (`reedOffer`): the landings it still takes, its price and [Buy], or [Wear it]. Items from no legend would go under
-   * a plain heading of their own.
+   * Captain Reed's Wardrobe tab, on the stall's Cosmetics pattern: the preview, everything he sells (`reedCosmetics`:
+   * the sea legends' pieces for now) as one row a set, by zone and in landing order, and the picked item's panel with
+   * its state (`reedOffer`): a silhouette until its zone is reached (Oscar: show all there is to get), the landings it
+   * still takes, its price and [Buy], or [Wear it]. Items from no legend would go under a plain heading of their own.
    */
   private reedWardrobeHtml(): string {
     const s = this.s;
-    const items = eco.reedCosmetics(s);
+    const items = eco.reedCosmetics();
+    const zoneOf = (c: Cosmetic) => ZONES.find((z) => z.legends.includes(c.legend ?? ''))?.name.replace(/^The /, 'the ') ?? 'deep water';
     const picked = cosById(this.pick.rcos);
     const chosen = picked && items.includes(picked) ? picked : undefined;
     // One row a set: "🦑 The Kraken's set · the Abyss" over its pieces in landing order (`reedCosmetics`'s order).
@@ -4879,6 +4891,10 @@ export class Game {
         .map((c) => {
           const offer = eco.reedOffer(s, c);
           const wearing = s.look[c.slot] === c.id;
+          if (offer === 'unseen') {
+            const look = this.cosLook(c);
+            return this.itemTile({ ...look, cls: `${look.cls} shadow`, name: c.name, sub: `🔒 ${zoneOf(c)}`, tier: c.tier + 1, on: chosen?.id === c.id, ghost: true, attrs: `data-pick="rcos" data-id="${c.id}" data-try="${c.slot}:${c.id}:shadow"`, tip: `Fit the boat for ${zoneOf(c)} to see it` });
+          }
           const sub = offer === 'owned' ? (wearing ? 'Wearing' : 'Owned') : offer === 'locked' ? `🔒 Landing ${c.landing}` : '';
           return this.itemTile({ ...this.cosLook(c), name: c.name, sub, price: offer === 'locked' ? undefined : this.cosPrice(c), tier: c.tier + 1, on: chosen?.id === c.id, check: offer === 'owned', ghost: offer === 'locked' || (offer === 'sale' && s.coins < c.price), attrs: `data-pick="rcos" data-id="${c.id}" data-try="${c.slot}:${c.id}"`, tip: offer === 'locked' ? eco.landingsText(s, c) : undefined });
         })
@@ -4890,11 +4906,12 @@ export class Game {
         : 'More from Reed';
       return `<h4 class="set-h">${head}</h4><div class="tiles">${cards}</div>`;
     }).join('');
-    const first = COSMETICS.find((c) => c.legend);
-    const where = first ? ZONES.find((z) => z.legends.includes(first.legend!)) : undefined;
-    const intro = items.length
+    // Until a set is reached, Reed points at the nearest one (the first in zone order).
+    const first = items.find((c) => c.legend);
+    const reached = items.some((c) => eco.reedOffer(s, c) !== 'unseen');
+    const intro = reached || !first
       ? `<p class="cos-intro">"Land a legend and I'll have the next piece of its set made up for you. One landing, one piece, paid in coins."</p>`
-      : `<p class="cos-intro">"Nothing here yet. The sea legends give up the finest gear afloat: fit the boat for ${where ? where.name.replace(/^The /, 'the ') : 'deep water'}, land ${first ? eco.legendName(first) : 'a legend'}, and I'll have a piece of its set made up for you."</p>`;
+      : `<p class="cos-intro">"The sea legends give up the finest gear afloat. Fit the boat for ${zoneOf(first)}, land ${eco.legendName(first)}, and I'll have a piece of its set made up for you."</p>`;
     if (!chosen) {
       const yours = this.detail({
         top: '<div id="pv-slot"></div>',
@@ -4914,6 +4931,8 @@ export class Game {
       ? wearing
         ? this.btn('Take it off', `data-act="equip" data-slot="${chosen.slot}" data-id=""`, 'plain')
         : this.btn('Wear it', `data-act="equip" data-slot="${chosen.slot}" data-id="${chosen.id}"`, 'ok')
+      : offer === 'unseen'
+        ? this.btn(`Fit the boat for ${zoneOf(chosen)}`, '', 'plain', true)
       : offer === 'locked'
         ? this.btn(eco.landingsText(s, chosen), '', 'plain', true)
         : s.coins < chosen.price
@@ -4923,6 +4942,8 @@ export class Game {
     const slotName = chosen.slot === 'jewelry' ? 'Jewelry' : chosen.slot[0].toUpperCase() + chosen.slot.slice(1);
     const state = offer === 'owned'
       ? wearing ? 'You are wearing it.' : 'Yours to wear any time, here or from the Wardrobe.'
+      : offer === 'unseen'
+        ? `From ${eco.legendName(chosen)}, out in ${zoneOf(chosen)}. Fit the boat for ${zoneOf(chosen)} to see it, then land ${eco.legendName(chosen)} ${chosen.landing === 1 ? 'once' : `${chosen.landing} times`} to unlock it.`
       : offer === 'locked'
         ? `Unlocks on landing ${chosen.landing} of ${eco.legendName(chosen)}.`
         : `Unlocked: ${chosen.price.toLocaleString()} coins.`;
@@ -4932,10 +4953,11 @@ export class Game {
       name: chosen.name,
       tier: chosen.tier + 1,
       color: look.color,
-      cls: look.cls,
+      cls: offer === 'unseen' ? `${look.cls} shadow` : look.cls,
       badge: `<span class="badge" style="--c:${look.color}">${slotName} · ${COS_RARITY[chosen.tier]}</span>`,
       body: '',
-      note: `${chosen.blurb} ${state}`,
+      // A silhouette keeps its look a surprise: no blurb until the set is reached.
+      note: offer === 'unseen' ? state : `${chosen.blurb} ${state}`,
       actions: action,
     });
     return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;

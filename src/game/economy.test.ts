@@ -4,10 +4,11 @@ import { ROD_SLOT, SEA_VERSION, SLOT_COUNT, migrate, newSave, type SaveData } fr
 import { FISH, LINES, byId } from '../data/content';
 import { GLOVES_CONTROL } from '../data/casino';
 import { mulberry } from './env';
+import { ZONES } from '../data/dive';
 import { FIGHT_DT, P, Reel, type ReelTune } from './reel';
 import { BACKPAY_VERSION, FISH_SPREAD, FLAT_LEVEL, TAG_TIERS, backPayXp, sellValue, xpForNextLevel } from './progression';
 import { Drops } from './drops';
-import { COSMETICS, COS_SLOTS, cleanLook, cosById, isFace } from '../data/cosmetics';
+import { ABYSSAL, COSMETICS, COS_SLOTS, cleanLook, cosById, isFace, legendPieces } from '../data/cosmetics';
 
 const fishSlot = (size = 20) => ({ k: 'fish' as const, fishId: FISH[0].id, size });
 /** Distinct fish that survive the size clamp in `migrate`. */
@@ -626,6 +627,7 @@ describe('cosmetics shops', () => {
 describe("a sea legend's set", () => {
   const kraken = byId(FISH, 'kraken');
   const leviathan = byId(FISH, 'leviathan');
+  const grouper = byId(FISH, 'grouper');
   const land = (s: SaveData, f = kraken, shiny = false, tag: 'feisty' | null = null) => eco.applyCatch(s, f, f.minSize, shiny, false, true, tag).legendPiece;
   const piece = (id: string) => cosById(id)!;
 
@@ -654,14 +656,16 @@ describe("a sea legend's set", () => {
     expect(s.legends.kraken).toBe(3);
   });
 
-  it('counts every sea legend, and nothing else', () => {
+  it('counts every sea legend, set or not, and nothing else', () => {
     const s = newSave();
-    expect(land(s, leviathan)).toBeUndefined();
+    // The Shelf's legend has no set yet: its landings only count.
+    expect(land(s, grouper)).toBeUndefined();
+    expect(land(s, leviathan)?.id).toBe('leviathanjaw');
     eco.applyCatch(s, byId(FISH, 'krakenspawn'), 300, false, false, true);
     eco.applyCatch(s, FISH[0], FISH[0].minSize);
     const top = FISH.find((f) => f.tier === 5 && !f.sea)!;
     eco.applyCatch(s, top, top.minSize);
-    expect(s.legends).toEqual({ leviathan: 1 });
+    expect(s.legends).toEqual({ grouper: 1, leviathan: 1 });
   });
 
   it('starts fresh for saves from before it, whatever the Fishdex says, and keeps only sane counts', () => {
@@ -716,17 +720,27 @@ describe("a sea legend's set", () => {
     expect([3_000_000, 4_000_000, 2_500_000, 5_000_000]).toEqual(['krakencrown', 'krakenarmor', 'krakenbeak', 'krakenpet'].map((id) => piece(id).price));
   });
 
-  it("shows at Reed's once its zone is open or it has been landed, locked, on sale or owned", () => {
+  it("shows every set at Reed's, as silhouettes until its zone is open or it has been landed", () => {
     const s = newSave();
-    expect(eco.reedCosmetics(s)).toEqual([]);
-    expect(eco.legendSetShown(s, 'kraken')).toBe(false);
-    s.boatParts = 4;
-    expect(eco.reedCosmetics(s).map((c) => c.id)).toEqual(['krakencrown', 'krakenarmor', 'krakenbeak', 'krakenpet']);
-    const early = { ...newSave(), legends: { kraken: 1 } };
-    expect(eco.legendSetShown(early, 'kraken')).toBe(true);
-    expect(eco.reedCosmetics(early)).toHaveLength(4);
+    // The sets in the order the zones list their legends (the Abyss: Leviathan, Dreamer, Kraken), each in landing order.
+    expect(eco.reedCosmetics().map((c) => c.id)).toEqual([
+      'leviathanjaw', 'leviathancoil', 'leviathanfangs', 'leviathanpet',
+      'dreamercap', 'dreamerrobe', 'dreamcatcher', 'dreamerpet',
+      'krakencrown', 'krakenarmor', 'krakenbeak', 'krakenpet',
+    ]);
     // Only Reed's counters: nothing from the stall, the casino or the ranks.
-    expect(eco.reedCosmetics(s).every((c) => eco.REED_SHOPS.includes(c.shop))).toBe(true);
+    expect(eco.reedCosmetics().every((c) => eco.REED_SHOPS.includes(c.shop))).toBe(true);
+    // A new player sees every piece, none reached yet.
+    expect(eco.legendSetReached(s, 'kraken')).toBe(false);
+    expect(eco.reedCosmetics().map((c) => eco.reedOffer(s, c))).toEqual(Array(12).fill('unseen'));
+    // Landing a legend reaches its set before the zone is open (a dev command or an old save), but only its own.
+    const early = { ...newSave(), legends: { kraken: 1 } };
+    expect(eco.legendSetReached(early, 'kraken')).toBe(true);
+    expect(eco.reedOffer(early, piece('krakencrown'))).toBe('sale');
+    expect(eco.reedOffer(early, piece('leviathanjaw'))).toBe('unseen');
+    // Opening the Abyss reaches all three.
+    s.boatParts = 4;
+    expect(eco.reedCosmetics().map((c) => eco.reedOffer(s, c))).toEqual(Array(12).fill('locked'));
     s.legends = { kraken: 2 };
     s.owned = ['krakencrown'];
     expect(['krakencrown', 'krakenarmor', 'krakenbeak'].map((id) => eco.reedOffer(s, piece(id)))).toEqual(['owned', 'sale', 'locked']);
@@ -750,6 +764,46 @@ describe("a sea legend's set", () => {
     expect(cleanLook({ ...look, pet: 'krakencrown' }, ['krakencrown']).pet).toBeNull();
     expect(migrate({ ...newSave(), owned: ['krakenpet'], look }).look.pet).toBe('krakenpet');
     expect(migrate({ ...newSave(), look }).look.pet).toBeNull();
+  });
+});
+
+describe('every sea legend with a set', () => {
+  const SETS = [
+    { legend: 'kraken', ids: ['krakencrown', 'krakenarmor', 'krakenbeak', 'krakenpet'] },
+    { legend: 'leviathan', ids: ['leviathanjaw', 'leviathancoil', 'leviathanfangs', 'leviathanpet'] },
+    { legend: 'dreamer', ids: ['dreamercap', 'dreamerrobe', 'dreamcatcher', 'dreamerpet'] },
+  ];
+  const ABYSS_PRICES = [3_000_000, 4_000_000, 2_500_000, 5_000_000];
+  const abyss = ZONES.find((z) => z.id === 'abyss')!;
+
+  it('lists exactly the sets above, all from sea legends', () => {
+    const legends = [...new Set(COSMETICS.filter((c) => c.shop === 'legend').map((c) => c.legend))];
+    expect(legends.sort()).toEqual(SETS.map((x) => x.legend).sort());
+    for (const l of legends) expect(FISH.find((f) => f.id === l)).toMatchObject({ sea: true, legend: true });
+  });
+
+  it.each(SETS)("has the $legend's hat, shirt, jewelry and pet at landings 1 to 4, Abyssal and priced like the Kraken's", ({ legend, ids }) => {
+    const set = legendPieces(legend);
+    expect(set.map((c) => c.id)).toEqual(ids);
+    expect(set.map((c) => [c.slot, c.landing])).toEqual([['hat', 1], ['shirt', 2], ['jewelry', 3], ['pet', 4]]);
+    expect(set.every((c) => c.shop === 'legend')).toBe(true);
+    if (abyss.legends.includes(legend)) {
+      expect(set.every((c) => c.tier === ABYSSAL)).toBe(true);
+      expect(set.map((c) => c.price)).toEqual(ABYSS_PRICES);
+    }
+  });
+
+  it.each(SETS)('unlocks the $legend\'s pieces landing by landing, then Reed sells them', ({ legend, ids }) => {
+    const s = newSave();
+    const f = byId(FISH, legend);
+    const got = ids.map(() => eco.applyCatch(s, f, f.minSize, false, false, true).legendPiece);
+    expect(got).toEqual(ids.map((id, i) => ({ id, landing: i + 1, of: 3 })));
+    expect(s.owned).toEqual([]);
+    s.coins = ABYSS_PRICES.reduce((a, b) => a + b);
+    for (const id of ids) expect(eco.buyLegendPiece(s, id)).toBe(true);
+    expect(s.owned).toEqual(ids);
+    expect(s.coins).toBe(0);
+    expect(eco.equipCosmetic(s, 'pet', ids[3])).toBe(true);
   });
 });
 

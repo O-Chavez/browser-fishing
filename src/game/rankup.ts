@@ -29,7 +29,7 @@ export function rankUp(ranks: Rank[]): RankUp | null {
 }
 
 /** Each legend's mark on its pieces' banners; a legend without one gets a plain star. */
-export const LEGEND_MARK: Record<string, string> = { kraken: '🦑' };
+export const LEGEND_MARK: Record<string, string> = { kraken: '🦑', leviathan: '🐉', dreamer: '💤' };
 
 export interface LegendUp {
   /** The big teal banner: "🦑 KRAKEN CROWN 🦑". */

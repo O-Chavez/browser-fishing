@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RANKS, ranksBetween } from '../data/ranks';
-import { legendUp, rankUp } from './rankup';
+import { COSMETICS } from '../data/cosmetics';
+import { LEGEND_MARK, legendUp, rankUp } from './rankup';
 
 describe('rankUp', () => {
   it('names the rank and its outfit', () => {
@@ -40,6 +41,19 @@ describe('legendUp', () => {
     const pet = legendUp({ id: 'krakenpet', landing: 4, of: 3 })!;
     expect(pet.title).toBe('🦑 KRAKEN HATCHLING 🦑');
     expect(pet.line).toBe("The Kraken's pet · unlocked at Captain Reed's");
+  });
+
+  it.each([
+    { id: 'leviathanjaw', landing: 1, title: "🐉 LEVIATHAN'S JAW 🐉", line: "Unlocked at Captain Reed's · piece 1 of 3", card: "🐉 Leviathan's Jaw · unlocked at Reed's" },
+    { id: 'leviathanpet', landing: 4, title: '🐉 LEVIATHAN WYRMLING 🐉', line: "The Leviathan's pet · unlocked at Captain Reed's", card: "🐉 Leviathan Wyrmling · unlocked at Reed's" },
+    { id: 'dreamerrobe', landing: 2, title: '💤 DREAM ROBE 💤', line: "Unlocked at Captain Reed's · piece 2 of 3", card: "💤 Dream Robe · unlocked at Reed's" },
+    { id: 'dreamerpet', landing: 4, title: '💤 SLEEPY DREAMER 💤', line: "The Drowned Dreamer's pet · unlocked at Captain Reed's", card: "💤 Sleepy Dreamer · unlocked at Reed's" },
+  ])("gives $id its legend's mark", ({ id, landing, ...want }) => {
+    expect(legendUp({ id, landing, of: 3 })).toEqual(want);
+  });
+
+  it('has a mark for every legend with a set', () => {
+    for (const c of COSMETICS.filter((x) => x.shop === 'legend')) expect(LEGEND_MARK[c.legend!]).toBeTruthy();
   });
 
   it('is null for an item that is no legend piece', () => {
