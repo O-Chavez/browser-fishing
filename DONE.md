@@ -2,6 +2,11 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Bug: the boards flickered where the pier and the two jetties meet the quay (Oscar, 2026-11-15; done 2026-11-15, branch `dock-seam-zfight`)
+  - Cause: `World.buildDock` laid planks every 0.28 m from a rect's start until past its end, so the last plank ran up to 0.22 m beyond it. The pier and the jetties end at z = 10, where the quay begins, so their last plank lay inside the quay's first planks at the same height with the grain crossed, and the two z-fought
+  - Fix: each rect's planks are fitted to it (`round(len / 0.28)` planks at an even pitch, a 0.03 m gap between them), so none passes its rect's end; the pitch changes by 2% at most (the jetties)
+  - Checked: build; tests (690 pass; the account and reel-sim tests hit the 5 s timeout on a busy machine and pass on their own); headless close-ups of the pier and east jetty roots before and after
+
 - [x] A "View your wardrobe" button under the character preview in the Bag tab (Oscar, 2026-11-15; done 2026-11-15, branch `tab-wardrobe-button`)
   - The Bag's "Your look" panel (`lookDetail`, shown until a tile is picked) gets a plain "👕 View your wardrobe" button under the heading that switches to the Wardrobe tab
   - Checked: build, headless renders at desktop and phone sizes, and clicking it opens the Wardrobe. Tests 689/690: the reel fan-of-hands test times out at 5 s on main too. No What's new entry (small adjustment)
