@@ -294,6 +294,8 @@ export class Avatars {
   private list = new Map<number, Avatar>();
   /** Hidden characters wearing the legend pieces (`warmLegends`); never drawn and never ticked. */
   private wearers = new THREE.Group();
+  /** True while `warmLegends` is still building the stand-ins, before it hands them to `warm`. */
+  buildingLegends = false;
 
   constructor(
     private scene: THREE.Scene,
@@ -332,8 +334,12 @@ export class Avatars {
         }
       } while (todo.length && (left() > 15 || performance.now() - t0 < 16));
       if (todo.length) whenIdle(next);
-      else warm(this.wearers);
+      else {
+        this.buildingLegends = false;
+        warm(this.wearers);
+      }
     };
+    this.buildingLegends = todo.length > 0;
     if (todo.length) whenIdle(next);
   }
 

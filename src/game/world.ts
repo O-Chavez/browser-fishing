@@ -182,6 +182,8 @@ export class World {
   private compiled = false;
   /** Objects `warm` has compiled since, waiting for their one-pixel draw. */
   private warmed: THREE.Object3D[] = [];
+  /** `warm` compiles still running. */
+  private warmsLeft = 0;
   /** Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5. */
   private pixelCap = 1.25;
   private trees: Circle[] = [];
@@ -336,9 +338,17 @@ export class World {
    * draws it once on a later frame (see `warmDraw`). The next `prewarm` covers it again with the rest.
    */
   warm(obj: THREE.Object3D): void {
-    void this.renderer.compileAsync(obj, this.camera, this.scene).then(() => {
+    this.warmsLeft++;
+    const done = (): void => {
+      this.warmsLeft--;
       if (obj.parent) this.warmed.push(obj);
-    });
+    };
+    void this.renderer.compileAsync(obj, this.camera, this.scene).then(done, done);
+  }
+
+  /** False while something `warm` was given is still compiling or waits for its one-pixel draw. */
+  get warmedAll(): boolean {
+    return !this.warmsLeft && !this.warmed.length;
   }
 
   /**
