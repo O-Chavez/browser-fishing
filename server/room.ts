@@ -304,8 +304,10 @@ export class Room {
       case 'boatpart':
         changed = this.atReed(m) && this.ok(m, eco.boatPartError(s)) && eco.buyBoatPart(s);
         break;
+      // Any piece on Reed's counters, a legend's or a zone set's: the message keeps its first name so older clients
+      // still buy. The unlock (landings, or fish landed in the zone) is checked here from the save, never the client.
       case 'buylegend':
-        changed = this.atReed(m) && this.ok(m, eco.legendBuyError(s, str(msg.id))) && eco.buyLegendPiece(s, str(msg.id));
+        changed = this.atReed(m) && this.ok(m, eco.reedBuyError(s, str(msg.id))) && eco.buyReedPiece(s, str(msg.id));
         break;
       case 'buyline':
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));

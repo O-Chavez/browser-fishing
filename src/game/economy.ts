@@ -374,8 +374,8 @@ export function buyPerk(s: SaveData, id: string, count = 1): boolean {
  */
 export function buyCosmetic(s: SaveData, id: string, at: CosShop = 'stall'): boolean {
   const c = cosById(id);
-  // Earned outfits come only with a rank, never from a counter; a legend's pieces only from Captain Reed (`buyLegendPiece`).
-  if (!c || c.shop === 'earned' || c.shop === 'legend' || c.shop !== at || s.owned.includes(id)) return false;
+  // Earned outfits come only with a rank, never from a counter; a legend's or a zone set's pieces only from Captain Reed (`buyReedPiece`).
+  if (!c || c.shop === 'earned' || REED_SHOPS.includes(c.shop) || c.shop !== at || s.owned.includes(id)) return false;
   if (c.shop === 'casino') {
     if (s.chips < c.price) return false;
     s.chips = Math.round((s.chips - c.price) * 10) / 10;
@@ -600,6 +600,8 @@ export interface CatchResult {
   sold?: number;
   /** The piece of a legend's set this landing unlocked at Captain Reed's. */
   legendPiece?: LegendPiece;
+  /** The piece of its zone's set this landing unlocked at Captain Reed's (its zone's fish reached the piece's milestone). */
+  zonePiece?: ZonePiece;
 }
 
 /** A piece of a legend's set: its id, its place in the set (`Cosmetic.landing`) and how many pieces the set has, not counting its pet. */
@@ -611,7 +613,7 @@ export interface LegendPiece {
 
 /**
  * Counts a landing of a sea legend (`SaveData.legends`) and returns the piece of its set this landing unlocks, if any:
- * the one whose landing it is (`legendUnlocked`). Captain Reed sells it from then on (`buyLegendPiece`). Every sea
+ * the one whose landing it is (`legendUnlocked`). Captain Reed sells it from then on (`buyReedPiece`). Every sea
  * legend is counted, set or not, so sets added later pick up from there; past the set it just counts.
  */
 export function landLegend(s: SaveData, fish: Fish): LegendPiece | undefined {
@@ -645,21 +647,103 @@ export function landingsText(s: Pick<SaveData, 'legends'>, c: Cosmetic): string 
   return `Land ${legendName(c)} ${left === 1 ? (landed ? 'once more' : 'once') : `${left}${landed ? ' more' : ''} times`}`;
 }
 
-/** Why Captain Reed won't sell this legend piece now, or null when he will. */
-export function legendBuyError(s: Pick<SaveData, 'legends' | 'owned' | 'coins'>, id: string): string | null {
+/** A sea zone's species: its fish and its legends. Each species lives in exactly one zone (pinned by a test). */
+export const zoneSpecies = (zone: number): string[] => (ZONES[zone] ? [...ZONES[zone].fish, ...ZONES[zone].legends] : []);
+
+/** The zone (index in `ZONES`) a sea species lives in, or -1 for a pond fish or anything else. */
+export const zoneOfFish = (id: string): number => ZONES.findIndex((z) => z.fish.includes(id) || z.legends.includes(id));
+
+/**
+ * Fish landed in a sea zone, counted from the Fishdex: every landing goes into `dex` (`applyCatch`, on a charter as on
+ * the pond), the sea's Fishdex starts from the sea reset, and each species lives in one zone. So no count of its own.
+ */
+export function zoneLanded(s: Pick<SaveData, 'dex'>, zone: number): number {
+  return zoneSpecies(zone).reduce((n, id) => n + (s.dex[id]?.count ?? 0), 0);
+}
+
+/** A zone's set at Reed's, in milestone order (fewest fish first). */
+export const zonePieces = (zone: number): Cosmetic[] =>
+  COSMETICS.filter((c) => c.shop === 'zone' && c.zone === zone).sort((a, b) => (a.zoneFish ?? 0) - (b.zoneFish ?? 0));
+
+/** A zone's name mid-sentence: "Kelp Deep", "the Twilight". */
+export const zoneName = (zone: number): string => (ZONES[zone]?.name ?? 'deep water').replace(/^The /, 'the ');
+
+/** A zone set's piece is unlocked once that many fish have been landed in its zone (`zoneLanded`). */
+export function zoneUnlocked(s: Pick<SaveData, 'dex'>, c: Cosmetic): boolean {
+  return c.zone !== undefined && zoneLanded(s, c.zone) >= (c.zoneFish ?? Infinity);
+}
+
+/** Fish still to land in its zone to unlock a zone set's piece (0 once unlocked, and for anything else). */
+export function zoneFishLeft(s: Pick<SaveData, 'dex'>, c: Cosmetic): number {
+  if (c.zone === undefined || c.zoneFish === undefined) return 0;
+  return Math.max(0, c.zoneFish - zoneLanded(s, c.zone));
+}
+
+/** What a locked zone piece still takes: "Land 40 fish in Kelp Deep" before any, then "Land 3 more fish in Kelp Deep". */
+export function zoneFishText(s: Pick<SaveData, 'dex'>, c: Cosmetic): string {
+  const left = zoneFishLeft(s, c);
+  const more = c.zone !== undefined && zoneLanded(s, c.zone) > 0 ? ' more' : '';
+  return `Land ${left}${more} fish in ${zoneName(c.zone ?? -1)}`;
+}
+
+/**
+ * A zone set's progress for Reed's bar: the fish landed in the zone, the next piece to unlock (none once the whole set
+ * is), and the milestones of all its pieces, for the bar's marks.
+ */
+export function zoneSetProgress(s: Pick<SaveData, 'dex'>, zone: number): { landed: number; next?: Cosmetic; marks: number[] } {
+  const set = zonePieces(zone);
+  const landed = zoneLanded(s, zone);
+  return { landed, next: set.find((c) => landed < (c.zoneFish ?? 0)), marks: set.map((c) => c.zoneFish ?? 0) };
+}
+
+/** The piece of a zone's set a landing unlocked at Captain Reed's: its id, the zone and the fish landed there. */
+export interface ZonePiece {
+  id: string;
+  zone: number;
+  fish: number;
+}
+
+/**
+ * The piece of its zone's set a landing just unlocked, if any: the fish landed in the zone went from below a piece's
+ * milestone to it with this landing (`before` is the zone's count before it). Owned pieces say nothing, like
+ * `landLegend`. No save field: the Fishdex count is the record.
+ */
+export function zonePieceLanded(s: Pick<SaveData, 'dex' | 'owned'>, fish: Fish, before: number): ZonePiece | undefined {
+  const zone = fish.sea ? zoneOfFish(fish.id) : -1;
+  if (zone < 0) return undefined;
+  const after = zoneLanded(s, zone);
+  const piece = zonePieces(zone).find((c) => before < c.zoneFish! && after >= c.zoneFish!);
+  return piece && !s.owned.includes(piece.id) ? { id: piece.id, zone, fish: after } : undefined;
+}
+
+/** Whether a piece on Reed's counters is unlocked: by its legend's landings, or by the fish landed in its zone. */
+export function reedUnlocked(s: Pick<SaveData, 'legends' | 'dex'>, c: Cosmetic): boolean {
+  return c.shop === 'zone' ? zoneUnlocked(s, c) : legendUnlocked(s, c);
+}
+
+/** What a locked piece at Reed's still takes: "Land the Kraken once more" or "Land 3 more fish in Kelp Deep". */
+export function reedUnlockText(s: Pick<SaveData, 'legends' | 'dex'>, c: Cosmetic): string {
+  return c.shop === 'zone' ? zoneFishText(s, c) : landingsText(s, c);
+}
+
+/**
+ * Why Captain Reed won't sell this piece now, or null when he will: a legend's piece or a zone set's, once unlocked, for
+ * coins, once. The client asks it before buying and the server again from the save, so a locked piece is never sold.
+ */
+export function reedBuyError(s: Pick<SaveData, 'legends' | 'dex' | 'owned' | 'coins'>, id: string): string | null {
   const c = cosById(id);
-  if (!c || c.shop !== 'legend' || !c.legend) return 'Captain Reed has nothing like that.';
+  if (!c || !REED_SHOPS.includes(c.shop) || (c.shop === 'legend' ? !c.legend : c.zone === undefined)) return 'Captain Reed has nothing like that.';
   if (s.owned.includes(c.id)) return `You already have the ${c.name}.`;
-  if (!legendUnlocked(s, c)) return `${landingsText(s, c)} to unlock the ${c.name}.`;
+  if (!reedUnlocked(s, c)) return `${reedUnlockText(s, c)} to unlock the ${c.name}.`;
   if (s.coins < c.price) return `The ${c.name} costs ${c.price.toLocaleString('en-US')} coins.`;
   return null;
 }
 
 /**
- * The counters whose items Captain Reed's Wardrobe tab shows: the sea legends' pieces for now. Sea gear and zone sets
- * sold for coins can join as their own shop later (with their own buy path; `reedOffer` treats them as plain sales).
+ * The counters whose items Captain Reed's Wardrobe tab shows and he sells (`buyReedPiece`): the sea legends' pieces
+ * and the zone sets. Never sold anywhere else (`buyCosmetic`).
  */
-export const REED_SHOPS: readonly CosShop[] = ['legend'];
+export const REED_SHOPS: readonly CosShop[] = ['legend', 'zone'];
 
 /**
  * Whether a player has reached a legend's set: its zone is open, or it has been landed. Reed's Wardrobe tab shows every
@@ -669,38 +753,54 @@ export function legendSetReached(s: Pick<SaveData, 'legends' | 'boatParts'>, fis
   return (s.legends[fish] ?? 0) > 0 || zoneOpen(s, Math.max(0, ZONES.findIndex((z) => z.legends.includes(fish))));
 }
 
-/** The sea legends in the order the zones list them, shallowest first: the order of the sets at Reed's. */
-const LEGEND_ORDER = ZONES.flatMap((z) => z.legends);
-/** Where a set goes at Reed's: by `LEGEND_ORDER`, with items from no legend after the sets. */
+/**
+ * Whether a player has reached a zone's set: the zone is open, or a fish has been landed there (a dev charter or an
+ * old save), like `legendSetReached`. Until then Reed shows it as a silhouette.
+ */
+export function zoneSetReached(s: Pick<SaveData, 'dex' | 'boatParts'>, zone: number): boolean {
+  return zoneOpen(s, zone) || zoneLanded(s, zone) > 0;
+}
+
+/** The zone a piece at Reed's comes from: its own (a zone set's) or its legend's. -1 for neither. */
+export const reedZone = (c: Cosmetic): number => (c.zone ?? ZONES.findIndex((z) => z.legends.includes(c.legend ?? '')));
+
+/**
+ * Where a set goes at Reed's: by zone, shallowest first, and within a zone the zone's own set before its legends' sets,
+ * in the order the zone lists them. Items from neither go after every set.
+ */
 const setRank = (c: Cosmetic): number => {
-  const i = c.legend ? LEGEND_ORDER.indexOf(c.legend) : -1;
-  return i < 0 ? LEGEND_ORDER.length : i;
+  const z = reedZone(c);
+  if (z < 0) return ZONES.length * 100;
+  return z * 100 + (c.shop === 'zone' ? 0 : 1 + ZONES[z].legends.indexOf(c.legend ?? ''));
 };
 
 /**
  * What Reed's Wardrobe tab shows: every item on his counters, so a player can see all there is to get (Oscar,
- * 2026-11-14). The sets go in the order the zones list their legends (the Abyss: the Leviathan, the Drowned Dreamer,
- * the Kraken), each in landing order.
+ * 2026-11-14). The sets go by zone, shallowest first, a zone's own set before its legends' (today Kelp Deep's set, the
+ * Twilight's, then the Abyss's Leviathan, Drowned Dreamer and Kraken); a zone set in milestone order, a legend's in
+ * landing order.
  */
 export function reedCosmetics(): Cosmetic[] {
   return COSMETICS.filter((c) => REED_SHOPS.includes(c.shop))
-    .sort((a, b) => setRank(a) - setRank(b) || (a.landing ?? 0) - (b.landing ?? 0) || a.price - b.price);
+    .sort((a, b) => setRank(a) - setRank(b) || (a.landing ?? 0) - (b.landing ?? 0) || (a.zoneFish ?? 0) - (b.zoneFish ?? 0) || a.price - b.price);
 }
 
 /**
- * Where an item at Reed's stands: from a set the player hasn't reached yet (`legendSetReached`; shown as a silhouette),
- * still locked by its legend's landings, on sale for coins, or already owned.
+ * Where an item at Reed's stands: from a set the player hasn't reached yet (`legendSetReached`, `zoneSetReached`; shown
+ * as a silhouette), still locked by its legend's landings or its zone's fish (`reedUnlocked`), on sale for coins, or
+ * already owned.
  */
-export function reedOffer(s: Pick<SaveData, 'legends' | 'owned' | 'boatParts'>, c: Cosmetic): 'unseen' | 'locked' | 'sale' | 'owned' {
+export function reedOffer(s: Pick<SaveData, 'legends' | 'dex' | 'owned' | 'boatParts'>, c: Cosmetic): 'unseen' | 'locked' | 'sale' | 'owned' {
   if (s.owned.includes(c.id)) return 'owned';
+  if (c.shop === 'zone' && c.zone !== undefined) return !zoneSetReached(s, c.zone) ? 'unseen' : zoneUnlocked(s, c) ? 'sale' : 'locked';
   if (c.legend && !legendSetReached(s, c.legend)) return 'unseen';
   return c.legend && !legendUnlocked(s, c) ? 'locked' : 'sale';
 }
 
-/** Buys an unlocked legend piece from Captain Reed with coins (`legendBuyError`). */
-export function buyLegendPiece(s: SaveData, id: string): boolean {
+/** Buys an unlocked piece from Captain Reed with coins, a legend's or a zone set's (`reedBuyError`). */
+export function buyReedPiece(s: SaveData, id: string): boolean {
   const c = cosById(id);
-  if (!c || legendBuyError(s, id)) return false;
+  if (!c || reedBuyError(s, id)) return false;
   s.coins -= c.price;
   s.owned.push(c.id);
   return true;
@@ -727,6 +827,8 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   if (slot < 0 && !sell) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
   const first = !entry;
+  // The zone's landed count before this one, to tell whether it reaches a piece of the zone's set.
+  const zoneBefore = fish.sea ? zoneLanded(s, zoneOfFish(fish.id)) : 0;
   // Smokehouse snacks and dishes apply at catch, like the Lucky Charms: ⭐ into the XP, 💰 into the fish's value.
   const xp = buff(s, 'xp');
   const coin = buff(s, 'coins');
@@ -749,8 +851,9 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const stages = openStages(s).ids;
   const gift = serveGifts(s);
   const legendPiece = landLegend(s, fish);
+  const zonePiece = zonePieceLanded(s, fish, zoneBefore);
   return {
-    stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult, ...(sell ? { sold } : {}), ...(legendPiece ? { legendPiece } : {}),
+    stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult, ...(sell ? { sold } : {}), ...(legendPiece ? { legendPiece } : {}), ...(zonePiece ? { zonePiece } : {}),
     ...(xp ? { xpFrom: xp.from } : {}), ...(coin ? { coinFrom: coin.from } : {}), ...(lured && shiny ? { shinyFrom: 'Shiny Lure' } : {}), ...(sh ? { shinyFrom: sh.from } : {}), ...(gift ? { gift } : {}),
   };
 }

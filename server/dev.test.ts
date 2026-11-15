@@ -6,6 +6,7 @@ import { DevGate, TIMES } from './dev';
 import { lakeReport } from './lakestats';
 import { markTip } from '../src/game/tips';
 import { Room } from './room';
+import * as eco from '../src/game/economy';
 
 describe('DevGate', () => {
   it('is off without credentials', () => {
@@ -253,6 +254,45 @@ describe('dev commands in a room', () => {
     for (const bad of ['/landed minnow 2', '/landed kraken', '/landed']) {
       room.handle(a.id, { t: 'cmd', text: bad });
       expect(devLines(a.log).at(-1)).toMatch(/^Usage: \/landed <legend> N · legends: grouper/);
+    }
+  });
+
+  it("sets the fish landed in a zone with /zonefish, unlocking its set's pieces up to there and taking back bought ones past it", () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 2 87' });
+    // Spread over Kelp Deep's plain fish in the Fishdex, which is the count.
+    expect(Object.fromEntries(Object.entries(a.save.dex).map(([id, e]) => [id, e.count]))).toEqual({ frondback: 29, lionfish: 29, wolfeel: 29 });
+    expect(eco.zoneLanded(a.save, 2)).toBe(87);
+    expect(a.save.owned).toEqual([]);
+    expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 87 fish landed, 1 of 3 pieces of its set unlocked at Reed's.");
+    expect([...a.log].reverse().find((m) => m.t === 'state')).toMatchObject({ save: { dex: { frondback: { count: 29 } } } });
+    // By id too; the zone's legends keep their own count.
+    a.save.dex.kelpbeard = { count: 2, best: 300 };
+    room.handle(a.id, { t: 'cmd', text: '/zonefish kelp 150' });
+    expect(eco.zoneLanded(a.save, 2)).toBe(150);
+    expect(a.save.dex.kelpbeard.count).toBe(2);
+    expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 150 fish landed, 3 of 3 pieces of its set unlocked at Reed's.");
+    a.save.owned.push('kelpcap', 'kelpwrap', 'cap');
+    room.handle(a.id, { t: 'equip', slot: 'shirt', id: 'kelpwrap' });
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 2 40' });
+    expect(a.save.owned).toEqual(['kelpcap', 'cap']);
+    // The piece taken back comes off, for everyone.
+    expect(a.save.look.shirt).toBeNull();
+    expect([...b.log].reverse().find((m) => m.t === 'look')).toMatchObject({ look: { shirt: null } });
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 2 1' });
+    expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 2 fish landed (its legends' 2 stay), 0 of 3 pieces of its set unlocked at Reed's.");
+    expect(a.save.dex.frondback).toBeUndefined();
+    expect(a.save.owned).toEqual(['cap']);
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 3 300' });
+    expect(devLines(a.log).at(-1)).toBe("The Twilight: 300 fish landed, 2 of 3 pieces of its set unlocked at Reed's.");
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 0 5' });
+    expect(devLines(a.log).at(-1)).toBe('The Shelf: 5 fish landed (it has no set).');
+    for (const bad of ['/zonefish kelp', '/zonefish reef 3', '/zonefish']) {
+      room.handle(a.id, { t: 'cmd', text: bad });
+      expect(devLines(a.log).at(-1)).toMatch(/^Usage: \/zonefish <zone 0-4> N · zones: 0 shelf, 1 dropoff, 2 kelp/);
     }
   });
 

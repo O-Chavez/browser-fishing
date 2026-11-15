@@ -1,7 +1,8 @@
 import { cosById, legendPieces } from '../data/cosmetics';
 import { FISH } from '../data/content';
 import type { Rank } from '../data/ranks';
-import type { LegendPiece } from './economy';
+import { ZONES } from '../data/dive';
+import type { LegendPiece, ZonePiece } from './economy';
 
 export interface RankUp {
   /** The big gold banner: "⚓ BOSUN ⚓". */
@@ -51,4 +52,18 @@ export function legendUp(p: LegendPiece): LegendUp | null {
     line: c.slot === 'pet' ? `${fish.name}'s pet · unlocked at Captain Reed's` : `Unlocked at Captain Reed's · piece ${p.landing} of ${p.of}`,
     card: `${mark} ${c.name} · unlocked at Reed's`,
   };
+}
+
+/** Each sea zone's mark on its set's heading at Reed's and its unlock line (by zone id); a zone without one gets a plain star. */
+export const ZONE_MARK: Record<string, string> = { kelp: '🌿', twilight: '🪼' };
+
+/**
+ * The one line for a piece of a zone's set that a landing unlocked: "🌿 Kelp Cap unlocked at Captain Reed's · 40 fish
+ * landed in Kelp Deep". Only the player sees it (on the catch card), like a legend's piece.
+ */
+export function zoneUp(p: ZonePiece): string | null {
+  const c = cosById(p.id);
+  const zone = ZONES[p.zone];
+  if (!c || c.zone !== p.zone || !zone) return null;
+  return `${ZONE_MARK[zone.id] ?? '✦'} ${c.name} unlocked at Captain Reed's · ${p.fish.toLocaleString('en-US')} fish landed in ${zone.name.replace(/^The /, 'the ')}`;
 }

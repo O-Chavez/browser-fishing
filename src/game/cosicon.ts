@@ -54,6 +54,23 @@ const zed = (x: number, y: number, s: number) => `<path d="M${x} ${y} h${s} l${-
 const cloud = (x: number, y: number, w: number) =>
   `<path d="M${x - w} ${y} Q${x - w - 2} ${y - 4} ${x - w * 0.55} ${y - 4.2} Q${x - w * 0.4} ${y - 8} ${x - w * 0.05} ${y - 6.2} Q${x + w * 0.3} ${y - 9} ${x + w * 0.55} ${y - 4.8} Q${x + w + 2} ${y - 4.5} ${x + w} ${y} Z" fill="${FLUFF}" ${line}/>`;
 
+/** Kelp Deep's and the Twilight's colours, as on the 3D pieces. */
+const KOLIVE = '#7d8a34';
+const KGOLD = '#c8962e';
+const KGOLD_D = '#7a5a1e';
+const KFLOAT = '#b08a3a';
+const BUBBLE = '#bff8ee';
+const TDEEP_L = '#8e88c8';
+const NC = '#dff2ff';
+const NV = '#c8b4f4';
+const NM = '#ffb09a';
+/** A kelp float: a little bladder at a blade's tip. */
+const kfloat = (x: number, y: number, r = 2) => `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 1.25}" fill="${KFLOAT}" stroke="${INK}" stroke-width=".9"/>`;
+const bubble = (x: number, y: number, r: number) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${BUBBLE}" stroke="${INK}" stroke-width=".6"/>`;
+/** A little glowing jelly: a bell `r` wide each way from (x, y), with three threads trailing under it. */
+const jelly = (x: number, y: number, r: number, fill: string) =>
+  `<path d="M${x - r * 0.6} ${y} q.4 ${r * 1.3} -.3 ${r * 2} M${x} ${y} q-.4 ${r * 1.4} .3 ${r * 2.2} M${x + r * 0.6} ${y} q-.4 ${r * 1.3} .3 ${r * 2}" stroke="${fill}" stroke-width=".8" fill="none" stroke-linecap="round"/><path d="M${x - r} ${y} Q${x - r} ${y - r * 1.25} ${x} ${y - r * 1.25} Q${x + r} ${y - r * 1.25} ${x + r} ${y} Q${x} ${y + r * 0.3} ${x - r} ${y} Z" fill="${fill}" stroke="${INK}" stroke-width=".8" stroke-linejoin="round"/><circle cx="${x}" cy="${y - r * 0.45}" r="${r * 0.32}" fill="#fff"/>`;
+
 function hat(c: Cosmetic): string {
   const col = hex(c.color);
   const acc = hex(c.accent);
@@ -85,6 +102,16 @@ function hat(c: Cosmetic): string {
     case 'dreamercap':
       // A long nightcap flopping over to a pompom that is a sleepy eye, mint stars on it, a halo over it and Zs drifting up.
       return `<path d="M8 30 Q6.5 13 15 5.5 Q24.5 0.5 30.5 10 Q33 15 33 21 L30 20.5 Q29.5 15 26 12.5 Q24.5 22 32 30 Z" fill="${col}" ${line}/>${star(13, 21, 2.2, acc)}${star(19, 9.5, 1.8, acc)}${star(20.5, 22.5, 1.6, acc)}<ellipse cx="15" cy="4.2" rx="6.5" ry="1.6" fill="none" stroke="${INK}" stroke-width="2.4"/><ellipse cx="15" cy="4.2" rx="6.5" ry="1.6" fill="none" stroke="${acc}" stroke-width="1.1"/><path d="M5.5 30.5 Q20 26.5 34.5 30.5 Q35 35.5 20 35.5 Q5 35.5 5.5 30.5 Z" fill="${FLUFF}" ${line}/><circle cx="32" cy="24" r="4" fill="${FLUFF}" ${line}/><path d="M29.4 24.6 Q32 22.4 34.6 24.6 Q32 26.6 29.4 24.6 Z" fill="#fff" stroke="${INK}" stroke-width=".8"/><circle cx="32" cy="25.1" r="1.1" fill="${acc}" stroke="${INK}" stroke-width=".5"/><path d="M29.4 24.6 Q32 22.8 34.6 24.6" stroke="${INK}" stroke-width="1.3" fill="none" stroke-linecap="round"/>${zed(1.5, 16, 3.2)}${zed(3.5, 11, 2.2)}`;
+    case 'kelpcap': {
+      // Woven kelp with a gold band, blades rising off it with a float at each tip, bubbles rising.
+      const blades = [['M12 21 Q8 15 10.5 10 Q12.5 6 8.5 4.5', KGOLD, 8.5, 4.5], ['M17 19 Q15.5 12 18 8 Q20 5 17.5 3.5', col, 17.5, 3.5], ['M23 19 Q25 13 22.5 9 Q20.5 6 23.5 4', KGOLD, 23.5, 4], ['M28 21 Q32 15 30 11 Q28.5 8 32 6', col, 32, 6]] as const;
+      return `${blades.map(([d, f]) => tentacle(d, 2.4, f)).join('')}${blades.map(([, , x, y]) => kfloat(x, y)).join('')}<path d="M7 31 Q7 18 20 18 Q33 18 33 31 Z" fill="${col}" ${line}/><path d="M7 27 H33 V31.5 H7 Z" fill="${KGOLD_D}" ${line}/>${[9.5, 13.5, 17.5, 21.5, 25.5, 29.5].map((x) => `<path d="M${x} 27.8 l1.6 3" stroke="${acc}" stroke-width="1.5" stroke-linecap="round"/>`).join('')}${bubble(36, 14, 1.4)}${bubble(3.5, 16, 1.1)}${bubble(37.5, 21, 0.9)}`;
+    }
+    case 'anemonecrown': {
+      // A lavender band with a glowing seam, see-through tendrils fanning up with glowing tips, little jellies rising.
+      const fronds = [[11, 'Q7 20 7 13', 7, 13, NV, NM], [14.5, 'Q11.5 16 11.5 9', 11.5, 9, NC, NC], [18, 'Q15.5 13 16.5 6', 16.5, 6, NV, NC], [22, 'Q24.5 13 23.5 6', 23.5, 6, NC, NM], [25.5, 'Q28.5 16 28.5 9', 28.5, 9, NV, NC], [29, 'Q33 20 33 13', 33, 13, NC, NC]] as const;
+      return `${fronds.map(([x, q, , , f]) => tentacle(`M${x} 26 ${q}`, 2, f)).join('')}${fronds.map(([, , x, y, , tip]) => `<circle cx="${x}" cy="${y}" r="1.7" fill="${tip}" stroke="${INK}" stroke-width=".8"/>`).join('')}<path d="M8 26 Q20 30 32 26 L32 31 Q20 35 8 31 Z" fill="${col}" ${line}/><path d="M8.5 28.6 Q20 32.6 31.5 28.6" stroke="${NV}" stroke-width="1.1" fill="none"/>${jelly(5, 21, 2.3, NC)}${jelly(35, 19, 2.3, acc)}`;
+    }
     case 'tophat':
       return `<path d="M3 30 Q20 36 37 30 Q35 27 20 27 Q5 27 3 30 Z" fill="${col}" ${line}/><path d="M11 28 L12 5 H28 L29 28 Z" fill="${col}" ${line}/><path d="M11.7 21 H28.3 L28.6 26 H11.4 Z" fill="${acc}" ${line}/><path d="M20 9 Q24 13 22.5 15.5 Q21 16.5 20 15 Q19 16.5 17.5 15.5 Q16 13 20 9 Z M20 15 L21 18 H19 Z" fill="${GOLD}" stroke="${INK}" stroke-width=".9"/><path d="M14.5 7 V18" stroke="#fff" stroke-width="1.2" opacity=".35"/>`;
   }
@@ -126,6 +153,12 @@ function shirt(c: Cosmetic, clip: string): string {
     case 'dreamerrobe':
       // A long robe of stars to the ground: a cloud ruff at the collar, a crescent moon, and sleeping eyes round the pale hem.
       return `${body(col, 'M11 8 L16 5.5 Q20 9 24 5.5 L29 8 L36 14 L31.5 18.5 L29.5 16.5 L33.5 35 L6.5 35 L10.5 16.5 L8.5 18.5 L4 14 Z')}<path d="M7 31 H33 L33.5 35 H6.5 Z" fill="#9ad8b8" ${line}/>${[11.5, 20, 28.5].map((x) => sleepy(x, 32.2, 2, '#2c6a5c')).join('')}<path d="M14.5 6.5 Q20 11.5 25.5 6.5" stroke="${INK}" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M14.5 6.5 Q20 11.5 25.5 6.5" stroke="${FLUFF}" stroke-width="3.2" fill="none" stroke-linecap="round"/><path d="M24.5 13 A4 4 0 1 0 24.5 20.5 A3 3 0 1 1 24.5 13 Z" fill="${MOON}" stroke="${INK}" stroke-width=".8"/>${star(14, 16, 1.8, acc)}${star(16.5, 25, 1.5, MOON)}${star(25.5, 26, 1.8, acc)}${star(12.5, 21, 1.2, acc)}${star(29, 20.5, 1.2, acc)}`;
+    case 'kelpwrap':
+      // Kelp blades wrapped to the hip over olive cloth, a stalk belt, streamers rising off the back with floats, bubbles.
+      return `${tentacle('M10 12 Q4 9 5 3.5', 2.2, KGOLD)}${tentacle('M30 12 Q36 9 35 3.5', 2.2, KGOLD_D)}${kfloat(5, 3.2, 1.7)}${kfloat(35, 3.2, 1.7)}<defs><clipPath id="${clip}"><path d="${SHIRT}"/></clipPath></defs>${body(col)}<g clip-path="url(#${clip})" fill="none" stroke-width="3.2">${[[12.5, acc], [17, KGOLD_D], [21.5, acc], [26, KGOLD_D]].map(([x, s]) => `<path d="M${x} 6 q-1.2 4 0 8 t0 8 t0 8 t0 8" stroke="${s}"/>`).join('')}</g><path d="${SHIRT}" fill="none" ${line}/>${[12.5, 17, 21.5, 26].map((x, i) => `<path d="M${x - 1.5} 34.5 Q${x} ${37.5 + (i % 2)} ${x + 1.5} 34.5" fill="${i % 2 ? KGOLD_D : acc}" stroke="${INK}" stroke-width=".9"/>`).join('')}<path d="M11 28.5 H29" stroke="${INK}" stroke-width="3.4"/><path d="M11 28.5 H29" stroke="${KGOLD_D}" stroke-width="1.8"/>${bubble(2.5, 24, 1.2)}${bubble(37.5, 27, 1)}${bubble(36, 19, 0.8)}`;
+    case 'drifttunic':
+      // Lavender with veins of light branching up from the hem, and little glowing jellies circling.
+      return `<defs><clipPath id="${clip}"><path d="${SHIRT}"/></clipPath></defs>${body(col)}<g clip-path="url(#${clip})" fill="none" stroke-linecap="round">${[[13.5, NC], [18, NV], [23, NC], [27, NV]].map(([x, s], i) => `<path d="M${x} 35 q${i % 2 ? 1.6 : -1.6} -5 0 -10 t0 -10 t0 -8" stroke="${s}" stroke-width=".9"/>`).join('')}<path d="M13.5 22 l2.5 -4 M23 22 l2.5 -4.5" stroke="${NM}" stroke-width=".9"/></g><path d="${SHIRT}" fill="none" ${line}/>${collar(TDEEP_L)}${jelly(4.5, 25, 2.4, acc)}${jelly(35.5, 22, 2.4, NM)}${jelly(24.5, 28.5, 2, NV)}`;
     case 'tux':
       return `${body(col, COAT)}<path d="M16 5.5 L20 22 L24 5.5 Z" fill="#f6f2e8" stroke="${INK}" stroke-width="1"/><path d="M16 5.5 L20 22 L14 12 Z M24 5.5 L20 22 L26 12 Z" fill="${acc}" stroke="${INK}" stroke-width="1"/><path d="M15.5 9 L20 11 L24.5 9 L24.5 13.5 L20 11.5 L15.5 13.5 Z" fill="#ff4f9a" stroke="${INK}" stroke-width="1"/><path d="M25 18 L28 17 L28 20 Z" fill="#ff4f9a"/><circle cx="20" cy="27" r="1.4" fill="${acc}" stroke="${INK}" stroke-width=".6"/>`;
   }
@@ -176,6 +209,12 @@ function jewelry(c: Cosmetic): string {
     case 'dreamcatcher':
       // A pale hoop with a web and a mint heart, hung with three glowing tentacle feathers.
       return `${chain('#4a9a7c', 1.4)}${['M16 31 Q15 35 16.5 39', 'M20 32 Q21 36 19.5 39.5', 'M24 31 Q25 35 23.5 39'].map((d) => tentacle(d, 2.4, acc)).join('')}<circle cx="20" cy="25" r="7" fill="#e6fbf2" stroke="${INK}" stroke-width="3.6"/><circle cx="20" cy="25" r="7" fill="none" stroke="${col}" stroke-width="2"/><path d="M13.6 25 H26.4 M16.8 19.5 L23.2 30.5 M16.8 30.5 L23.2 19.5" stroke="#7aaa98" stroke-width=".7"/><circle cx="20" cy="25" r="3" fill="none" stroke="${acc}" stroke-width="1"/><circle cx="20" cy="25" r="1.4" fill="${acc}" stroke="${INK}" stroke-width=".6"/>`;
+    case 'holdfast':
+      // Kelp's roots knotted round a pebble of sea glass, on a cord of stalk.
+      return `${chain(KGOLD_D, 1.6)}${tentacle('M20 25.5 Q13 27 13.8 32.5 Q14.6 37 18.5 38', 1.3, KOLIVE)}${tentacle('M20 25.5 Q27.5 27 27 32.5 Q26.5 36.5 22.5 38.2', 1.3, acc)}<path d="M15 30.5 L19 25.8 L24.5 27 L26.5 31.5 L22.5 36.5 L16 35 Z" fill="${col}" ${line}/>${glint(18.2, 30)}${tentacle('M14.8 33.8 Q20.5 31.2 26.4 33.6', 1, KOLIVE)}${tentacle('M20 35.8 Q21 38 19.5 39.2', 1, acc)}`;
+    case 'jellylocket':
+      // A glass locket on a fine silver chain with a tiny glowing jelly inside.
+      return `${chain(col, 1.2)}<rect x="18.5" y="23" width="3" height="2.6" fill="${col}" stroke="${INK}" stroke-width=".8"/><circle cx="20" cy="31.5" r="6.6" fill="#e8f4ff" ${line}/>${jelly(20, 31.5, 2.8, acc)}<circle cx="20" cy="31.5" r="6.6" fill="none" stroke="${col}" stroke-width="1"/><path d="M16 28 Q17 26.5 18.6 26" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round" opacity=".9"/>`;
     case 'jackpot':
       return `${chain(col, 3.4)}<circle cx="20" cy="30" r="8.5" fill="${acc}" ${line}/><circle cx="20" cy="30" r="8.5" fill="none" stroke="#ffe9a8" stroke-width="2.6" stroke-dasharray="2.6 3.6"/><circle cx="20" cy="30" r="5" fill="#1b1b24"/><path d="M20 26.2 L21.1 28.9 L24 29 L21.8 30.8 L22.5 33.6 L20 32 L17.5 33.6 L18.2 30.8 L16 29 L18.9 28.9 Z" fill="#ffd24a"/>`;
   }

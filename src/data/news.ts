@@ -26,6 +26,7 @@ import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
 import reelFight from '../assets/images/news/reel-fight.jpg';
 import seaWeather from '../assets/images/news/sea-weather.jpg';
+import zoneSets from '../assets/images/news/zone-sets.jpg';
 
 export interface NewsEntry {
   /** Release number: unique, and higher than every entry below it. */
@@ -42,6 +43,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 12,
+    date: '2026-11-15',
+    title: 'Sets for Kelp Deep and the Twilight',
+    image: zoneSets,
+    alt: 'Two players on the pier at night: one in the Kelp Deep set, kelp blades rising off a woven cap with floats at their tips and a wrap of golden and olive kelp; one in the Twilight set, a crown of glowing tendrils and a lavender tunic veined with light, little glowing jellies circling and rising round them',
+    body: [
+      "<b>Kelp Deep</b> and <b>the Twilight</b> each have a set of their own at <b>Captain Reed</b>'s: a hat, a shirt and a piece of jewelry. Kelp Deep's is flowing kelp that floats up round you; the Twilight's is a crown of glowing tendrils, a tunic veined with light and little glowing jellies that drift round you.",
+      "Every fish you land in a zone counts toward its set, and the fish you've already landed there count too. In Kelp Deep the <b>Kelp Cap</b> unlocks at 40 fish, the <b>Kelp Wrap</b> at 90 and the <b>Holdfast Pendant</b> at 150. In the Twilight the <b>Anemone Crown</b> unlocks at 100, the <b>Drift Tunic</b> at 300 and the <b>Jelly Locket</b> at 550.",
+      "Reed sells each piece once it's unlocked, in the <b>Wardrobe</b> tab of his menu, where a bar shows how far you've come in each zone.",
+    ],
+  },
   {
     id: 11,
     date: '2026-11-14',

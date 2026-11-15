@@ -292,7 +292,7 @@ const whenIdle = (f: (left: () => number) => void): void => {
 /** Other players in the same map, interpolated between server snapshots. */
 export class Avatars {
   private list = new Map<number, Avatar>();
-  /** Hidden characters wearing the legend pieces (`warmLegends`); never drawn and never ticked. */
+  /** Hidden characters wearing the legend and zone set pieces (`warmLegends`); never drawn and never ticked. */
   private wearers = new THREE.Group();
   /** True while `warmLegends` is still building the stand-ins, before it hands them to `warm`. */
   buildingLegends = false;
@@ -311,15 +311,15 @@ export class Avatars {
   }
 
   /**
-   * The sea legends' pieces are the biggest models (an armor is tens of meshes, with programs no other item uses), and
-   * building one and compiling its shaders the first time someone nearby wore it stalled the game for a few frames. So
-   * hidden stand-ins wear every one of them, built in idle moments while the page loads (on the join screen; the
-   * biggest piece takes about 13 ms, 35 ms on a slow phone), and then `warm` compiles their shaders and draws them
-   * once. They stay in the scene, so each later `World.prewarm` covers them too. Every `legend` item is covered, so a
-   * new set needs nothing here.
+   * The sea sets' pieces, the legends' and the zones', are the biggest models (an armor is tens of meshes, with
+   * programs no other item uses, like the Twilight jellies' glows), and building one and compiling its shaders the
+   * first time someone nearby wore it stalled the game for a few frames. So hidden stand-ins wear every one of them,
+   * built in idle moments while the page loads (on the join screen; the biggest piece takes about 13 ms, 35 ms on a
+   * slow phone), and then `warm` compiles their shaders and draws them once. They stay in the scene, so each later
+   * `World.prewarm` covers them too. Every `legend` and `zone` item is covered, so a new set needs nothing here.
    */
   warmLegends(warm: (o: THREE.Object3D) => void): void {
-    const todo = COSMETICS.filter((c) => c.shop === 'legend');
+    const todo = COSMETICS.filter((c) => c.shop === 'legend' || c.shop === 'zone');
     const next = (left: () => number): void => {
       // At least one piece each time, and more while the idle moment lasts or for up to a frame's time (the game
       // draws every frame, so on a slow device idle moments are short and far apart).

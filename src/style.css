@@ -369,6 +369,20 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 /* Reed's Wardrobe: a heading per legend set, in the set's own words rather than a slot's small caps */
 .main > h4.set-h { margin: 4px 0 10px; font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--ink); }
 .main > h4.set-h small { font-size: 13px; font-weight: 800; color: var(--ink-muted); }
+/* a zone set's bar under its heading: fish landed in the zone, a tick at each piece's milestone, in the set's rarity colour */
+.zprog { max-width: 440px; margin: -4px 0 10px; }
+.zp-txt { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; font-size: 13px; font-weight: 800; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.zp-txt b { font-weight: 900; color: var(--ink); }
+.zp-txt small { font-size: 12px; font-weight: 800; }
+.zp-bar { position: relative; height: 10px; margin-top: 5px; border-radius: 99px; background: rgba(58,39,22,.14); overflow: hidden; }
+.zp-bar i { display: block; height: 100%; border-radius: 99px; background: var(--c); }
+.zp-bar s { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--paper); }
+.zp-mks { position: relative; height: 15px; margin-top: 2px; }
+.zp-mk { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; font-size: 11px; font-weight: 900; line-height: 15px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.zp-mk:last-child { transform: translateX(-100%); }
+.zp-mk.on { color: var(--ink); }
+.zp-mk.on::before { content: '✔ '; color: var(--ok); }
+.zprog.done .zp-txt b { color: var(--ok); }
 @keyframes cos-shine { 0% { background-position: 0% 0; } 60%, 100% { background-position: 100% 0; } }
 @keyframes cos-twinkle { 0%, 100% { filter: drop-shadow(0 0 0 rgba(255,210,58,0)); } 50% { filter: drop-shadow(0 0 5px rgba(255,210,58,.95)); } }
 /* Abyssal (tier 6, pieces from the Abyss): a cool teal shimmer in place of Legendary's gold */
@@ -529,6 +543,8 @@ canvas.preview.dragging { cursor: grabbing; }
 #catch .btn.mini { padding: 6px 12px; font-size: 13px; border-radius: 10px; box-shadow: 0 3px 0 var(--gold-dark); }
 #catch .btn.mini:disabled { background: var(--paper-3); color: var(--ink-muted); box-shadow: none; }
 #catch .piece { display: inline-block; margin: 6px 0 0; padding: 3px 12px; border-radius: 999px; font-size: 13px; font-weight: 900; color: #0c3532; background: var(--abyssal); box-shadow: 0 0 12px rgba(67,227,210,.6); }
+/* a zone set's piece unlocked: the same pill on paper, ringed in the piece's rarity colour */
+#catch .piece.zone { color: var(--ink); background: var(--paper-3); box-shadow: inset 0 0 0 2px var(--c), 0 0 12px color-mix(in srgb, var(--c) 60%, transparent); }
 #catch .btn.mini kbd { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(0,0,0,.15); }
 body.touch #catch .btn.mini { padding: 10px 18px; font-size: 16px; }
 #catch .catch-ico { position: relative; }

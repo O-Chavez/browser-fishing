@@ -101,7 +101,10 @@ export type ClientMsg =
   | { t: 'abysslevel' }
   | { t: 'holdlevel' }
   | { t: 'boatpart' }
-  /** From Captain Reed: a piece of a sea legend's set, once its landings have unlocked it (`buyLegendPiece`). */
+  /**
+   * From Captain Reed: a piece of a sea legend's set or a zone's set, once its landings or the fish landed in its zone
+   * have unlocked it (`buyReedPiece`). Named for the legend sets, which came first.
+   */
   | { t: 'buylegend'; id: string }
   | { t: 'buybait'; id: string }
   /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
