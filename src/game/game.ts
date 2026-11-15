@@ -3614,9 +3614,11 @@ export class Game {
         body = `<span class="ic">${rodIcon(byId(RODS, sl.id).tier)}</span><span class="nm">${shortRod(byId(RODS, sl.id).name)}</span>`;
       } else if (sl?.k === 'fish') {
         const f = byId(FISH, sl.fishId);
-        ring = sl.shiny ? '#ffd23a' : RARITY_COLOR[f.rarity];
+        // The ring is always the fish's tier colour; a shiny one adds a ✨ badge in the top right corner.
+        ring = RARITY_COLOR[f.rarity];
         // Just the total value: a wheel or table multiplier is already folded into it.
         body = `<span class="ic">${fishIcon(f.id, { shiny: sl.shiny })}</span><span class="nm val"><span class="coin xs"></span>${shortCoins(eco.fishValue(sl))}</span>`;
+        if (sl.shiny) body += '<b class="shiny">✨</b>';
         cls += ' fish';
         // Past the hotbar size: a fish left over from before the rod and bait slots, until it's sold.
         if (i >= size) cls += ' extra';

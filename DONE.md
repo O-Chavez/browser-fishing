@@ -2,6 +2,10 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 🎨 A shiny fish's hotbar slot gets its own outline, not the legend's gold (Oscar, 2026-11-14; done 2026-11-14, branch `shiny-slot-ring`)
+  - Options proposed: a tier-coloured ring with a sparkle or shimmer. Oscar picked **the ring in the fish's tier colour plus a small ✨ badge in the slot's corner, no animation**. The tier colours item stays in Ideas
+  - A fish slot's ring is now always its tier colour (`RARITY_COLOR`); a shiny fish adds `<b class="shiny">✨</b>` (hotbar render in `src/game/game.ts`, `.shiny` in `src/style.css`): a 17 px dark badge with a gold edge inside the top right corner, clear of the number badge (top left), the neighbouring slots and the fish icon. The hotbar is the only place a fish slot is drawn with a ring (the touch hotbar is the same one; the Bag holds no fish and the sell lists reuse the hotbar slots), so nowhere else needed the rule. The other shiny marks (✨ in names and titles, the sparkling icon) were already tier-neutral
+  - Checked: build, tests; headless Chrome on desktop and a `?touch` 844x390 phone with a shiny common, uncommon, rare, epic and legendary beside plain ones: tiers read from the ring, shinies from the badge, and the badge stays readable and uncovered on the phone. No smoke run (CSS and markup only). No What's new entry (polish)
 - [x] A chat line when someone takes the top of the Furthest Out board (from the charter rework, 2026-11-12; Oscar, 2026-11-14; done 2026-11-14, branch `furthest-out-chat`)
   - Options offered: a line for a legend landed, for a new zone opened and for a new Furthest Out record. Oscar picked **only the new record**; the other two and the legend trophy stay in Ideas
   - The server says `🧭 Ann has sailed the furthest out: Abyss marker 12!` to everyone (a `sys` line, like the rank lines). Zones before the Abyss read `...: the Twilight!` / `Kelp Deep!`; an Abyss leader with no marker yet reads `the Abyss!`. Wording is a play-test default (`furthestLine`, `src/game/dive.ts`)
