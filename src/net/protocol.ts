@@ -80,7 +80,7 @@ export interface DiveEnd {
 export type Activity =
   | { a: 'cast'; x: number; z: number }
   /** `mult` is the Lucky Charm bonus baked into the catch (missing from older servers: treat as 1). */
-  | { a: 'hold'; fish: string; size: number; shiny?: boolean; mult?: number }
+  | { a: 'hold'; fish: string; size: number; shiny?: boolean; mult?: number; rec?: true }
   | { a: 'carry'; fish: string; size: number; shiny?: boolean };
 
 export type ClientMsg =

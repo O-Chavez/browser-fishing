@@ -1020,7 +1020,7 @@ export class Room {
       return false;
     }
     for (const r of res.ranks) this.say({ t: 'sys', text: `⚓ ${m.acct.name} made ${r.title}!` });
-    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(res.mult > 1 ? { mult: res.mult } : {}) });
+    this.setAct(m, { a: 'hold', fish: p.fishId, size: p.size, shiny: p.shiny, ...(res.record ? { rec: true as const } : {}), ...(res.mult > 1 ? { mult: res.mult } : {}) });
     if (run) this.fightOver(m, run, p, true, res.sold ?? 0);
     return true;
   }

@@ -489,6 +489,30 @@ describe('Room economy', () => {
     expect(last(b.c, 'act').act).toBeNull();
   });
 
+  it('flags a held catch as a record only when it beats that player\'s best of the species', () => {
+    const { room, join, advance } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    const land = () => {
+      room.handle(a.id, { t: 'cast', x: 1, z: -9 });
+      advance(20_000);
+      room.handle(a.id, fought(a.c));
+      const act = last(b.c, 'act').act;
+      if (act?.a !== 'hold') throw new Error('no hold');
+      return act;
+    };
+    // A first catch of a species is no record.
+    const first = land();
+    expect(first.rec).toBeUndefined();
+    // The same fish at the same size doesn't beat it either.
+    a.acct.save.slots = a.acct.save.slots.map((x) => (x?.k === 'fish' ? null : x));
+    expect(land().rec).toBeUndefined();
+    // Once the Fishdex best is smaller, the same landing is a record.
+    a.acct.save.slots = a.acct.save.slots.map((x) => (x?.k === 'fish' ? null : x));
+    a.acct.save.dex[first.fish].best = 0.001;
+    expect(land().rec).toBe(true);
+  });
+
   it('sends the Lucky Charm bonus with a held catch, so others see its real value', () => {
     const { room, join, advance } = setup();
     const a = join('Ann');

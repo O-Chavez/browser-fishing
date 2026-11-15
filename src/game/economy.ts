@@ -690,6 +690,14 @@ export const CLEAN_BONUS = 0.1;
 export { TAG_BONUS };
 
 /**
+ * Whether another player's landed catch is announced to the room: only a personal record (bigger than that player's
+ * previous best of the species; a first catch isn't one) of a rare-or-better fish. A shiny announces only the same way.
+ */
+export function announcesCatch(fish: Fish, act: { rec?: boolean }): boolean {
+  return !!act.rec && fish.rarity !== 'common' && fish.rarity !== 'uncommon';
+}
+
+/**
  * Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins
  * (charters). `grow` multiplies its value on top (an Abyss marker's, `markerGrowth`).
  */

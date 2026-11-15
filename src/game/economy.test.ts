@@ -1112,3 +1112,16 @@ describe('the sea in old saves', () => {
     expect(eco.lineName(s)).toBe('Moonsilk Line');
   });
 });
+
+describe('catch announcements', () => {
+  const rare = FISH.find((f) => f.rarity === 'rare')!;
+  const common = FISH.find((f) => f.rarity === 'common')!;
+  it('announces only records of rare-or-better fish', () => {
+    expect(eco.announcesCatch(rare, { rec: true })).toBe(true);
+    expect(eco.announcesCatch(rare, {})).toBe(false);
+    expect(eco.announcesCatch(common, { rec: true })).toBe(false);
+  });
+  it('does not announce a shiny that is no record', () => {
+    expect(eco.announcesCatch(rare, { shiny: true } as { rec?: boolean })).toBe(false);
+  });
+});

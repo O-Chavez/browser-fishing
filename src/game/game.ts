@@ -440,7 +440,7 @@ export class Game {
       },
       onAct: (p, act) => {
         const f = act?.a === 'hold' ? FISH.find((x) => x.id === act.fish) : null;
-        if (f && act?.a === 'hold' && (act.shiny || (f.rarity !== 'common' && f.rarity !== 'uncommon')) && placeOf(p) === this.here())
+        if (f && act?.a === 'hold' && eco.announcesCatch(f, act) && placeOf(p) === this.here())
           this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${Math.round(sellValue(f, act.size, act.shiny) * (act.mult ?? 1))} 🪙)!`);
       },
       onJump: (id) => this.avatars.jump(id),
