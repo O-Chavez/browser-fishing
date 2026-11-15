@@ -685,7 +685,7 @@ body.touch input { -webkit-user-select: text; user-select: text; font-size: 22px
 #touch .t-view { position: absolute; inset: 0; }
 body.touch #hud { z-index: 2; }
 body.touch #help, body.touch #crosshair { display: none; }
-body.touch #chat { top: 108px; }
+body.touch #chat { top: 108px; font-size: 16px; }
 body.touch #prompt { pointer-events: auto; bottom: 128px; padding: 14px 24px; box-shadow: 0 0 0 4px var(--gold), 0 8px 18px rgba(0,0,0,.35); }
 body.touch #hotbar { pointer-events: auto; }
 body.touch #catch { z-index: 3; pointer-events: auto; }
@@ -698,6 +698,10 @@ body.touch[data-phase="reeling"] #hotbar, body.touch[data-phase="reeling"] #held
 body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .t-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 12px; }
 .t-btn { width: 76px; height: 76px; border: 0; border-radius: 20px; display: grid; place-items: center; font-size: 36px; background: var(--hud-bg); box-shadow: var(--hud-edge); }
+.t-btn { position: relative; }
+/* Unread chat: a gold pill on the 💬 corner (play-test default). */
+.t-badge { position: absolute; top: -8px; right: -8px; min-width: 34px; height: 34px; padding: 0 8px; box-sizing: border-box; border-radius: 17px; display: grid; place-items: center; font: 900 22px/1 Nunito, ui-rounded, system-ui, sans-serif; color: var(--gold-ink); background: var(--gold); box-shadow: 0 0 0 3px var(--wood-900), 0 3px 8px rgba(0,0,0,.4); }
+.t-badge[hidden] { display: none; }
 .t-stick { position: absolute; width: 200px; height: 200px; margin: -100px 0 0 -100px; border-radius: 50%; background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 3px rgba(255,255,255,.45); display: none; pointer-events: none; }
 .t-stick.on { display: block; }
 .t-knob { position: absolute; left: 58px; top: 58px; width: 84px; height: 84px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 4px 12px rgba(0,0,0,.3); }

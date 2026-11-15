@@ -36,6 +36,15 @@ export const shownLines = (lines: ChatLine[], onlyMap: string | null): ChatLine[
  */
 export const flashElapsed = (l: ChatLine, now: number): number | null => (now - l.at < FLASH_MS ? Math.max(0, now - l.at) : null);
 
+/**
+ * Whether a line is worth an unread badge on the touch 💬 button: another player's message. Your own echoes, server
+ * notices (joins, rank-ups, renames) and command replies are not conversation, so they never count.
+ */
+export const countsAsUnread = (l: Pick<ChatLine, 'self' | 'system'>): boolean => !l.self && !l.system;
+
+/** The badge text for a number of unread lines: empty for none, capped at "9+" so it stays small. */
+export const unreadLabel = (n: number): string => (n <= 0 ? '' : n > 9 ? '9+' : String(n));
+
 /** Slash commands any player can use, in Tab order. Dev console commands stay unlisted. */
 export const COMMANDS = [
   { cmd: 'bug', about: 'report a problem' },
@@ -101,6 +110,8 @@ export class ChatBox {
   private input: HTMLInputElement;
   private hint: HTMLElement;
   private escapedAt = -Infinity;
+  /** Other players' lines that arrived while the input was closed; reset when it opens. */
+  private unread = 0;
   /** The commands Tab is stepping through, and the text it last filled in. */
   private cycle: { list: Command[]; i: number; shown: string } | null = null;
 
@@ -112,6 +123,8 @@ export class ChatBox {
       map: () => string;
       mapName: (id: string) => string;
       now?: () => number;
+      /** The unread count changed (the touch 💬 button's badge). */
+      onUnread?: (n: number) => void;
     },
   ) {
     root.innerHTML = '<div class="chat-log"></div><input class="chat-input hidden" type="text" autocomplete="off" spellcheck="false"><div class="chat-hint"></div>';
@@ -181,6 +194,7 @@ export class ChatBox {
     this.cycle = null;
     this.input.value = '';
     this.input.maxLength = MAX_LEN;
+    this.setUnread(0);
     this.input.classList.remove('hidden');
     this.root.classList.add('typing');
     this.input.focus();
@@ -198,7 +212,14 @@ export class ChatBox {
   add(line: Omit<ChatLine, 'at'>): void {
     this.lines.push({ ...line, at: this.now() });
     if (this.lines.length > 100) this.lines.shift();
+    if (!this.isOpen && countsAsUnread(line)) this.setUnread(this.unread + 1);
     this.render();
+  }
+
+  private setUnread(n: number): void {
+    if (n === this.unread) return;
+    this.unread = n;
+    this.opts.onUnread?.(n);
   }
 
   private now(): number {

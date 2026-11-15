@@ -47,7 +47,7 @@ export class TouchControls {
     this.root.className = 'hidden';
     this.root.innerHTML = `
       <div class="t-view"></div>
-      <div class="t-top"><button class="t-btn" data-t="chat" aria-label="Chat">💬</button><button class="t-btn" data-t="bag" aria-label="Bag">🎒</button></div>
+      <div class="t-top"><button class="t-btn" data-t="chat" aria-label="Chat">💬<span class="t-badge" hidden></span></button><button class="t-btn" data-t="bag" aria-label="Bag">🎒</button></div>
       <button class="t-jump" aria-label="Jump">JUMP</button>`;
     this.stick.className = 't-stick';
     this.knob.className = 't-knob';
@@ -92,6 +92,14 @@ export class TouchControls {
     if (this.root.classList.contains('hidden') !== on) return;
     this.root.classList.toggle('hidden', !on);
     if (!on) this.reset();
+  }
+
+  /** Unread chat badge on the 💬 button; empty hides it. */
+  setUnread(label: string): void {
+    const b = this.root.querySelector<HTMLElement>('.t-badge')!;
+    b.textContent = label;
+    b.hidden = !label;
+    this.root.querySelector('[data-t="chat"]')!.setAttribute('aria-label', label ? `Chat, ${label} unread` : 'Chat');
   }
 
   /** Relabels the action button; cheap to call every frame. */

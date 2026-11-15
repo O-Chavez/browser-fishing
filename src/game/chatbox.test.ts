@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_TTL_MS, FLASH_MS, commandMatches, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
+import { CHAT_TTL_MS, FLASH_MS, commandMatches, countsAsUnread, unreadLabel, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
 
 const line = (text: string, map = 'pond', at = 0): ChatLine => ({ name: 'Ann', map, text, self: false, at });
 
@@ -91,5 +91,20 @@ describe('dev login panel', () => {
     expect(secretError(['admin', 'hunter2'])).toBeNull();
     expect(secretError(['admin', ''])).not.toBeNull();
     expect(secretError(['admin', 'hunter 2'])).not.toBeNull();
+  });
+});
+
+describe('unread chat badge', () => {
+  it('counts other players\' messages only', () => {
+    expect(countsAsUnread({ self: false })).toBe(true);
+    expect(countsAsUnread({ self: true })).toBe(false);
+    expect(countsAsUnread({ self: false, system: true })).toBe(false);
+  });
+
+  it('shows nothing for none and caps at 9+', () => {
+    expect(unreadLabel(0)).toBe('');
+    expect(unreadLabel(1)).toBe('1');
+    expect(unreadLabel(9)).toBe('9');
+    expect(unreadLabel(10)).toBe('9+');
   });
 });
