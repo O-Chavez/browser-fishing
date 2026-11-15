@@ -200,6 +200,8 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 .rodico { display: block; width: 1.15em; height: 1.15em; }
 /* Shiny Lure on: sparkle and charges on the bait slot's free corner */
 #hotbar .slot .lure { position: absolute; bottom: -9px; right: -15px; padding: 0 5px; border-radius: 7px; font-size: 11px; font-weight: 900; line-height: 17px; background: var(--wood-800); box-shadow: 0 0 0 2px #ffd23a; color: #ffe27a; }
+/* A shiny fish: its ring stays the tier colour; this small ✨ badge sits inside the top right corner (the number badge is top left), clear of the neighbouring slots. */
+#hotbar .slot .shiny { position: absolute; top: 3px; right: 3px; width: 17px; height: 17px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; line-height: 1; background: var(--wood-800); box-shadow: 0 0 0 1.5px #ffd23a; pointer-events: none; }
 #hotbar .slot .q { position: absolute; top: 3px; right: 6px; font-size: 12px; font-weight: 900; }
 #hotbar .slot i { position: absolute; top: -8px; left: -8px; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 900; font-style: normal; background: var(--wood-800); box-shadow: 0 0 0 2px var(--wood-600); color: var(--cream-muted); }
 /* slots 1 and 2 always hold the rod and bait you fish with: a teal frame, a tag under them, and a gap before the fish */
