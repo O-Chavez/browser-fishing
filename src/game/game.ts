@@ -4455,6 +4455,7 @@ export class Game {
     return `<div class="titles">${chip('None', !worn, `data-act="title" data-id=""`)}${chips.join('')}</div>`;
   }
 
+  /** Your Wardrobe: only the pieces you own (Oscar, 2026-11-15); what's still ahead shows at the stall and at Reed's. */
   private wardrobeHtml(): string {
     const sections = COS_SLOTS.map((slot) => {
       const worn = this.s.look[slot];
@@ -4465,24 +4466,9 @@ export class Game {
           return this.itemTile({ ...this.cosLook(c), name: c.name, sub: on ? 'Wearing' : COS_RARITY[c.tier], tier: c.tier + 1, on, check: on, attrs: `data-act="equip" data-slot="${slot}" data-id="${on ? '' : c.id}" data-try="${slot}:${c.id}"`, tip: on ? 'Click to take off' : 'Click to wear' });
         })
         .join('');
-      // Rank rewards not earned yet, greyed with their level; hovering still tries them on.
-      const locked = COSMETICS.filter((c) => c.slot === slot && c.shop === 'earned' && !this.s.owned.includes(c.id))
-        .sort((a, b) => a.level! - b.level!)
-        .map((c) => this.itemTile({ ...this.cosLook(c), name: c.name, sub: `🔒 Level ${c.level}`, tier: c.tier + 1, ghost: true, attrs: `data-act="locked" data-try="${slot}:${c.id}"` }))
-        .join('');
-      // Reed's pieces not bought yet (a legend's or a zone set's), so every set shows from the start, in Reed's order:
-      // the landings or zone fish each still takes, then once unlocked, that Captain Reed sells it and for how much.
-      const ahead = eco.reedCosmetics().filter((c) => c.slot === slot && !this.s.owned.includes(c.id))
-        .map((c) => {
-          const open = eco.reedUnlocked(this.s, c);
-          const sub = open ? "🔒 At Reed's" : c.shop === 'zone' ? `🔒 ${eco.zoneName(c.zone!)}` : `🔒 Land ${eco.legendName(c)}`;
-          const tip = open ? `Unlocked · ${c.price.toLocaleString('en-US')} coins at Captain Reed's` : eco.reedUnlockText(this.s, c);
-          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, ghost: true, attrs: `data-act="locked" data-try="${slot}:${c.id}"`, tip });
-        })
-        .join('');
       const title = this.slotTitle(slot);
       const none = slot === 'pet' ? 'land a sea legend to find one' : `${this.map.vendor.name}'s stall sells ${title.toLowerCase()}`;
-      return `<h4>${title}</h4><div class="tiles">${cards + locked + ahead || `<p class="empty">Nothing yet - ${none}.</p>`}</div>`;
+      return `<h4>${title}</h4><div class="tiles">${cards || `<p class="empty">Nothing yet - ${none}.</p>`}</div>`;
     }).join('');
     return `<div class="cols wardrobe"><div class="side"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><h4>Colour</h4><div class="swatches">${this.swatchHtml()}</div></div>
       <div class="main"><h4>Face</h4><div class="faces">${this.facesHtml()}</div><h4>Title</h4>${this.titlesHtml()}${sections}</div></div>`;
