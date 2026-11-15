@@ -5,10 +5,9 @@ import { clientLog, watchErrors } from './game/clientlog';
 
 watchErrors();
 
-// Touch-only devices get a "made for desktop" notice (shown by CSS); "Try touch controls" dismisses it
-// for this tab and turns on the on-screen controls. `?touch` forces touch mode, for testing on desktop.
+// The start-error panel (#desktop-only, named for the "made for desktop" notice it used to be): shown only when the
+// game can't start.
 const notice = document.getElementById('desktop-only')!;
-const ANYWAY = 'desktop-anyway';
 
 /**
  * The game can't run without WebGL. Chromium blocks it for a site after a GPU crash (on Android until
@@ -42,24 +41,5 @@ try {
 }
 if (import.meta.env.DEV) (window as unknown as { __game: ReturnType<Game['debug']> }).__game = game.debug();
 
-const tryTouch = () => {
-  notice.classList.add('hidden');
-  game.setCovered(false);
-  if (touchOnly) game.enableTouch();
-};
-// Nothing to see behind the notice, so phones don't draw the world (or load the GPU) until the player opts in.
-if (touchOnly) game.setCovered(true);
-try {
-  if (sessionStorage.getItem(ANYWAY)) tryTouch();
-} catch {}
-if (new URLSearchParams(location.search).has('touch')) {
-  notice.classList.add('hidden');
-  game.setCovered(false);
-  game.enableTouch();
-}
-document.getElementById('desktop-anyway')!.addEventListener('click', () => {
-  tryTouch();
-  try {
-    sessionStorage.setItem(ANYWAY, '1');
-  } catch {}
-});
+// Phones and tablets play with the on-screen controls (GAME_DESIGN.md §39); `?touch` turns them on for testing on desktop.
+if (touchOnly || new URLSearchParams(location.search).has('touch')) game.enableTouch();

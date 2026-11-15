@@ -2,6 +2,11 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Open the doors, step 6 of full mobile support (from the mobile plan, 2026-11-15; done 2026-11-15, branch `mobile`)
+  - Phones and tablets go straight into the game with touch controls: the "Lakeside is made for desktop" notice and its "Try touch controls (early test)" link are gone (`src/main.ts`, `index.html`). The notice's panel stays as the start-error panel ("Lakeside couldn't start its 3D graphics"), shown only when the game can't start. No more covering the world until the player opts in
+  - What's new entry 13, "Lakeside on phones and tablets", with a photo (`src/assets/images/news/phones.jpg`, 1280x720, 91 KB): the sunset pier on a phone held sideways, two players chatting, staged headlessly on three `?touch` phones and framed in a phone outline. README and GAME_DESIGN.md's platform line updated
+  - Not done: the real-phone check of frame rate and heat (TODO.md, step 7), which needs Oscar's phones
+  - Checked: build, tests; headless Chrome emulating a touch-only phone without `?touch`: touch mode on, no notice, the news card with the entry and photo; `npm run smoke` 114/114 (its no-WebGL check still finds the start-error panel)
 - [x] 📋 🎨 Full-screen menus, step 5 of full mobile support (from the mobile plan and spec, 2026-11-15; done 2026-11-15, branch `mobile`)
   - Found first: most of the spec's "tap to select" was already there. The shops, the Prize Counter and Reed's Wardrobe pick an item on a click and show it on the preview with its price and Buy in the detail pane; owned Wardrobe pieces wear on a click. What touch lacked was the layout, the hover tooltips and hover try-on of locked pieces
   - Layout (`src/style.css`, "touch menus"): every full menu (the Bag and its tabs, Marlow's stall, the Prize Counter, the Smokehouse, Reed's Wardrobe) fills the screen; its tabs stand in a rail on the left (icon over label, 72px each, the ⚙️ tab labelled "Settings"), the owner (you, Marlow's Stall, the Prize Counter) above them, and a big "✕ Close" at the rail's foot. At a vendor the menu stops above the hotbar, which stays in view for selling. Fitted cards (charters, a marker's choice, What's new, the nudge) stay cards with a bigger ✕. The rail fits five tabs on a 667x375 phone

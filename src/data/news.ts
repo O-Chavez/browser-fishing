@@ -22,6 +22,7 @@ import charterHold from '../assets/images/news/charter-hold.jpg';
 import charterLures from '../assets/images/news/charter-lures.jpg';
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
+import phones from '../assets/images/news/phones.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
 import reelFight from '../assets/images/news/reel-fight.jpg';
@@ -43,6 +44,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 13,
+    date: '2026-11-15',
+    title: 'Lakeside on phones and tablets',
+    image: phones,
+    alt: 'Lakeside on a phone held sideways: two players fishing off the pier at sunset, a chat line at the top, the hotbar at the bottom and the big gold Cast button in the corner',
+    body: [
+      "Lakeside now plays on <b>phones and tablets</b>: open the game and turn your phone sideways. Push the left thumbstick to walk, drag to look around, and hold the big gold button to cast and reel.",
+      "Tap 💬 to chat with Lakeside's own keyboard, which leaves the lake in view (🌐 switches to your phone's keyboard for emoji). Tap 🎒 for your bag; menus fill the screen, and a tap on an item tries it on and shows what it is. Hold a hotbar slot to drop it.",
+      "Your account works on every device: set a password in ⚙️ Settings to play as you on your phone too.",
+    ],
+  },
   {
     id: 12,
     date: '2026-11-15',

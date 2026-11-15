@@ -14,7 +14,7 @@ A relaxing, browser-based first-person fishing game. The player stands at water'
 
 | Area | Decision |
 |---|---|
-| Platform | Desktop browsers (Chrome, Firefox, Safari, Edge); mobile/touch is a stretch goal |
+| Platform | Desktop browsers (Chrome, Firefox, Safari, Edge), and phones and tablets in landscape with touch controls (§39) |
 | Rendering | WebGL via **Three.js** (or Babylon.js) |
 | Language | TypeScript |
 | Build | Vite |
@@ -715,7 +715,7 @@ Today the server rolls the fish and size and enforces a minimum fight time, but 
 
 ## 39. Phones and tablets (touch)
 
-Planned with Oscar on 2026-11-15 (TODO.md, "Full mobile support"; the mobile spec at https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv). Touch mode turns on for touch-only devices (`(pointer: coarse) and (hover: none)`, `touchOnly` in `src/game/touch.ts`) or with `?touch`.
+Planned with Oscar on 2026-11-15 (TODO.md, "Full mobile support"; the mobile spec at https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv). Touch mode turns on for touch-only devices (`(pointer: coarse) and (hover: none)`, `touchOnly` in `src/game/touch.ts`) or with `?touch`, straight into the game (the "made for desktop" notice and its "Try touch controls" are gone since step 6; its panel now only shows when the game can't start).
 
 - **Layout:** landscape only, one layout for phones and tablets; an upright phone gets "Turn your phone sideways". The page is laid out wide and scaled to the screen (`enableTouch`, `src/game/game.ts`): the screen's long side / 0.6, between 1000 and 1400px (`touchLayoutWidth`, `src/game/touch.ts`), so phones show it at about 0.6x and sizes in the touch CSS are in that layout. Text on touch is at least about 19px there (11 pt on a phone). In a fight only the gauge, the action button, the level and coins stay up. Under 1300px wide the hotbar centres left of JUMP and the action button.
 - **Controls:** a floating move stick wherever the left thumb lands (push to the edge to run), drag anywhere else to look, the big action button (cast, hook, reel, bet), JUMP, 💬 and 🎒 top right. The E prompt is tapped. Casino table pieces are tapped. Tapping a hotbar slot takes it in hand; holding one for half a second offers a Drop button over it (G on desktop; `wireHoldToDrop`). Settings > Controls lists the touch controls.
