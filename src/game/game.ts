@@ -153,6 +153,8 @@ const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
 
 /** 'full' or 'lite', remembered per browser; unset means the device's default. */
 const GRAPHICS_KEY = 'fishing-graphics';
+/** Touch: how long a tapped item's tooltip stays up as a bar. */
+const TIP_BAR_MS = 4000;
 /** Touch: how long a hotbar slot is held before it offers Drop. */
 const HOLD_TO_DROP_MS = 500;
 /** Times this tab reloaded to reconnect (`reconnect`), so a server that drops every join can't loop it. */
@@ -271,6 +273,11 @@ export class Game {
   private serverDrops: Drop[] = [];
   private keys = new Set<string>();
   private menuOpen = false;
+  /** Touch: hides the tapped item's tooltip bar (`touchMenuTap`). */
+  private tipTimer = 0;
+  /** Touch: a menu's history step is being popped by its close (`setMenu`), and a menu opened meanwhile wants one. */
+  private histBack = false;
+  private histPush = false;
   private keepTab = false;
   /** The unread entries while the "What's new" card from joining is open; null on the full board. */
   private newsGlance: NewsEntry[] | null = null;
@@ -973,9 +980,21 @@ export class Game {
   }
 
   private bind(): void {
-    $('menu').addEventListener('click', (e) =>
-      this.onMenuClick(e.target as HTMLElement),
-    );
+    $('menu').addEventListener('click', (e) => {
+      const el = e.target as HTMLElement;
+      this.onMenuClick(el);
+      if (this.touch) this.touchMenuTap(el);
+    });
+    addEventListener('popstate', () => {
+      // Our own back() from closing a menu: nothing to close; a menu opened meanwhile gets its step now.
+      if (this.histBack) {
+        this.histBack = false;
+        if (this.histPush && this.menuOpen) history.pushState({ lakesideMenu: true }, '');
+        this.histPush = false;
+        return;
+      }
+      if (this.menuOpen) this.closeMenu();
+    });
     $('menu').addEventListener('keydown', (e) => {
       const id = (e.target as HTMLElement).id;
       if (id === 'acct-pass' && e.key === 'Enter') this.savePass();
@@ -1001,12 +1020,17 @@ export class Game {
       } else if (this.touch && this.active && this.phase === 'idle') this.takeSlot(i);
     });
     this.wireHoldToDrop();
+    // Hover is a mouse thing: on touch the browser's emulated mouse events would undo a tap's tooltip and try-on.
     $('menu').addEventListener('mouseover', (e) => {
+      if (this.touch) return;
       this.tryOn(e.target as HTMLElement, true);
       this.showTip(e.target as HTMLElement, e as MouseEvent);
     });
-    $('menu').addEventListener('mousemove', (e) => this.moveTip(e as MouseEvent));
+    $('menu').addEventListener('mousemove', (e) => {
+      if (!this.touch) this.moveTip(e as MouseEvent);
+    });
     $('menu').addEventListener('mouseout', (e) => {
+      if (this.touch) return;
       this.tryOn(e.target as HTMLElement, false);
       if (!(e.relatedTarget as HTMLElement | null)?.closest?.('[data-tip]')) $('tip').classList.add('hidden');
     });
@@ -1689,6 +1713,22 @@ export class Game {
     this.persist();
   }
 
+  /**
+   * Touch has no hover, so a tap does what hovering does on desktop: an item's tooltip shows as a bar at the bottom
+   * of the screen (`#tip.bar`) until the next tap or a few seconds pass, and a locked piece is tried on the preview.
+   */
+  private touchMenuTap(el: HTMLElement): void {
+    const tip = $('tip');
+    clearTimeout(this.tipTimer);
+    const t = el.closest<HTMLElement>('[data-tip]');
+    if (t?.dataset.tip && this.menuOpen) {
+      tip.innerHTML = t.dataset.tip;
+      tip.className = 'bar';
+      this.tipTimer = window.setTimeout(() => tip.classList.add('hidden'), TIP_BAR_MS);
+    } else tip.classList.add('hidden');
+    if (el.closest('[data-act="locked"][data-try]')) this.tryOn(el, true);
+  }
+
   private showTip(el: HTMLElement, e: MouseEvent): void {
     const t = el.closest<HTMLElement>('[data-tip]');
     const tip = $('tip');
@@ -2040,6 +2080,20 @@ export class Game {
   // ---------- walking & interaction ----------
 
   private setMenu(open: boolean): void {
+    // Touch: an open menu is a step in the browser's history, so Android's back gesture (or iOS's swipe) closes it
+    // instead of leaving the game (`popstate` in bind).
+    // history.back() lands later, so a menu opened before it does waits for it (`popstate`) to add its own step.
+    if (this.touch && open && !this.menuOpen) {
+      if (this.histBack) this.histPush = true;
+      else history.pushState({ lakesideMenu: true }, '');
+    } else if (!open && this.menuOpen && (history.state as { lakesideMenu?: boolean } | null)?.lakesideMenu) {
+      this.histPush = false;
+      if (!this.histBack) {
+        this.histBack = true;
+        history.back();
+      }
+    }
+    if (!open) $('tip').classList.add('hidden');
     this.menuOpen = open;
     $('menu').classList.toggle('hidden', !open);
     // Shop mode hides parts of the HUD; it must end with the menu, not wait for the next redraw.
@@ -5037,7 +5091,7 @@ export class Game {
         tier: 1,
         badge: '<span class="badge" style="--c:var(--t1)">Wearing now</span>',
         body: '',
-        note: 'Hover any item to try it on. Click one to see its price and buy it.',
+        note: this.touch ? 'Tap any item to try it on and see its price.' : 'Hover any item to try it on. Click one to see its price and buy it.',
         actions: '',
       });
       return `<div class="cols"><div class="main">${intro}${sections}</div>${yours}</div>`;
@@ -5063,7 +5117,7 @@ export class Game {
       cls: look.cls,
       badge: `<span class="badge" style="--c:${look.color}">${slotName} · ${COS_RARITY[chosen.tier]}${where}</span>`,
       body: '',
-      note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.'}`,
+      note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : (this.touch ? 'Tap any item to try it on.' : 'Hover any item to try it on.')}`,
       actions: action,
     });
     return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
@@ -5131,7 +5185,7 @@ export class Game {
         tier: 1,
         badge: '<span class="badge" style="--c:var(--t1)">Wearing now</span>',
         body: '',
-        note: items.length ? 'Hover any piece to try it on. Click one to see what it takes.' : 'Land a sea legend to unlock the first piece of its set.',
+        note: items.length ? (this.touch ? 'Tap any piece to try it on and see what it takes.' : 'Hover any piece to try it on. Click one to see what it takes.') : 'Land a sea legend to unlock the first piece of its set.',
         actions: '',
       });
       return `<div class="cols"><div class="main">${intro}${sections}</div>${yours}</div>`;
