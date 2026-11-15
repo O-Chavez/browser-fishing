@@ -16,12 +16,12 @@
  *   { id: 1, date: '2026-11-20', title: 'The Delve', image: delve, alt: 'Diving below the pond',
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
+import abyssGear from '../assets/images/news/abyss-gear.jpg';
 import charterChart from '../assets/images/news/charter-chart.jpg';
 import charterHold from '../assets/images/news/charter-hold.jpg';
 import charterLures from '../assets/images/news/charter-lures.jpg';
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
-import krakenGear from '../assets/images/news/kraken-gear.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
 import reelFight from '../assets/images/news/reel-fight.jpg';
@@ -45,13 +45,13 @@ export const NEWS: NewsEntry[] = [
   {
     id: 11,
     date: '2026-11-14',
-    title: "The Kraken's gear",
-    image: krakenGear,
-    alt: 'Three players on the pier at sunset: one in the Kraken Crown and the Kraken Armor, a wet crimson shell with squid fins, tentacles and water spiralling round it, standing in a puddle; one in a navy coat with the crown and the Kraken Beak; one in a bucket hat; two little pink Kraken Hatchlings float beside them',
+    title: 'Legend gear from the Abyss',
+    image: abyssGear,
+    alt: "Three players on the pier: one in the Kraken's gear, a crimson shell with tentacles and water spiralling round it; one with the Leviathan coiled round them and its fanged jaw on their head; one in the Dreamer's nightcap and starry robe, standing on a little cloud; a pink Kraken Hatchling and a little Leviathan float beside them",
     body: [
-      "Land <b>the Kraken</b> in <b>the Abyss</b> and <b>Captain Reed</b> can make you something from it. Your first Kraken unlocks the <b>Kraken Crown</b>, the second the <b>Kraken Armor</b>, the third the <b>Kraken Beak</b>, and the fourth the <b>Kraken Hatchling</b>, a little Kraken that floats after you wherever you go.",
-      "Once a piece is unlocked, find it in the new <b>Wardrobe</b> tab of Reed's menu, try it on, and buy it there. They don't come cheap: the crown is 3,000,000 coins. Wear them from your own Wardrobe (<kbd>Tab</kbd>) too, where pets have a row of their own.",
-      "They're the first <b>Abyssal</b> pieces, a new rarity above Legendary that only comes from the Abyss. Krakens count from today on.",
+      "Land a legend in <b>the Abyss</b> and <b>Captain Reed</b> can make you something from it. Each of its three legends has a set: <b>the Kraken</b>'s crown, armor and beak, <b>the Leviathan</b>'s jaw, coil and fangs, and <b>the Drowned Dreamer</b>'s nightcap, robe and dreamcatcher.",
+      "Your first landing of a legend unlocks its hat, the second its shirt, the third its jewelry, and the fourth its pet, which floats after you wherever you go: the <b>Kraken Hatchling</b>, the <b>Leviathan Wyrmling</b> or the <b>Sleepy Dreamer</b>. Find unlocked pieces in the new <b>Wardrobe</b> tab of Reed's menu, try them on, and buy them there. They don't come cheap: a hat is 3,000,000 coins. Wear them from your own Wardrobe (<kbd>Tab</kbd>) too, where pets have a row of their own.",
+      "They're the first <b>Abyssal</b> pieces, a new rarity above Legendary that only comes from the Abyss. Landings count from today on.",
     ],
   },
   {

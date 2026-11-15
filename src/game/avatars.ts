@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FISH } from '../data/content';
-import { defaultLook } from '../data/cosmetics';
+import { COSMETICS, defaultLook } from '../data/cosmetics';
 import { titleName } from '../data/ranks';
 import { placeOf, type Activity, type PlayerInfo } from '../net/protocol';
 import { Character } from './character';
@@ -280,9 +280,20 @@ class Avatar {
   }
 }
 
+/**
+ * Runs `f` when the page is idle, with the idle milliseconds left (Safari has no `requestIdleCallback`: soon after,
+ * with none to spare).
+ */
+const whenIdle = (f: (left: () => number) => void): void => {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback((d) => f(() => d.timeRemaining()), { timeout: 3000 });
+  else setTimeout(() => f(() => 0), 50);
+};
+
 /** Other players in the same map, interpolated between server snapshots. */
 export class Avatars {
   private list = new Map<number, Avatar>();
+  /** Hidden characters wearing the legend pieces (`warmLegends`); never drawn and never ticked. */
+  private wearers = new THREE.Group();
 
   constructor(
     private scene: THREE.Scene,
@@ -293,6 +304,37 @@ export class Avatars {
     // A hidden stand-in that never leaves the scene, so `World.prewarm` compiles the avatar shaders
     // before other players show up, and they stay compiled while nobody else is around.
     new Avatar({ id: -1, name: '', map: '', x: 0, z: 0, yaw: 0, look: defaultLook(), coins: 0 }, scene, surface);
+    this.wearers.visible = false;
+    scene.add(this.wearers);
+  }
+
+  /**
+   * The sea legends' pieces are the biggest models (an armor is tens of meshes, with programs no other item uses), and
+   * building one and compiling its shaders the first time someone nearby wore it stalled the game for a few frames. So
+   * hidden stand-ins wear every one of them, built in idle moments while the page loads (on the join screen; the
+   * biggest piece takes about 13 ms, 35 ms on a slow phone), and then `warm` compiles their shaders and draws them
+   * once. They stay in the scene, so each later `World.prewarm` covers them too. Every `legend` item is covered, so a
+   * new set needs nothing here.
+   */
+  warmLegends(warm: (o: THREE.Object3D) => void): void {
+    const todo = COSMETICS.filter((c) => c.shop === 'legend');
+    const next = (left: () => number): void => {
+      // At least one piece each time, and more while the idle moment lasts or for up to a frame's time (the game
+      // draws every frame, so on a slow device idle moments are short and far apart).
+      const t0 = performance.now();
+      do {
+        const c = todo.shift()!;
+        try {
+          this.wearers.add(new Character({ ...defaultLook(), [c.slot]: c.id }).group);
+        } catch (e) {
+          // A broken model shouldn't stop the page: it throws again when someone wears it.
+          console.warn(`Couldn't build ${c.id}:`, e);
+        }
+      } while (todo.length && (left() > 15 || performance.now() - t0 < 16));
+      if (todo.length) whenIdle(next);
+      else warm(this.wearers);
+    };
+    if (todo.length) whenIdle(next);
   }
 
   /** `place` is where the viewer is (`placeOf`): only players on the same map and dive show. */

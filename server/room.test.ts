@@ -1365,6 +1365,31 @@ describe('charters', () => {
     expect(b.c.log.some((m) => m.t === 'sys' && /Kraken/.test(m.text))).toBe(false);
   });
 
+  it.each([
+    { legend: 'leviathan', roll: 0, ids: ['leviathanjaw', 'leviathancoil', 'leviathanfangs', 'leviathanpet'] },
+    { legend: 'dreamer', roll: 0.5, ids: ['dreamercap', 'dreamerrobe', 'dreamcatcher', 'dreamerpet'] },
+  ])("unlocks the $legend's set landing by landing too, and Reed sells it", ({ legend, roll, ids }) => {
+    const t = setup();
+    const a = diver(t);
+    const s = a.acct.save;
+    Object.assign(s, { boatParts: 4, rodStep: 8, abyssLevels: 60, holdLevel: 4, coins: 1e9 });
+    t.room.handle(a.id, { t: 'dive', zone: 4, marker: 1 });
+    for (let n = 1; n <= ids.length; n++) {
+      // The legend chance, then which of the Abyss's three legends.
+      t.queueRolls(0.01, roll);
+      fight(t, a);
+      expect(last(a.c, 'castok').fishId).toBe(legend);
+      expect(s.legends).toEqual({ [legend]: n });
+    }
+    expect(s.owned).toEqual([]);
+    t.room.handle(a.id, { t: 'headhome' });
+    atReed(t, a);
+    const coins = s.coins;
+    for (const id of ids) t.room.handle(a.id, { t: 'buylegend', id });
+    expect(s.owned).toEqual(ids);
+    expect(s.coins).toBe(coins - 14_500_000);
+  });
+
   it("sells an unlocked legend piece for coins at Reed's seaplane only, and wears it once bought", () => {
     const t = setup();
     const a = diver(t);

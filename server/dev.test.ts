@@ -235,9 +235,21 @@ describe('dev commands in a room', () => {
     room.handle(a.id, { t: 'cmd', text: '/landed kraken 0' });
     expect(a.save.legends).toEqual({});
     expect(a.save.owned).toEqual(['cap']);
-    room.handle(a.id, { t: 'cmd', text: '/landed leviathan 2' });
-    expect(a.save.legends).toEqual({ leviathan: 2 });
-    expect(devLines(a.log).at(-1)).toBe('The Leviathan landed 2 times (it has no set yet).');
+    // Every set reports the same way.
+    for (const [legend, name] of [['leviathan', 'The Leviathan'], ['dreamer', 'The Drowned Dreamer']]) {
+      room.handle(a.id, { t: 'cmd', text: `/landed ${legend} 2` });
+      expect(a.save.legends[legend]).toBe(2);
+      expect(devLines(a.log).at(-1)).toBe(`${name} landed 2 times: 2 of 4 pieces of its set unlocked at Reed's.`);
+    }
+    room.handle(a.id, { t: 'cmd', text: '/landed dreamer 0' });
+    room.handle(a.id, { t: 'cmd', text: '/landed leviathan 1' });
+    expect(devLines(a.log).at(-1)).toBe("The Leviathan landed 1 time: 1 of 4 pieces of its set unlocked at Reed's.");
+    expect(a.save.legends).toEqual({ leviathan: 1 });
+    room.handle(a.id, { t: 'cmd', text: '/landed leviathan 0' });
+    // A legend with no set only counts.
+    room.handle(a.id, { t: 'cmd', text: '/landed grouper 2' });
+    expect(a.save.legends).toEqual({ grouper: 2 });
+    expect(devLines(a.log).at(-1)).toBe('Grandmother Grouper landed 2 times (it has no set yet).');
     for (const bad of ['/landed minnow 2', '/landed kraken', '/landed']) {
       room.handle(a.id, { t: 'cmd', text: bad });
       expect(devLines(a.log).at(-1)).toMatch(/^Usage: \/landed <legend> N · legends: grouper/);

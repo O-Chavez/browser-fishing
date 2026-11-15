@@ -158,6 +158,8 @@ export class World {
   /** The running `prewarm`, until its shaders are ready and drawn once. */
   private warming: Promise<unknown> | null = null;
   private compiled = false;
+  /** Objects `warm` has compiled since, waiting for their one-pixel draw. */
+  private warmed: THREE.Object3D[] = [];
   /** Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5. */
   private pixelCap = 1.25;
   private trees: Circle[] = [];
@@ -307,18 +309,30 @@ export class World {
   }
 
   /**
-   * Draws everything once, hidden objects included, clipped to one pixel. Some GPUs (phones) only
-   * finish a program on its first draw, so without this the first look around still stalls.
+   * `prewarm` for something added to the scene after it ran (and still in it), like the avatars' hidden
+   * stand-ins: compiles only its programs in the background, against the scene's lights and fog, then
+   * draws it once on a later frame (see `warmDraw`). The next `prewarm` covers it again with the rest.
    */
-  private warmDraw(): void {
-    const restore = revealAll(this.scene);
+  warm(obj: THREE.Object3D): void {
+    void this.renderer.compileAsync(obj, this.camera, this.scene).then(() => {
+      if (obj.parent) this.warmed.push(obj);
+    });
+  }
+
+  /**
+   * Draws everything under `roots` once, hidden objects included, clipped to one pixel (the rest of
+   * the scene draws as it is). Some GPUs (phones) only finish a program on its first draw, and the
+   * first draw uploads the geometry, so without this the first look around still stalls.
+   */
+  private warmDraw(roots: THREE.Object3D[] = [this.scene]): void {
+    const restore = roots.map((o) => revealAll(o));
     const r = this.renderer;
     r.shadowMap.needsUpdate = true;
     r.setScissorTest(true);
     r.setScissor(0, 0, 1, 1);
     r.render(this.scene, this.camera);
     r.setScissorTest(false);
-    restore();
+    for (const f of restore.reverse()) f();
     r.shadowMap.needsUpdate = true;
   }
 
@@ -1386,8 +1400,9 @@ export class World {
     if (this.compiled) {
       this.compiled = false;
       this.warming = null;
+      this.warmed = [];
       this.warmDraw();
-    }
+    } else if (this.warmed.length) this.warmDraw(this.warmed.splice(0));
     if (!this.paused && !(this.holdForShaders && (this.warming || performance.now() < this.holdUntil))) this.renderer.render(this.scene, this.camera);
   }
 }

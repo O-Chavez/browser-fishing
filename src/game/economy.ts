@@ -659,20 +659,39 @@ export function legendBuyError(s: Pick<SaveData, 'legends' | 'owned' | 'coins'>,
  */
 export const REED_SHOPS: readonly CosShop[] = ['legend'];
 
-/** A legend's set shows at Reed's once its zone is open or it has been landed (so a set never shows out of nowhere). */
-export function legendSetShown(s: Pick<SaveData, 'legends' | 'boatParts'>, fish: string): boolean {
+/**
+ * Whether a player has reached a legend's set: its zone is open, or it has been landed. Reed's Wardrobe tab shows every
+ * set from the start, and the ones not reached yet as silhouettes (Oscar, 2026-11-14).
+ */
+export function legendSetReached(s: Pick<SaveData, 'legends' | 'boatParts'>, fish: string): boolean {
   return (s.legends[fish] ?? 0) > 0 || zoneOpen(s, Math.max(0, ZONES.findIndex((z) => z.legends.includes(fish))));
 }
 
-/** What Reed's Wardrobe tab shows: his counters' items, a legend's pieces only while its set shows, in set order. */
-export function reedCosmetics(s: Pick<SaveData, 'legends' | 'boatParts'>): Cosmetic[] {
-  return COSMETICS.filter((c) => REED_SHOPS.includes(c.shop) && (!c.legend || legendSetShown(s, c.legend)))
-    .sort((a, b) => (a.legend ?? '').localeCompare(b.legend ?? '') || (a.landing ?? 0) - (b.landing ?? 0) || a.price - b.price);
+/** The sea legends in the order the zones list them, shallowest first: the order of the sets at Reed's. */
+const LEGEND_ORDER = ZONES.flatMap((z) => z.legends);
+/** Where a set goes at Reed's: by `LEGEND_ORDER`, with items from no legend after the sets. */
+const setRank = (c: Cosmetic): number => {
+  const i = c.legend ? LEGEND_ORDER.indexOf(c.legend) : -1;
+  return i < 0 ? LEGEND_ORDER.length : i;
+};
+
+/**
+ * What Reed's Wardrobe tab shows: every item on his counters, so a player can see all there is to get (Oscar,
+ * 2026-11-14). The sets go in the order the zones list their legends (the Abyss: the Leviathan, the Drowned Dreamer,
+ * the Kraken), each in landing order.
+ */
+export function reedCosmetics(): Cosmetic[] {
+  return COSMETICS.filter((c) => REED_SHOPS.includes(c.shop))
+    .sort((a, b) => setRank(a) - setRank(b) || (a.landing ?? 0) - (b.landing ?? 0) || a.price - b.price);
 }
 
-/** Where an item at Reed's stands: still locked by its legend's landings, on sale for coins, or already owned. */
-export function reedOffer(s: Pick<SaveData, 'legends' | 'owned'>, c: Cosmetic): 'locked' | 'sale' | 'owned' {
+/**
+ * Where an item at Reed's stands: from a set the player hasn't reached yet (`legendSetReached`; shown as a silhouette),
+ * still locked by its legend's landings, on sale for coins, or already owned.
+ */
+export function reedOffer(s: Pick<SaveData, 'legends' | 'owned' | 'boatParts'>, c: Cosmetic): 'unseen' | 'locked' | 'sale' | 'owned' {
   if (s.owned.includes(c.id)) return 'owned';
+  if (c.legend && !legendSetReached(s, c.legend)) return 'unseen';
   return c.legend && !legendUnlocked(s, c) ? 'locked' : 'sale';
 }
 

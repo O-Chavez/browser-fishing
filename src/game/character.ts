@@ -37,12 +37,13 @@ function mat(color: number, finish: Finish = 'cloth', side: THREE.Side = THREE.F
       metalness: f.metal,
       flatShading: true,
       side,
-      emissive: f.glow ? color : 0x000000,
-      emissiveIntensity: f.glow,
+      // A painted material's colour is white, so it can't glow its parts' own colours: it doesn't glow.
+      emissive: f.glow && !painted ? color : 0x000000,
+      emissiveIntensity: painted ? 0 : f.glow,
       vertexColors: painted,
     });
     MATS.set(key, m);
-    if (finish === 'glow') PULSE.set(m, f.glow);
+    if (finish === 'glow' && !painted) PULSE.set(m, f.glow);
   }
   return m;
 }
@@ -380,6 +381,12 @@ function hatModel(c: Cosmetic, g: THREE.Group): void {
     case 'krakencrown':
       krakenCrown(c, g);
       break;
+    case 'leviathanjaw':
+      leviathanJaw(c, g);
+      break;
+    case 'dreamercap':
+      dreamerCap(c, g);
+      break;
   }
 }
 
@@ -496,6 +503,12 @@ function shirtModel(c: Cosmetic, g: THREE.Group): void {
     case 'krakenarmor':
       krakenArmor(c, g);
       break;
+    case 'leviathancoil':
+      leviathanCoil(c, g);
+      break;
+    case 'dreamerrobe':
+      dreamRobe(c, g);
+      break;
   }
 }
 
@@ -588,6 +601,12 @@ function jewelryModel(c: Cosmetic, g: THREE.Group): void {
     case 'krakenbeak':
       krakenBeak(c, g);
       break;
+    case 'leviathanfangs':
+      leviathanFangs(c, g);
+      break;
+    case 'dreamcatcher':
+      dreamcatcher(c, g);
+      break;
   }
 }
 
@@ -599,6 +618,9 @@ const SUCKER = 0xf4b8c4;
 /** The soft halo round the Kraken's ruby eye, and its sparkles. */
 const RUBY_HALO = 0xff4a6a;
 const KRAKEN_SPARK = 0xff7a95;
+
+/** The material for parts merged with their colours painted on (see `paint`). */
+const painted = (f: Finish): THREE.MeshStandardMaterial => mat(0xffffff, f, THREE.FrontSide, true);
 
 /** Gives every vertex one colour, for parts merged under a `painted` material. */
 function paint(geo: THREE.BufferGeometry, color: number): THREE.BufferGeometry {
@@ -654,7 +676,7 @@ function swaying(g: THREE.Object3D, p: V3, sway: Sway, parts: Part[], finish: Fi
   const o = new THREE.Group();
   o.position.set(...p);
   o.userData.sway = sway;
-  add(o, merged(parts), mat(0xffffff, finish, THREE.FrontSide, true));
+  add(o, merged(parts), painted(finish));
   g.add(o);
   return o;
 }
@@ -683,20 +705,34 @@ function halo(g: THREE.Group, p: V3, color: number, size: number): void {
 }
 
 /**
- * Geometry every wearer shares, moved on the CPU once a frame (whoever ticks first): water dripping and ripples
- * spreading. One mesh each, however many drops, and no custom shaders.
+ * Geometry every wearer shares, moved on the CPU once a frame (by whoever ticks first): water dripping, ripples
+ * spreading, bubbles rising. One mesh each, however many drops, and no custom shaders. Each is filed under the item
+ * whose model made it, and a frame moves only the items a ticking character wears, so pieces nobody has on (like the
+ * hidden stand-ins `Avatars.warmLegends` builds) cost nothing.
  */
-const SHARED_ANIM: ((t: number) => void)[] = [];
+const SHARED_ANIM = new Map<string, ((t: number) => void)[]>();
+/** The item `outfitPiece` is building, whose shared animations `animated` files. */
+let building = '';
 let animatedAt = -1;
+const animatedNow = new Set<string>();
 /** Adds a shared animation and runs it once, so the template's resting shape (and its bounds) are real. */
 function animated(f: (t: number) => void): void {
-  SHARED_ANIM.push(f);
+  let list = SHARED_ANIM.get(building);
+  if (!list) SHARED_ANIM.set(building, (list = []));
+  list.push(f);
   f(0);
 }
-function animateShared(t: number): void {
-  if (t === animatedAt) return;
-  animatedAt = t;
-  for (const f of SHARED_ANIM) f(t);
+/** Moves the shared animations of the items in `ids`, each once a frame however many wear it. */
+function animateShared(t: number, ids: readonly string[]): void {
+  if (t !== animatedAt) {
+    animatedAt = t;
+    animatedNow.clear();
+  }
+  for (const id of ids) {
+    if (animatedNow.has(id)) continue;
+    animatedNow.add(id);
+    for (const f of SHARED_ANIM.get(id)!) f(t);
+  }
 }
 
 /** Sea water: drops, and the sheets that spiral round the Kraken Armor. */
@@ -780,15 +816,16 @@ function puddle(g: THREE.Group): void {
   add(pg, geo, RIPPLES).castShadow = false;
 }
 
-/** An upright band along a curve through `pts`, `width(t)` tall: the water streams. */
-function ribbon(pts: V3[], width: (t: number) => number, n: number): THREE.BufferGeometry {
+/** A band along a curve through `pts`, `width(t)` wide `across` it (upright by default): the water streams, the dreamcatcher's feathers. */
+function ribbon(pts: V3[], width: (t: number) => number, n: number, across: V3 = [0, 1, 0]): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)));
+  const [ax, ay, az] = across;
   const pos: number[] = [];
   const idx: number[] = [];
   for (let i = 0; i <= n; i++) {
     const p = curve.getPoint(i / n);
     const w = width(i / n) / 2;
-    pos.push(p.x, p.y + w, p.z, p.x, p.y - w, p.z);
+    pos.push(p.x + ax * w, p.y + ay * w, p.z + az * w, p.x - ax * w, p.y - ay * w, p.z - az * w);
     if (i < n) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
   }
   const geo = new THREE.BufferGeometry();
@@ -829,7 +866,6 @@ function krakenCrown(c: Cosmetic, g: THREE.Group): void {
 function krakenArmor(c: Cosmetic, g: THREE.Group): void {
   const SHELL = 0xb02a48;
   const UNDER = 0x5e1228;
-  const painted = (f: Finish) => mat(0xffffff, f, THREE.FrontSide, true);
   const plate = SHIRT.slice(0, 5).map(([r, y]) => new THREE.Vector2(r + 0.025, y));
   const shell: Part[] = [
     [paint(new THREE.LatheGeometry(SHIRT.map(([r, y]) => new THREE.Vector2(r, y)), 14), UNDER), {}],
@@ -944,6 +980,400 @@ function krakenBeak(c: Cosmetic, g: THREE.Group): void {
   sparkles(g, KRAKEN_SPARK, 1.2, 0.48, 5, 1.2);
 }
 
+// ---------- sea legend pieces (the Leviathan's and the Drowned Dreamer's sets) ----------
+
+const LEV_LIGHT = 0x3e3a56;
+const LEV_BELLY = 0x4c3c44;
+const LEV_BEARD = 0x9a86c0;
+const EMBER = 0xffb02e;
+const BONE = 0xf4e8cc;
+const DRE_LIGHT = 0x4a9a7c;
+const DRE_BELLY = 0x9ad8b8;
+const DRE_GLOW = 0x9affd0;
+const MOON = 0xfff1c8;
+const FLUFF = 0xf4f0ff;
+
+/** Bubbles off the Leviathan Coil; the Dream Robe's dream bubbles; the dreamcatcher's glowing feathers. */
+const BUBBLE = new THREE.MeshStandardMaterial({ color: 0xbff8ee, transparent: true, opacity: 0.5, roughness: 0.1, flatShading: true });
+const DREAM_BUBBLE = new THREE.MeshStandardMaterial({ color: 0xd8fff4, emissive: 0x3a8a7a, emissiveIntensity: 0.3, transparent: true, opacity: 0.35, roughness: 0.05, depthWrite: false, flatShading: true });
+const STRAND = new THREE.MeshStandardMaterial({ color: DRE_GLOW, emissive: DRE_GLOW, emissiveIntensity: 0.8, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, flatShading: true });
+
+const UP = new THREE.Vector3(0, 1, 0);
+const TO_Z = new THREE.Vector3(0, 0, 1);
+const v3 = ([x, y, z]: V3) => new THREE.Vector3(x, y, z);
+
+/** A part whose +y axis points along `dir`, at `pos` (spines standing off a curve). */
+function alongAt(pos: THREE.Vector3, dir: THREE.Vector3): At {
+  const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize()));
+  return { p: pos.toArray() as V3, r: [e.x, e.y, e.z] };
+}
+
+/** Bakes a part placed in a frame (at `p`, turned by `q`) into the piece's own coordinates: an eye's parts, a lash line. */
+function framed(geo: THREE.BufferGeometry, at: At, p: V3, q: THREE.Quaternion): THREE.BufferGeometry {
+  return place(geo, at).applyMatrix4(new THREE.Matrix4().compose(v3(p), q, new THREE.Vector3(1, 1, 1)));
+}
+const turnY = (ry: number) => new THREE.Quaternion().setFromAxisAngle(UP, ry);
+
+/** A copy of a small shape that `move` places each frame (its matrix, written into `m`). */
+interface Mover {
+  geo: THREE.BufferGeometry;
+  move: (t: number, m: THREE.Matrix4) => void;
+}
+
+/**
+ * Small parts that move every frame (rising bubbles and Zs, sliding seams, a wyrmling's segments) as one shared mesh:
+ * each mover's vertices are placed on the CPU once a frame (see `animated`), after any `still` parts, which never move.
+ * `bound` covers everywhere they go, in the parent's frame.
+ */
+function movers(g: THREE.Object3D, m: THREE.Material, list: Mover[], bound: THREE.Sphere, still: Part[] = []): THREE.Mesh {
+  const all = [...still.map(([geo, at]) => place(geo, at)), ...list.map((x) => x.geo)];
+  const mixed = all.some((x) => x.index) && all.some((x) => !x.index);
+  const geos = mixed ? all.map((x) => (x.index ? x.toNonIndexed() : x)) : all;
+  const geo = mergeGeometries(geos)!;
+  geo.boundingSphere = bound;
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const out = pos.array as Float32Array;
+  let at = 0;
+  for (let i = 0; i < still.length; i++) at += geos[i].attributes.position.count * 3;
+  const src = geos.slice(still.length).map((x) => {
+    const shape = (x.attributes.position.array as Float32Array).slice();
+    const start = at;
+    at += shape.length;
+    return { shape, start };
+  });
+  const mtx = new THREE.Matrix4();
+  animated((t) => {
+    for (let j = 0; j < list.length; j++) {
+      list[j].move(t, mtx);
+      const e = mtx.elements;
+      const { shape, start } = src[j];
+      for (let i = 0; i < shape.length; i += 3) {
+        const x = shape[i];
+        const y = shape[i + 1];
+        const z = shape[i + 2];
+        out[start + i] = e[0] * x + e[4] * y + e[8] * z + e[12];
+        out[start + i + 1] = e[1] * x + e[5] * y + e[9] * z + e[13];
+        out[start + i + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
+      }
+    }
+    pos.needsUpdate = true;
+  });
+  const o = new THREE.Mesh(geo, m);
+  g.add(o);
+  return o;
+}
+
+const SCALE = new THREE.Vector3();
+/**
+ * Rises from `base` through `span` once every 1/`speed` seconds (starting `off` of the way up), swelling in and
+ * shrinking away to nothing at the top, turned `rz` about z: bubbles and Zs.
+ */
+function rising(x: number, z: number, base: number, span: number, speed: number, off: number, rz = 0): Mover['move'] {
+  return (t, m) => {
+    const k = (off + t * speed) % 1;
+    m.makeRotationZ(rz).scale(SCALE.setScalar(Math.sin(k * Math.PI) + 0.05)).setPosition(x, base + k * span, z);
+  };
+}
+
+/** A 'Z' for sleepers, from three bars, centred on the origin. */
+function zee(size: number): THREE.BufferGeometry {
+  return merged([
+    [new THREE.BoxGeometry(size, size * 0.2, size * 0.12), { p: [0, size * 0.5, 0] }],
+    [new THREE.BoxGeometry(size, size * 0.2, size * 0.12), { p: [0, -size * 0.5, 0] }],
+    [new THREE.BoxGeometry(size * 1.38, size * 0.2, size * 0.12), { r: [0, 0, 0.785] }],
+  ]);
+}
+
+/** A sleeping eye drawn as a glowing lash line (a closed lid) with three lashes, at `p` turned `ry` about y. */
+function lashes(out: Part[], p: V3, ry: number, r: number): void {
+  const q = turnY(ry);
+  out.push([framed(new THREE.TorusGeometry(r, r * 0.22, 4, 10, Math.PI), { r: [0, 0, Math.PI] }, p, q), {}]);
+  for (const a of [-0.7, 0, 0.7]) out.push([framed(new THREE.ConeGeometry(r * 0.16, r * 0.6, 3), { p: [Math.sin(a) * r * 1.25, -Math.cos(a) * r * 1.25, 0], r: [0, 0, a + Math.PI] }, p, q), {}]);
+}
+
+/** Leviathan's Jaw: the Leviathan's long skull over your head, fangs over your brow, its jaw under your chin, bone horns and a row of burning eyes. */
+function leviathanJaw(c: Cosmetic, g: THREE.Group): void {
+  // The skull's dome over your head, its snout out over your face (centre z 0.07, 0.4 deep), a lower jaw under your chin.
+  const C: V3 = [0, 1.7, 0.07];
+  const R: V3 = [0.25, 0.19, 0.4];
+  const plate: Part[] = [
+    [paint(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, H), c.color), { p: C, s: R }],
+    [paint(new THREE.TorusGeometry(0.26, 0.036, 5, 18, 2.6), c.color), { p: [0, 1.45, 0.03], r: [H, 0, H - 1.3], s: [1, 1.35, 1] }],
+    ...[-1, 1].map((s): Part => [paint(new THREE.CylinderGeometry(0.032, 0.04, 0.26, 6), c.color), { p: [s * 0.25, 1.58, -0.04] }]),
+  ];
+  // A raised ridge down the snout.
+  limb(plate, [[0, 1.86, -0.05], [0, 1.865, 0.15], [0, 1.8, 0.33], [0, 1.74, 0.44]], 0.035, 0.022, LEV_LIGHT, 10, 6);
+  addMany(g, painted('metal'), plate);
+  // The roof of its mouth over your face, fangs all round the jaw's front edge and up from the lower jaw, horns and back spines.
+  const bone: Part[] = [[paint(new THREE.CircleGeometry(1, 18), 0x7a2434), { p: [C[0], C[1] - 0.001, C[2]], r: [H, 0, 0], s: [R[0] - 0.005, R[2] - 0.005, 1] }]];
+  for (let i = -5; i <= 5; i++) {
+    const a = i * 0.2;
+    const len = 0.075 - Math.abs(i) * 0.005;
+    bone.push([paint(new THREE.ConeGeometry(0.014, len, 4), BONE), { p: [Math.sin(a) * (R[0] - 0.01), 1.7 - len / 2, C[2] + Math.cos(a) * (R[2] - 0.012)], r: [Math.PI, 0, 0] }]);
+  }
+  for (let i = -4; i <= 4; i++) bone.push([paint(new THREE.ConeGeometry(0.013, 0.06, 4), BONE), { p: [Math.sin(i * 0.24) * 0.26, 1.49, 0.03 + Math.cos(i * 0.24) * 0.35] }]);
+  for (const s of [-1, 1]) limb(bone, [[s * 0.12, 1.84, -0.12], [s * 0.2, 1.94, -0.26], [s * 0.2, 2.02, -0.42], [s * 0.13, 2.05, -0.54]], 0.05, 0.007, BONE, 12, 6);
+  for (let i = 0; i < 4; i++) bone.push([paint(new THREE.ConeGeometry(0.03 - i * 0.004, 0.12 - i * 0.015, 4), BONE), { p: [0, 1.88 - i * 0.035, -0.08 - i * 0.08], r: [-0.7 - i * 0.2, 0, 0] }]);
+  addMany(g, painted('satin'), bone);
+  // Smouldering nostrils and two molten seams round the skull.
+  const seams: Part[] = [-1, 1].map((s): Part => [new THREE.SphereGeometry(0.016, 6, 4), { p: [s * 0.045, 1.745, 0.455] }]);
+  for (const y of [1.76, 1.83]) {
+    const f = Math.sqrt(1 - ((y - C[1]) / R[1]) ** 2);
+    const r = R[0] * f + 0.003;
+    seams.push([new THREE.TorusGeometry(r, 0.007, 4, 28), { p: [0, y, C[2]], r: [H, 0, 0], s: [1, (R[2] * f + 0.003) / r, 1] }]);
+  }
+  addMany(g, mat(c.accent, 'glow'), seams);
+  // The burning row of eyes along each side of the skull, with slit pupils.
+  const eyes: Part[] = [];
+  const pupils: Part[] = [];
+  for (const s of [-1, 1])
+    for (let i = 0; i < 4; i++) {
+      const z = 0.3 - i * 0.1;
+      const y = 1.79;
+      const r = 0.034 - i * 0.006;
+      const x = s * (R[0] * Math.sqrt(Math.max(0, 1 - ((y - C[1]) / R[1]) ** 2 - ((z - C[2]) / R[2]) ** 2)) + 0.004);
+      eyes.push([new THREE.SphereGeometry(r, 8, 6), { p: [x, y, z], s: [0.8, 0.8, 1] }]);
+      pupils.push([new THREE.BoxGeometry(r * 0.4, r * 1.5, r * 0.4), { p: [x + s * r * 0.7, y, z] }]);
+      if (i === 0) halo(g, [x + s * 0.03, y, z], c.accent, 0.22);
+    }
+  addMany(g, mat(EMBER, 'glow'), eyes);
+  addMany(g, mat(INK, 'gem'), pupils);
+  // A little lower and closer in than the render's (2.05, 0.5), as the Kraken Crown's, so the Wardrobe preview needn't shrink.
+  sparkles(g, EMBER, 2.0, 0.47, 5, 0.8);
+}
+
+/**
+ * Leviathan Coil: the Leviathan wrapped once round you, from its shark tail off the ground behind you, round your
+ * body and up over your back to your head, over a dark belly. Its molten seams slide slowly along it, so it seems to
+ * turn round you; bone spines stand off its outer side, its lavender beard hangs behind your head, the tail flicks
+ * and bubbles stream up.
+ */
+function leviathanCoil(c: Cosmetic, g: THREE.Group): void {
+  const [collar, collarAt] = hoop(0.2, 0.03, 1.43);
+  const plate: Part[] = [[paint(collar, LEV_LIGHT), collarAt]];
+  const pts: V3[] = [[0, 0.28, -0.92], [0, 0.3, -0.72], [0, 0.36, -0.5]];
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    const a = Math.PI + t * Math.PI * 2;
+    pts.push([Math.sin(a) * 0.38, 0.48 + t * 0.9, Math.cos(a) * 0.38]);
+  }
+  pts.push([0, 1.52, -0.37], [0, 1.64, -0.32]);
+  const [R0, R1] = [0.035, 0.105];
+  limb(plate, pts, R0, R1, c.color, 60, 9);
+  addMany(g, painted('metal'), plate);
+  const curve = new THREE.CatmullRomCurve3(pts.map(v3));
+  const soft: Part[] = [[paint(new THREE.LatheGeometry(SHIRT.map(([r, y]) => new THREE.Vector2(r, y)), 14), LEV_BELLY), {}]];
+  for (let i = 0; i < 12; i++) {
+    const u = 0.12 + i * 0.07;
+    const p = curve.getPointAt(u);
+    const r = R0 + (R1 - R0) * u;
+    const d = new THREE.Vector3(p.x, 0.35, p.z).normalize();
+    soft.push([paint(new THREE.ConeGeometry(0.018 + r * 0.15, 0.07 + r * 0.5, 4), BONE), alongAt(p.addScaledVector(d, r + 0.025), d)]);
+  }
+  for (const x of [-0.05, 0, 0.05]) limb(soft, [[x, 1.58, -0.42], [x * 1.4, 1.45, -0.46], [x * 1.2, 1.32, -0.44]], 0.012, 0.004, LEV_BEARD, 6, 4);
+  addMany(g, painted('satin'), soft);
+  // Nine seam rings slide from tail to head; the curve is sampled once so moving them costs no allocations.
+  const N = 240;
+  const at = Array.from({ length: N + 1 }, (_, i) => curve.getPointAt(i / N));
+  const turn = Array.from({ length: N + 1 }, (_, i) => new THREE.Quaternion().setFromUnitVectors(UP, curve.getTangentAt(i / N)));
+  const ring = new THREE.TorusGeometry(1, 0.11, 4, 14).rotateX(H);
+  const P = new THREE.Vector3();
+  const seams = Array.from({ length: 9 }, (_, i): Mover => ({
+    geo: ring.clone(),
+    move: (t, m) => {
+      const u = 0.08 + ((i / 9 + t * 0.045) % 1) * 0.9;
+      const f = u * N;
+      const j = Math.min(N - 1, Math.floor(f));
+      P.lerpVectors(at[j], at[j + 1], f - j);
+      m.compose(P, turn[j], SCALE.setScalar(R0 + (R1 - R0) * u + 0.006));
+    },
+  }));
+  movers(g, mat(c.accent, 'glow'), seams, new THREE.Sphere(new THREE.Vector3(0, 0.9, -0.2), 1.1)).castShadow = false;
+  // The shark tail stands up off the end of the coil and flicks.
+  const fin = new THREE.Shape();
+  fin.moveTo(0, 0);
+  fin.quadraticCurveTo(0.04, 0.2, -0.22, 0.48);
+  fin.quadraticCurveTo(-0.08, 0.2, -0.12, 0.06);
+  fin.quadraticCurveTo(-0.08, -0.05, -0.18, -0.12);
+  fin.quadraticCurveTo(-0.05, -0.08, 0, 0);
+  swaying(g, pts[0], { axis: 'y', amp: 0.35, speed: 1.4, phase: 0 }, [[paint(new THREE.ExtrudeGeometry(fin, { depth: 0.022, bevelEnabled: false }), c.color), { p: [-0.011, 0, 0], r: [0, H, 0], s: 1.2 }]], 'metal');
+  // Bubbles stream up round you.
+  const bubbles = Array.from({ length: 14 }, (_, i): Mover => {
+    const a = i * 2.39;
+    const r = 0.36 + ((i * 0.37) % 1) * 0.14;
+    return { geo: new THREE.SphereGeometry(0.014 + (i % 3) * 0.008, 7, 5), move: rising(Math.sin(a) * r, Math.cos(a) * r, 0.35, 1.6, 0.18 + (i % 4) * 0.05, (i * 0.29) % 1) };
+  });
+  const bub = movers(g, BUBBLE, bubbles, new THREE.Sphere(new THREE.Vector3(0, 1.15, 0), 1));
+  bub.castShadow = false;
+  bub.userData.unframed = true;
+  sparkles(g, EMBER, 1.0, 0.62, 6, 0.7);
+}
+
+/** Leviathan Fangs: five of its fangs on a dark cord, each hung from a glowing ember. */
+function leviathanFangs(c: Cosmetic, g: THREE.Group): void {
+  const cord: Part[] = [[paint(new THREE.TorusGeometry(NECK.r, 0.009, 4, 22), 0x3a3448), { p: [0, NECK.y, NECK.z], r: [H + NECK.tilt, 0, 0] }]];
+  const embers: Part[] = [];
+  for (let i = -2; i <= 2; i++) {
+    const p = beadAt((i + 16) % 16, 16, 0.006);
+    const len = 0.13 - Math.abs(i) * 0.025;
+    embers.push([new THREE.SphereGeometry(0.016, 6, 4), { p }]);
+    cord.push([paint(new THREE.ConeGeometry(0.022 - Math.abs(i) * 0.003, len, 5), c.color), { p: [p[0], p[1] - 0.016 - len / 2, p[2] + 0.01], r: [Math.PI - 0.15, 0, -p[0] * 0.8] }]);
+  }
+  for (const i of [-3, 3]) cord.push([paint(new THREE.SphereGeometry(1, 6, 4), 0x2c2c42), { p: beadAt((i + 16) % 16, 16, 0.006), s: [0.024, 0.03, 0.014] }]);
+  addMany(g, painted('satin'), cord);
+  addMany(g, mat(c.accent, 'glow'), embers);
+  const top = beadAt(0, 16);
+  halo(g, [0, top[1] - 0.06, top[2] + 0.05], c.accent, 0.22);
+  sparkles(g, EMBER, 1.2, 0.48, 5, 1.2);
+}
+
+/**
+ * Dreamer's Nightcap: a long teal nightcap over a fluffy band, dotted with mint stars, swaying gently. Its pompom is a
+ * sleepy eye that opens drowsily every few seconds and shuts again; Zs drift up and a small halo turns overhead.
+ */
+function dreamerCap(c: Cosmetic, g: THREE.Group): void {
+  add(g, new THREE.TorusGeometry(0.21, 0.04, 6, 20), mat(FLUFF), { p: [0, 1.76, 0], r: [H, 0, 0] });
+  const pts: V3[] = [[0, 0, 0], [0, 0.18, -0.02], [0.08, 0.33, -0.05], [0.22, 0.36, -0.04], [0.32, 0.26, -0.02], [0.35, 0.14, 0]];
+  const cloth: Part[] = [];
+  limb(cloth, pts, 0.2, 0.03, c.color, 18, 10);
+  const curve = new THREE.CatmullRomCurve3(pts.map(v3));
+  const glow: Part[] = [];
+  for (let i = 0; i < 9; i++) {
+    const u = 0.12 + i * 0.09;
+    const q = curve.getPointAt(u);
+    const r = 0.2 + (0.03 - 0.2) * u + 0.003;
+    const a = i * 2.2;
+    glow.push([new THREE.OctahedronGeometry(0.016 + (i % 2) * 0.006), { p: [q.x + Math.sin(a) * r * 0.9, q.y + Math.cos(a) * r * 0.5, q.z + Math.cos(a) * r * 0.9], s: [1, 1, 0.5] }]);
+  }
+  // The pompom is a sleepy eye looking out and a little down.
+  const tip = curve.getPoint(1);
+  cloth.push([paint(new THREE.IcosahedronGeometry(0.06, 1), FLUFF), { p: [tip.x, tip.y - 0.04, tip.z] }]);
+  const r = 0.032;
+  const eyeAt: V3 = [tip.x, tip.y - 0.045, tip.z + 0.045];
+  const look = new THREE.Quaternion().setFromUnitVectors(TO_Z, new THREE.Vector3(0.1, -0.2, 1).normalize());
+  cloth.push([paint(framed(new THREE.SphereGeometry(r, 10, 8), {}, eyeAt, look), WHITE), {}]);
+  cloth.push([paint(framed(new THREE.SphereGeometry(r * 0.3, 8, 6), { p: [0, 0, r * 1.03], s: [1, 1, 0.35] }, eyeAt, look), INK), {}]);
+  glow.push([framed(new THREE.SphereGeometry(r * 0.62, 10, 8), { p: [0, 0, r * 0.79], s: [1, 1, 0.45] }, eyeAt, look), {}]);
+  const cap = swaying(g, [0, 1.78, 0], { axis: 'z', amp: 0.06, speed: 1.0, phase: 0 }, cloth, 'cloth');
+  addMany(cap, mat(DRE_GLOW, 'glow'), glow);
+  // Two lids that rest shut and open drowsily once every 6 s, turning about the eye's x axis.
+  const eye = new THREE.Matrix4().compose(v3(eyeAt), look, new THREE.Vector3(1, 1, 1));
+  const lids = [1, -1].map((s): Mover => ({
+    geo: new THREE.SphereGeometry(r * 1.1, 10, 5, 0, Math.PI * 2, s > 0 ? 0 : H, H),
+    move: (t, m) => {
+      const k = (t / 6 + 0.2) % 1;
+      const open = 0.03 + 0.72 * (k < 0.28 ? Math.sin((k / 0.28) * Math.PI) ** 0.7 : 0);
+      m.makeRotationX(-s * open * 1.05).premultiply(eye);
+    },
+  }));
+  movers(cap, mat(FLUFF, 'satin', THREE.DoubleSide), lids, new THREE.Sphere(v3(eyeAt), r * 1.2));
+  // A small halo, tilted, turning overhead.
+  const holder = new THREE.Group();
+  holder.position.set(-0.05, 2.22, -0.02);
+  g.add(holder);
+  const ring = add(holder, new THREE.TorusGeometry(0.16, 0.01, 4, 28).rotateX(H).rotateZ(0.25), mat(DRE_GLOW, 'glow'));
+  ring.castShadow = false;
+  ring.userData.spin = 0.5;
+  const zs = movers(
+    g,
+    mat(DRE_GLOW, 'glow'),
+    ([[0.34, 0.05, 0.05], [0.42, 0.04, -0.02], [0.28, 0.035, 0.08]] as V3[]).map(([x, size, z], i): Mover => ({ geo: zee(size), move: rising(x + i * 0.03, z, 1.95, 0.6, 0.22, i / 3, 0.2 - i * 0.15) })),
+    new THREE.Sphere(new THREE.Vector3(0.38, 2.25, 0), 0.4),
+  );
+  zs.castShadow = false;
+  // The Zs may clip at the preview's edge rather than shrink the character to fit them.
+  zs.userData.unframed = true;
+  sparkles(g, DRE_GLOW, 2.0, 0.5, 5, -0.5);
+}
+
+/** The Dream Robe's profile: a shirt that flares out to the ground. */
+const ROBE: [number, number][] = [[0.43, 0.23], [0.39, 0.4], [0.335, 0.62], ...SHIRT.slice(2)];
+
+/**
+ * Dream Robe: a long teal robe of stars with a crescent moon, sleeping eyes round its pale hem and a ruff of cloud.
+ * Dream bubbles rise round you, a few with a tiny glowing fish asleep inside, and cloud puffs turn slowly at your feet.
+ */
+function dreamRobe(c: Cosmetic, g: THREE.Group): void {
+  addMany(g, painted('satin'), [
+    [paint(new THREE.LatheGeometry(ROBE.map(([r, y]) => new THREE.Vector2(r, y)), 14), c.color), {}],
+    [paint(new THREE.LatheGeometry([[0.437, 0.23], [0.41, 0.33], [0.4, 0.37]].map(([r, y]) => new THREE.Vector2(r, y)), 18), DRE_BELLY), {}],
+  ]);
+  // Sleeping eyes round the hem and stars up the robe, mint and moon-pale, and a crescent moon at the chest.
+  const mint: Part[] = [];
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    lashes(mint, [Math.sin(a) * 0.43, 0.3, Math.cos(a) * 0.43], a, 0.03);
+  }
+  const moon: Part[] = [[new THREE.TorusGeometry(0.05, 0.014, 4, 14, Math.PI * 1.3), { p: [0.08, 1.24, front(1.24) + 0.01], r: [0, 0, 0.8] }]];
+  for (let i = 0; i < 16; i++) {
+    const a = i * 2.39;
+    const y = 0.45 + ((i * 0.37) % 1) * 0.85;
+    const r = rAt(y, ROBE) + 0.004;
+    (i % 3 ? mint : moon).push([new THREE.OctahedronGeometry(0.014 + (i % 3) * 0.004), { p: [Math.sin(a) * r, y, Math.cos(a) * r], s: [1, 1, 0.4], r: [0, a, 0] }]);
+  }
+  addMany(g, mat(DRE_GLOW, 'glow'), mint);
+  halo(g, [0.08, 1.24, front(1.24) + 0.05], MOON, 0.24);
+  // A ruff of cloud at the collar.
+  addMany(g, mat(FLUFF), Array.from({ length: 12 }, (_, i): Part => [new THREE.IcosahedronGeometry(0.045, 1), { p: [Math.sin((i / 12) * Math.PI * 2) * 0.2, 1.43, Math.cos((i / 12) * Math.PI * 2) * 0.2], s: [1, 0.75, 1] }]));
+  // Dream bubbles rise round you; every third holds a tiny glowing fish, which shares the moon's mesh.
+  const dreams: Mover[] = [];
+  const fish: Mover[] = [];
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.39;
+    const r = 0.5 + (i % 3) * 0.08;
+    const size = 0.05 + (i % 3) * 0.02;
+    const move = rising(Math.sin(a) * r, Math.cos(a) * r, 0.45, 1.9, 0.1 + (i % 4) * 0.025, (i * 0.29) % 1);
+    dreams.push({ geo: new THREE.SphereGeometry(size, 10, 8), move });
+    if (i % 3 === 0)
+      fish.push({
+        geo: merged([
+          [new THREE.SphereGeometry(1, 6, 4), { s: [size * 0.25, size * 0.3, size * 0.5] }],
+          [new THREE.ConeGeometry(size * 0.25, size * 0.35, 3), { p: [0, 0, -size * 0.55], r: [-H, 0, 0], s: [0.4, 1, 1] }],
+        ]),
+        move,
+      });
+  }
+  const rise = new THREE.Sphere(new THREE.Vector3(0, 1.4, 0), 1.3);
+  const moons = movers(g, mat(MOON, 'glow'), fish, rise, moon);
+  const bubbles = movers(g, DREAM_BUBBLE, dreams, rise);
+  // The bubbles may clip at the preview's edge rather than shrink the character to fit them.
+  for (const o of [moons, bubbles]) {
+    o.castShadow = false;
+    o.userData.unframed = true;
+  }
+  // Cloud puffs round your feet, turning slowly.
+  const puffs = addMany(g, mat(FLUFF), Array.from({ length: 16 }, (_, i): Part => {
+    const a = (i / 16) * Math.PI * 2;
+    const r = 0.42 + (i % 3) * 0.05;
+    return [new THREE.IcosahedronGeometry(0.12 * (0.75 + (i % 4) * 0.15), 1), { p: [Math.sin(a) * r, 0.28 + (i % 2) * 0.042, Math.cos(a) * r], s: [1, 0.7, 1] }];
+  }));
+  puffs.castShadow = false;
+  puffs.userData.spin = 0.1;
+  sparkles(g, DRE_GLOW, 1.0, 0.66, 6, -0.6);
+}
+
+/** Dreamcatcher: a pale hoop and web with a mint light at its heart, hung with glowing tentacle feathers, swaying on its cord. */
+function dreamcatcher(c: Cosmetic, g: THREE.Group): void {
+  const top = beadAt(0, 16);
+  addMany(g, mat(DRE_LIGHT, 'satin'), [
+    [new THREE.TorusGeometry(NECK.r, 0.007, 4, 22), { p: [0, NECK.y, NECK.z], r: [H + NECK.tilt, 0, 0] }],
+    [new THREE.CylinderGeometry(0.005, 0.005, top[1] - 1.22, 4), { p: [0, (top[1] + 1.22) / 2, (top[2] + 0.35) / 2], r: [0.35, 0, 0] }],
+  ]);
+  const frame: Part[] = [[paint(new THREE.TorusGeometry(0.085, 0.01, 5, 24), c.color), {}]];
+  for (let k = 0; k < 6; k++) frame.push([paint(new THREE.BoxGeometry(0.17, 0.003, 0.003), 0xeaf7f0), { r: [0, 0, (k / 6) * Math.PI] }]);
+  const feathers: Part[] = [];
+  for (const [x, len] of [[-0.06, 0.16], [0, 0.22], [0.06, 0.16]]) {
+    feathers.push([ribbon([[x, -0.085, 0], [x * 1.1, -0.085 - len * 0.5, 0.01], [x * 0.9, -0.085 - len, 0.005]], (t) => 0.035 * Math.sin(Math.PI * Math.min(1, t * 0.9 + 0.1)), 14, [1, 0, 0]), {}]);
+    frame.push([paint(new THREE.SphereGeometry(0.012, 6, 4), c.color), { p: [x, -0.095, 0.004] }]);
+  }
+  const dc = swaying(g, [0, 1.13, front(1.13) + 0.03], { axis: 'z', amp: 0.06, speed: 1.2, phase: 0 }, frame);
+  dc.rotation.x = -0.1;
+  addMany(dc, mat(c.accent, 'glow'), [[new THREE.TorusGeometry(0.04, 0.004, 4, 16), {}], [new THREE.SphereGeometry(0.018, 8, 6), {}]]);
+  addMany(dc, STRAND, feathers).castShadow = false;
+  halo(dc, [0, 0, 0.03], c.accent, 0.24);
+  sparkles(g, DRE_GLOW, 1.2, 0.48, 5, 1.0);
+}
+
 // ---------- pets ----------
 
 /**
@@ -997,6 +1427,89 @@ function petModel(c: Cosmetic, g: THREE.Group): void {
       }
       // Its stars may clip at the preview's edge rather than shrink the character to fit them.
       sparkles(pet, KRAKEN_SPARK, 0.2, 0.19, 3, 1.4).userData.unframed = true;
+      break;
+    }
+    case 'leviathanpet': {
+      // Leviathan Wyrmling: a little serpent of dark plates and molten rings with bone spines and horns, swimming after
+      // you in a wave that runs from its head to its tail fins. Its segments move as shared meshes, one per material.
+      const pet = new THREE.Group();
+      pet.scale.setScalar(2.1);
+      // Floats 10 cm above its spot (the render's 0), near the Hatchling's height, so in the Wardrobe it passes over the face.
+      pet.userData.bob = { base: 0.1, amp: 0.05, smooth: true };
+      float.add(pet);
+      // It swims a little behind its spot (0.1 here, 21 cm), so its head doesn't reach out past the preview's frame.
+      const swim = new THREE.Group();
+      swim.position.z = -0.1;
+      pet.add(swim);
+      const plate: Mover[] = [];
+      const spines: Mover[] = [];
+      const rings: Mover[] = [];
+      /** A segment at z swings side to side and turns into the wave. */
+      const wave = (z: number, amp: number, phase: number, y = 0): Mover['move'] => (t, m) => {
+        const a = t * 4 + phase;
+        m.makeRotationY(Math.cos(a) * 0.6).setPosition(Math.sin(a) * amp, y, z);
+      };
+      const n = 10;
+      for (let i = 0; i < n; i++) {
+        const move = wave(0.04 - i * 0.034, 0.03 + i * 0.003, -i * 0.65);
+        const r = 0.034 * (1 - i / (n + 3));
+        const body: Part[] = [[paint(new THREE.SphereGeometry(r, 8, 6), c.color), {}]];
+        if (i === n - 1)
+          body.push(
+            [paint(new THREE.ConeGeometry(0.03, 0.07, 4), c.color), { p: [0, 0.02, -0.03], r: [-0.9, 0, 0], s: [0.25, 1, 1] }],
+            [paint(new THREE.ConeGeometry(0.022, 0.045, 4), c.color), { p: [0, -0.012, -0.02], r: [-2.1, 0, 0], s: [0.25, 1, 1] }],
+          );
+        plate.push({ geo: merged(body), move });
+        if (i % 2) rings.push({ geo: new THREE.TorusGeometry(r + 0.002, 0.004, 4, 12), move });
+        if (i > 0) spines.push({ geo: place(paint(new THREE.ConeGeometry(0.007, 0.026, 4), BONE), { p: [0, r + 0.008, 0], r: [-0.5, 0, 0] }), move });
+      }
+      // The head leads the wave: burning eyes, little fangs and three swept-back horns.
+      const head = (geo: THREE.BufferGeometry): Mover => ({ geo, move: wave(0.085, 0.026, 0.6, 0.005) });
+      plate.push(head(paint(new THREE.SphereGeometry(1, 10, 8), c.color).scale(0.05, 0.042, 0.065)));
+      const bone: Part[] = [];
+      const eyes: Part[] = [];
+      for (const s of [-1, 1]) {
+        eyes.push([new THREE.SphereGeometry(0.014, 6, 4), { p: [s * 0.03, 0.018, 0.03] }], [new THREE.SphereGeometry(0.009, 6, 4), { p: [s * 0.038, 0.02, 0.008] }]);
+        bone.push([paint(new THREE.ConeGeometry(0.004, 0.016, 4), BONE), { p: [s * 0.014, -0.03, 0.05], r: [Math.PI, 0, 0] }]);
+        limb(bone, [[s * 0.02, 0.035, 0], [s * 0.035, 0.06, -0.02], [s * 0.035, 0.075, -0.045]], 0.008, 0.002, BONE, 4, 4);
+      }
+      limb(bone, [[0, 0.04, 0.01], [0, 0.07, -0.005], [0, 0.085, -0.03]], 0.009, 0.002, BONE, 4, 4);
+      spines.push(head(merged(bone)));
+      const reach = new THREE.Sphere(new THREE.Vector3(0, 0.02, -0.08), 0.32);
+      movers(swim, painted('metal'), plate, reach).castShadow = true;
+      movers(swim, painted('satin'), spines, reach);
+      movers(swim, mat(c.accent, 'glow'), rings, reach);
+      movers(swim, mat(EMBER, 'glow'), [head(merged(eyes))], reach);
+      // Its embers may clip at the preview's edge rather than shrink the character to fit them.
+      sparkles(swim, EMBER, 0.05, 0.2, 3, 1.4).userData.unframed = true;
+      break;
+    }
+    case 'dreamerpet': {
+      // Sleepy Dreamer: a little teal Dreamer fast asleep on its own cloud in its own nightcap, Zs rising off it.
+      const pet = new THREE.Group();
+      pet.scale.setScalar(1.45);
+      // Floats 15 cm above its spot (the render's 0), at the Hatchling's height, so in the Wardrobe its cloud passes over the face.
+      pet.userData.bob = { base: 0.15, amp: 0.05, smooth: true };
+      float.add(pet);
+      const cloth: Part[] = [[paint(new THREE.IcosahedronGeometry(0.06, 1), FLUFF), { p: [0, -0.07, 0], s: [1.4, 0.7, 1.2] }]];
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        cloth.push([paint(new THREE.IcosahedronGeometry(0.045 + (i % 3) * 0.01, 1), FLUFF), { p: [Math.sin(a) * 0.08, -0.09 + (i % 2) * 0.01, Math.cos(a) * 0.07], s: [1, 0.7, 1] }]);
+      }
+      limb(cloth, [[0, 0.045, 0], [0.02, 0.1, -0.01], [0.07, 0.11, -0.01], [0.1, 0.07, 0]], 0.05, 0.01, c.color, 10, 8);
+      cloth.push([paint(new THREE.IcosahedronGeometry(0.02, 1), FLUFF), { p: [0.105, 0.055, 0] }], [paint(new THREE.TorusGeometry(0.052, 0.012, 5, 16), FLUFF), { p: [0, 0.045, 0], r: [H, 0, 0] }]);
+      addMany(pet, painted('cloth'), cloth);
+      const skin: Part[] = [
+        [paint(new THREE.SphereGeometry(0.075, 12, 8), c.color), { p: [0, -0.01, 0], s: [1, 0.85, 1] }],
+        [paint(new THREE.SphereGeometry(1, 12, 5, 0, Math.PI * 2, H * 1.15, H * 0.85), DRE_BELLY), { p: [0, -0.012, 0], s: [0.077, 0.066, 0.077] }],
+      ];
+      for (const x of [-0.05, 0.05]) limb(skin, [[x, -0.04, 0.05], [x * 1.4, -0.08, 0.09], [x * 1.4, -0.14, 0.09]], 0.009, 0.003, DRE_LIGHT, 6, 4);
+      addMany(pet, painted('satin'), skin);
+      // Shut eyes and rising Zs share one glowing mesh.
+      const shut: Part[] = [];
+      for (const s of [-1, 1]) lashes(shut, [s * 0.03, 0, 0.068], s * 0.35, 0.014);
+      const zs = movers(pet, mat(c.accent, 'glow'), [0, 1].map((i): Mover => ({ geo: zee(0.025 - i * 0.006), move: rising(0.06 + i * 0.03, 0.02, 0.08, 0.2, 0.4, i / 2) })), new THREE.Sphere(new THREE.Vector3(0.05, 0.1, 0), 0.25), shut);
+      zs.userData.unframed = true;
       break;
     }
   }
@@ -1054,11 +1567,25 @@ function outfitPiece(c: Cosmetic): THREE.Group {
   if (!t) {
     t = new THREE.Group();
     t.name = c.id;
-    MODELS[c.slot](c, t);
+    building = c.id;
+    try {
+      MODELS[c.slot](c, t);
+    } finally {
+      building = '';
+    }
     t.userData.bounds = boundsOf(t);
     TEMPLATES.set(c.id, t);
   }
   return t.clone();
+}
+
+/** A character wearing a piece the player hasn't reached yet is drawn in one flat dark colour, glows hidden (Reed's Wardrobe tab). */
+const SILHOUETTE = new THREE.MeshBasicMaterial({ color: 0x3a4250, side: THREE.DoubleSide });
+function silhouette(piece: THREE.Object3D): void {
+  piece.traverse((o) => {
+    if (o instanceof THREE.Sprite) o.visible = false;
+    else if (o instanceof THREE.Mesh) o.material = SILHOUETTE;
+  });
 }
 
 const PET_GOAL = new THREE.Vector3();
@@ -1066,9 +1593,11 @@ const PET_GOAL = new THREE.Vector3();
 /** A character facing +z, about 1.9 tall, without held items. `set` swaps the body color and outfit. */
 export class Character {
   readonly group = new THREE.Group();
-  private body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.7, 4, 10), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true }));
+  private bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true });
+  private body = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(new THREE.CapsuleGeometry(0.28, 0.7, 4, 10), this.bodyMat);
   /** Skin and face come from the face texture, so the material stays white. */
-  private head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true }));
+  private headMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true });
+  private head = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(new THREE.SphereGeometry(0.2, 12, 10), this.headMat);
   private outfit = new THREE.Group();
   /** Legendary sparkles that turn in `tick`. */
   private spinners: THREE.Object3D[] = [];
@@ -1080,6 +1609,8 @@ export class Character {
   private grounded: THREE.Object3D[] = [];
   /** The worn pet's float, and where it is in the world and which way it faces while it trails the character. */
   private pet: { o: THREE.Object3D; at: THREE.Vector3; yaw: number; placed: boolean } | null = null;
+  /** The worn items with shared animations (`animated`), moved in `tick`. */
+  private animIds: string[] = [];
   private lastT = -1;
   private key = '';
   /** The room the outfit takes (see `boundsOf`). */
@@ -1100,12 +1631,16 @@ export class Character {
     this.set(look);
   }
 
-  set(look: Look): void {
-    const key = JSON.stringify(look);
+  /**
+   * `shadow` lists items the player hasn't reached yet: wearing any of them draws the whole character as a silhouette
+   * (`silhouette`), body, head and outfit, so the piece is a shape to look forward to (Oscar, 2026-11-14).
+   */
+  set(look: Look, shadow: readonly string[] = []): void {
+    const key = JSON.stringify(look) + shadow.join();
     if (key === this.key) return;
     this.key = key;
-    (this.body.material as THREE.MeshStandardMaterial).color.setHex(look.color);
-    const head = this.head.material as THREE.MeshStandardMaterial;
+    this.bodyMat.color.setHex(look.color);
+    const head = this.headMat;
     head.map = faceTexture(look.face);
     head.needsUpdate = true;
     // Pieces are clones of shared templates, so there is nothing to dispose.
@@ -1115,11 +1650,13 @@ export class Character {
     this.bobbers = [];
     this.grounded = [];
     this.pet = null;
+    this.animIds = [];
     const b = { ...NO_BOUNDS };
     for (const slot of COS_SLOTS) {
       const c = cosById(look[slot]);
       if (!c) continue;
       const piece = outfitPiece(c);
+      if (SHARED_ANIM.has(c.id)) this.animIds.push(c.id);
       piece.traverse((o) => {
         if (o.userData.spin) this.spinners.push(o);
         if (o.userData.sway) this.swayers.push(o);
@@ -1137,6 +1674,11 @@ export class Character {
       this.outfit.add(piece);
     }
     this.bounds = b;
+    // Any unreached piece worn: the whole character goes dark (pieces are fresh clones, so only the body needs restoring).
+    const dark = COS_SLOTS.some((slot) => !!look[slot] && shadow.includes(look[slot]!));
+    this.body.material = dark ? SILHOUETTE : this.bodyMat;
+    this.head.material = dark ? SILHOUETTE : this.headMat;
+    if (dark) silhouette(this.outfit);
   }
 
   /** Frees the body and head geometry; materials and outfit pieces are left for reuse (see `disposeTree`). */
@@ -1153,7 +1695,7 @@ export class Character {
     const dt = this.lastT < 0 ? Infinity : t - this.lastT;
     this.lastT = t;
     pulse(t);
-    animateShared(t);
+    animateShared(t, this.animIds);
     for (const o of this.spinners) {
       o.rotation.y = t * (o.userData.spin as number);
       o.position.y = Math.sin(t * 1.7) * 0.03;
@@ -1299,9 +1841,9 @@ export class CharacterPreview {
     this.cam.updateProjectionMatrix();
   }
 
-  set(look: Look): void {
+  set(look: Look, shadow: readonly string[] = []): void {
     const was = this.char.bounds;
-    this.char.set(look);
+    this.char.set(look, shadow);
     const now = this.char.bounds;
     if (this.raf && (now.reach !== was.reach || now.top !== was.top || now.low !== was.low)) this.fit();
   }

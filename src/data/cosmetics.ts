@@ -113,6 +113,17 @@ export const COSMETICS: Cosmetic[] = [
   legendPiece('krakenarmor', 'shirt', 'Kraken Armor', 'kraken', 2, 4_000_000, 6, 0xb02a48, 0xff3a5a, 'A wet crimson shell with squid fins and barnacles, the sea spiralling round it, and tentacles that curl off the shoulders and trail behind.'),
   legendPiece('krakenbeak', 'jewelry', 'Kraken Beak', 'kraken', 3, 2_500_000, 6, 0x2a1a24, 0xff3a5a, "The Kraken's beak on a cord of suckers, set with its glowing ruby eye."),
   legendPiece('krakenpet', 'pet', 'Kraken Hatchling', 'kraken', 4, 5_000_000, 6, 0xe2708e, 0xb94a6c, 'A baby Kraken that floats along after you and watches the water.'),
+
+  // The Leviathan's and the Drowned Dreamer's sets and pets (deep sea cosmetics step 2, 2026-11-14), priced like the
+  // Kraken's since all three are caught in the Abyss: the 1st to 3rd landings unlock the set, the 4th the pet.
+  legendPiece('leviathanjaw', 'hat', "Leviathan's Jaw", 'leviathan', 1, 3_000_000, 6, 0x2c2c42, 0xff6a1a, "The Leviathan's long skull over your head: fangs over your brow, a jaw under your chin and its burning eyes along the top."),
+  legendPiece('leviathancoil', 'shirt', 'Leviathan Coil', 'leviathan', 2, 4_000_000, 6, 0x2c2c42, 0xff6a1a, 'The Leviathan wrapped once round you, from its tail on the planks to your head, with its molten seams sliding slowly along it.'),
+  legendPiece('leviathanfangs', 'jewelry', 'Leviathan Fangs', 'leviathan', 3, 2_500_000, 6, 0xf4e8cc, 0xff6a1a, "Five of the Leviathan's fangs on a cord, each set with an ember."),
+  legendPiece('leviathanpet', 'pet', 'Leviathan Wyrmling', 'leviathan', 4, 5_000_000, 6, 0x2c2c42, 0xff6a1a, 'A little Leviathan that swims along after you in waves.'),
+  legendPiece('dreamercap', 'hat', "Dreamer's Nightcap", 'dreamer', 1, 3_000_000, 6, 0x2c6a5c, 0x9affd0, 'A long teal nightcap with a sleepy eye for a pompom. The Zs drift up on their own.'),
+  legendPiece('dreamerrobe', 'shirt', 'Dream Robe', 'dreamer', 2, 4_000_000, 6, 0x2c6a5c, 0x9affd0, 'A robe of stars with sleeping eyes round the hem, dream bubbles rising round you and a cloud to walk on.'),
+  legendPiece('dreamcatcher', 'jewelry', 'Dreamcatcher', 'dreamer', 3, 2_500_000, 6, 0x9ad8b8, 0x9affd0, 'A dreamcatcher hung with tentacle feathers, a mint light at its heart.'),
+  legendPiece('dreamerpet', 'pet', 'Sleepy Dreamer', 'dreamer', 4, 5_000_000, 6, 0x2c6a5c, 0x9affd0, 'A little Dreamer fast asleep on its own cloud, in its own nightcap, floating along after you.'),
 ];
 
 export const cosById = (id: string | null | undefined): Cosmetic | undefined => COSMETICS.find((x) => x.id === id);
