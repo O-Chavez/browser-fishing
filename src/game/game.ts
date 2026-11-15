@@ -28,7 +28,8 @@ import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
 import { FpsMeter, TouchControls, touchOnly } from './touch';
-import { ChatBox } from './chatbox';
+import { ChatBox, maskedEcho, secretPrompt, type SecretPrompt } from './chatbox';
+import { DevPrompt } from './devprompt';
 import { FEEDBACK_MAX, FEEDBACK_WAIT_MS, FeedbackForm, OFFLINE_MSG, type FeedbackKind } from './feedback';
 import { fishIcon } from './fishicon';
 import { rodIcon, seaRodIcon } from './rodicon';
@@ -340,6 +341,7 @@ export class Game {
   private heldSave: SaveData | null = null;
   private betSlot = -1;
   private chat!: ChatBox;
+  private devPrompt!: DevPrompt;
   private hotbarHeld = -1;
   private ctxShown: boolean | null = null;
   private bj: BlackjackView | null = null;
@@ -524,12 +526,21 @@ export class Game {
     });
     this.world.clock = () => this.net.now();
     this.applyLocation();
+    this.devPrompt = new DevPrompt($('devprompt'), {
+      send: (text, echo) => {
+        this.chat.add({ name: '', map: '', text: `> ${echo}`, self: true, system: true });
+        this.net.send({ t: 'cmd', text });
+      },
+      closed: () => this.secretClosed(),
+    });
     this.chat = new ChatBox($('chat'), {
       send: (text) => {
         if (!text.startsWith('/')) return this.net.send({ t: 'chat', text });
+        // `/login` and `/resetpass <name>` ask for their secrets in a starred-out panel instead.
+        const ask = secretPrompt(text);
+        if (ask) return this.askSecret(ask);
         // Slash commands (feedback and the dev console) go to the server, never to chat; only you see them, password hidden.
-        const shown = text.replace(/^(\/login\s+\S+\s+).*/, '$1••••').replace(/^(\/resetpass\s+.+\s)\S+$/, '$1••••');
-        this.chat.add({ name: '', map: '', text: `> ${shown}`, self: true, system: true });
+        this.chat.add({ name: '', map: '', text: `> ${maskedEcho(text)}`, self: true, system: true });
         this.net.send({ t: 'cmd', text });
       },
       map: () => this.map.id,
@@ -793,7 +804,7 @@ export class Game {
     return document.pointerLockElement === this.world.renderer.domElement;
   }
   private get active() {
-    return (this.locked || this.forceActive) && !this.menuOpen && !this.restarting;
+    return (this.locked || this.forceActive) && !this.menuOpen && !this.restarting && !this.devPrompt.isOpen;
   }
 
   /** Test hook: drive the game without pointer lock. */
@@ -959,6 +970,8 @@ export class Game {
     });
     document.addEventListener('pointerlockchange', () => {
       $('resume').classList.add('hidden');
+      // Letting go of the mouse for the login panel isn't a pause.
+      if (this.devPrompt.isOpen) return;
       if (this.locked) {
         audio.start();
         this.dismissWelcome();
@@ -1071,6 +1084,19 @@ export class Game {
   private pointerUp(): void {
     this.holding = false;
     if (this.phase === 'charging') this.releaseCast();
+  }
+
+  /** Opens the dev login / reset password panel; the mouse is let go so its buttons work. */
+  private askSecret(ask: SecretPrompt): void {
+    this.keys.clear();
+    this.holding = false;
+    this.devPrompt.open(ask);
+    if (this.locked) document.exitPointerLock();
+  }
+
+  /** The panel closed (sent or cancelled): a mouse that was let go for it needs a click to come back. */
+  private secretClosed(): void {
+    if (!this.touch && !this.forceActive && !this.menuOpen) this.showResume();
   }
 
   private openChat(): void {
@@ -1658,6 +1684,7 @@ export class Game {
     // A fight on the line is lost (the server has already ended the session); nothing is saved from here on.
     if (this.menuOpen) this.closeMenu();
     if (this.chat.isOpen) this.chat.close();
+    this.devPrompt.close();
     this.holding = false;
     this.keys.clear();
     this.roll = null;
