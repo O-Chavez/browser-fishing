@@ -27,7 +27,7 @@ import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
-import { FpsMeter, TouchControls, touchOnly } from './touch';
+import { TouchControls, touchLayoutWidth, touchOnly } from './touch';
 import { ChatBox, maskedEcho, secretPrompt, unreadLabel, type SecretPrompt } from './chatbox';
 import { DevPrompt } from './devprompt';
 import { FEEDBACK_MAX, FEEDBACK_WAIT_MS, FeedbackForm, OFFLINE_MSG, type FeedbackKind } from './feedback';
@@ -95,7 +95,8 @@ import { World } from './world';
 import { ScreenSpray } from './screenspray';
 import { seaDepthFor, zoneAt } from '../data/sea';
 import { CAST_OFF_CARD, cardColours } from './castoffcard';
-import { RESTART_PROBE_TIMEOUT_MS, waitForRestart } from './restart';
+import { autoReload, RESTART_PROBE_TIMEOUT_MS, waitForRestart } from './restart';
+import { clientLog, setLogMap } from './clientlog';
 import { dayFraction } from './daynight';
 import { ABYSS, DIVES_OPEN, ZONES, glowColor } from '../data/dive';
 
@@ -152,6 +153,12 @@ const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
 
 /** 'full' or 'lite', remembered per browser; unset means the device's default. */
 const GRAPHICS_KEY = 'fishing-graphics';
+/** Touch: how long a tapped item's tooltip stays up as a bar. */
+const TIP_BAR_MS = 4000;
+/** Touch: how long a hotbar slot is held before it offers Drop. */
+const HOLD_TO_DROP_MS = 500;
+/** Times this tab reloaded to reconnect (`reconnect`), so a server that drops every join can't loop it. */
+const AUTO_RELOAD_KEY = 'fishing-auto-reload';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
 const MAX_HOLD_PITCH = 1.5;
 /** The longest the join card waits on the shader warm-up after the server lets you in ("Loading…"), so a stuck one can't keep you out. A play-test default. */
@@ -169,7 +176,6 @@ export class Game {
   private touch: TouchControls | null = null;
   private touchMove = { x: 0, y: 0, sprint: false };
   private touchWoke = false;
-  private fps: FpsMeter | null = null;
   private shownPhase: Phase | '' = '';
   private power = 0;
   private powerDir = 1;
@@ -270,6 +276,11 @@ export class Game {
   private serverDrops: Drop[] = [];
   private keys = new Set<string>();
   private menuOpen = false;
+  /** Touch: hides the tapped item's tooltip bar (`touchMenuTap`). */
+  private tipTimer = 0;
+  /** Touch: a menu's history step is being popped by its close (`setMenu`), and a menu opened meanwhile wants one. */
+  private histBack = false;
+  private histPush = false;
   private keepTab = false;
   /** The unread entries while the "What's new" card from joining is open; null on the full board. */
   private newsGlance: NewsEntry[] | null = null;
@@ -372,7 +383,10 @@ export class Game {
     // "sad canvas" meanwhile), so offer a reload, which starts in lite graphics to ease the load.
     const canvas = this.world.renderer.domElement;
     canvas.addEventListener('webglcontextlost', () => {
-      localStorage.setItem(GRAPHICS_KEY, 'lite');
+      clientLog('gpu', `context lost, ${document.hidden ? 'hidden' : 'visible'}`);
+      try {
+        localStorage.setItem(GRAPHICS_KEY, 'lite');
+      } catch {}
       this.showOffline('Graphics stopped working', 'Reload to keep playing. Lite graphics will be on, which is easier on your device.', 'gpu');
     });
     canvas.addEventListener('webglcontextrestored', () => $('offline').classList.add('hidden'));
@@ -440,6 +454,7 @@ export class Game {
       },
       onFurthest: () => this.world.town?.setFurthest(this.net.furthest),
       onFailed: () => {
+        clientLog('failed', this.joining ? 'join' : 'auto-join');
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
         else if (this.pendingWelcome) {
           this.showOffline("Can't reach the game server");
@@ -529,12 +544,16 @@ export class Game {
         this.dropsView.sync(this.localDrops.all(), this.map.id);
         this.fb.giveUp(OFFLINE_MSG);
         this.renderFeedback();
-        this.showOffline(this.offlineWhy ?? 'Disconnected');
+        clientLog('close', `${this.offlineWhy ?? 'dropped'}, ${document.hidden ? 'hidden' : 'visible'}`);
+        // The server sent a reason (kicked, signed in elsewhere): reconnecting would only repeat it.
+        if (this.offlineWhy) this.showOffline(this.offlineWhy);
+        else this.reconnect();
         this.offlineWhy = undefined;
       },
       onRestart: () => this.startRestart(),
     });
     this.world.clock = () => this.net.now();
+    setLogMap(() => this.map.id);
     this.applyLocation();
     this.devPrompt = new DevPrompt($('devprompt'), {
       send: (text, echo) => {
@@ -556,6 +575,7 @@ export class Game {
       map: () => this.map.id,
       mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
       onUnread: (n) => this.touch?.setUnread(unreadLabel(n)),
+      soft: () => !!this.touch,
     });
     $('resume').addEventListener('click', (e) => {
       const acct = (e.target as HTMLElement).closest<HTMLElement>('#resume-fb, [data-acct]');
@@ -963,9 +983,21 @@ export class Game {
   }
 
   private bind(): void {
-    $('menu').addEventListener('click', (e) =>
-      this.onMenuClick(e.target as HTMLElement),
-    );
+    $('menu').addEventListener('click', (e) => {
+      const el = e.target as HTMLElement;
+      this.onMenuClick(el);
+      if (this.touch) this.touchMenuTap(el);
+    });
+    addEventListener('popstate', () => {
+      // Our own back() from closing a menu: nothing to close; a menu opened meanwhile gets its step now.
+      if (this.histBack) {
+        this.histBack = false;
+        if (this.histPush && this.menuOpen) history.pushState({ lakesideMenu: true }, '');
+        this.histPush = false;
+        return;
+      }
+      if (this.menuOpen) this.closeMenu();
+    });
     $('menu').addEventListener('keydown', (e) => {
       const id = (e.target as HTMLElement).id;
       if (id === 'acct-pass' && e.key === 'Enter') this.savePass();
@@ -990,12 +1022,18 @@ export class Game {
         else this.sellSlot(i);
       } else if (this.touch && this.active && this.phase === 'idle') this.takeSlot(i);
     });
+    this.wireHoldToDrop();
+    // Hover is a mouse thing: on touch the browser's emulated mouse events would undo a tap's tooltip and try-on.
     $('menu').addEventListener('mouseover', (e) => {
+      if (this.touch) return;
       this.tryOn(e.target as HTMLElement, true);
       this.showTip(e.target as HTMLElement, e as MouseEvent);
     });
-    $('menu').addEventListener('mousemove', (e) => this.moveTip(e as MouseEvent));
+    $('menu').addEventListener('mousemove', (e) => {
+      if (!this.touch) this.moveTip(e as MouseEvent);
+    });
     $('menu').addEventListener('mouseout', (e) => {
+      if (this.touch) return;
       this.tryOn(e.target as HTMLElement, false);
       if (!(e.relatedTarget as HTMLElement | null)?.closest?.('[data-tip]')) $('tip').classList.add('hidden');
     });
@@ -1143,9 +1181,9 @@ export class Game {
   enableTouch(): void {
     if (this.touch) return;
     document.body.classList.add('touch');
-    // Lay the page out 1400px wide and let the browser scale it to the screen, so the desktop HUD and
-    // menus fit a phone in landscape at about 0.6x without a separate layout.
-    document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=1400, user-scalable=no');
+    // Lay the page out wide and let the browser scale it to the screen, so the desktop HUD and menus fit a phone
+    // in landscape at about 0.6x without a separate layout (`touchLayoutWidth`).
+    document.querySelector('meta[name=viewport]')?.setAttribute('content', `width=${touchLayoutWidth(screen.width, screen.height)}, user-scalable=no`);
     this.world.setPixelCap(1);
     this.forceActive = true;
     $('resume').classList.add('hidden');
@@ -1192,7 +1230,6 @@ export class Game {
     });
     // iOS Safari ignores touch-action for pinch zoom; this stops it zooming the page mid-game.
     document.addEventListener('gesturestart', (e) => e.preventDefault());
-    if (import.meta.env.DEV) this.fps = new FpsMeter(() => this.world.isLite, () => this.toggleGraphics());
   }
 
   /** A tap on the open view: at a casino table it plays the piece under the finger. */
@@ -1312,7 +1349,13 @@ export class Game {
 
   /** The number keys for fish slots, for hints: "3-5", or more with the Tackle Vest. */
   private get fishKeys(): string {
-    return `${FISH_SLOT + 1}-${Math.min(9, this.s.slots.length)}`;
+    return this.touch ? 'tap one in your hotbar' : `${FISH_SLOT + 1}-${Math.min(9, this.s.slots.length)}`;
+  }
+
+  /** "Click" on desktop, "Tap" on touch (`lower` for mid-sentence). */
+  private clickWord(lower = false): string {
+    const w = this.touch ? 'Tap' : 'Click';
+    return lower ? w.toLowerCase() : w;
   }
 
   /** Number keys: take that hotbar slot in hand. */
@@ -1323,6 +1366,62 @@ export class Game {
     this.net.send({ t: 'slot', i });
     this.refreshHud();
     this.persist();
+  }
+
+  /**
+   * Touch: holding a hotbar slot takes it in hand and offers a Drop button over it (G on desktop). Two steps, so a
+   * slow tap never throws an item away.
+   */
+  private wireHoldToDrop(): void {
+    const ask = document.createElement('button');
+    ask.id = 'dropask';
+    ask.className = 'hidden';
+    $('hud').append(ask);
+    let timer = 0;
+    let hideTimer = 0;
+    let start: { x: number; y: number } | null = null;
+    const hide = () => {
+      ask.classList.add('hidden');
+      clearTimeout(hideTimer);
+    };
+    const cancel = () => {
+      clearTimeout(timer);
+      start = null;
+    };
+    $('hotbar').addEventListener('pointerdown', (e) => {
+      if (!this.touch) return;
+      const slot = (e.target as HTMLElement).closest<HTMLElement>('.slot');
+      const i = Number(slot?.dataset.i);
+      if (!slot || !Number.isInteger(i) || slot.classList.contains('sellable') || !this.s.slots[i]) return;
+      start = { x: e.clientX, y: e.clientY };
+      timer = window.setTimeout(() => {
+        start = null;
+        if (!this.active || this.phase !== 'idle' || this.spin || this.map.sea) return;
+        this.takeSlot(i);
+        const item = this.s.slots[i];
+        if (!item) return;
+        const r = slot.getBoundingClientRect();
+        ask.textContent = `Drop ${itemName(item)}`;
+        ask.style.left = `${r.left + r.width / 2}px`;
+        ask.style.top = `${r.top - 12}px`;
+        ask.classList.remove('hidden');
+        navigator.vibrate?.(15);
+        clearTimeout(hideTimer);
+        hideTimer = window.setTimeout(hide, 4000);
+      }, HOLD_TO_DROP_MS);
+    });
+    $('hotbar').addEventListener('pointermove', (e) => {
+      if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) cancel();
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) $('hotbar').addEventListener(ev, cancel);
+    ask.addEventListener('click', () => {
+      hide();
+      if (this.active && this.phase === 'idle') this.dropHeld();
+    });
+    // Any other tap puts the question away.
+    addEventListener('pointerdown', (e) => {
+      if (e.target !== ask && !(e.target as HTMLElement).closest?.('#hotbar')) hide();
+    }, true);
   }
 
   private dropHeld(): void {
@@ -1617,6 +1716,22 @@ export class Game {
     this.persist();
   }
 
+  /**
+   * Touch has no hover, so a tap does what hovering does on desktop: an item's tooltip shows as a bar at the bottom
+   * of the screen (`#tip.bar`) until the next tap or a few seconds pass, and a locked piece is tried on the preview.
+   */
+  private touchMenuTap(el: HTMLElement): void {
+    const tip = $('tip');
+    clearTimeout(this.tipTimer);
+    const t = el.closest<HTMLElement>('[data-tip]');
+    if (t?.dataset.tip && this.menuOpen) {
+      tip.innerHTML = t.dataset.tip;
+      tip.className = 'bar';
+      this.tipTimer = window.setTimeout(() => tip.classList.add('hidden'), TIP_BAR_MS);
+    } else tip.classList.add('hidden');
+    if (el.closest('[data-act="locked"][data-try]')) this.tryOn(el, true);
+  }
+
   private showTip(el: HTMLElement, e: MouseEvent): void {
     const t = el.closest<HTMLElement>('[data-tip]');
     const tip = $('tip');
@@ -1749,6 +1864,56 @@ export class Game {
         this.renderFeedback();
         this.showOffline('Disconnected');
       },
+    });
+  }
+
+  /**
+   * The connection dropped with no reason given (a phone that slept or switched apps, a network blip): say so, and
+   * reload once the server answers and the page is in view, which rejoins with the saved login. Gives up to the
+   * plain offline banner after a couple of minutes, or when it has already reloaded twice in a few minutes.
+   */
+  private reconnect(): void {
+    let history: number[] = [];
+    try {
+      history = JSON.parse(sessionStorage.getItem(AUTO_RELOAD_KEY) ?? '[]') as number[];
+    } catch {}
+    const r = autoReload(Array.isArray(history) ? history : [], Date.now());
+    if (!r.ok) return this.showOffline('Disconnected');
+    this.showOffline('Reconnecting…', 'Lost the connection. Getting you back in.');
+    const health = `${NetClient.serverBase().replace(/^ws/, 'http')}/health`;
+    const visible = () => new Promise<void>((done) => {
+      if (!document.hidden) return done();
+      const on = () => {
+        if (document.hidden) return;
+        document.removeEventListener('visibilitychange', on);
+        done();
+      };
+      document.addEventListener('visibilitychange', on);
+    });
+    void waitForRestart({
+      probe: async () => {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), RESTART_PROBE_TIMEOUT_MS * 2);
+        try {
+          return (await fetch(health, { cache: 'no-store', signal: ctl.signal })).ok;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+      socketClosed: () => this.net.socketClosed,
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+      reload: () => {
+        void visible().then(() => {
+          try {
+            sessionStorage.setItem(AUTO_RELOAD_KEY, JSON.stringify([...r.keep, Date.now()]));
+          } catch {}
+          clientLog('reconnect', 'reloading');
+          location.reload();
+        });
+      },
+      giveUp: () => this.showOffline('Disconnected'),
+      cancelled: () => this.restarting || this.loggingOut,
     });
   }
 
@@ -1918,6 +2083,20 @@ export class Game {
   // ---------- walking & interaction ----------
 
   private setMenu(open: boolean): void {
+    // Touch: an open menu is a step in the browser's history, so Android's back gesture (or iOS's swipe) closes it
+    // instead of leaving the game (`popstate` in bind).
+    // history.back() lands later, so a menu opened before it does waits for it (`popstate`) to add its own step.
+    if (this.touch && open && !this.menuOpen) {
+      if (this.histBack) this.histPush = true;
+      else history.pushState({ lakesideMenu: true }, '');
+    } else if (!open && this.menuOpen && (history.state as { lakesideMenu?: boolean } | null)?.lakesideMenu) {
+      this.histPush = false;
+      if (!this.histBack) {
+        this.histBack = true;
+        history.back();
+      }
+    }
+    if (!open) $('tip').classList.add('hidden');
     this.menuOpen = open;
     $('menu').classList.toggle('hidden', !open);
     // Shop mode hides parts of the HUD; it must end with the menu, not wait for the next redraw.
@@ -2177,10 +2356,10 @@ export class Game {
         const name = byId(FISH, held.fishId).name;
         const chips = chipsFor(eco.fishValue(held));
         // The trade prompt: exactly what a click on the chip tray will do.
-        if (chips >= 1) lines.push(`<span class="trade${onTray ? ' ready' : ''}"><kbd>Click</kbd> ${onTray ? '' : 'the chip tray '}to trade <b>${name}</b> for <b>${chips}</b> chips</span>`);
+        if (chips >= 1) lines.push(`<span class="trade${onTray ? ' ready' : ''}"><kbd>${this.clickWord()}</kbd> ${onTray ? '' : 'the chip tray '}to trade <b>${name}</b> for <b>${chips}</b> chips</span>`);
         else lines.push(`<b>${name}</b> is worth ${chips} chips. Win it bigger at a table first.`);
-      } else lines.push('Hold a fish (<kbd>1</kbd>-<kbd>5</kbd>) to trade it for chips.');
-      if (this.aim?.k !== 'cash') lines.push('<span class="muted">Prize case: click it, or press <kbd>E</kbd></span>');
+      } else lines.push(this.touch ? 'Hold a fish (tap one in your hotbar) to trade it for chips.' : 'Hold a fish (<kbd>1</kbd>-<kbd>5</kbd>) to trade it for chips.');
+      if (this.aim?.k !== 'cash') lines.push(`<span class="muted">${this.touch ? 'Prize case: tap it' : 'Prize case: click it, or press <kbd>E</kbd>'}</span>`);
       const html = lines.join('<br>');
       if (html !== this.tableHtml) {
         this.tableHtml = html;
@@ -2204,7 +2383,7 @@ export class Game {
     }
     if (this.casinoMsg) lines.push(this.casinoMsg);
     // What E (or a click) plays is in the prompt; roulette needs a colour aimed at first.
-    if (!this.aim && !busy && t === 'roulette') lines.push('<span class="muted">Aim at red, black or green, then press <kbd>E</kbd> or click to bet.</span>');
+    if (!this.aim && !busy && t === 'roulette') lines.push(`<span class="muted">${this.touch ? 'Tap red, black or green on the table to bet.' : 'Aim at red, black or green, then press <kbd>E</kbd> or click to bet.'}</span>`);
     const html = lines.join('<br>');
     if (html !== this.tableHtml) {
       this.tableHtml = html;
@@ -2758,7 +2937,7 @@ export class Game {
       ${fish.sea && this.fightAt ? catchPearlsHtml(this.fightAt.zone, this.fightAt.marker, { tag: this.fightTag, legend, shiny }) : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.legendCard ? `<div class="piece">${escapeHtml(this.legendCard.card)}</div>` : ''}${zoneLine ? `<div class="piece zone" style="--c:${COS_RARITY_COLOR[zoneTier]}">${escapeHtml(zoneLine)}</div>` : ''}${this.rankButtons()}
-      <div class="muted">Click to release your hold</div>`;
+      <div class="muted">${this.clickWord()} to release your hold</div>`;
     el.classList.remove('hidden');
     // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
     el.style.animation = 'none';
@@ -2983,7 +3162,6 @@ export class Game {
       this.shownPhase = this.phase;
     }
     if (this.touch) this.updateTouch();
-    this.fps?.frame(now);
     requestAnimationFrame(this.loop);
   };
 
@@ -4033,12 +4211,12 @@ export class Game {
         ${intro}
         <div class="smoker-h"><h4>Smoker · ${busy} of ${SMOKER_SPOTS} in use</h4>${all}</div>
         <div class="spots">${s.smoke.spots.map((sp) => this.spotCard(sp, now)).join('')}</div>
-        <p class="foot">Click a fish in your hotbar to put it on the smoker, or Smoke all (it skips shinies). Smoked fish go to your Pantry, even while you're away.</p>
+        <p class="foot">${this.clickWord()} a fish in your hotbar to put it on the smoker, or Smoke all (it skips shinies). Smoked fish go to your Pantry, even while you're away.</p>
       </div>${this.smokerDetail()}</div>`;
   }
 
   private spotCard(sp: SaveData['smoke']['spots'][number], now: number): string {
-    if (!sp) return `<div class="spot"><span class="ic">🪵</span><b>Empty</b><span>Click a hotbar fish</span></div>`;
+    if (!sp) return `<div class="spot"><span class="ic">🪵</span><b>Empty</b><span>${this.clickWord()} a hotbar fish</span></div>`;
     const f = byId(FISH, sp.fish.fishId);
     const from = sp.doneAt - smokeSeconds(f.tier) * 1000;
     const done = sp.doneAt <= now;
@@ -4582,7 +4760,13 @@ export class Game {
   // ---------- Settings ----------
 
   private settingsHtml(): string {
-    const keys: [string, string][] = [
+    const keys: [string, string][] = this.touch ? [
+      ['Left thumb', 'Walk: drag anywhere on the left; push to the edge to run'], ['Drag', 'Look around'], ['JUMP', 'Jump'],
+      ['Tap the prompt', 'Talk / interact'], ['Hold the big button', 'Charge a cast - let go in the gold zone for a perfect cast'],
+      ['Tap', 'Hook when the ! appears'], ['Hold', 'Reel - when the fish surges, keep the gauge green'],
+      ['Tap a slot', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['Hold a slot', 'Drop that item'],
+      ['🎒', 'Open your bag'], ['💬', 'Chat'],
+    ] : [
       ['W A S D', 'Walk'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Talk / interact'],
       ['Hold click', 'Charge a cast - let go in the gold zone for a perfect cast'], ['Click', 'Hook when the ! appears'],
       ['Hold click', 'Reel - when the fish surges, keep the gauge green'], ['1-5 / Scroll', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['G', 'Drop the item in hand'],
@@ -4724,7 +4908,7 @@ export class Game {
     }).join('');
     const sign = s.level >= DEEP_SEA_ROD.unlockLevel || s.seaRod ? `<p class="signpost">⛵ Deep sea gear: see Captain Reed on the west beach</p>` : '';
     return `<div class="cols"><div class="main">${sign}<h4>Rods</h4><div class="tiles">${rods}</div><h4>Line</h4><div class="tiles">${lines}</div><h4>Bait · packs of ${eco.BAIT_PACK}</h4><div class="tiles">${baits}</div>
-      <p class="foot">Rods and bait go to your tackle locker; equip them from your Bag (<kbd>Tab</kbd>). Line spools straight onto your rod.</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
+      <p class="foot">Rods and bait go to your tackle locker; equip them from your Bag (${this.touch ? '🎒' : '<kbd>Tab</kbd>'}). Line spools straight onto your rod.</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
   }
 
   private gearDetail(): string {
@@ -4896,7 +5080,7 @@ export class Game {
         tier: 1,
         badge: '<span class="badge" style="--c:var(--t1)">Wearing now</span>',
         body: '',
-        note: 'Hover any item to try it on. Click one to see its price and buy it.',
+        note: this.touch ? 'Tap any item to try it on and see its price.' : 'Hover any item to try it on. Click one to see its price and buy it.',
         actions: '',
       });
       return `<div class="cols"><div class="main">${intro}${sections}</div>${yours}</div>`;
@@ -4922,7 +5106,7 @@ export class Game {
       cls: look.cls,
       badge: `<span class="badge" style="--c:${look.color}">${slotName} · ${COS_RARITY[chosen.tier]}${where}</span>`,
       body: '',
-      note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.'}`,
+      note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : (this.touch ? 'Tap any item to try it on.' : 'Hover any item to try it on.')}`,
       actions: action,
     });
     return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
@@ -4990,7 +5174,7 @@ export class Game {
         tier: 1,
         badge: '<span class="badge" style="--c:var(--t1)">Wearing now</span>',
         body: '',
-        note: items.length ? 'Hover any piece to try it on. Click one to see what it takes.' : 'Land a sea legend to unlock the first piece of its set.',
+        note: items.length ? (this.touch ? 'Tap any piece to try it on and see what it takes.' : 'Hover any piece to try it on. Click one to see what it takes.') : 'Land a sea legend to unlock the first piece of its set.',
         actions: '',
       });
       return `<div class="cols"><div class="main">${intro}${sections}</div>${yours}</div>`;
@@ -5065,10 +5249,10 @@ export class Game {
     if (this.tab === 'casino') {
       const n = cashOutSlots(this.s).length;
       const all = n ? this.btn(`Turn in all ${n} · ${this.chipsText(cashOutAllChips(this.s))} chips`, 'data-act="cashoutall"', 'ok') : '';
-      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> click one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} ${COIN} of fish value.</span>${all}</div>`;
+      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> ${this.clickWord(true)} one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} ${COIN} of fish value.</span>${all}</div>`;
     }
     const total = fish.reduce((a, f) => a + eco.sellPrice(this.s, f), 0);
     const all = fish.length ? this.btn(`Sell all ${fish.length} · ${total.toLocaleString()} ${COIN}`, 'data-act="sellall"', 'ok') : '';
-    return `<div class="strip"><span>🐟 <b>Sell fish:</b> click one in your hotbar below${fish.length ? '' : ' (you have none right now)'}.</span>${all}</div>`;
+    return `<div class="strip"><span>🐟 <b>Sell fish:</b> ${this.clickWord(true)} one in your hotbar below${fish.length ? '' : ' (you have none right now)'}.</span>${all}</div>`;
   }
 }

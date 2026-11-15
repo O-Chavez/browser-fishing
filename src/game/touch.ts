@@ -1,5 +1,16 @@
 /** Phones and tablets: a coarse pointer and nothing that can hover (no mouse). */
-export const touchOnly = matchMedia('(pointer: coarse) and (hover: none)').matches;
+export const touchOnly = typeof matchMedia === 'function' && matchMedia('(pointer: coarse) and (hover: none)').matches;
+
+/**
+ * The touch layout's width in CSS pixels: the desktop HUD laid out this wide and scaled to the screen. 1400 puts an
+ * 844-wide phone at about 0.6x; smaller phones get a narrower layout so they stay near 0.6x instead of shrinking
+ * every label further (an iPhone SE would be 0.48x at 1400), down to 1000. Tablets keep 1400 and show it larger.
+ */
+export function touchLayoutWidth(w: number, h: number): number {
+  const long = Math.max(w, h);
+  if (!long) return 1400;
+  return Math.round(Math.min(1400, Math.max(1000, long / 0.6)));
+}
 
 /** What the on-screen controls ask the game to do. */
 export interface TouchHandlers {
@@ -18,7 +29,7 @@ export interface TouchHandlers {
 
 export type ActionTone = 'gold' | 'hook' | 'danger' | 'quiet';
 
-/** Stick travel in CSS pixels (of the 1400px-wide touch layout); the knob stops at the rim, pushing past it sprints. */
+/** Stick travel in CSS pixels (of the touch layout, `touchLayoutWidth`); the knob stops at the rim, pushing past it sprints. */
 const STICK_R = 80;
 const SPRINT_AT = 1.25;
 /** Taps shorter and stiller than this count as taps, not drags. */
@@ -170,35 +181,5 @@ export class TouchControls {
     if (!l) return;
     this.looks.delete(e.pointerId);
     if (ended && e.timeStamp - l.t < TAP_MS && Math.hypot(e.clientX - l.sx, e.clientY - l.sy) < TAP_PX) this.h.tap(e.clientX, e.clientY);
-  }
-}
-
-/** Frames-per-second readout for testing on devices; tapping it toggles the lighter graphics mode. */
-export class FpsMeter {
-  private el = document.createElement('button');
-  private frames = 0;
-  private since = 0;
-
-  constructor(private lite: () => boolean, onToggle: () => void) {
-    this.el.id = 'fps';
-    this.el.addEventListener('click', () => {
-      onToggle();
-      this.since = 0;
-    });
-    document.body.append(this.el);
-  }
-
-  frame(now: number): void {
-    this.frames++;
-    if (!this.since) {
-      this.since = now;
-      this.frames = 0;
-      return;
-    }
-    if (now - this.since < 500) return;
-    const fps = Math.round((this.frames * 1000) / (now - this.since));
-    this.el.textContent = `${fps} fps · ${this.lite() ? 'lite' : 'full'} (tap to switch)`;
-    this.frames = 0;
-    this.since = now;
   }
 }

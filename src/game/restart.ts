@@ -50,3 +50,13 @@ export async function waitForRestart(d: RestartDeps): Promise<void> {
     await d.sleep(RESTART_POLL_MS);
   }
 }
+
+/** Reloads to reconnect after a dropped connection: at most this many in `AUTO_RELOAD_WINDOW_MS`, so a server that drops every join can't loop the page. */
+export const AUTO_RELOADS = 2;
+export const AUTO_RELOAD_WINDOW_MS = 3 * 60_000;
+
+/** The reload times still inside the window, and whether one more is allowed. */
+export function autoReload(history: number[], now: number): { ok: boolean; keep: number[] } {
+  const keep = history.filter((t) => Number.isFinite(t) && now - t < AUTO_RELOAD_WINDOW_MS && t <= now);
+  return { ok: keep.length < AUTO_RELOADS, keep };
+}

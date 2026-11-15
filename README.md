@@ -51,7 +51,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 ![Looking back from the pier at the harbour: the Smokehouse and Marlow's BAIT & TACKLE shack along the quay, and the main street running up to the gate](docs/images/harbour.jpg)
 
 ### Features at a glance
-- Free to play, right in your browser, on any desktop (early touch controls for phones and tablets)
+- Free to play, right in your browser, on a computer, phone or tablet
 - Online multiplayer with global chat
 - 19 lake fish across 5 tiers and 23 sea fish across 5 zones, plus rare shiny variants
 - 5 rods, 5 lines and 5 baits, plus the Deep Sea Rod, and levels with no cap
@@ -85,7 +85,7 @@ Lakeside is free with no ads, made by one person. If you enjoy it, you can leave
 | M | Music on/off |
 | Esc | Menu / close |
 
-**On a phone or tablet (early test):** tap "Try touch controls" on the desktop notice and play in landscape. Push the left thumbstick to walk (past the rim to run), drag anywhere else to look, and hold the big button to cast and reel. Tap the prompt to talk, a hotbar slot to switch, and the casino tables to bet.
+**On a phone or tablet:** play in landscape. Push the left thumbstick to walk (past the rim to run), drag anywhere else to look, and hold the big button to cast and reel. Tap the prompt to talk, a hotbar slot to switch (hold one to drop it), and the casino tables to bet. 🎒 opens your bag and 💬 opens chat with its own keyboard.
 
 ## Tech stack
 

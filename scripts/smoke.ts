@@ -22,9 +22,9 @@ import { xpForNextLevel } from '../src/game/progression';
 import { newSave } from '../src/game/state';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const VITE_PORT = 5288;
+const VITE_PORT = Number(process.env.SMOKE_VITE_PORT) || 5288;
 // Its own game server port, so a local `npm run dev:all` can keep running; the client is pointed at it below.
-const SMOKE_SERVER_PORT = 8788;
+const SMOKE_SERVER_PORT = Number(process.env.SMOKE_PORT) || 8788;
 const SHOTS = path.resolve('.bench/smoke');
 const TOKEN = 'smoke-test-token-0123456789abcdef';
 
@@ -1282,8 +1282,20 @@ async function offlineChecks(): Promise<void> {
   await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 10000 });
   const drop = await shown();
   await page.screenshot({ path: path.join(SHOTS, 'offline.png') });
-  check('offline: a dropped connection shows the banner', !!drop?.text.includes('Disconnected'), drop?.text);
+  check('offline: a dropped connection shows the reconnecting banner', !!drop?.text.includes('Reconnecting'), drop?.text);
   check('offline: the reconnect button can be clicked over the resume overlay', !!drop?.clickable);
+  // The server comes back: the page reloads by itself and rejoins (the marker is gone with the old page).
+  await page.evaluate(() => { (window as any).__beforeDrop = true; });
+  await startServer();
+  let back = false;
+  try {
+    await page.waitForFunction(() => !(window as any).__beforeDrop && window.__game?.online(), { timeout: 20000, polling: 250 });
+    back = true;
+  } catch {}
+  check('offline: once the server answers, the page reconnects by itself', back);
+  // Down again: this time refresh by hand.
+  signalServerGroup('SIGKILL');
+  await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 10000 });
   // Refreshing tries the server again; it's still down, so the reloaded page says it can't reach it.
   await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.click('#offline-go')]);
   await page.waitForFunction(() => !document.getElementById('offline')!.classList.contains('hidden'), { timeout: 15000 });

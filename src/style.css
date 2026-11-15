@@ -151,6 +151,9 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 .chat-input { pointer-events: auto; font: inherit; padding: 8px 12px; color: var(--ink); background: var(--paper-3); border: 3px solid var(--wood-600); border-radius: 12px; outline: none; }
 .chat-input::placeholder { color: var(--ink-muted); }
 .chat-input.hidden { display: none; }
+/* The touch layout's pieces (the in-game keyboard, Send, ✕, the world filter) only show on touch while typing. */
+.chat-bar { display: contents; }
+.chat-top, .chat-field, .chat-send, .chat-keys { display: none; }
 .chat-hint { font-size: 12px; opacity: calc(var(--fade) * .75); text-align: right; text-shadow: 0 1px 3px #000; transition: opacity .2s; }
 .chat-hint b { opacity: 1; }
 .chat-cmd { font-weight: 800; color: #ffd98a; }
@@ -683,9 +686,8 @@ button.linklike { margin-top: 10px; font-size: 14px; font-weight: 800; color: va
 /* the menu opens behind the join screen on first load; keep it out of sight until then */
 body:has(#join:not(.hidden)) #menu { visibility: hidden; }
 
-/* desktop-only notice: phones and tablets (no mouse to hover with) see it over everything */
+/* The start-error panel (showStartError, src/main.ts): over everything when the game can't start. */
 #desktop-only { display: none; position: fixed; inset: 0; z-index: 60; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 14, 22, .92); }
-@media (pointer: coarse) and (hover: none) { #desktop-only { display: flex; } }
 #desktop-only.error { display: flex; }
 #desktop-only .panel { width: min(420px, 100%); padding: 24px 22px 20px; border-radius: 22px; text-align: center; color: var(--ink); background: var(--paper); box-shadow: 0 0 0 6px var(--wood-600), 0 0 0 9px var(--wood-900), 0 24px 60px rgba(0,0,0,.55); }
 #desktop-only img { width: 72px; height: 72px; border-radius: 18px; }
@@ -695,13 +697,27 @@ body:has(#join:not(.hidden)) #menu { visibility: hidden; }
 /* ---------- touch mode (body.touch; see TouchControls) ----------
    Sizes are in the 1400px-wide touch layout, which a phone in landscape shows at about 0.6x. */
 body.touch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
-body.touch input { -webkit-user-select: text; user-select: text; font-size: 22px; }
+/* 28px in the touch layout is about 17 real px on a phone (touchLayoutWidth keeps phones near 0.6x): at 16 or more,
+   iPhones don't zoom the page into a field when it's tapped (the join name, passwords, feedback). */
+body.touch input, body.touch textarea { -webkit-user-select: text; user-select: text; font-size: 28px; }
+body.touch #join-name, body.touch #join-pass, body.touch #acct-pass, body.touch #acct-name, body.touch #fb-text { font-size: 28px; }
 #touch { position: fixed; inset: 0; z-index: 1; touch-action: none; }
 #touch.hidden { display: none; }
 #touch .t-view { position: absolute; inset: 0; }
 body.touch #hud { z-index: 2; }
 body.touch #help, body.touch #crosshair { display: none; }
-body.touch #chat { top: 108px; font-size: 16px; }
+body.touch #chat { top: 108px; width: 480px; font-size: 19px; }
+body.touch #chat .chat-tag { font-size: 15px; }
+/* Phone-sized text (step 4 of full mobile support): the touch layout shows at about 0.6x, so 14-16px labels came out
+   near 9pt. These are about 11pt on a phone. */
+body.touch #spot, body.touch #nightchip, body.touch #lurechip { font-size: 19px; padding: 6px 14px; }
+body.touch #fishtag b small { font-size: 15px; }
+body.touch #toast { font-size: 22px; }
+/* A fight needs only the gauge and the button: JUMP and the top buttons step aside, like the hotbar. */
+body.touch[data-phase="reeling"] #touch .t-jump, body.touch[data-phase="reeling"] #touch .t-top, body.touch[data-phase="reeling"] #chat:not(.typing) { visibility: hidden; }
+/* Narrow layouts (small phones, touchLayoutWidth under 1300): centre the hotbar in the room left of JUMP and the action
+   button (their 360px at the right), so even 7 slots clear them. */
+@media (max-width: 1299px) { body.touch #hotbar, body.touch #heldname { left: calc((100% - 360px) / 2); } }
 body.touch #prompt { pointer-events: auto; bottom: 128px; padding: 14px 24px; box-shadow: 0 0 0 4px var(--gold), 0 8px 18px rgba(0,0,0,.35); }
 body.touch #hotbar { pointer-events: auto; }
 body.touch #catch { z-index: 3; pointer-events: auto; }
@@ -729,14 +745,87 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .t-action.danger { color: #fff; background: var(--bad); box-shadow: 0 8px 0 #9c2b1b, 0 0 0 10px rgba(229,83,61,.35); }
 @keyframes hookFlash { to { transform: scale(1.1); box-shadow: 0 8px 0 var(--gold-dark), 0 0 0 16px rgba(255,201,51,.45); } }
 .t-jump { position: absolute; right: 262px; bottom: 54px; width: 96px; height: 96px; border: 0; border-radius: 50%; font: 900 17px Nunito, ui-rounded, system-ui, sans-serif; letter-spacing: .05em; color: var(--cream); background: var(--hud-bg); box-shadow: 0 0 0 4px var(--wood-600); }
-#fps { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 6px 12px; border: 0; border-radius: 10px; font: 800 16px ui-monospace, Menlo, monospace; color: #fff; background: rgba(0,0,0,.55); }
-#fps:empty { display: none; }
+/* Holding a hotbar slot offers Drop over it (wireHoldToDrop). */
+#dropask { position: fixed; z-index: 4; transform: translate(-50%, -100%); padding: 14px 24px; border: 0; border-radius: 16px; font: 900 22px Nunito, ui-rounded, system-ui, sans-serif; color: #fff; background: var(--bad); box-shadow: 0 5px 0 #9c2b1b, 0 10px 22px rgba(0,0,0,.35); white-space: nowrap; pointer-events: auto; -webkit-tap-highlight-color: transparent; }
+#dropask.hidden { display: none; }
 #rotate { display: none; position: fixed; inset: 0; z-index: 70; align-items: center; justify-content: center; text-align: center; background: rgba(8, 14, 22, .96); font-size: 64px; font-weight: 900; line-height: 1.2; }
 #rotate b { display: block; font-size: 180px; color: var(--gold); }
 #rotate small { display: block; margin-top: 16px; font-size: 40px; font-weight: 700; color: var(--cream-muted); }
 @media (orientation: portrait) { body.touch #rotate { display: flex; } }
 @media (prefers-reduced-motion: reduce) { .t-action.hook { animation: none; } }
 body.touch #chat .chat-hint { display: none; }
+/* No Esc key on a phone: the menu's close button is just the ✕. */
+body.touch #menu .close kbd { display: none; }
+/* ---------- touch menus (step 5 of full mobile support) ----------
+   Every full menu (the Bag and its tabs, the shops, the Prize Counter, Reed's Wardrobe, the Smokehouse) fills the
+   screen: tabs move to a rail on the left (height is what a landscape phone is short of), the menu's owner sits above
+   them and a big ✕ Close at the rail's foot. At a vendor the hotbar stays in view below, since fish are sold from it.
+   Fitted cards (charters, a marker's choice, What's new, the nudge) stay cards. */
+body.touch #menu:not(.fit) { align-items: stretch; justify-content: stretch; padding: 0; backdrop-filter: none; }
+body.touch #menu:not(.fit) > .win { width: 100%; height: 100%; border-radius: 0; box-shadow: none; display: grid; grid-template-columns: 176px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+body.touch.shopping #menu:not(.fit) > .win { height: calc(100% - 132px); box-shadow: 0 4px 0 var(--wood-900); }
+body.touch #menu:not(.fit) .win-bar { display: contents; }
+body.touch #menu:not(.fit) .who { grid-column: 1; grid-row: 1; flex: none; gap: 8px; padding: 14px 8px 12px 14px; }
+body.touch #menu:not(.fit) .who b { font-size: 17px; white-space: normal; overflow-wrap: anywhere; }
+body.touch #menu:not(.fit) .who span { font-size: 13px; white-space: normal; }
+body.touch #menu:not(.fit) .who img, body.touch #menu:not(.fit) .who .who-ic { width: 44px; height: 44px; }
+body.touch #menu:not(.fit) .tabs { grid-column: 1; grid-row: 2; min-height: 0; flex-direction: column; gap: 8px; padding: 0 0 12px 14px; overflow-y: auto; }
+body.touch #menu:not(.fit) .tab { flex: none; flex-direction: column; justify-content: center; gap: 2px; min-height: 72px; padding: 6px; border-radius: 18px 0 0 18px; font-size: 18px; text-align: center; -webkit-tap-highlight-color: transparent; }
+body.touch #menu:not(.fit) .tab span { font-size: 26px; }
+body.touch #menu:not(.fit) .tab[title="Settings"]::after { content: 'Settings'; }
+body.touch #menu:not(.fit) .close { grid-column: 1; grid-row: 3; flex: none; justify-content: center; padding: 0 14px 14px; }
+body.touch #menu .close .x { width: 100%; min-width: 72px; height: 72px; border-radius: 20px; font-size: 32px; }
+body.touch #menu:not(.fit) .close .x::after { content: 'Close'; margin-left: 10px; font-size: 22px; }
+body.touch #menu:not(.fit) .close .x { display: flex; justify-content: center; align-items: center; }
+body.touch #menu.fit .close .x { width: 76px; }
+body.touch #menu:not(.fit) .sheet { grid-column: 2; grid-row: 1 / 4; margin: 14px 14px 14px 0; border-radius: 18px; }
+body.touch #menu:not(.fit) .win-bar:has(.tabs .tab.on) ~ .sheet { border-top-left-radius: 0; }
+/* Over a full-screen menu the HUD layer rises so toasts ("Need 40 chips") and a tapped item's tooltip bar show; the rest
+   of the HUD hides (at a vendor the hotbar stays, as on desktop). */
+body.touch:has(#menu:not(.hidden)) #hud { z-index: 30; }
+body.touch:not(.shopping):has(#menu:not(.hidden)) #hud > :not(#toast):not(#tip) { visibility: hidden; }
+/* The welcome banner and big catch banners wait behind a full-screen menu. */
+body.touch:has(#menu:not(.hidden):not(.fit)) #banner { visibility: hidden; }
+/* A tapped item's tooltip, as a bar at the foot of the screen (touchMenuTap). */
+body.touch #tip.bar { left: 50% !important; top: auto !important; bottom: 28px; transform: translateX(-50%); max-width: min(760px, 70vw); padding: 14px 22px; border-radius: 16px; font-size: 21px; line-height: 1.35; text-align: center; z-index: 30; box-shadow: 0 0 0 3px var(--gold), 0 10px 24px rgba(0,0,0,.45); }
+body.touch.shopping #tip.bar { bottom: 150px; }
+/* ---------- touch chat (ChatBox with soft keys, src/game/softkeys.ts) ----------
+   While typing, chat fills the screen over a light dim: the log at the left, the field and Send above our own
+   keyboard (about 40% of the screen), ✕ and the world filter where the 💬 and 🎒 buttons sit. The world shows through
+   and still takes drags to look. With 🌐 (the phone's keyboard) the field moves to the top, clear of that keyboard.
+   Key height, keyboard height and the dim are play-test defaults. */
+body.touch #chat.typing { --kb-h: 40vh; position: fixed; inset: 0 !important; width: auto; z-index: 6; padding: 0; gap: 10px; justify-content: flex-end; font-size: 22px; background: linear-gradient(rgba(16, 10, 5, .1), rgba(16, 10, 5, .45)); pointer-events: none; }
+body.touch #chat.typing .chat-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 12px; pointer-events: auto; }
+body.touch #chat.typing .chat-top button { height: 76px; min-width: 76px; padding: 0 20px; border: 0; border-radius: 20px; font: 900 26px Nunito, ui-rounded, system-ui, sans-serif; color: var(--cream); background: var(--hud-bg); box-shadow: var(--hud-edge); }
+body.touch #chat.typing .chat-x { font-size: 34px; }
+body.touch #chat.typing .chat-log { flex: 0 1 auto; min-height: 0; overflow: hidden; justify-content: flex-end; width: min(860px, 62vw); margin: 0 0 0 80px; }
+body.touch #chat.typing .chat-hint:not(:empty) { display: block; margin: 0 80px; text-align: left; font-size: 20px; opacity: 1; pointer-events: auto; }
+body.touch #chat.typing .chat-cmd { margin: 0 2px; padding: 8px 16px; border: 0; border-radius: 99px; font: 900 22px Nunito, ui-rounded, system-ui, sans-serif; color: var(--gold-ink); background: var(--gold); box-shadow: 0 3px 0 var(--gold-dark); }
+body.touch #chat.typing .chat-bar { display: flex; gap: 12px; margin: 0 80px; pointer-events: auto; }
+body.touch #chat.typing .chat-send { display: block; flex: none; padding: 0 34px; border: 0; border-radius: 14px; font: 900 24px Nunito, ui-rounded, system-ui, sans-serif; color: var(--gold-ink); background: var(--gold); box-shadow: 0 4px 0 var(--gold-dark); }
+body.touch #chat.typing .chat-input { flex: 1; min-width: 0; }
+body.touch #chat.soft .chat-input { display: none; }
+body.touch #chat.soft .chat-field { display: flex; align-items: center; flex: 1; min-width: 0; height: 64px; padding: 0 18px; overflow: hidden; white-space: pre; font-size: 26px; color: var(--ink); background: var(--paper-3); border: 3px solid var(--wood-600); border-radius: 12px; box-sizing: border-box; }
+body.touch #chat.soft .chat-field .ph { color: var(--ink-muted); }
+body.touch #chat.soft .chat-field .caret { flex: none; width: 3px; height: 1.1em; margin: 0 1px; background: #2a7bf6; animation: caret 1s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { body.touch #chat.soft .chat-field .caret { animation: none; } }
+body.touch #chat.soft .chat-keys { display: grid; grid-auto-rows: 1fr; gap: 8px; height: var(--kb-h); padding: 12px 80px 26px; box-sizing: border-box; background: rgba(42, 27, 15, .94); box-shadow: 0 -4px 0 var(--wood-600); pointer-events: auto; touch-action: none; }
+.chat-keys .row { display: flex; gap: 8px; justify-content: center; min-height: 0; }
+.chat-keys .k { flex: 0 0 calc((100% - 72px) / 10); min-width: 0; border: 0; border-radius: 12px; font: 800 30px Nunito, ui-rounded, system-ui, sans-serif; color: var(--ink); background: var(--paper-3); box-shadow: 0 4px 0 #b99f74; }
+.chat-keys .k.fn { font-size: 26px; background: var(--paper-2); }
+.chat-keys .k.fn.on { color: var(--gold-ink); background: var(--gold); box-shadow: 0 4px 0 var(--gold-dark); }
+.chat-keys .k.space { flex: 1 1 auto; font-size: 22px; color: var(--ink-muted); }
+.chat-keys .k.send { flex-basis: calc((100% - 72px) / 10 * 2 + 8px); font-size: 26px; font-weight: 900; color: var(--gold-ink); background: var(--gold); box-shadow: 0 4px 0 var(--gold-dark); }
+.chat-keys .k.down { transform: translateY(3px); box-shadow: 0 1px 0 #b99f74; filter: brightness(.92); }
+body.touch #chat.native { justify-content: flex-start; padding-top: 18px; }
+body.touch #chat.native .chat-bar { order: -1; height: 76px; margin-right: 440px; }
+body.touch #chat.native .chat-hint:not(:empty) { order: -1; }
+body.touch #chat.native .chat-log { margin-top: 4px; }
+/* Typing hides what the keyboard would sit on, and what it would cover anyway. */
+body.touch:has(#chat.typing) #touch .t-action, body.touch:has(#chat.typing) #touch .t-jump, body.touch:has(#chat.typing) #touch .t-top,
+body.touch:has(#chat.typing) #ctx, body.touch:has(#chat.typing) #hud-tl, body.touch:has(#chat.typing) #divehud { visibility: hidden; }
+#chat button { -webkit-tap-highlight-color: transparent; }
 /* The prompt is tapped, not keyed: swap its E badge for a finger. */
 body.touch #prompt b { font-size: 0; }
 body.touch #prompt b::after { content: '👆'; font-size: 20px; }
