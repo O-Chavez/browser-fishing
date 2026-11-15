@@ -125,7 +125,9 @@ async function join(name: string, room: string): Promise<Page> {
   await page.evaluateOnNewDocument((t) => localStorage.setItem('fishing-token', t), token(name));
   // Every "What's new" entry read, so no card opens over the scene on joining.
   await page.evaluateOnNewDocument(() => localStorage.setItem('fishing-news', String(Number.MAX_SAFE_INTEGER)));
-  await page.goto(`http://localhost:${VITE_PORT}/?name=${name}&room=${room}`, { waitUntil: 'load' });
+  // The outfits run joins eight players; on a busy machine later pages took up to ~110 s to load
+  // (2026-11-13), past puppeteer's default 30 s, so this one navigation gets 150 s.
+  await page.goto(`http://localhost:${VITE_PORT}/?name=${name}&room=${room}`, { waitUntil: 'load', timeout: 150_000 });
   await page.waitForFunction(() => window.__game?.online(), { timeout: 20000 });
   await page.evaluate(() => window.__game.activate());
   return page;

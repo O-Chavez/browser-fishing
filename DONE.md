@@ -2,6 +2,8 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] `npm run screenshots -- outfits` times out on a busy machine: the navigation in `join` gets a 150 s timeout, not puppeteer's 30 s (done 2026-11-14, branch `screenshots-join-timeout`)
+  - Checked: `npx tsc -p tsconfig.scripts.json --noEmit` (the scripts config covers `scripts/`)
 - [x] Out-of-date text found while updating the README (2026-11-13; done 2026-11-14, branch `docs-endgame-refresh`)
   - The campfire tip now says the Lucky Wheel can make a fish worth five times as much (`CAMP_TIPS`, `src/game/game.ts`; the best wedge is ×5, `WHEEL_WEDGES`). GAME_DESIGN.md §38 lost "(planned)" and its old status; Oscar chose a short summary with pointers: §38.1 now describes charters as built (Reed, the zones, the hold and fee, the rod's steps and Abyss levels, boat parts and Black Pearls, Shiny Lures, Abyss markers and the Furthest Out board, legends and the Kraken's set) and points to REELING.md and `src/data/dive.ts` for the numbers; §38.2 says the Smokehouse is built and the spices and packing for charters are shelved (TODO.md, "Smokehouse R3"); status words in §38.4 and the §38.6 build order fixed. No What's new entry (docs and a text fix)
 - [x] 🎨📋 Deep sea cosmetics, step 1: the pet slot, the Kraken's set and hatchling, unlocked by landing and bought from Reed, and the Abyssal rarity (Oscar, 2026-11-14; done 2026-11-14, branch `legend-gear`)
