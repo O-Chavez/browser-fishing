@@ -2,6 +2,10 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] A "View your wardrobe" button under the character preview in the Bag tab (Oscar, 2026-11-15; done 2026-11-15, branch `tab-wardrobe-button`)
+  - The Bag's "Your look" panel (`lookDetail`, shown until a tile is picked) gets a plain "👕 View your wardrobe" button under the heading that switches to the Wardrobe tab
+  - Checked: build, headless renders at desktop and phone sizes, and clicking it opens the Wardrobe. Tests 689/690: the reel fan-of-hands test times out at 5 s on main too. No What's new entry (small adjustment)
+
 - [x] 🎨 Elevate Marlow's BAIT & TACKLE stall and Marlow himself, which were first-pass designs (Oscar, 2026-11-15; done 2026-11-15, branch `shop-look`)
   - Looks: three directions rendered in the game from the deck, three-quarter, the counter, the main street, at night and at dusk from the pier root ([Marlow's Shop Looks](https://claude.ai/artifact/Y3vgfaNNGiPhh2H4UjKSd5)): A, a tackle shack; B, the striped stall dressed up; C, a boathouse roofed with an upturned rowboat. Oscar picked **A** for both the shack and Marlow
   - The shack (`src/game/baitshop.ts`, built by `Hub.buildStall`): mint clapboard with white trim, a red shingled gable roof with a carved fish in the gable, a framed BAIT & TACKLE sign over a red and cream scalloped valance, and a serving window with a plank sill. On the sill the five baits in jars in their colours (the Glow Lure and the Moon Pearl glow); inside a plank floor, a pegboard of lures, a shelf of the five line spools and a lantern hung beside Marlow, which shows lit through the window at night (play-test: its spot); lanterns on brackets either side of the window; on the street side a rack of the five rods in their tier colours; out front a LIVE BAIT chalkboard with the three cheapest baits' prices read from `BAITS`; a bait cooler against the far wall. The two swaying fish hang under the eaves at the front corners
