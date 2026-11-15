@@ -60,6 +60,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Bugs and tooling
 
+- `npm run screenshots -- wardrobe` catches Mags's "Smokehouse: Small Fry" banner across the menu on every run (seen 2026-11-15), so the README Wardrobe shot can't be re-taken as is; calling `hideHud` before the shot (it hides `#banner`) clears it. Ivy also owns every cosmetic, so the shot now shows Kelp Deep pieces among the hats
 - A `toNonIndexed` console warning shows up after going to sea (seen while staging the zone sets, 2026-11-15; the same pieces built on land gave none, so likely the sea scene's own geometry). Trace which geometry calls it
 - `npm run smoke` only runs on a Mac as is: `CHROME_PATH` defaults to the macOS Chrome and it launches with `--use-angle=metal`. On Linux (cloud sessions) it needs a wrapper that adds `--no-sandbox` and SwiftShader, and even then slow software frames fail ~8 timing checks (townsfolk walks, reel fights, roulette pacing) and the offline checks time out. A Linux-friendly launch and longer timeouts there would let cloud sessions run it.
 - The bench scenes have no high-tier fish, so they can't measure the fish tier effects

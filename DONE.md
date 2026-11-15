@@ -2,6 +2,10 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] The player's Wardrobe shows only the cosmetics they own (Oscar, 2026-11-15; done 2026-11-15, branch `wardrobe-owned-only`)
+  - `wardrobeHtml` no longer adds the greyed tiles for rank outfits not earned yet ("🔒 Level 35") or for Captain Reed's legend and zone pieces not bought yet ("🔒 Land the Kraken", "🔒 At Reed's"); a slot with nothing owned keeps its "Nothing yet" line. What's ahead still shows at Marlow's stall, the Prize Counter and Reed's Wardrobe tab. The Title row still lists locked ranks greyed with their level
+  - Checked: build; tests 689/690 (the reel fan-of-hands test fails on main too); headless render of a level 22 player owning only their outfit: Hats and Shirts show just the worn piece, Pets reads "Nothing yet". README Wardrobe shot not re-taken (filed in TODO.md, Bugs and tooling). No What's new entry (small adjustment)
+
 - [x] Bug: the boards flickered where the pier and the two jetties meet the quay (Oscar, 2026-11-15; done 2026-11-15, branch `dock-seam-zfight`)
   - Cause: `World.buildDock` laid planks every 0.28 m from a rect's start until past its end, so the last plank ran up to 0.22 m beyond it. The pier and the jetties end at z = 10, where the quay begins, so their last plank lay inside the quay's first planks at the same height with the grain crossed, and the two z-fought
   - Fix: each rect's planks are fitted to it (`round(len / 0.28)` planks at an even pitch, a 0.03 m gap between them), so none passes its rect's end; the pitch changes by 2% at most (the jetties)
