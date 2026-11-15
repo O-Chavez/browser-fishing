@@ -8,6 +8,7 @@ import { glowTag } from './nightglow';
 import { BOARD_POSTS, FurthestBoard } from './furthestboard';
 import { boxUV, shingleTexture, sidingTexture, stoneTexture } from './textures';
 import { faceHead } from './faces';
+import { LIGHTS_MAST } from './baitshop';
 import type { Circle } from './player';
 import type { FurthestRow } from '../net/protocol';
 
@@ -472,7 +473,7 @@ export class Town {
    * more hanging under the eave and on the back wall, a lantern, a SMOKEHOUSE sign up high, and a stone
    * smoker behind it whose pipe puffs smoke over the roof. `sh` is the middle of the counter; the shack
    * stands behind it.
-   * Dark and smoky on purpose, so it reads as a different place from Marlow's striped stall.
+   * Dark and smoky on purpose, so it reads as a different place from Marlow's mint BAIT & TACKLE shack.
    */
   private buildSmokehouse(sh: Spot): void {
     const g = new THREE.Group();
@@ -1099,8 +1100,9 @@ export class Town {
     // A picnic blanket on the slope above Reed's lane (the campfire headland is too narrow for a second one).
     this.blanket(-15, 16.5, -0.3);
     // String lights over the mouth of the main street between the two stalls, over the square and at the gate (the
-    // campfire's hang round its ring, `buildRing`). The stalls' string hangs from masts on their street-side front
-    // posts (Marlow's stall in hub.ts, `buildSmokehouse`), so no post stands on the quay road.
+    // campfire's hang round its ring, `buildRing`). The stalls' string hangs from a pole beside Marlow's shack, tied
+    // to its wall (`LIGHTS_MAST`, baitshop.ts), and a mast on the Smokehouse's street-side front post
+    // (`buildSmokehouse`), so no post stands on the quay road.
     // Play-test: the posts and the height.
     const sh = this.map.smokehouse;
     if (sh) {
@@ -1110,7 +1112,7 @@ export class Town {
         const z = s.z - lx * Math.sin(s.facing) + lz * Math.cos(s.facing);
         return [x, z, standHeight(s.x, s.z) + top - groundHeight(x, z)];
       };
-      const [ax, az, a] = corner(shop, -1.5, 0.9, 2.5);
+      const [ax, az, a] = corner(shop, LIGHTS_MAST.x, LIGHTS_MAST.z, 0);
       const [bx, bz, b] = corner(sh, 3.4 / 2 - 0.08, 0.25, 2.3);
       this.stringLights(ax, az, bx, bz, 3.3, [a, b]);
     }
