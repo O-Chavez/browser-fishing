@@ -638,6 +638,11 @@ export class Sea {
   }
   private lite = false;
 
+  /** Whether the marker buoy has drifted up alongside the boat. */
+  get buoyAlongside(): boolean {
+    return this.buoy.alongside;
+  }
+
   /** Whether the boat is stopped at a marker: its buoy drifts up alongside, and falls astern on sailing on. */
   setMarker(on: boolean): void {
     this.buoy.set(on);

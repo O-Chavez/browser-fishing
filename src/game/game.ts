@@ -2941,7 +2941,7 @@ export class Game {
     this.world.update(dt);
     const sea = this.world.sea;
     this.screenSpray.update(dt, sea ? this.world.mood : 0, sea?.slam ?? 0, this.world.night);
-    audio.seaSound(dt, sea ? { mood: this.world.mood, slam: sea.slam, rise: sea.swell > 0.05 ? Math.max(-1, Math.min(1, sea.motion.heave / sea.swell)) : 0 } : null);
+    audio.seaSound(dt, sea ? { mood: this.world.mood, slam: sea.slam, rise: sea.swell > 0.05 ? Math.max(-1, Math.min(1, sea.motion.heave / sea.swell)) : 0, night: this.world.night, buoy: sea.buoyAlongside } : null);
     this.drawGauge(now / 1000);
     if (this.phase !== this.shownPhase) {
       // CSS hides parts of the touch HUD by phase (e.g. the hotbar during a fight).

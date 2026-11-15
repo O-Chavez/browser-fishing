@@ -155,6 +155,11 @@ export class MarkerBuoy {
     this.group.visible = false;
   }
 
+  /** Whether the buoy has drifted close enough to be alongside (a few seconds after the boat stops). */
+  get alongside(): boolean {
+    return this.on && this.x < BUOY.rest + 8;
+  }
+
   /** Whether the boat is stopped at a marker. */
   set(on: boolean): void {
     if (on && !this.on && !this.group.visible) this.x = BUOY.from;
