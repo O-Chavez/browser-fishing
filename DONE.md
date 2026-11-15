@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] The catch card credited a dish's shiny bonus on a Shiny Lure cast, where the dish did nothing (found in the charter boost review, 2026-11-13; done 2026-11-14, branch `shiny-lure-credit`)
+  - A lured cast is shiny whatever the dish, so `rollCast` and `rollSeaCast` now mark it `lured` (a Shiny Lure charge was spent); the flag rides `castok` and the server's pending fish, and `applyCatch` takes it (`lured`): `shinyFrom` is then `Shiny Lure` (the Prize Counter's name) and the dish is not credited. A natural shiny with a Spirit Banquet or other ✨ dish still credits the dish. Same at the pond and at sea, on the client's card and the server's landing
+  - Checked: build, 665 tests (new case in `smoke.test.ts`: a lured pond and sea cast with the dish on credit the lure; an unlured one has no flag; the existing dish credit test is unchanged). No smoke run (card text only). No What's new entry (bug fix)
 - [x] 🎨 Tab opens on your own character, so players see their look more often (and want cosmetics) (Oscar, 2026-11-14; done 2026-11-14, branch `bag-opens-on-look`)
   - Options proposed: what sits under the character (shop-style "Your look" with a Wardrobe button, plus a row of what's worn, plus where cosmetics are sold, or the character only) and when it resets. Oscar picked **the character only** ("Drag to turn" and "🪞 Your look", no badge, hint or button) and **reset each time the menu opens**
   - The Bag's right panel shows the character preview until a tile is picked (`lookDetail`, `bagHtml`; it used to show the rod in use). `openMenu('inventory')` clears `pick.bag` when the menu wasn't open (Tab, the bag button), so a tile picked stays while flipping Bag → Wardrobe → Bag. The touch layout keeps its two columns and the preview uses the shops' height clamp

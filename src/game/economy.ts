@@ -515,6 +515,8 @@ export interface Roll {
   /** Seconds until the fish bites. */
   wait: number;
   shiny?: boolean;
+  /** A Shiny Lure charge made it shiny (not the dish's ✨ or luck), for the catch card's credit. */
+  lured?: boolean;
   perfect?: boolean;
   spot?: string;
   /** The fight, with a fish: its reel seed and gaps over the gear. The server replays the catch from these. */
@@ -544,7 +546,7 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
   const wait = ((3.5 + rng() * 6) / bait.luck) * SPOTS[spot].wait;
   // A dish's ✨ multiplies the shiny chance.
   const shiny = lure || (!!fish && rng() < (night ? SHINY_CHANCE_NIGHT : SHINY_CHANCE) * shinyMult(s));
-  const roll: Roll = { perfect, spot, fishId: fish?.id ?? null, size, wait, shiny };
+  const roll: Roll = { perfect, spot, fishId: fish?.id ?? null, size, wait, shiny, ...(lure ? { lured: true } : {}) };
   if (fish) {
     roll.seed = Math.floor(rng() * 4294967296);
     const m = rollFishGaps(fightGapsOf(s, fish), rng);
@@ -571,7 +573,7 @@ export function rollSeaCast(s: SaveData, zone: number, marker: number, rod: SeaR
   const seed = Math.floor(rng() * 4294967296);
   const m = rollFishGaps(seaGaps(zone, marker, rod), rng);
   const tune = fightTune(s);
-  return { fishId: bite.fish.id, size, wait, shiny, seed, d: m.d, ...(m.tag ? { tag: m.tag } : {}), ...(tune ? { tune } : {}) };
+  return { fishId: bite.fish.id, size, wait, shiny, ...(lure ? { lured: true } : {}), seed, d: m.d, ...(m.tag ? { tag: m.tag } : {}), ...(tune ? { tune } : {}) };
 }
 
 export interface CatchResult {
@@ -718,9 +720,9 @@ export function announcesCatch(fish: Fish, act: { rec?: boolean }): boolean {
 
 /**
  * Lands a fish: XP, the Fishdex, the best catch and ranks, then into a free fish slot, or with `sell` straight to coins
- * (charters). `grow` multiplies its value on top (an Abyss marker's, `markerGrowth`).
+ * (charters). `grow` multiplies its value on top (an Abyss marker's, `markerGrowth`). `lured`: a Shiny Lure made the cast shiny.
  */
-export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false, tag: FishTag | null = null, grow = 1): CatchResult {
+export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false, clean = false, sell = false, tag: FishTag | null = null, grow = 1, lured = false): CatchResult {
   const slot = sell ? -1 : freeFishSlot(s);
   if (slot < 0 && !sell) return { stored: false, first: false, record: false, gained: 0, leveledUp: false, level: s.level, ranks: [], stages: [], mult: 1 };
   const entry = s.dex[fish.id];
@@ -728,7 +730,8 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   // Smokehouse snacks and dishes apply at catch, like the Lucky Charms: ⭐ into the XP, 💰 into the fish's value.
   const xp = buff(s, 'xp');
   const coin = buff(s, 'coins');
-  const sh = shiny ? buff(s, 'shiny') : null;
+  // A lured cast is shiny whatever the dish, so the card credits the lure, not the dish.
+  const sh = shiny && !lured ? buff(s, 'shiny') : null;
   const gained = Math.round(catchXp(fish, size, first, shiny) * (1 + (xp?.bonus ?? 0)));
   const record = !!entry && size > entry.best;
   const shinies = (entry?.shiny ?? 0) + (shiny ? 1 : 0);
@@ -748,7 +751,7 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const legendPiece = landLegend(s, fish);
   return {
     stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult, ...(sell ? { sold } : {}), ...(legendPiece ? { legendPiece } : {}),
-    ...(xp ? { xpFrom: xp.from } : {}), ...(coin ? { coinFrom: coin.from } : {}), ...(sh ? { shinyFrom: sh.from } : {}), ...(gift ? { gift } : {}),
+    ...(xp ? { xpFrom: xp.from } : {}), ...(coin ? { coinFrom: coin.from } : {}), ...(lured && shiny ? { shinyFrom: 'Shiny Lure' } : {}), ...(sh ? { shinyFrom: sh.from } : {}), ...(gift ? { gift } : {}),
   };
 }
 

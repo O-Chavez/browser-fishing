@@ -191,6 +191,7 @@ export class Game {
   private hooked: Fish | null = null;
   private hookedSize = 0;
   private hookedShiny = false;
+  private hookedLured = false;
   private waitTotal = 0;
   private elapsed = 0;
   private nibbleCd = 1.5;
@@ -920,6 +921,7 @@ export class Game {
         this.hooked = byId(FISH, id);
         this.hookedSize = size;
         this.hookedShiny = shiny;
+        this.hookedLured = false;
         this.fish = buildFish(this.hooked.color, false, shiny, this.hooked.tier, id);
         this.fish.group.scale.setScalar(waterScale(size, this.hooked.tier));
         const f = this.world.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
@@ -2482,6 +2484,7 @@ export class Game {
     this.hooked = roll.fishId ? byId(FISH, roll.fishId) : null;
     this.hookedSize = roll.size;
     this.hookedShiny = !!roll.shiny && !!roll.fishId;
+    this.hookedLured = !!roll.lured;
     this.waitTotal = roll.wait;
     this.fightSeed = roll.seed ?? 0;
     this.fightD = roll.d ?? { strength: 0, weight: 0 };
@@ -2689,7 +2692,7 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift, legendPiece } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null);
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift, legendPiece } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null, 1, this.hookedLured);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch', h: this.holds.encode() });
     if (leveledUp) this.queueNudge();

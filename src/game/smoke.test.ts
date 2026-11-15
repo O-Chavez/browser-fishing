@@ -387,6 +387,21 @@ describe('dish buffs at catch', () => {
     const res = eco.applyCatch(s, byId(FISH, ofTier(1)), mid(ofTier(1)), true);
     expect(res.shinyFrom).toBe('Spirit Banquet');
   });
+
+  it('credits the Shiny Lure, not the dish, on a lured cast, at the pond and at sea', () => {
+    const s = caught(5);
+    s.bait = 'worm';
+    smoke.addCooked(s, 'banquet', 1);
+    smoke.eatDish(s, 'banquet');
+    s.lure = 2;
+    const pond = eco.rollCast(s, 'pond', () => 0.99);
+    expect([pond.shiny, pond.lured]).toEqual([true, true]);
+    expect(eco.applyCatch(s, byId(FISH, ofTier(1)), mid(ofTier(1)), true, false, false, null, 1, pond.lured).shinyFrom).toBe('Shiny Lure');
+    const sea = eco.rollSeaCast(s, 0, 0, { steps: 0, levels: 0 }, () => 0.99);
+    expect([sea.shiny, sea.lured]).toEqual([true, true]);
+    const plain = eco.rollCast(s, 'pond', () => 0.99);
+    expect(plain.lured).toBeUndefined();
+  });
 });
 
 describe('the Kitchen opening and level gifts', () => {
