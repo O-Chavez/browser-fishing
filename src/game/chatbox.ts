@@ -1,4 +1,5 @@
 import { coinText, escapeHtml as esc } from './format';
+import { BOTTOM, keyFace, keyId, keyOf, pressKey, REPEAT_DELAY_MS, REPEAT_MS, ROWS, startKeys, type Key, type KeyState } from './softkeys';
 
 /** Lines leave the window this long after they arrive. */
 export const CHAT_TTL_MS = 5 * 60_000;
@@ -114,6 +115,14 @@ export class ChatBox {
   private unread = 0;
   /** The commands Tab is stepping through, and the text it last filled in. */
   private cycle: { list: Command[]; i: number; shown: string } | null = null;
+  /** Touch: the in-game keyboard is up (`softkeys.ts`), in place of the phone's. Null with the phone's keyboard or on desktop. */
+  private keys: KeyState | null = null;
+  private field: HTMLElement;
+  private keysEl: HTMLElement;
+  private scope: HTMLElement;
+  private repeat = 0;
+  /** The layer and ⇧ the keys were last drawn for; letters only redraw when these change. */
+  private drawnKeys = '';
 
   constructor(
     private root: HTMLElement,
@@ -125,12 +134,22 @@ export class ChatBox {
       now?: () => number;
       /** The unread count changed (the touch 💬 button's badge). */
       onUnread?: (n: number) => void;
+      /** Touch mode: chat opens with the in-game keyboard. */
+      soft?: () => boolean;
     },
   ) {
-    root.innerHTML = '<div class="chat-log"></div><input class="chat-input hidden" type="text" autocomplete="off" spellcheck="false"><div class="chat-hint"></div>';
+    root.innerHTML =
+      '<div class="chat-top"><button class="chat-scope" type="button"></button><button class="chat-x" type="button" aria-label="Close chat">✕</button></div>' +
+      '<div class="chat-log"></div>' +
+      '<div class="chat-bar"><input class="chat-input hidden" type="text" autocomplete="off" spellcheck="false"><div class="chat-field" aria-live="polite"></div><button class="chat-send" type="button">Send</button></div>' +
+      '<div class="chat-hint"></div><div class="chat-keys"></div>';
     this.log = root.querySelector('.chat-log')!;
     this.input = root.querySelector('.chat-input')!;
     this.hint = root.querySelector('.chat-hint')!;
+    this.field = root.querySelector('.chat-field')!;
+    this.keysEl = root.querySelector('.chat-keys')!;
+    this.scope = root.querySelector('.chat-scope')!;
+    this.wireTouch();
     this.input.maxLength = MAX_LEN;
     this.input.placeholder = 'Say something… or /bug, /idea to send feedback';
     // Feedback reports get more room than chat lines.
@@ -143,10 +162,7 @@ export class ChatBox {
       // The game listens on the document; keep typing from moving the player or switching slots.
       e.stopPropagation();
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
-        const text = this.input.value.trim();
-        // Closed first: a send can open the login panel, which takes the focus.
-        this.close();
-        if (text) this.opts.send(text);
+        this.submit();
       } else if (e.code === 'Escape') {
         this.escapedAt = performance.now();
         this.close();
@@ -159,7 +175,10 @@ export class ChatBox {
       }
     });
     this.input.addEventListener('keyup', (e) => e.stopPropagation());
-    this.input.addEventListener('blur', () => this.close());
+    // The in-game keyboard never focuses the input, so only the phone's (or a desktop's) keyboard closes on blur.
+    this.input.addEventListener('blur', () => {
+      if (!this.keys) this.close();
+    });
     setInterval(() => this.expire(), 5000);
     this.render();
   }
@@ -197,15 +216,158 @@ export class ChatBox {
     this.setUnread(0);
     this.input.classList.remove('hidden');
     this.root.classList.add('typing');
-    this.input.focus();
+    if (this.opts.soft?.()) {
+      this.keys = startKeys();
+      this.root.classList.add('soft');
+      this.input.readOnly = true;
+      addEventListener('keydown', this.hardKey, true);
+      addEventListener('keyup', this.hardKeyUp, true);
+    } else this.input.focus();
     this.render();
   }
 
   close(): void {
     if (!this.isOpen) return;
     this.input.classList.add('hidden');
-    this.root.classList.remove('typing');
+    this.root.classList.remove('typing', 'soft', 'native');
+    this.input.style.fontSize = '';
+    if (this.keys) {
+      this.keys = null;
+      this.input.readOnly = false;
+      removeEventListener('keydown', this.hardKey, true);
+      removeEventListener('keyup', this.hardKeyUp, true);
+    }
+    this.stopRepeat();
     this.input.blur();
+    this.render();
+  }
+
+  /** Sends what's typed. Closed first: a send can open the login panel, which takes the focus. */
+  private submit(): void {
+    const text = this.input.value.trim();
+    this.close();
+    if (text) this.opts.send(text);
+  }
+
+  private maxLen(text: string): number {
+    return text.startsWith('/') ? CMD_MAX_LEN : MAX_LEN;
+  }
+
+  /** The touch layout's buttons: the in-game keys, Send, ✕, the world filter and the tappable slash commands. */
+  private wireTouch(): void {
+    // pointerdown with preventDefault: a key acts at once and never takes the focus (which would close the phone's keyboard).
+    this.keysEl.addEventListener('pointerdown', (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-k]');
+      e.preventDefault();
+      if (!el) return;
+      const k = keyOf(el.dataset.k!);
+      if (!k || ('act' in k && k.act === 'native')) return;
+      el.classList.add('down');
+      // On the window: a press can redraw the keys (⇧, 123), and the finger lifts over the new ones.
+      const up = () => {
+        el.classList.remove('down');
+        this.stopRepeat();
+        removeEventListener('pointerup', up);
+        removeEventListener('pointercancel', up);
+      };
+      addEventListener('pointerup', up);
+      addEventListener('pointercancel', up);
+      this.press(k);
+      if ('act' in k && k.act === 'back') {
+        this.repeat = window.setTimeout(() => {
+          this.repeat = window.setInterval(() => this.press(k), REPEAT_MS);
+        }, REPEAT_DELAY_MS);
+      }
+    });
+    // The phone's keyboard opens only from a click (iOS counts it as the user's gesture), so 🌐 acts on click.
+    this.keysEl.addEventListener('click', (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-k="native"]');
+      if (el) this.toNative();
+    });
+    const tap = (sel: string, fn: () => void) =>
+      this.root.querySelector(sel)!.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        fn();
+      });
+    tap('.chat-send', () => this.submit());
+    tap('.chat-x', () => this.close());
+    tap('.chat-scope', () => {
+      this.onlyHere = !this.onlyHere;
+      this.render();
+    });
+    this.hint.addEventListener('pointerdown', (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-cmd]');
+      if (!el || !this.isOpen) return;
+      e.preventDefault();
+      this.input.value = `/${el.dataset.cmd} `;
+      this.input.maxLength = CMD_MAX_LEN;
+      if (this.keys) this.keys = { ...this.keys, text: this.input.value, shift: false };
+      this.cycle = null;
+      this.render();
+      if (!this.keys) this.input.focus();
+    });
+  }
+
+  private stopRepeat(): void {
+    clearTimeout(this.repeat);
+    clearInterval(this.repeat);
+    this.repeat = 0;
+  }
+
+  /** One in-game key. */
+  private press(k: Key): void {
+    if (!this.keys) return;
+    if ('act' in k && k.act === 'send') return this.submit();
+    this.keys = pressKey({ ...this.keys, text: this.input.value }, k, this.maxLen(this.input.value + ('ch' in k ? k.ch : '')));
+    this.input.value = this.keys.text;
+    this.cycle = null;
+    this.render();
+  }
+
+  /** A hardware keyboard (a tablet's) while the in-game keys are up: it types into the chat, not the game. */
+  private hardKey = (e: KeyboardEvent): void => {
+    if (!this.keys) return;
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const v = this.input.value;
+    if (e.key === 'Enter') this.submit();
+    else if (e.key === 'Escape') {
+      this.escapedAt = performance.now();
+      this.close();
+    } else if (e.key === 'Backspace') this.press({ act: 'back' });
+    else if (e.key === 'Tab') {
+      if (!this.complete(e.shiftKey ? -1 : 1) && !v.startsWith('/')) this.onlyHere = !this.onlyHere;
+      this.keys = { ...this.keys, text: this.input.value };
+      this.render();
+    } else if (e.key.length === 1 || [...e.key].length === 1) {
+      if (v.length >= this.maxLen(v + e.key)) return void e.preventDefault();
+      this.input.value = v + e.key;
+      this.keys = { ...this.keys, text: this.input.value, shift: false };
+      this.cycle = null;
+      this.render();
+    } else return;
+    e.preventDefault();
+  };
+
+  private hardKeyUp = (e: KeyboardEvent): void => {
+    if (this.keys) e.stopPropagation();
+  };
+
+  /**
+   * 🌐: the phone's own keyboard, for emoji, other languages and voice typing. Its text is sized to at least 16 real
+   * pixels (the touch layout is scaled down), or iPhones zoom the page into the field; the layout puts the field at
+   * the top, clear of the keyboard.
+   */
+  private toNative(): void {
+    if (!this.keys) return;
+    this.keys = null;
+    removeEventListener('keydown', this.hardKey, true);
+    removeEventListener('keyup', this.hardKeyUp, true);
+    this.input.readOnly = false;
+    this.root.classList.remove('soft');
+    this.root.classList.add('native');
+    this.input.style.fontSize = `${nativeFontPx()}px`;
+    this.input.focus();
     this.render();
   }
 
@@ -248,6 +410,26 @@ export class ChatBox {
       })
       .join('');
     this.renderHint();
+    this.renderTouch();
+  }
+
+  /** The touch layout's field (the typed text with a caret), keys and filter button. */
+  private renderTouch(): void {
+    if (!this.opts.soft?.()) return;
+    this.scope.textContent = this.onlyHere ? `📍 ${this.opts.mapName(this.opts.map())}` : '🌍 All worlds';
+    const text = this.input.value;
+    this.field.innerHTML = text ? `<span>${esc(text)}</span><i class="caret"></i>` : '<i class="caret"></i><span class="ph">Say something…</span>';
+    this.field.scrollLeft = this.field.scrollWidth;
+    const st = this.keys;
+    const drawn = st ? `${st.layer}:${st.shift}` : '';
+    if (drawn === this.drawnKeys) return;
+    this.drawnKeys = drawn;
+    if (!st) return void (this.keysEl.innerHTML = '');
+    const key = (k: Key) => {
+      const f = keyFace(k, st);
+      return `<button type="button" class="${f.cls}" data-k="${esc(keyId(k))}">${esc(f.label)}</button>`;
+    };
+    this.keysEl.innerHTML = [...ROWS[st.layer], BOTTOM].map((r) => `<div class="row">${r.map(key).join('')}</div>`).join('');
   }
 
   private renderHint(): void {
@@ -256,6 +438,12 @@ export class ChatBox {
     const matches = this.isOpen ? commandMatches(text) : null;
     const typed = this.isOpen ? typedCommand(text) : undefined;
     const current = this.cycle?.shown === text ? this.cycle.list[this.cycle.i] : undefined;
+    if (this.opts.soft?.()) {
+      // Touch: no keys to name, so only the commands, which a tap fills in.
+      const list = text === '' ? COMMANDS : matches;
+      this.hint.innerHTML = list?.length ? list.map((c) => `<button type="button" class="chat-cmd" data-cmd="${c.cmd}">/${c.cmd}</button> ${c.about}`).join(' · ') : '';
+      return;
+    }
     this.hint.innerHTML = !this.isOpen
       ? `Press <b>Enter</b> to chat${this.onlyHere ? ` · ${scope}` : ''}`
       : matches?.length
@@ -266,4 +454,10 @@ export class ChatBox {
             ? `<span class="chat-cmd">/${typed.cmd}</span> ${typed.about} · <b>Enter</b> send · <b>Esc</b> cancel`
             : `<b>Enter</b> send · <b>Esc</b> cancel${text.startsWith('/') ? '' : ` · <b>Tab</b> showing: ${scope}`}`;
   }
+}
+
+/** The phone keyboard's field text size in the scaled touch layout: 16 real pixels or more, so iPhones don't zoom. */
+export function nativeFontPx(): number {
+  const real = Math.max(screen.width, screen.height) || innerWidth;
+  return Math.max(22, Math.ceil((17 * innerWidth) / real));
 }

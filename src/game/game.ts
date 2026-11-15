@@ -564,6 +564,7 @@ export class Game {
       map: () => this.map.id,
       mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
       onUnread: (n) => this.touch?.setUnread(unreadLabel(n)),
+      soft: () => !!this.touch,
     });
     $('resume').addEventListener('click', (e) => {
       const acct = (e.target as HTMLElement).closest<HTMLElement>('#resume-fb, [data-acct]');
