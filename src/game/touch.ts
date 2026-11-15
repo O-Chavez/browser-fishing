@@ -172,33 +172,3 @@ export class TouchControls {
     if (ended && e.timeStamp - l.t < TAP_MS && Math.hypot(e.clientX - l.sx, e.clientY - l.sy) < TAP_PX) this.h.tap(e.clientX, e.clientY);
   }
 }
-
-/** Frames-per-second readout for testing on devices; tapping it toggles the lighter graphics mode. */
-export class FpsMeter {
-  private el = document.createElement('button');
-  private frames = 0;
-  private since = 0;
-
-  constructor(private lite: () => boolean, onToggle: () => void) {
-    this.el.id = 'fps';
-    this.el.addEventListener('click', () => {
-      onToggle();
-      this.since = 0;
-    });
-    document.body.append(this.el);
-  }
-
-  frame(now: number): void {
-    this.frames++;
-    if (!this.since) {
-      this.since = now;
-      this.frames = 0;
-      return;
-    }
-    if (now - this.since < 500) return;
-    const fps = Math.round((this.frames * 1000) / (now - this.since));
-    this.el.textContent = `${fps} fps · ${this.lite() ? 'lite' : 'full'} (tap to switch)`;
-    this.frames = 0;
-    this.since = now;
-  }
-}

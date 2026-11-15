@@ -27,7 +27,7 @@ import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
-import { FpsMeter, TouchControls, touchOnly } from './touch';
+import { TouchControls, touchOnly } from './touch';
 import { ChatBox, maskedEcho, secretPrompt, unreadLabel, type SecretPrompt } from './chatbox';
 import { DevPrompt } from './devprompt';
 import { FEEDBACK_MAX, FEEDBACK_WAIT_MS, FeedbackForm, OFFLINE_MSG, type FeedbackKind } from './feedback';
@@ -153,6 +153,8 @@ const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
 
 /** 'full' or 'lite', remembered per browser; unset means the device's default. */
 const GRAPHICS_KEY = 'fishing-graphics';
+/** Touch: how long a hotbar slot is held before it offers Drop. */
+const HOLD_TO_DROP_MS = 500;
 /** Times this tab reloaded to reconnect (`reconnect`), so a server that drops every join can't loop it. */
 const AUTO_RELOAD_KEY = 'fishing-auto-reload';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
@@ -169,7 +171,6 @@ export class Game {
   private touch: TouchControls | null = null;
   private touchMove = { x: 0, y: 0, sprint: false };
   private touchWoke = false;
-  private fps: FpsMeter | null = null;
   private shownPhase: Phase | '' = '';
   private power = 0;
   private powerDir = 1;
@@ -999,6 +1000,7 @@ export class Game {
         else this.sellSlot(i);
       } else if (this.touch && this.active && this.phase === 'idle') this.takeSlot(i);
     });
+    this.wireHoldToDrop();
     $('menu').addEventListener('mouseover', (e) => {
       this.tryOn(e.target as HTMLElement, true);
       this.showTip(e.target as HTMLElement, e as MouseEvent);
@@ -1201,7 +1203,6 @@ export class Game {
     });
     // iOS Safari ignores touch-action for pinch zoom; this stops it zooming the page mid-game.
     document.addEventListener('gesturestart', (e) => e.preventDefault());
-    if (import.meta.env.DEV) this.fps = new FpsMeter(() => this.world.isLite, () => this.toggleGraphics());
   }
 
   /** A tap on the open view: at a casino table it plays the piece under the finger. */
@@ -1321,7 +1322,13 @@ export class Game {
 
   /** The number keys for fish slots, for hints: "3-5", or more with the Tackle Vest. */
   private get fishKeys(): string {
-    return `${FISH_SLOT + 1}-${Math.min(9, this.s.slots.length)}`;
+    return this.touch ? 'tap one in your hotbar' : `${FISH_SLOT + 1}-${Math.min(9, this.s.slots.length)}`;
+  }
+
+  /** "Click" on desktop, "Tap" on touch (`lower` for mid-sentence). */
+  private clickWord(lower = false): string {
+    const w = this.touch ? 'Tap' : 'Click';
+    return lower ? w.toLowerCase() : w;
   }
 
   /** Number keys: take that hotbar slot in hand. */
@@ -1332,6 +1339,62 @@ export class Game {
     this.net.send({ t: 'slot', i });
     this.refreshHud();
     this.persist();
+  }
+
+  /**
+   * Touch: holding a hotbar slot takes it in hand and offers a Drop button over it (G on desktop). Two steps, so a
+   * slow tap never throws an item away.
+   */
+  private wireHoldToDrop(): void {
+    const ask = document.createElement('button');
+    ask.id = 'dropask';
+    ask.className = 'hidden';
+    $('hud').append(ask);
+    let timer = 0;
+    let hideTimer = 0;
+    let start: { x: number; y: number } | null = null;
+    const hide = () => {
+      ask.classList.add('hidden');
+      clearTimeout(hideTimer);
+    };
+    const cancel = () => {
+      clearTimeout(timer);
+      start = null;
+    };
+    $('hotbar').addEventListener('pointerdown', (e) => {
+      if (!this.touch) return;
+      const slot = (e.target as HTMLElement).closest<HTMLElement>('.slot');
+      const i = Number(slot?.dataset.i);
+      if (!slot || !Number.isInteger(i) || slot.classList.contains('sellable') || !this.s.slots[i]) return;
+      start = { x: e.clientX, y: e.clientY };
+      timer = window.setTimeout(() => {
+        start = null;
+        if (!this.active || this.phase !== 'idle' || this.spin || this.map.sea) return;
+        this.takeSlot(i);
+        const item = this.s.slots[i];
+        if (!item) return;
+        const r = slot.getBoundingClientRect();
+        ask.textContent = `Drop ${itemName(item)}`;
+        ask.style.left = `${r.left + r.width / 2}px`;
+        ask.style.top = `${r.top - 12}px`;
+        ask.classList.remove('hidden');
+        navigator.vibrate?.(15);
+        clearTimeout(hideTimer);
+        hideTimer = window.setTimeout(hide, 4000);
+      }, HOLD_TO_DROP_MS);
+    });
+    $('hotbar').addEventListener('pointermove', (e) => {
+      if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) cancel();
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) $('hotbar').addEventListener(ev, cancel);
+    ask.addEventListener('click', () => {
+      hide();
+      if (this.active && this.phase === 'idle') this.dropHeld();
+    });
+    // Any other tap puts the question away.
+    addEventListener('pointerdown', (e) => {
+      if (e.target !== ask && !(e.target as HTMLElement).closest?.('#hotbar')) hide();
+    }, true);
   }
 
   private dropHeld(): void {
@@ -2236,10 +2299,10 @@ export class Game {
         const name = byId(FISH, held.fishId).name;
         const chips = chipsFor(eco.fishValue(held));
         // The trade prompt: exactly what a click on the chip tray will do.
-        if (chips >= 1) lines.push(`<span class="trade${onTray ? ' ready' : ''}"><kbd>Click</kbd> ${onTray ? '' : 'the chip tray '}to trade <b>${name}</b> for <b>${chips}</b> chips</span>`);
+        if (chips >= 1) lines.push(`<span class="trade${onTray ? ' ready' : ''}"><kbd>${this.clickWord()}</kbd> ${onTray ? '' : 'the chip tray '}to trade <b>${name}</b> for <b>${chips}</b> chips</span>`);
         else lines.push(`<b>${name}</b> is worth ${chips} chips. Win it bigger at a table first.`);
-      } else lines.push('Hold a fish (<kbd>1</kbd>-<kbd>5</kbd>) to trade it for chips.');
-      if (this.aim?.k !== 'cash') lines.push('<span class="muted">Prize case: click it, or press <kbd>E</kbd></span>');
+      } else lines.push(this.touch ? 'Hold a fish (tap one in your hotbar) to trade it for chips.' : 'Hold a fish (<kbd>1</kbd>-<kbd>5</kbd>) to trade it for chips.');
+      if (this.aim?.k !== 'cash') lines.push(`<span class="muted">${this.touch ? 'Prize case: tap it' : 'Prize case: click it, or press <kbd>E</kbd>'}</span>`);
       const html = lines.join('<br>');
       if (html !== this.tableHtml) {
         this.tableHtml = html;
@@ -2263,7 +2326,7 @@ export class Game {
     }
     if (this.casinoMsg) lines.push(this.casinoMsg);
     // What E (or a click) plays is in the prompt; roulette needs a colour aimed at first.
-    if (!this.aim && !busy && t === 'roulette') lines.push('<span class="muted">Aim at red, black or green, then press <kbd>E</kbd> or click to bet.</span>');
+    if (!this.aim && !busy && t === 'roulette') lines.push(`<span class="muted">${this.touch ? 'Tap red, black or green on the table to bet.' : 'Aim at red, black or green, then press <kbd>E</kbd> or click to bet.'}</span>`);
     const html = lines.join('<br>');
     if (html !== this.tableHtml) {
       this.tableHtml = html;
@@ -2817,7 +2880,7 @@ export class Game {
       ${fish.sea && this.fightAt ? catchPearlsHtml(this.fightAt.zone, this.fightAt.marker, { tag: this.fightTag, legend, shiny }) : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.legendCard ? `<div class="piece">${escapeHtml(this.legendCard.card)}</div>` : ''}${zoneLine ? `<div class="piece zone" style="--c:${COS_RARITY_COLOR[zoneTier]}">${escapeHtml(zoneLine)}</div>` : ''}${this.rankButtons()}
-      <div class="muted">Click to release your hold</div>`;
+      <div class="muted">${this.clickWord()} to release your hold</div>`;
     el.classList.remove('hidden');
     // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
     el.style.animation = 'none';
@@ -3042,7 +3105,6 @@ export class Game {
       this.shownPhase = this.phase;
     }
     if (this.touch) this.updateTouch();
-    this.fps?.frame(now);
     requestAnimationFrame(this.loop);
   };
 
@@ -4092,12 +4154,12 @@ export class Game {
         ${intro}
         <div class="smoker-h"><h4>Smoker · ${busy} of ${SMOKER_SPOTS} in use</h4>${all}</div>
         <div class="spots">${s.smoke.spots.map((sp) => this.spotCard(sp, now)).join('')}</div>
-        <p class="foot">Click a fish in your hotbar to put it on the smoker, or Smoke all (it skips shinies). Smoked fish go to your Pantry, even while you're away.</p>
+        <p class="foot">${this.clickWord()} a fish in your hotbar to put it on the smoker, or Smoke all (it skips shinies). Smoked fish go to your Pantry, even while you're away.</p>
       </div>${this.smokerDetail()}</div>`;
   }
 
   private spotCard(sp: SaveData['smoke']['spots'][number], now: number): string {
-    if (!sp) return `<div class="spot"><span class="ic">🪵</span><b>Empty</b><span>Click a hotbar fish</span></div>`;
+    if (!sp) return `<div class="spot"><span class="ic">🪵</span><b>Empty</b><span>${this.clickWord()} a hotbar fish</span></div>`;
     const f = byId(FISH, sp.fish.fishId);
     const from = sp.doneAt - smokeSeconds(f.tier) * 1000;
     const done = sp.doneAt <= now;
@@ -4655,7 +4717,13 @@ export class Game {
   // ---------- Settings ----------
 
   private settingsHtml(): string {
-    const keys: [string, string][] = [
+    const keys: [string, string][] = this.touch ? [
+      ['Left thumb', 'Walk: drag anywhere on the left; push to the edge to run'], ['Drag', 'Look around'], ['JUMP', 'Jump'],
+      ['Tap the prompt', 'Talk / interact'], ['Hold the big button', 'Charge a cast - let go in the gold zone for a perfect cast'],
+      ['Tap', 'Hook when the ! appears'], ['Hold', 'Reel - when the fish surges, keep the gauge green'],
+      ['Tap a slot', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['Hold a slot', 'Drop that item'],
+      ['🎒', 'Open your bag'], ['💬', 'Chat'],
+    ] : [
       ['W A S D', 'Walk'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Talk / interact'],
       ['Hold click', 'Charge a cast - let go in the gold zone for a perfect cast'], ['Click', 'Hook when the ! appears'],
       ['Hold click', 'Reel - when the fish surges, keep the gauge green'], ['1-5 / Scroll', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['G', 'Drop the item in hand'],
@@ -4797,7 +4865,7 @@ export class Game {
     }).join('');
     const sign = s.level >= DEEP_SEA_ROD.unlockLevel || s.seaRod ? `<p class="signpost">⛵ Deep sea gear: see Captain Reed on the west beach</p>` : '';
     return `<div class="cols"><div class="main">${sign}<h4>Rods</h4><div class="tiles">${rods}</div><h4>Line</h4><div class="tiles">${lines}</div><h4>Bait · packs of ${eco.BAIT_PACK}</h4><div class="tiles">${baits}</div>
-      <p class="foot">Rods and bait go to your tackle locker; equip them from your Bag (<kbd>Tab</kbd>). Line spools straight onto your rod.</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
+      <p class="foot">Rods and bait go to your tackle locker; equip them from your Bag (${this.touch ? '🎒' : '<kbd>Tab</kbd>'}). Line spools straight onto your rod.</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
   }
 
   private gearDetail(): string {
@@ -5138,10 +5206,10 @@ export class Game {
     if (this.tab === 'casino') {
       const n = cashOutSlots(this.s).length;
       const all = n ? this.btn(`Turn in all ${n} · ${this.chipsText(cashOutAllChips(this.s))} chips`, 'data-act="cashoutall"', 'ok') : '';
-      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> click one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} ${COIN} of fish value.</span>${all}</div>`;
+      return `<div class="strip"><span>🐟 <b>Turn in fish:</b> ${this.clickWord(true)} one in your hotbar below. 1 chip for every ${CHIP_COINS.toLocaleString()} ${COIN} of fish value.</span>${all}</div>`;
     }
     const total = fish.reduce((a, f) => a + eco.sellPrice(this.s, f), 0);
     const all = fish.length ? this.btn(`Sell all ${fish.length} · ${total.toLocaleString()} ${COIN}`, 'data-act="sellall"', 'ok') : '';
-    return `<div class="strip"><span>🐟 <b>Sell fish:</b> click one in your hotbar below${fish.length ? '' : ' (you have none right now)'}.</span>${all}</div>`;
+    return `<div class="strip"><span>🐟 <b>Sell fish:</b> ${this.clickWord(true)} one in your hotbar below${fish.length ? '' : ' (you have none right now)'}.</span>${all}</div>`;
   }
 }

@@ -732,14 +732,17 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .t-action.danger { color: #fff; background: var(--bad); box-shadow: 0 8px 0 #9c2b1b, 0 0 0 10px rgba(229,83,61,.35); }
 @keyframes hookFlash { to { transform: scale(1.1); box-shadow: 0 8px 0 var(--gold-dark), 0 0 0 16px rgba(255,201,51,.45); } }
 .t-jump { position: absolute; right: 262px; bottom: 54px; width: 96px; height: 96px; border: 0; border-radius: 50%; font: 900 17px Nunito, ui-rounded, system-ui, sans-serif; letter-spacing: .05em; color: var(--cream); background: var(--hud-bg); box-shadow: 0 0 0 4px var(--wood-600); }
-#fps { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 6px 12px; border: 0; border-radius: 10px; font: 800 16px ui-monospace, Menlo, monospace; color: #fff; background: rgba(0,0,0,.55); }
-#fps:empty { display: none; }
+/* Holding a hotbar slot offers Drop over it (wireHoldToDrop). */
+#dropask { position: fixed; z-index: 4; transform: translate(-50%, -100%); padding: 14px 24px; border: 0; border-radius: 16px; font: 900 22px Nunito, ui-rounded, system-ui, sans-serif; color: #fff; background: var(--bad); box-shadow: 0 5px 0 #9c2b1b, 0 10px 22px rgba(0,0,0,.35); white-space: nowrap; pointer-events: auto; -webkit-tap-highlight-color: transparent; }
+#dropask.hidden { display: none; }
 #rotate { display: none; position: fixed; inset: 0; z-index: 70; align-items: center; justify-content: center; text-align: center; background: rgba(8, 14, 22, .96); font-size: 64px; font-weight: 900; line-height: 1.2; }
 #rotate b { display: block; font-size: 180px; color: var(--gold); }
 #rotate small { display: block; margin-top: 16px; font-size: 40px; font-weight: 700; color: var(--cream-muted); }
 @media (orientation: portrait) { body.touch #rotate { display: flex; } }
 @media (prefers-reduced-motion: reduce) { .t-action.hook { animation: none; } }
 body.touch #chat .chat-hint { display: none; }
+/* No Esc key on a phone: the menu's close button is just the ✕. */
+body.touch #menu .close kbd { display: none; }
 /* ---------- touch chat (ChatBox with soft keys, src/game/softkeys.ts) ----------
    While typing, chat fills the screen over a light dim: the log at the left, the field and Send above our own
    keyboard (about 40% of the screen), ✕ and the world filter where the 💬 and 🎒 buttons sit. The world shows through

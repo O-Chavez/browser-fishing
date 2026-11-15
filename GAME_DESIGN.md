@@ -712,3 +712,12 @@ Today the server rolls the fish and size and enforces a minimum fight time, but 
 6. The Chef's Special: not built (TODO.md Ideas).
 7. Weekly Derby: not built.
 8. Later, not built: group charters and species mastery.
+
+## 39. Phones and tablets (touch)
+
+Planned with Oscar on 2026-11-15 (TODO.md, "Full mobile support"; the mobile spec at https://claude.ai/artifact/KV18eWyPMNJYvD8yJdvTHv). Touch mode turns on for touch-only devices (`(pointer: coarse) and (hover: none)`, `touchOnly` in `src/game/touch.ts`) or with `?touch`.
+
+- **Layout:** landscape only, one layout for phones and tablets; an upright phone gets "Turn your phone sideways". The page is laid out 1400px wide and scaled to the screen (`enableTouch`, `src/game/game.ts`), about 0.6x on an 844x390 phone, so sizes in the touch CSS are in that layout.
+- **Controls:** a floating move stick wherever the left thumb lands (push to the edge to run), drag anywhere else to look, the big action button (cast, hook, reel, bet), JUMP, 💬 and 🎒 top right. The E prompt is tapped. Casino table pieces are tapped. Tapping a hotbar slot takes it in hand; holding one for half a second offers a Drop button over it (G on desktop; `wireHoldToDrop`). Settings > Controls lists the touch controls.
+- **Wording:** "Tap" where desktop says "Click", "tap one in your hotbar" for the number keys, no Esc or Tab keys named (`clickWord`, `fishKeys`).
+- **Chat:** typed with the in-game keyboard (§30, "Typing on touch").

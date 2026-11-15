@@ -86,7 +86,7 @@ export function smokeAll(s: SaveData, now: number): string | null {
   if (!smokerOpen(s)) return `Mags opens up at level ${SMOKE_LEVEL}.`;
   if (freeSpot(s) < 0) return 'The smoker is full. A spot frees up when a fish is done.';
   const slots = smokeAllSlots(s);
-  if (!slots.length) return s.slots.some((x) => x?.k === 'fish') ? 'Smoke all skips shinies: click one to smoke it anyway.' : 'No fish in your hotbar.';
+  if (!slots.length) return s.slots.some((x) => x?.k === 'fish') ? 'Smoke all skips shinies: pick one in your hotbar to smoke it anyway.' : 'No fish in your hotbar.';
   for (const i of slots) {
     const item = s.slots[i] as FishItem;
     s.smoke.spots[freeSpot(s)] = { fish: item, doneAt: now + smokeSeconds(byId(FISH, item.fishId).tier) * 1000 };
