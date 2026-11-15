@@ -133,7 +133,7 @@ const CAMP_TIPS = [
   'Tip: when a fish surges, keep the gauge green: ease off before the red, tighten before it takes your line.',
   `Tip: a fish landed without fraying the line is a clean catch, worth ${Math.round(eco.CLEAN_BONUS * 100)}% more.`,
   'Tip: shiny fish fight harder but sell for 5×.',
-  'Tip: the Lucky Wheel in Casino Cove can make a fish worth four times as much... or take it.',
+  'Tip: the Lucky Wheel in Casino Cove can make a fish worth five times as much... or take it.',
   'Tip: bigger rods and better bait attract rarer fish.',
   `Tip: the gate to Casino Cove opens at level ${CASINO_LEVEL}.`,
 ];

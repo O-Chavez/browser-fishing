@@ -501,94 +501,61 @@ Players who enjoy the game can tip Oscar on Ko-fi (`KOFI_URL` in `src/data/suppo
 - **Linking a tip to a player:** Ko-fi posts each tip to `POST /kofi`. The server checks Ko-fi's verification token (`KOFI_VERIFY_TOKEN`; with it unset, every request is turned away), then looks for a Lakeside name written in the tip message as a whole word, falling back to the tipper's Ko-fi name. A message naming several players matches nobody. A matched player gets the heart at once, everyone gets the new supporters list, and the player, if online, a thank-you notice. Retries of the same Ko-fi message id are ignored. The tipper's email is never read.
 - **Discord and the dev console:** `DISCORD_TIPS_WEBHOOK` gets one message per tip (amount, Ko-fi name, message, and who got the heart, or a reminder to give it by hand). `/supporter <name>` in the dev console gives the heart; `/supporter <name> off` takes it away.
 
-## 38. Endgame (planned)
+## 38. Endgame
 
-Planned 2026-10-30; the build steps are the "Endgame step N of 8" items in TODO.md. Step 1 (§38.4) is built. Step 2, the Smokehouse (§38.2), has a v1 on the `smokehouse` branch and is being reworked there before it merges; the rest are not built.
+Planned 2026-10-30. Built today: titles, level rewards and levels past 50 (§38.4), the Smokehouse's snacks and dishes (§38.2), and charters (§38.1, rebuilt since the plan). Not built: the Weekly Derby (§38.3), server-checked fights (§38.5), the Chef's Special, the Smokehouse's spices and group charters (TODO.md Ideas).
 
 **The problem:** everything unlocks by level 15 (~3,200 XP). Levels 16-50 take ~66,000 more XP (~1,000 catches with top gear) and give nothing, and a maxed player earns ~1,100-3,100 coins a catch with little left to buy once the cosmetics and casino perks (455 chips) are owned. Coins, fish, XP and chips all stop mattering at about the same time.
 
 **The plan:** four loops that feed each other, with no resets or prestige (decided).
 
-- **Charters** (§38.1) are the endless ladder: they spend coins and give sea fish.
-- **The Smokehouse** (§38.2) turns spare fish, cheap ones included, into snacks and dishes: buffs that earn more coins and help push deeper.
+- **Charters** (§38.1) are the endless ladder: they cost a fee and coins for the rod and the hold, and give sea fish, coins and Black Pearls.
+- **The Smokehouse** (§38.2) turns spare fish, cheap ones included, into snacks and dishes: buffs that earn more coins, XP and shinies. Their planned help for charters (spices) is shelved.
 - **The Weekly Derby** (§38.3) gives a reason to log in each week.
 - **Titles, level rewards and levels past 50** (§38.4) give the long tail.
 
 ### 38.1 Deep-water charters
 
-Two goals (decided 2026-10-30): charters get harder but never impossible, and every trip gives the player something good and a clear next thing to go for.
+**Built** (2026-11-01 to 2026-11-14), and changed a lot from the first plan, which had numbered levels, fares, a fixed number of casts, provisions, Sea Legs and a fast track. Play tests replaced it with "a place to earn" (REELING.md, "A place to earn" and "The hold and the coin retune"). The numbers live in `src/data/dive.ts` and REELING.md, so this section gives the rules and a few headline figures. The words on screen are charter, zone, hold, fee, Easy / Fair / Tough / Too much, rod steps, boat parts, markers (Abyss only), Cast off and Head home.
 
-**As built, the trip differs from the plan below** (REELING.md, "A place to earn", merged 2026-11-13): the sea is a place to earn. A charter is fished in one zone and fills a hold of landed fish for Reed's fee (line and spools until 2026-11-14; REELING.md, "The hold and the coin retune"): 10 fish to start and 5 more with each hold level Reed sells as a zone opens, up to 30, and a fish that gets away takes no place; fish pay coins and Black Pearls by zone, from the Drop-off on about twice the coins of the zone before; coins buy the hold's levels and the Deep Sea Rod's eight steps, pearls buy the four boat parts that open zones; only the Abyss has markers, endless rod levels and the Furthest Out board. **The boost** (2026-11-13; REELING.md, "The boost"; PLAYTEST.md): playing charters straight is the slow base loop, and Shiny Lures are how a player speeds it up. A shiny sea fish pays five times the coins and the pearls, the lure costs the same in every zone, and Reed's chart counts the charters to the next boat part plain and with Shiny Lures and shows the lures held with their switch. The boat parts cost 25 / 150 / 3,000 / 25,000 pearls, so the plain path to the Abyss is about 8.5 hours and a lured one about 5. `/lakestats` in the dev console reports chips per lake hour from real play, to check the prices. The plan's zone twists, milestones, titles and boat comforts are still to come (TODO.md).
+Two goals (decided 2026-10-30): charters get harder but never impossible, and every charter gives the player something good and a clear next thing to go for. The second goal is why the sea became a place to earn, with pay by place.
 
-**The gear** (as built, 2026-11-01): charters need the **Deep Sea Rod**, bought once at Marlow's stall's Sea gear tab (level 20, 100,000 coins: the next grind after the Aurora Rod), which is what pays for charter access. It stays on Reed's boat and is the only thing in hand at sea (the hotbar waits as it was until home), and comes with the Deep Sea Line; both level with Black Pearls (REELING.md, "Decisions so far"). The Aurora Rod is the pond's top rod.
+**Captain Reed and the harbour**
+- Captain Reed stands at the quay's west end, with his seaplane in the cove. His chart is the charter menu: the zones, what a fish pays, the fee, the Deep Sea Rod, the boat parts, the hold, and a Wardrobe tab (below). A charter runs as an instance: **Cast off** leads to the player on a boat in the sea.
+- The player needs the **Deep Sea Rod** (level 20, 100,000 coins; `DEEP_SEA_ROD`). It is the only thing in hand at sea, and the hotbar waits as it was until home. Casts at sea use no bait, because Reed's boat has it.
 
-**The trip**
-- A new map, run as an instance. Captain Reed sells the trip; a loading screen leads to the player on a boat in rough ocean, which gets rougher with depth (bigger swell rocking the boat, wind, rain, a darker sky, fog, lightning far down).
-- A fare buys **8 casts at Depth N**, with the boat's bait included. Catches go into the boat's 8-fish hold, not the hotbar, so a trip never stops on "slots full". The hold's fish come home with the player at the end.
-- **Landing 3 of the 8 opens Depth N+1.** There is no last depth.
+**Zones** (`ZONES`): The Shelf, The Drop-off, Kelp Deep, The Twilight and The Abyss. Each has its own sea, sea species and legends. Zone fish run 0.8 of a tier harder with each zone out (`SEA_TIERS`). A zone reads **Easy, Fair, Tough or Too much** for the player's rod (`ratingOf`, `RATING`). After a rod step the same water gets easier and pays more, as at the lake.
 
-**Why depth can't just raise `difficulty`.** A reel bot (scratch simulation, 2026-10-30: reels unless the fish surges, 0.25 s reaction) lands ~100% of fish up to difficulty 2.4, ~90% at 2.5, 0-40% at 2.8 and 0% at 3.2, whichever simple strategy it plays. Today's hardest fight (a shiny Starweaver Eel on the Aurora Rod with gloves) is about 2.15. The fight goes from easy to impossible over a few tenths, so charter fish keep their `difficulty` under ~2.3, and depth works through separate levers that are tuned against the bot.
+**The hold and the fee**
+- A charter fills a **hold** of landed fish (`HOLD`): 10 fish to start, then 15 / 20 / 25 / 30. A fish that gets away takes no place. When the hold is full the charter waits at sea for **Head home** ("Hold's full"). Four minutes is the shortest a charter should go.
+- Captain Reed sells each bigger hold for coins once the next zone is open (25,000 / 300,000 / 8,000,000 / 10,000,000). It is the place for spare coins, and makes charters longer, not faster.
+- Casting off costs a **fee** by zone, about two average fish (`CHARTER_FEE`): free on the Shelf, then 7,000 / 14,000 / 27,000 / 54,000 coins. It isn't refunded if the player heads home early.
 
-**The difficulty curve: harder, then level**
-- Depth sets a pressure from 0 to 1 that eases toward 1 (for example `1 - e^(-depth/20)`): steep early, flat later. Every depth lever goes from today's value to its own ceiling by that pressure, so by about depth 60 fights are at the ceiling and stay there. Past that, **rewards keep growing; difficulty doesn't.**
-- The ceiling is tuned so the bot (0.3 s reaction) lands about 60% at the ceiling against ~95% at depth 1. At 60% a 3-of-8 trip passes ~95% of the time; a weaker player landing 35% still passes ~57%.
-- Depth comes in **zones**, each with its own sea and one new twist, so it gets harder in new ways, not only by bigger numbers:
+**Two kinds of money** (the lake and the sea feed each other)
+- **Coins** buy the hold's levels and the rod. From the Drop-off on, a zone's fish pay about twice the coins of the zone before (about 1,470 coins a fish on the Shelf, 27,200 in the Abyss).
+- **The Deep Sea Rod** has one track (`ROD`): eight **rod steps** of 0.4 of a tier, two a zone, on sale once the zone is open (50,000 coins for the first, 8,400,000 for the last), then endless **Abyss levels** of a tenth of a tier from 1,750,000 coins, each 12% dearer. The rod's tip glows a new colour as it levels.
+- **Black Pearls** only come from sea fish (1 / 3 / 8 / 20 / 50 a fish by zone, double for a Feisty or Brutish fish, five times for a legend or a shiny; `PEARLS`). They buy the four **boat parts** that open the zones (`BOAT_PARTS`): Storm sail (25 pearls, opens the Drop-off), Kelp cutter (150), Deep lamps (3,000) and Iron keel (25,000). The screens show pearls as progress to the next part, not as a purse.
 
-| Zone | Depths | Sea | New twist |
-|---|---|---|---|
-| The Shelf | 1-5 | Choppy, grey-blue | None: today's fights, learn the trip |
-| The Drop-off | 6-15 | Wind and spray | Longer fights: more reeling per fish |
-| Kelp Deep | 16-30 | Rain, green water | Runs: now and then a fish takes line in a long pull; ease off and ride it |
-| The Twilight | 31-50 | Dark, fog | A shorter snap window and faster surges |
-| The Abyss | 51+ | Storm, lightning | All levers at the ceiling; the fight stops getting harder |
+**The pace.** Played straight, the Abyss opens after about 8.5 hours of charters; with Shiny Lures, about 5. The first two zones come fast (the Drop-off after about 8 minutes) as a taste of the ladder. The checks are in `scripts/seaeconomy.ts` and REELING.md, and `/lakestats` in the dev console reports chips per lake hour from real play.
 
-**Hard, but always feasible** (decided 2026-10-30: the Smokehouse is optional, but it is what makes the deeper zones doable)
-- The Shelf and the Drop-off are comfortable on skill alone. From Kelp Deep down, each zone's twist is tuned to be steep without that zone's provision (§38.2) and fair with it.
-- **Never locked out:** every provision a zone needs is smoked from pond fish or from fish of a zone already passed, so a stuck player can always go back and make it. Going back also pays: the earlier zones stay worth fishing.
-- **No lost progress:** a failed trip keeps your best depth; you try the same depth again, or any depth you've reached.
-- **Sea Legs:** each failed trip at a depth makes fights there 5% easier, up to 20%, until you pass it ("🌊 Sea Legs II: fights here are 10% easier"). It resets once the depth is passed.
-- **Easing has a cap:** Sea Legs, Pike Jerky and the Fighting Chair together ease a fight by at most ~35%, so depth still means something.
+**The boost: Shiny Lures.** Playing charters straight is the slow base loop. A Shiny Lure from the Prize Counter (15 chips for 3 casts, the same in every zone) makes the fish a shiny, which pays five times the coins and the pearls. Reed's chart counts the charters to the next boat part plain and with lures, and shows the lures held with their switch. Lakeside chips feed the sea, and the sea's coins feed the rod.
 
-**Reasons to keep going**
-- **Every trip pays.** Fish are worth +12% per depth, so a trip that lands a fish or two still earns back much of its fare, and a good one about doubles it.
-- **Fast track:** landing 6 of 8 skips a depth (+2) and a clean 8 of 8 skips two (+3) with a bonus, so skilled players don't grind easy depths and every trip can go better than "pass".
-- **Milestones:** first time at every 5th depth, a coin chest; entering a zone, a title (Shelf Runner, Drop-off Diver, Kelp Diver, Twilight Angler, Abyss Walker); past 50, every 10th depth is a new mark on the board ("Abyss 70").
-- **Things to find:** each zone adds 1-2 sea species to the Fishdex and has one rare zone legend (about 1 cast in 40) worth a lot. Size ranges grow with depth, so personal records keep breaking.
-- **Boat upgrades**, a coin sink with visible progress, a few levels each: Fighting Chair (+reel control), Sonar (shows the bite's tier before the hook), Bigger Hold (10 casts per fare), Storm Canopy (calms the camera sway).
-- **Being seen:** the all-time Deepest Charter board, the weekly deepest for the Derby, and a chat line when someone enters a new zone.
-- **Ingredients:** sea fish go on Mags's smoker like pond fish, and some make the charter spices (§38.2).
+**The Abyss.** Only the Abyss has **markers** (`MARKER`): every third fish landed reaches the next marker, each a tenth of a tier harder and 12% richer in coins and pearls, numbered from 1. A charter there fills a hold like any other, climbing markers as it goes. Each player's furthest marker goes on the **Furthest Out** board by Reed's lane. The Abyss is where the endless play lives.
 
-**Smokehouse hooks** (planned with the Smokehouse rework, 2026-10-30; settle the details when charters are planned). The Smokehouse is optional, but it is how a stuck player gets deeper, so the trip has to point there:
-- **Spices are the charter lever.** Each charter challenge has a spice that answers it (⚓ Storm Pepper: fights 15% easier). When charters add a new mechanic (runs, a shorter snap window), a spice for it comes with it. Some are made from sea fish, so trips feed back into Mags's kitchen.
-- **Casino perks lead in:** charters open (level 20) while most players are still buying casino perks, and the Quick-Reel Gloves matter most from Kelp Deep. Reed says so ("Those gloves'll help when we hit the kelp").
-- **Packing:** before the trip, at Reed, the player packs spiced dishes from the Pantry into the provision slots. The picker marks the spice that helps at the target depth. If the player has none, it says where it comes from ("Storm Pepper: Mags sells it").
-- **Failure card:** a failed trip names that spice next to the Sea Legs line.
-- **Sea fish smoke like pond fish.** Their tier sets their buff, like pond fish; any sea-only effect is decided with the sea species.
-- **Tests:** "with the zone's provision" in the reel-bot tests means a dish with that zone's spice is packed. The trip summary credits what each packed dish did.
+**Legends and Reed's Wardrobe.** Each zone has rare legends (about 1 bite in 20, a long hard fight, worth a fortune); the Abyss has the Leviathan, the Dreamer and the Kraken. Each landing of a sea legend unlocks the next piece of its set, which Captain Reed sells for coins in the Wardrobe tab of his menu. **Built so far:** the Kraken's set (Crown, Armor, Beak and a Hatchling pet, the Abyssal rarity; §15 and §33, with the five-family outline in TODO.md). The other legend sets are not built.
 
-**Positive feedback while playing**
-- A trip HUD: "Depth 14 · 2 of 3 landed · 5 casts left".
-- The third fish: a ship's bell, Reed calls "That's our quota! Depth 15 opens!", the sea calms for a moment and a banner shows.
-- A trip summary card: fish landed, coins earned against the fare, records broken, depth opened, and always the next goal ("Next: Depth 16, Kelp Deep: 2 new species and a title").
-- A failure says how close it was and what helps: "One fish short. Sea Legs I: fights at Depth 14 are 5% easier next trip."
-- Sound and sky change at each zone, so going deeper feels like getting somewhere.
-
-**Tuning and safeguards**
-- A reel-bot test in `npm test` guards the curve, with a 0.3 s reaction. Packing the zone's provision, the bot lands at least 90% at depth 1 and 55% at depth 500. With no provisions it still lands at least 20% everywhere (hard, never zero). Neither curve drops more than a few points between neighbouring depths, so retuning a lever can't create a wall without failing the test.
-- The server counts trips, catches and passes per zone; a dev command (`/charters`) shows real players' rates, so the ceiling is tuned from play, not guessed.
-- The board's records need server-checked fights (§38.5).
-- Later: group charters, where friends share a boat and a depth.
+**Not built from the first plan:** Sea Legs, the fast track, milestone chests and zone titles, boat comforts (Fighting Chair, Sonar, Storm Canopy), packing provisions and charter spices (§38.2), the Captain's Feast, a weekly board for the Derby, zone chat lines, the reel-bot curve tests and group charters. TODO.md Ideas holds what is still wanted. The board's records need server-checked fights (§38.5).
 
 ### 38.2 Smokehouse
 
-**Status:** v1 was built 2026-10-30 on the `smokehouse` branch: Mags's shack, the menu, the Pantry and online-time buffs. Oscar's demo found the multi-fish racks too slow. After two rounds of planning, Oscar settled on a simpler model in three stages, written up below, which replaced v1's racks and recipes. R1 (the smoker, snacks and stages) and R2 (dishes) are built, after which it merges and players test it at the pond before charters exist. R3 (charter spices) comes with charters (TODO.md).
+**Status:** built and merged. R1 (the smoker, snacks and stages) and R2 (dishes) are on main; v1's racks and recipes were replaced by the three-stage model below. **Not built:** R3, the spices (Hickory and Chili for the pond, charter spices) and packing dishes for charters at Reed. They are shelved; the "Smokehouse R3" idea in TODO.md holds them. Charters were built without them (§38.1).
 
 **Why it exists**
 - **Before the endgame:** a use for the cheap fish everyone sells for a few coins, so no catch is wasted.
-- **In the endgame:** a steady boost to coins and XP per hour, and, with charters, what gets a player past a hard depth.
+- **In the endgame:** a steady boost to coins and XP per hour. Charter spices to help a player through a hard zone were planned too, and are shelved.
 - **Kept simple on purpose** (Oscar, 2026-10-30): three buffs, one for each thing the player is grinding at that stage.
 
-**The loop:** catch, then smoke the fish (seconds). Sell it smoked for more, eat it as a **snack**, or cook smoked fish into a **dish** that gives several buffs at once. With charters, a **spice** (coins) added to a dish will make it last longer, hit harder or help on a trip.
+**The loop:** catch, then smoke the fish (seconds). Sell it smoked for more, eat it as a **snack**, or cook smoked fish into a **dish** that gives several buffs at once. A **spice** (coins) added to a dish was planned to make it last longer or hit harder, or to help on a charter; spices are shelved (below).
 
 **Three stages, each opened by a first catch** (decided 2026-10-30). The stages are named after their fish, not early, mid and end (Oscar, 2026-10-30), because they all open by about level 12; "endgame" means charters only.
 
@@ -606,10 +573,10 @@ Two goals (decided 2026-10-30): charters get harder but never impossible, and ev
 | Phase | Levels | The grind | What the Smokehouse does |
 |---|---|---|---|
 | Gear | 1-15 | Levels and coins for rods and bait (the Aurora Rod is 20,000 coins at level 15) | ⭐ XP snacks, then 💰 dishes for the next rod |
-| Casino | 15 on | Chips for the perks: 455 chips, about 230 top-gear catches turned in without betting | ✨ and 💰 dishes speed the chips up; spices (with charters) will use up the coins that have nothing else to buy |
-| Charters | 20 on, endless | Depth | Charter spices get players past hard depths (R3) |
+| Casino | 15 on | Chips for the perks: 455 chips, about 230 top-gear catches turned in without betting | ✨ and 💰 dishes speed the chips up; spices (shelved) were meant to use up the coins that have nothing else to buy |
+| Charters | 20 on, endless | Zones and the rod | Nothing yet: charter spices (R3) are shelved |
 
-- **Charters overlap the casino, on purpose.** They open about 50 catches after level 15, about a quarter of the way through the perk grind. The Shelf and Drop-off need only skill. The hard zones start at Kelp Deep, about when a player has the Quick-Reel Gloves, so the perks become what carries a player through the hard zones.
+- **Charters overlap the casino, on purpose.** They open about 50 catches after level 15, about a quarter of the way through the perk grind, and the casino's Shiny Lures are the boost for charters (§38.1). The Quick-Reel Gloves help in the harder zones.
 - **No casino rework for now.** If the play test shows the chip grind is off, `CHIP_COINS` and the perk prices in `src/data/casino.ts` tune it.
 - **Buffs apply at catch, like the Lucky Charms** (Oscar, 2026-10-30). 💰 multiplies into the fish's `mult` when it lands (`land` in `src/game/economy.ts`), so it raises the chips a fish turns into as well as its sale price. ✨ makes more shinies, each worth 5× in coins or chips. That makes the Jewels & Spirits dishes the casino accelerator.
 
@@ -651,13 +618,13 @@ Every number in this section is a starting value, to be tuned in play.
 - **Each card shows the gain plainly:** "+50% XP · +30% coins · ×1.5 shinies · 15 min", next to what eating the fish one by one would give ("As snacks, one at a time: ⭐ +50% · 10 min, 💰 +15% · 10 min").
 
 **Spices (shelved to R3, with charters)**
-- **Shelved (Oscar, 2026-10-30):** R2 shipped Hickory and Chili with a picker in the Kitchen, but they were taken out before the merge to keep the play test to dishes alone. Pond and charter spices come back together with charters (R3). `/smokestats` will show whether players pile up coins with nothing to spend them on in the meantime.
+- **Shelved (Oscar, 2026-10-30):** R2 shipped Hickory and Chili with a picker in the Kitchen, but they were taken out before the merge to keep the play test to dishes alone. Pond and charter spices were to come back together with charters (R3); charters shipped without them and R3 is still shelved (TODO.md, "Smokehouse R3"). `/smokestats` will show whether players pile up coins with nothing to spend them on in the meantime.
 - **What they are:** bought from Mags with coins when cooking; one per dish, optional. They are the Smokehouse's coin sink.
 - **Pond spices:**
   - 🌰 **Hickory:** the dish lasts twice as long.
   - 🌶 **Chili:** the dish's buffs are a quarter stronger. On a multiplier it's the bonus that grows, so ✨ ×2 becomes ×2.25.
 - **Price:** set by the dish, the same for both spices; the shelved build used 100 coins (Fish Cakes), 500 (Angler's Supper), 5,000 (Jewel Platter) and 20,000 (Spirit Banquet). The aim is about a third of what a spice adds for a player at that gear, so it always pays back.
-- **Charter spices (R3):** each one answers a charter challenge, for example ⚓ **Storm Pepper:** fights 15% easier on a trip. When charters add a new mechanic (runs, a shorter snap window), a new spice answers it, so the Smokehouse grows with the charters without new systems. Some charter spices are made from sea fish instead of bought, which links the trips back to Mags.
+- **Charter spices (R3, not built):** the idea was that each one answers a charter challenge, for example ⚓ **Storm Pepper:** fights 15% easier at sea. Charters now rate each zone for the rod (Easy / Fair / Tough / Too much) and have no provisions, so this needs a new plan. Some were to be made from sea fish instead of bought.
 
 **Play-testing (after R2).** Players test it at the pond before charters exist. A `/smokestats` dev command shows whether it's working: fish smoked and sold by tier, snacks eaten, and dishes cooked and eaten, all by stage, plus the share of online players with a buff running. The counts are saved with the accounts (Oscar, 2026-10-30), so a redeploy doesn't wipe a multi-day play test. Watch night shinies: ✨ ×2 on the night's 15% is 30%.
 
@@ -673,7 +640,7 @@ Every number in this section is a starting value, to be tuned in play.
    - **Tip `snack`** on the first smoked fish: eat it from the Bag for more XP.
 3. **First tier 3 catch: the kitchen opens.** A banner, Fish Cakes unlocked, and Mags hands over one Fish Cakes to try. The tip names what to smoke for the next one ("3 tier 1 fish and your Golden Koi"). **Tip `dish`:** a dish combines its fish's buffs, stronger and longer.
 4. **First tier 4 catch, then tier 5:** the Jewel Platter, then the Spirit Banquet, each with a banner.
-5. **Charters (step 4):** charter spices. A failed trip's card names the spice that would help (§38.1, "Smokehouse hooks").
+5. **Charters:** charter spices and packing were planned here and are not built (shelved with R3).
 6. **Past level 50:** each level gifts the best dish unlocked.
 
 **From v1**
@@ -683,7 +650,7 @@ Every number in this section is a starting value, to be tuned in play.
   - The Pantry and its Bag section, HUD chips, and buffs ticking down in online time only on the server.
   - No eating in the casino, the server checks with the "Get closer" notice, dev `/smoke`, and level gifts going to the Pantry.
 - **Dropped:** multi-fish racks, rack times, loading over several trips, the five v1 recipes and their buffs (luck, reel control, the dusk bite), Prime trophy fish, Well-smoked ★ and the third rack.
-- **Later:** smoker upgrades and mastery are in TODO.md Ideas; the Chef's Special is still step 6.
+- **Later:** smoker upgrades and mastery are in TODO.md Ideas; the Chef's Special is not built.
 - **No save migration:** Smokehouse data has never shipped on main; only dev and demo saves need `cleanSmoke` to drop v1's racks.
 - **v1 details still useful**
   - Mags is stout, with a red headscarf and a leather apron over a rust shirt; warm but brisk.
@@ -699,7 +666,7 @@ Every number in this section is a starting value, to be tuned in play.
 
 ### 38.4 Titles, level rewards and levels past 50
 
-Built 2026-10-30 (step 1). With step 2 (on its branch), provision gifts go to the Smokehouse Pantry as the best dish unlocked; the charters, provision slots and fares wait for step 4. Decided 2026-10-30: a mix of titles, earned outfits and Smokehouse and charter unlocks; level titles are nautical ranks, because everyone knows their order, so a rank reads as progress at a glance.
+Built 2026-10-30 (step 1). Provision gifts go to the Smokehouse Pantry as the best dish unlocked. Charters are built (§38.1) but have no fares or provision slots, so the level 40 reward (a third provision slot) and the free charter fare every 5th level past 50 have nothing to do yet. Decided 2026-10-30: a mix of titles, earned outfits and Smokehouse and charter unlocks; level titles are nautical ranks, because everyone knows their order, so a rank reads as progress at a glance.
 
 - **Titles:** one is chosen in the Wardrobe and shown under the name tag and in the Anglers list. Level ranks, charter zone titles, and Derby titles all go in the same list.
 - **Before the ranks** (Smokehouse rework, §38.2): level 3 opens the Smokehouse. The kitchen and its dishes open on the first tier 3, 4 and 5 catches, each with a banner, and the next-goal HUD line names the level 3 unlock beforehand, so players meet the Smokehouse well before the endgame relies on it.
@@ -734,10 +701,10 @@ Today the server rolls the fish and size and enforces a minimum fight time, but 
 ### 38.6 Build order
 
 1. Titles, level rewards, no level cap (with back pay), shiny counts.
-2. Smokehouse: the three-stage rework replaced v1's racks. R1 (the smoker, snacks and stages) and R2 (the dishes) are built, after which it merges and is play-tested; R3 is the spices (pond and charter) and packing, built with step 4.
+2. Smokehouse: **built and merged.** The three-stage rework replaced v1's racks; R1 (the smoker, snacks and stages) and R2 (the dishes) are on main. R3, the spices (pond and charter) and packing, is **shelved, not built**.
 3. Server-checked fights.
-4. Charters v1: the instance, trips, zones and the difficulty curve with its bot tests, Sea Legs, fast track, milestones and zone titles, the trip HUD and summary card, the sea species, provision slots with the town recipes' charter effects, and the sea recipes. Big; may be split when planned.
-5. Charter rewards: boat upgrades, zone legends and the Captain's Feast, the Deepest Charter board, zone chat lines.
-6. The Chef's Special (the Spirit Feast becomes a charter spice in the Smokehouse's R3).
-7. Weekly Derby.
-8. Later: group charters and species mastery.
+4. Charters: **built, and changed from this plan** (§38.1). The instance, the five zones, the sea species, the hold and fee, the Deep Sea Rod's steps and Abyss levels, boat parts and Black Pearls, Shiny Lures as the boost, and Abyss markers. Not built: Sea Legs, the fast track, milestones and zone titles, provision slots and the sea recipes.
+5. Charter rewards: **partly built.** Zone legends, the Furthest Out board and the Kraken's set from Reed's Wardrobe are built (the other legend sets are planned in TODO.md). Boat comforts, the Captain's Feast and zone chat lines are not.
+6. The Chef's Special: not built (TODO.md Ideas).
+7. Weekly Derby: not built.
+8. Later, not built: group charters and species mastery.
