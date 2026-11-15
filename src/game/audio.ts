@@ -1,5 +1,6 @@
 import type { Rarity } from '../data/content';
 import { gloomAt, stormAt } from '../data/sea';
+import { chimeNow, gullCryWait, gullsAbout, rainLevel } from './seamix';
 
 /** Background music level; kept low so it sits under the lake ambience. */
 const MUSIC_VOL = 0.17;
@@ -18,6 +19,10 @@ export interface SeaSound {
   slam: number;
   /** The boat's heave against the long swell's height: -1 in a trough, 1 on a crest. */
   rise: number;
+  /** How dark it is (0..1): the gulls roost after dark. */
+  night: number;
+  /** Whether a marker's buoy has come alongside. */
+  buoy: boolean;
 }
 
 /** A looping filtered noise whose level and filter are set each frame. */
@@ -35,7 +40,7 @@ class AudioFX {
   private creakOsc?: OscillatorNode;
   private lake?: GainNode;
   private duck?: GainNode;
-  private sea?: { wash: Bed; hiss: Bed; wind: Bed; howl: Bed; gust: number; gustTo: number; lap: number; creak: number; cool: number; on: boolean };
+  private sea?: { wash: Bed; hiss: Bed; wind: Bed; howl: Bed; rain: Bed; patter: Bed; gull: number; buoy: boolean; gust: number; gustTo: number; lap: number; creak: number; cool: number; on: boolean };
 
   start(): void {
     if (this.ctx) {
@@ -422,7 +427,8 @@ class AudioFX {
     if (!s) {
       if (this.sea?.on) {
         this.sea.on = false;
-        for (const b of [this.sea.wash, this.sea.hiss, this.sea.wind, this.sea.howl]) b.g.gain.setTargetAtTime(0, t, 0.5);
+        this.sea.buoy = false;
+        for (const b of [this.sea.wash, this.sea.hiss, this.sea.wind, this.sea.howl, this.sea.rain, this.sea.patter]) b.g.gain.setTargetAtTime(0, t, 0.5);
         this.lake.gain.setTargetAtTime(1, t, 0.8);
         this.duck!.gain.setTargetAtTime(1, t, 0.8);
       }
@@ -433,6 +439,11 @@ class AudioFX {
       hiss: this.bed('bandpass', 1600, 0.6),
       wind: this.bed('bandpass', 450, 1.5),
       howl: this.bed('bandpass', 1000, 9),
+      // Rain on the deck: a soft hiss over a lower patter.
+      rain: this.bed('bandpass', 3400, 0.4),
+      patter: this.bed('bandpass', 1100, 0.7),
+      gull: 4 + Math.random() * 6,
+      buoy: false,
       gust: 0,
       gustTo: 0,
       lap: 1,
@@ -462,7 +473,22 @@ class AudioFX {
     sea.wind.g.gain.setTargetAtTime((0.012 + 0.025 * m + 0.11 * storm) * gust, t, 0.4);
     sea.howl.f.frequency.setTargetAtTime(850 + 500 * storm + 180 * sea.gust, t, 0.5);
     sea.howl.g.gain.setTargetAtTime(0.06 * storm * storm * Math.max(0, gust - 0.85), t, 0.4);
+    // Rain on the deck from Kelp Deep on, fading with the rain you see. Soft, under the wind.
+    const rain = rainLevel(s.mood);
+    sea.rain.g.gain.setTargetAtTime(0.05 * rain, t, 0.8);
+    sea.patter.g.gain.setTargetAtTime(0.03 * rain, t, 0.8);
     this.duck!.gain.setTargetAtTime(1 - SEA_MUSIC_DUCK * gloomAt(s.mood), t, 0.8);
+
+    // Gulls crying now and then while some are about on the Shelf.
+    const about = gullsAbout(s.mood, s.night);
+    sea.gull -= dt;
+    if (sea.gull <= 0) {
+      sea.gull = gullCryWait(about, Math.random());
+      if (about > 0) this.gullCry(0.6 + 0.4 * (about / 7));
+    }
+    // The marker buoy's bell as it comes alongside.
+    if (chimeNow(sea.buoy, s.buoy)) this.buoyBell();
+    sea.buoy = s.buoy;
 
     // Small waves slapping the hull, mostly heard when the sea is calm.
     sea.lap -= dt;
@@ -482,6 +508,43 @@ class AudioFX {
     if (sea.creak <= 0) {
       sea.creak = 0.6 + Math.random() * 2;
       if (m > 0.4) this.hullCreak(0.4 + 0.6 * storm);
+    }
+  }
+
+  /** A gull's cry far off: two or three thin falling whistles, panned to a random side and softened by distance. */
+  private gullCry(k: number): void {
+    const ctx = this.ctx!;
+    const t0 = ctx.currentTime + 0.02;
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = Math.random() * 1.6 - 0.8;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 3200;
+    lp.connect(pan).connect(this.master!);
+    const base = 1500 + Math.random() * 300;
+    const calls = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < calls; i++) {
+      const t = t0 + i * 0.3;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(base * 1.25, t);
+      o.frequency.exponentialRampToValueAtTime(base * 0.8, t + 0.24);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.018 * k, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+      o.connect(g).connect(lp);
+      o.start(t);
+      o.stop(t + 0.3);
+    }
+  }
+
+  /** The buoy's bell: a soft two-note chime with a little inharmonic shimmer, ringing out over a few seconds. */
+  private buoyBell(): void {
+    const t = this.ctx!.currentTime;
+    for (const [at, f, k] of [[0, 659, 1], [0.7, 523, 0.7]]) {
+      this.tone(f, f, 2.4, 0.035 * k, t + at);
+      this.tone(f * 2.76, f * 2.76, 1.1, 0.01 * k, t + at);
     }
   }
 
