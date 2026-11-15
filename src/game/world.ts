@@ -1061,15 +1061,19 @@ export class World {
       const wide = (alongZ ? w : d) - 0.1;
       const cx = (r.x0 + r.x1) / 2;
       const cz = (r.z0 + r.z1) / 2;
-      for (let s = 0; s < len; s += 0.28) {
-        const o = (alongZ ? r.z0 : r.x0) + s + 0.14;
+      // Planks about 0.28 m apart, fitted to the rect so the last one stops at its end: one that ran past it lay in
+      // the next rect's planks at the same height (the pier and jetty roots on the quay), and the two flickered.
+      const count = Math.round(len / 0.28);
+      const pitch = len / count;
+      for (let i = 0; i < count; i++) {
+        const o = (alongZ ? r.z0 : r.x0) + (i + 0.5) * pitch;
         const pos = alongZ ? [cx, o] : [o, cz];
         planks.setMatrixAt(
           n,
           m.compose(
             new THREE.Vector3(pos[0], 0.66, pos[1]),
             alongZ ? q : turn,
-            new THREE.Vector3(wide, 1, 0.25),
+            new THREE.Vector3(wide, 1, pitch - 0.03),
           ),
         );
         planks.setColorAt(
