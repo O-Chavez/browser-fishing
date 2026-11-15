@@ -4349,9 +4349,9 @@ export class Game {
       </div>${sel ? this.bagDetail(sel) : this.lookDetail()}</div>`;
   }
 
-  /** The Bag's panel before a tile is picked: your character, to turn with a drag (Oscar: nothing else under it). */
+  /** The Bag's panel before a tile is picked: your character, to turn with a drag, and a way into the Wardrobe. */
   private lookDetail(): string {
-    return `<aside class="detail look"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><div class="hero"><span class="ic" style="--c:var(--t1)">🪞</span><div><b>Your look</b></div></div></aside>`;
+    return `<aside class="detail look"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><div class="hero"><span class="ic" style="--c:var(--t1)">🪞</span><div><b>Your look</b></div></div>${this.btn('👕 View your wardrobe', 'data-tab="wardrobe"', 'plain')}</aside>`;
   }
 
   /** Charms and casino perks that are working for you, and what they add up to. */
