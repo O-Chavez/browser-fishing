@@ -2251,6 +2251,12 @@ export class Game {
     if (town) {
       town.setFound(this.s.bottles);
       const stand = this.map.harbour?.stand;
+      // The Furthest Out board: take a look at what charters are. Its spot is a step in front of the board's face.
+      const fb = this.map.harbour?.board;
+      if (fb) {
+        const df = Math.hypot(fb.x + Math.sin(fb.facing) - x, fb.z + Math.cos(fb.facing) - z);
+        if (df < 3) spots.push({ d: df, label: 'Furthest Out · take a look', act: () => this.openMenu('charters') });
+      }
       for (const npc of town.npcs) {
         // Captain Reed stands at the harbour's dive stand, and talking to him opens the trip panel.
         const reed = !!stand && npc.def.x === stand.x && npc.def.z === stand.z;
@@ -2315,7 +2321,6 @@ export class Game {
         { d: near(hub.leaderSpot), label: 'Top Anglers · see everyone online', act: () => this.openMenu('players') },
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         ...(hub.peekSpot ? [{ d: near(hub.peekSpot), label: 'Casino Cove poster · take a look inside', act: () => this.openMenu('peek') }] : []),
-        ...(hub.charterSpot ? [{ d: near(hub.charterSpot), label: 'Charters poster · take a look', act: () => this.openMenu('charters') }] : []),
         {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
           label: this.gateOpen
@@ -3511,7 +3516,7 @@ export class Game {
         el.innerHTML = this.peekHtml();
         break;
       case 'charters':
-        el.innerHTML = this.chartersPosterHtml();
+        el.innerHTML = this.chartersHtml();
         break;
       case 'news':
         el.innerHTML = newsHtml(this.newsGlance ?? NEWS, !!this.newsGlance);
@@ -4419,10 +4424,10 @@ export class Game {
   }
 
   /**
-   * The charter poster by the pond gate: what a charter is, with the Kraken, so players have charters to look forward
+   * The charters panel, opened from the Furthest Out board: what a charter is, with the Kraken, so players have charters to look forward
    * to while they level up toward the Deep Sea Rod; the last line says how far off theirs is.
    */
-  private chartersPosterHtml(): string {
+  private chartersHtml(): string {
     const s = this.s;
     const rod = DEEP_SEA_ROD;
     const left = rod.unlockLevel - s.level;

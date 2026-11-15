@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Remove the CHARTERS poster by the pond gate and move its explanation to the Furthest Out board (Oscar, 2026-11-13; done 2026-11-14, branch `charters-poster-to-board`)
+  - Removed `POSTERS.charters`, `charterSpot` and the poster's interaction (`src/game/hub.ts`, `src/game/game.ts`); the casino poster stays where it is (Oscar's call). The Furthest Out board now has "Furthest Out · take a look" (a step in front of its face, within 3 m), opening the same `charters` panel (`chartersHtml`, renamed from `chartersPosterHtml`); it sits 5 m from the CHARTERS arch and 8 m from Reed, so nothing else competes. GAME_DESIGN.md mentions it; smoke and screenshots never used the poster, README images don't show it
+  - Checked: headless screenshots of the pond gate (casino poster only), the board's prompt and the open panel; build, tests, smoke
 - [x] Stop the catch toasts spamming players: only announce another player's catch when it beats that player's own personal record (Oscar, 2026-11-14; done 2026-11-14, branch `catch-toast-records`)
   - Decided: another player's catch toasts only when it is bigger than that player's previous best of the species (the Fishdex record, `record` from `applyCatch`); a first catch of a species is no record, and `SaveData.best` doesn't count. The rare-or-better filter stays on top, so common and uncommon fish never announce. Shinies no longer always announce: a shiny announces only when it is also a rare+ record, and keeps its "✨ SHINY " prefix. The player's own catch card is unchanged
   - Built: the `hold` act carries `rec: true` (only when true) from `Room.land`, charter catches included (same path); `announcesCatch` in `economy.ts` is the toast rule, used by `onAct`; the `carry` act (held slot) never toasted. GAME_DESIGN.md (Shiny fish) updated
