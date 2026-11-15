@@ -199,7 +199,7 @@ export type ServerMsg =
   | { t: 'drops'; list: Drop[] }
   /** With a fish, `seed` and `d`, its gaps over the gear, set up its fight (`new Reel(d, mulberry(seed))`); the server replays the catch from them. */
   /** `b`: a sea fish's behaviour (not rolled while the foundation leaves variety off); `tag`: a Feisty or Brutish fish, pond or sea. */
-  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Gaps; b?: Behaviour; tag?: FishTag; tune?: ReelTune }
+  | { t: 'castok'; fishId: string | null; size: number; wait: number; shiny?: boolean; lured?: boolean; perfect?: boolean; spot?: string; seed?: number; d?: Gaps; b?: Behaviour; tag?: FishTag; tune?: ReelTune }
   | { t: 'castfail'; msg: string }
   | { t: 'wheel'; wedge: number; factor: number; ms: number }
   | { t: 'roulette'; pocket: number; color: RouletteBet; factor: number; ms: number }

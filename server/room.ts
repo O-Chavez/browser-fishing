@@ -33,6 +33,8 @@ interface Pending {
   fishId: string;
   size: number;
   shiny: boolean;
+  /** A Shiny Lure made it shiny (the catch card credits it). */
+  lured?: boolean;
   /** The fight's reel seed and gaps over the gear, sent with `castok`. */
   seed: number;
   d: Gaps;
@@ -959,7 +961,7 @@ export class Room {
     const lures = m.acct.save.lure;
     const roll = eco.rollCast(m.acct.save, map.locationId, this.rng, perfect, fishingSpot(m.info.x, m.info.z), m.dayFrac != null ? nightness(m.dayFrac) >= NIGHT_BITE : isNight(this.now() / 1000));
     if (m.acct.save.lure < lures) lakeOf(m.acct).lakeLures += lures - m.acct.save.lure;
-    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) } : null;
+    m.pending = roll.fishId ? { fishId: roll.fishId, size: roll.size, shiny: !!roll.shiny, ...(roll.lured ? { lured: true } : {}), seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) } : null;
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
     return true;
@@ -984,7 +986,7 @@ export class Room {
     const lake = lakeOf(m.acct);
     lake.seaLures += lures - s.lure;
     if (roll.fishId) lake.seaHooks++;
-    m.pending = { fishId: roll.fishId!, size: roll.size, shiny: !!roll.shiny, seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.b ? { b: roll.b } : {}), ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) };
+    m.pending = { fishId: roll.fishId!, size: roll.size, shiny: !!roll.shiny, ...(roll.lured ? { lured: true } : {}), seed: roll.seed!, d: roll.d!, biteAt: this.now() + roll.wait * 1000, ...(roll.b ? { b: roll.b } : {}), ...(roll.tag ? { tag: roll.tag } : {}), ...(roll.tune ? { tune: roll.tune } : {}) };
     m.conn.send({ t: 'castok', ...roll });
     this.setAct(m, { a: 'cast', x, z });
     return true;
@@ -1014,7 +1016,7 @@ export class Room {
     }
     // On a charter the fish is sold as it's landed (the hotbar couldn't hold a charter's catch), worth more each Abyss marker.
     const grow = run ? markerGrowth(run.dive.zone, run.dive.marker) : 1;
-    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean, !!run, p.tag ?? null, grow);
+    const res = eco.applyCatch(m.acct.save, byId(FISH, p.fishId), p.size, p.shiny, fight.clean, !!run, p.tag ?? null, grow, !!p.lured);
     if (!res.stored) {
       this.setAct(m, null);
       return false;
