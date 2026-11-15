@@ -8,6 +8,12 @@ const MUSIC_VOL = 0.17;
 const MASTER_VOL = 0.7;
 /** How much the music drops under the deepest storms at sea, so the wind and thunder carry the scene. */
 const SEA_MUSIC_DUCK = 0.6;
+/**
+ * How loud the sea is at the height of the storm, against the mix it was built with: the water, wind, rain and
+ * thunder fade toward this as the storm builds, so the Shelf is unchanged and the Abyss is 30% quieter (Mighty's
+ * play test, 2026-11-15). A play-test default.
+ */
+const STORM_VOL = 0.7;
 /** The bow has to drop at least this fast (m/s) to thud into a wave. */
 const SLAM = 0.25;
 
@@ -464,19 +470,21 @@ class AudioFX {
     const gust = 1 + 0.35 * sea.gust;
     // The water around the boat: a low roar that swells as the boat drops into a trough, with the hiss of whitecaps over it.
     const trough = 1 + 0.5 * -s.rise * (0.3 + 0.7 * m);
+    // The storm's whole mix comes down a little as it builds (STORM_VOL).
+    const loud = 1 - (1 - STORM_VOL) * storm;
     sea.wash.f.frequency.setTargetAtTime(260 + 260 * m + 120 * storm, t, 0.3);
-    sea.wash.g.gain.setTargetAtTime((0.05 + 0.12 * m + 0.1 * storm) * trough, t, 0.25);
-    sea.hiss.g.gain.setTargetAtTime((0.004 + 0.02 * m + 0.035 * storm) * trough, t, 0.25);
+    sea.wash.g.gain.setTargetAtTime((0.05 + 0.12 * m + 0.1 * storm) * trough * loud, t, 0.25);
+    sea.hiss.g.gain.setTargetAtTime((0.004 + 0.02 * m + 0.035 * storm) * trough * loud, t, 0.25);
     // The wind: a soft breeze near shore, a gale by the Abyss, whistling in the rigging.
     sea.wind.f.frequency.setTargetAtTime((380 + 120 * m + 450 * storm) * (1 + 0.12 * sea.gust), t, 0.4);
     sea.wind.f.Q.value = 1.2 + 3 * storm;
-    sea.wind.g.gain.setTargetAtTime((0.012 + 0.025 * m + 0.11 * storm) * gust, t, 0.4);
+    sea.wind.g.gain.setTargetAtTime((0.012 + 0.025 * m + 0.11 * storm) * gust * loud, t, 0.4);
     sea.howl.f.frequency.setTargetAtTime(850 + 500 * storm + 180 * sea.gust, t, 0.5);
-    sea.howl.g.gain.setTargetAtTime(0.06 * storm * storm * Math.max(0, gust - 0.85), t, 0.4);
+    sea.howl.g.gain.setTargetAtTime(0.06 * storm * storm * Math.max(0, gust - 0.85) * loud, t, 0.4);
     // Rain on the deck from Kelp Deep on, fading with the rain you see. Soft, under the wind.
     const rain = rainLevel(s.mood);
-    sea.rain.g.gain.setTargetAtTime(0.05 * rain, t, 0.8);
-    sea.patter.g.gain.setTargetAtTime(0.03 * rain, t, 0.8);
+    sea.rain.g.gain.setTargetAtTime(0.05 * rain * loud, t, 0.8);
+    sea.patter.g.gain.setTargetAtTime(0.03 * rain * loud, t, 0.8);
     this.duck!.gain.setTargetAtTime(1 - SEA_MUSIC_DUCK * gloomAt(s.mood), t, 0.8);
 
     // Gulls crying now and then while some are about on the Shelf.
@@ -590,7 +598,9 @@ class AudioFX {
     const near = Math.max(0, Math.min(1, 1 - (dist - 90) / 110));
     const t = ctx.currentTime;
     const dur = 4 + 2.5 * (1 - near) + Math.random() * 1.5;
-    const layer = (type: BiquadFilterType, f0: number, f1: number, peak: number, at: number, len: number) => {
+    const layer = (type: BiquadFilterType, f0: number, f1: number, full: number, at: number, len: number) => {
+      // Thunder only rolls in the storm, so it takes the storm's level (STORM_VOL) whole.
+      const peak = full * STORM_VOL;
       const src = ctx.createBufferSource();
       src.buffer = this.noiseBuf!;
       src.loop = true;

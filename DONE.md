@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 The storm in the Abyss is too loud (Mighty, 2026-11-15: bring it down about 30%; done 2026-11-15, branch `abyss-storm-volume`)
+  - The sea's whole mix (the wash and whitecaps, the wind and its howl, the rain) fades toward `STORM_VOL` = 0.7 as the storm builds (`stormAt`), so the Shelf sounds as before and the full storm in the Abyss is 30% quieter; thunder takes 0.7 whole, since it only rolls in the storm (`src/game/audio.ts`). The music's duck under the storm is unchanged. 0.7 is a play-test default
+  - Checked: build, tests. Not listened to in a browser here; smoke skipped (audio levels only)
 - [x] Open the doors, step 6 of full mobile support (from the mobile plan, 2026-11-15; done 2026-11-15, branch `mobile`)
   - Phones and tablets go straight into the game with touch controls: the "Lakeside is made for desktop" notice and its "Try touch controls (early test)" link are gone (`src/main.ts`, `index.html`). The notice's panel stays as the start-error panel ("Lakeside couldn't start its 3D graphics"), shown only when the game can't start. No more covering the world until the player opts in
   - What's new entry 13, "Lakeside on phones and tablets", with a photo (`src/assets/images/news/phones.jpg`, 1280x720, 91 KB): the sunset pier on a phone held sideways, two players chatting, staged headlessly on three `?touch` phones and framed in a phone outline. README and GAME_DESIGN.md's platform line updated
