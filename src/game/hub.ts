@@ -9,7 +9,6 @@ import { buildFish } from './fishmodel';
 import { SKIN, faceHead } from './faces';
 import type { Circle } from './player';
 import casinoPreview from '../assets/images/casino-preview.jpg';
-import charterPreview from '../assets/images/charter-preview.jpg';
 
 export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
   new THREE.MeshLambertMaterial({ color, ...extra });
@@ -51,13 +50,11 @@ interface Poster {
 }
 
 /**
- * The posters beside the pond gate, showing newer players what's waiting: Casino Cove on one side, and on the other
- * a charter out to the deep sea (the Kraken, from the "What's new" photo), so players have charters to look forward
- * to while they level up toward the Aurora Rod (Oscar, 2026-11-01).
+ * The poster beside the pond gate, showing newer players what's waiting in Casino Cove. (The CHARTERS poster on the
+ * gate's other side moved to the Furthest Out board, Oscar 2026-11-13.)
  */
 const POSTERS = {
   casino: { side: 5.2, image: casinoPreview, title: 'CASINO COVE', ink: '#ffd76a', frame: 0xb8862f },
-  charters: { side: -5.2, image: charterPreview, title: 'CHARTERS', ink: '#9fe8ff', frame: 0x6f9e96 },
 } satisfies Record<string, Poster>;
 
 /** Capsule limb between two points. */
@@ -147,8 +144,6 @@ export class Hub {
   readonly gateSpot = new THREE.Vector3();
   /** The casino poster beside the pond gate (unset on maps without one). */
   readonly peekSpot: THREE.Vector3 | null = null;
-  /** The charter poster on the gate's other side, on maps with Reed's harbour (unset elsewhere). */
-  readonly charterSpot: THREE.Vector3 | null = null;
   readonly leaderSpot = new THREE.Vector3();
   readonly campSpot = new THREE.Vector3();
   private leaderCtx!: CanvasRenderingContext2D;
@@ -179,7 +174,6 @@ export class Hub {
     this.buildStall(map.vendor.shop, map.vendor.npc);
     this.buildGate(map.gate);
     if (map.next?.id === 'casino') (this as { peekSpot: THREE.Vector3 | null }).peekSpot = this.buildPoster(map.gate, POSTERS.casino);
-    if (map.harbour) (this as { charterSpot: THREE.Vector3 | null }).charterSpot = this.buildPoster(map.gate, POSTERS.charters);
     this.buildProps();
     this.buildLeaderboard(map.leaderboard);
     this.buildThanks(map.thanks);

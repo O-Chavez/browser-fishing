@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Remove the CHARTERS poster by the pond gate and move its explanation to the Furthest Out board (Oscar, 2026-11-13; done 2026-11-14, branch `charters-poster-to-board`)
+  - Removed `POSTERS.charters`, `charterSpot` and the poster's interaction (`src/game/hub.ts`, `src/game/game.ts`); the casino poster stays where it is (Oscar's call). The Furthest Out board now has "Furthest Out · take a look" (a step in front of its face, within 3 m), opening the same `charters` panel (`chartersHtml`, renamed from `chartersPosterHtml`); it sits 5 m from the CHARTERS arch and 8 m from Reed, so nothing else competes. GAME_DESIGN.md mentions it; smoke and screenshots never used the poster, README images don't show it
+  - Checked: headless screenshots of the pond gate (casino poster only), the board's prompt and the open panel; build, tests, smoke
 - [x] Check blackjack's edge (from the charter boost review, 2026-11-13; done 2026-11-14, branch `blackjack-edge-check`)
   - Measured: 10,000,000 hands through the game's own `dealBlackjack`, `actBlackjack` and `blackjackFactor` (`src/game/casino.ts`), with the best hit, stand or double worked out exactly for each hand. With best play a hand returns **+1.98%** to the player (±0.07%); at a natural paying ×2.5 it would be −0.35%, to the house (break-even about ×2.52). Standing on 17+ and never doubling returns −3.4%. The edge comes from the natural paying ×3 (2:1), the dealer standing on soft 17, a fresh single deck every hand and doubling on any two cards. A double costs coins equal to the fish and pays like a normal two-unit double, so a skilled player turns coins into fish value at those odds
   - Decided (Oscar, 2026-11-14): keep ×3. The small edge is a reward for players who learn the strategy; the casual player still loses. Nothing in the game changed
