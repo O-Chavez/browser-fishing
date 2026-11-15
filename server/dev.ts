@@ -76,6 +76,7 @@ export const HELP = [
   '/coins N · /chips N · /pearls N · /level N · /rodstep 0-8 · /abysslevel N · /hold 0-4 · /fill · /boat 0-4',
   '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
   '/landed <legend> N (times landed: unlocks its set\'s pieces up to N, to buy at Reed\'s; takes back bought ones past N)',
+  '/zonefish <zone 0-4 or id> N (fish landed in a zone, set in its Fishdex: unlocks its set\'s pieces up to N at Reed\'s; takes back bought ones past N)',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
   '/sea <zone 0-4> [marker] (start a charter there, no fee; 0 is the Shelf, 4 the Abyss)',
   '/dig (reset worm cooldown) · /tips (show the new-player tips again) · /smoke (finish the smoker) · /smoke <fish> [N]',
@@ -87,6 +88,8 @@ export const HELP = [
 
 /** Landings past every set are only a count; this keeps `/landed` typos sane. */
 const MAX_DEV_LANDED = 999;
+/** Fish landed in a zone past its set are only a count; this keeps `/zonefish` typos sane. */
+const MAX_DEV_ZONE_FISH = 9999;
 
 /** There is no level cap; this only keeps `/level` typos sane. */
 const MAX_DEV_LEVEL = 999;
@@ -203,6 +206,33 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       for (const slot of COS_SLOTS) if (past.has(s.look[slot]!)) s.look[slot] = null;
       const open = set.length - past.size;
       return ok(`${f.name} landed ${n} time${n === 1 ? '' : 's'}${set.length ? `: ${open} of ${set.length} pieces of its set unlocked at Reed's` : ' (it has no set yet)'}.`);
+    }
+    case 'zonefish': {
+      // Sets the fish landed in a sea zone (`zoneLanded`, counted from the Fishdex) to N, for its set's milestones at
+      // Reed's. The zone's legends keep their Fishdex counts (`/landed` is theirs); the rest of N is spread evenly over
+      // its plain fish, the first ones taking the remainder, and a plain fish left at 0 leaves the Fishdex. Pieces past
+      // N that were bought are taken back (and off), like `/landed`, so the next milestone unlocks again.
+      // The zone by its number or its id ("kelp").
+      const byName = ZONES.findIndex((z) => z.id === args[0]);
+      const zone = byName >= 0 ? byName : int(args[0], 0, ZONES.length - 1);
+      const n = int(args[1], 0, MAX_DEV_ZONE_FISH);
+      if (zone === null || n === null) return say(`Usage: /zonefish <zone 0-${ZONES.length - 1}> N · zones: ${ZONES.map((z, i) => `${i} ${z.id}`).join(', ')}`);
+      const z = ZONES[zone];
+      const legends = z.legends.reduce((a, id) => a + (s.dex[id]?.count ?? 0), 0);
+      const rest = Math.max(0, n - legends);
+      z.fish.forEach((id, i) => {
+        const k = Math.floor(rest / z.fish.length) + (i < rest % z.fish.length ? 1 : 0);
+        if (k) s.dex[id] = { ...s.dex[id], count: k, best: s.dex[id]?.best ?? FISH.find((f) => f.id === id)!.minSize };
+        else delete s.dex[id];
+      });
+      s.seen = s.seen.filter((id) => !s.dex[id]);
+      const set = eco.zonePieces(zone);
+      const past = new Set(set.filter((c) => !eco.zoneUnlocked(s, c)).map((c) => c.id));
+      s.owned = s.owned.filter((id) => !past.has(id));
+      for (const slot of COS_SLOTS) if (past.has(s.look[slot]!)) s.look[slot] = null;
+      const landed = eco.zoneLanded(s, zone);
+      const kept = legends > n ? ` (its legends' ${legends} stay)` : '';
+      return ok(`${z.name}: ${landed} fish landed${kept}${set.length ? `, ${set.length - past.size} of ${set.length} pieces of its set unlocked at Reed's` : ' (it has no set)'}.`);
     }
     case 'smoke': {
       if (!args[0]) {

@@ -5,10 +5,11 @@ export const COS_SLOTS: CosSlot[] = ['hat', 'shirt', 'jewelry', 'pet'];
 
 /**
  * Where an item comes from: Marlow's stall (coins), the casino prize counter (chips only), a level rank (never sold),
- * or a sea legend (each landing of the legend unlocks the next piece of its set, then its pet, which Captain Reed then
- * sells for coins).
+ * a sea legend (each landing of the legend unlocks the next piece of its set, then its pet, which Captain Reed then
+ * sells for coins), or a sea zone (a number of fish landed in the zone unlocks each piece of its set, which Captain
+ * Reed then sells for coins).
  */
-export type CosShop = 'stall' | 'casino' | 'earned' | 'legend';
+export type CosShop = 'stall' | 'casino' | 'earned' | 'legend' | 'zone';
 
 export interface Cosmetic {
   id: string;
@@ -28,6 +29,9 @@ export interface Cosmetic {
   /** Legend items: the sea legend (a fish id) whose landings give it, and which landing (1 = the first). */
   legend?: string;
   landing?: number;
+  /** Zone set items: the zone (index in `ZONES`, `src/data/dive.ts`) and how many fish landed there unlock it. */
+  zone?: number;
+  zoneFish?: number;
 }
 
 /**
@@ -66,6 +70,16 @@ const legendPiece = (id: string, slot: CosSlot, name: string, fish: string, land
   ...c(id, slot, name, price, tier, color, accent, blurb, 'legend'),
   legend: fish,
   landing,
+});
+/**
+ * A sea zone's set piece (2026-11-14): unlocked once `zoneFish` fish have been landed in zone `zone` (counted from the
+ * Fishdex, `zoneLanded`), then sold by Captain Reed for `price` coins. Each set is a goal for the long grind in its
+ * zone: in the charter sim (`scripts/seaeconomy.ts`) every piece unlocks, and can be bought, before the next zone opens.
+ */
+const zonePiece = (id: string, slot: CosSlot, name: string, zone: number, zoneFish: number, price: number, tier: number, color: number, accent: number, blurb: string): Cosmetic => ({
+  ...c(id, slot, name, price, tier, color, accent, blurb, 'zone'),
+  zone,
+  zoneFish,
 });
 const casino = (id: string, slot: CosSlot, name: string, chips: number, tier: number, color: number, accent: number, blurb: string): Cosmetic =>
   c(id, slot, name, chips, tier, color, accent, blurb, 'casino');
@@ -124,6 +138,15 @@ export const COSMETICS: Cosmetic[] = [
   legendPiece('dreamerrobe', 'shirt', 'Dream Robe', 'dreamer', 2, 4_000_000, 6, 0x2c6a5c, 0x9affd0, 'A robe of stars with sleeping eyes round the hem, dream bubbles rising round you and a cloud to walk on.'),
   legendPiece('dreamcatcher', 'jewelry', 'Dreamcatcher', 'dreamer', 3, 2_500_000, 6, 0x9ad8b8, 0x9affd0, 'A dreamcatcher hung with tentacle feathers, a mint light at its heart.'),
   legendPiece('dreamerpet', 'pet', 'Sleepy Dreamer', 'dreamer', 4, 5_000_000, 6, 0x2c6a5c, 0x9affd0, 'A little Dreamer fast asleep on its own cloud, in its own nightcap, floating along after you.'),
+
+  // The zone sets for Kelp Deep (Epic) and the Twilight (Legendary) (deep sea cosmetics, 2026-11-14): each wears its zone,
+  // flowing kelp and glowing jellies. Milestones and prices from the charter sim, so a set is earned and bought on its leg.
+  zonePiece('kelpcap', 'hat', 'Kelp Cap', 2, 40, 150_000, 3, 0x7d8a34, 0xc8962e, 'Woven kelp with blades rising off it, each held up by its float, swaying as if the sea were still round you.'),
+  zonePiece('kelpwrap', 'shirt', 'Kelp Wrap', 2, 90, 200_000, 3, 0x7d8a34, 0xc8962e, 'Kelp blades wrapped to the hip, with streamers drifting up behind you and bubbles rising all round.'),
+  zonePiece('holdfast', 'jewelry', 'Holdfast Pendant', 2, 150, 100_000, 3, 0x8ff0c0, 0x7a5a1e, "Kelp's roots knotted round a pebble of sea glass, the way kelp holds on to the sea floor."),
+  zonePiece('anemonecrown', 'hat', 'Anemone Crown', 3, 100, 1_000_000, 5, 0x8e88c8, 0xffb09a, 'A crown of glowing see-through tendrils swaying up, with little jellies rising off it and fading.'),
+  zonePiece('drifttunic', 'shirt', 'Drift Tunic', 3, 300, 1_250_000, 5, 0x6462a4, 0xdff2ff, "Lavender like the Twilight's sea, veined with light, and little glowing jellies circling you on their own."),
+  zonePiece('jellylocket', 'jewelry', 'Jelly Locket', 3, 550, 750_000, 5, 0xd0d6dc, 0xffb09a, 'A glass locket on a silver chain with a tiny glowing jelly drifting inside.'),
 ];
 
 export const cosById = (id: string | null | undefined): Cosmetic | undefined => COSMETICS.find((x) => x.id === id);

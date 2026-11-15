@@ -1499,6 +1499,43 @@ describe('charters', () => {
     expect(last(b.c, 'look')).toMatchObject({ id: a.id, look: { pet: 'krakenpet' } });
   });
 
+  it("sells a zone set's piece at Reed's once the fish landed in its zone unlock it, checked from the save", () => {
+    const t = setup();
+    const a = diver(t);
+    const s = a.acct.save;
+    Object.assign(s, { boatParts: 2, rodStep: 8, abyssLevels: 60, holdLevel: 4, coins: 1e9 });
+    // Kelp Deep's fish land in the server's Fishdex, which is the count.
+    t.room.handle(a.id, { t: 'dive', zone: 2, marker: 0 });
+    t.setRoll(0.5);
+    fight(t, a);
+    fight(t, a);
+    expect(eco.zoneLanded(s, 2)).toBe(2);
+    t.room.handle(a.id, { t: 'headhome' });
+    atReed(t, a);
+    // Locked: the server says what it takes and sells nothing, whatever the client thinks.
+    const buy = (id = 'kelpcap') => t.room.handle(a.id, { t: 'buylegend', id });
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('Land 38 more fish in Kelp Deep to unlock the Kelp Cap.');
+    expect(s.owned).toEqual([]);
+    s.dex.frondback = { count: 40, best: 100 };
+    s.coins = 149_999;
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('The Kelp Cap costs 150,000 coins.');
+    s.coins = 150_000;
+    buy('kelpwrap');
+    expect(last(a.c, 'notice').msg).toMatch(/^Land \d+ more fish in Kelp Deep to unlock the Kelp Wrap\.$/);
+    buy();
+    expect(s.owned).toEqual(['kelpcap']);
+    expect(s.coins).toBe(0);
+    expect(last(a.c, 'state').save.owned).toEqual(['kelpcap']);
+    // Not at the stall either.
+    s.coins = 1e9;
+    s.dex.frondback.count = 200;
+    t.atShop(a);
+    t.room.handle(a.id, { t: 'buycos', id: 'holdfast' });
+    expect(s.owned).toEqual(['kelpcap']);
+  });
+
   it('counts sea casts, lured ones and the pearls landed for /lakestats', () => {
     const t = setup();
     const a = diver(t);

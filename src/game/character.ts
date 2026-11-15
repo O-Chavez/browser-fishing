@@ -387,6 +387,12 @@ function hatModel(c: Cosmetic, g: THREE.Group): void {
     case 'dreamercap':
       dreamerCap(c, g);
       break;
+    case 'kelpcap':
+      kelpCap(c, g);
+      break;
+    case 'anemonecrown':
+      anemoneCrown(c, g);
+      break;
   }
 }
 
@@ -509,6 +515,12 @@ function shirtModel(c: Cosmetic, g: THREE.Group): void {
     case 'dreamerrobe':
       dreamRobe(c, g);
       break;
+    case 'kelpwrap':
+      kelpWrap(c, g);
+      break;
+    case 'drifttunic':
+      driftTunic(c, g);
+      break;
   }
 }
 
@@ -607,6 +619,12 @@ function jewelryModel(c: Cosmetic, g: THREE.Group): void {
     case 'dreamcatcher':
       dreamcatcher(c, g);
       break;
+    case 'holdfast':
+      holdfast(c, g);
+      break;
+    case 'jellylocket':
+      jellyLocket(c, g);
+      break;
   }
 }
 
@@ -620,7 +638,7 @@ const RUBY_HALO = 0xff4a6a;
 const KRAKEN_SPARK = 0xff7a95;
 
 /** The material for parts merged with their colours painted on (see `paint`). */
-const painted = (f: Finish): THREE.MeshStandardMaterial => mat(0xffffff, f, THREE.FrontSide, true);
+const painted = (f: Finish, side: THREE.Side = THREE.FrontSide): THREE.MeshStandardMaterial => mat(0xffffff, f, side, true);
 
 /** Gives every vertex one colour, for parts merged under a `painted` material. */
 function paint(geo: THREE.BufferGeometry, color: number): THREE.BufferGeometry {
@@ -683,19 +701,20 @@ function swaying(g: THREE.Object3D, p: V3, sway: Sway, parts: Part[], finish: Fi
 
 /** A soft additive glow around a gem; one shared texture, and one material per colour. */
 let haloTex: THREE.CanvasTexture | null = null;
+const haloTexture = (): THREE.CanvasTexture =>
+  (haloTex ??= canvasTex((x, s) => {
+    const gr = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = gr;
+    x.fillRect(0, 0, s, s);
+  }));
 const HALOS = new Map<number, THREE.SpriteMaterial>();
 function halo(g: THREE.Group, p: V3, color: number, size: number): void {
   let m = HALOS.get(color);
   if (!m) {
-    haloTex ??= canvasTex((x, s) => {
-      const gr = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-      gr.addColorStop(0, 'rgba(255,255,255,1)');
-      gr.addColorStop(0.35, 'rgba(255,255,255,0.45)');
-      gr.addColorStop(1, 'rgba(255,255,255,0)');
-      x.fillStyle = gr;
-      x.fillRect(0, 0, s, s);
-    });
-    m = new THREE.SpriteMaterial({ map: haloTex, color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.3 });
+    m = new THREE.SpriteMaterial({ map: haloTexture(), color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.3 });
     HALOS.set(color, m);
   }
   const sp = new THREE.Sprite(m);
@@ -1023,14 +1042,14 @@ interface Mover {
 /**
  * Small parts that move every frame (rising bubbles and Zs, sliding seams, a wyrmling's segments) as one shared mesh:
  * each mover's vertices are placed on the CPU once a frame (see `animated`), after any `still` parts, which never move.
- * `bound` covers everywhere they go, in the parent's frame.
+ * `bound` covers everywhere they go, in the parent's frame; a number instead pads the bounds of where they rest by that much.
  */
-function movers(g: THREE.Object3D, m: THREE.Material, list: Mover[], bound: THREE.Sphere, still: Part[] = []): THREE.Mesh {
+function movers(g: THREE.Object3D, m: THREE.Material, list: Mover[], bound: THREE.Sphere | number, still: Part[] = []): THREE.Mesh {
   const all = [...still.map(([geo, at]) => place(geo, at)), ...list.map((x) => x.geo)];
   const mixed = all.some((x) => x.index) && all.some((x) => !x.index);
   const geos = mixed ? all.map((x) => (x.index ? x.toNonIndexed() : x)) : all;
   const geo = mergeGeometries(geos)!;
-  geo.boundingSphere = bound;
+  if (typeof bound !== 'number') geo.boundingSphere = bound;
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const out = pos.array as Float32Array;
   let at = 0;
@@ -1058,6 +1077,10 @@ function movers(g: THREE.Object3D, m: THREE.Material, list: Mover[], bound: THRE
     }
     pos.needsUpdate = true;
   });
+  if (typeof bound === 'number') {
+    geo.computeBoundingSphere();
+    geo.boundingSphere!.radius += bound;
+  }
   const o = new THREE.Mesh(geo, m);
   g.add(o);
   return o;
@@ -1374,6 +1397,499 @@ function dreamcatcher(c: Cosmetic, g: THREE.Group): void {
   sparkles(g, DRE_GLOW, 1.2, 0.48, 5, 1.0);
 }
 
+// ---------- sea zone sets (Kelp Deep's and the Twilight's) ----------
+
+const KOLIVE = 0x7d8a34;
+const KGOLD = 0xc8962e;
+const KGOLD_D = 0x7a5a1e;
+const KFLOAT = 0xb08a3a;
+const SEAGLASS = 0x8ff0c0;
+/** The Twilight as the game draws it: cloth the colour of its violet water, pale fish-light, lilac glass and the sky's peach. */
+const TDEEP = 0x6462a4;
+const TDEEP_L = 0x8e88c8;
+const NC = 0xdff2ff;
+const NV = 0xc8b4f4;
+const NM = 0xffb09a;
+
+/**
+ * A kelp blade along a curve through `pts`: a strip with a rippled edge, narrowing toward its tip, `w` wide across
+ * `side` (or level and square to the blade, 'flat'). Painted, with blank uvs so it merges with spheres (its float).
+ */
+function kelpBlade(pts: V3[], w: number, side: V3 | 'flat', color: number, n: number): { geo: THREE.BufferGeometry; tip: THREE.Vector3 } {
+  const curve = new THREE.CatmullRomCurve3(pts.map(v3));
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const p = new THREE.Vector3();
+  const tan = new THREE.Vector3();
+  const s = new THREE.Vector3();
+  const segs = n * 2;
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    curve.getPoint(t, p);
+    if (side === 'flat') {
+      curve.getTangent(t, tan);
+      s.set(-tan.z, 0, tan.x);
+      if (s.lengthSq() < 1e-6) s.set(1, 0, 0);
+    } else s.set(...side);
+    s.normalize().multiplyScalar((w * (1 - t * 0.35) * (0.82 + 0.18 * Math.sin(t * 28))) / 2);
+    pos.push(p.x + s.x, p.y + s.y, p.z + s.z, p.x - s.x, p.y - s.y, p.z - s.z);
+    if (i < segs) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return { geo: paint(geo, color), tip: curve.getPoint(1) };
+}
+
+const ROT = new THREE.Matrix4();
+/** Swings about its own axis at `p` as `swaying` does, for parts sharing one mesh (`movers`) instead of a draw call each. */
+const swing =
+  (p: V3, s: Sway): Mover['move'] =>
+  (t, m) => {
+    const a = Math.sin(t * s.speed + s.phase) * s.amp;
+    (s.axis === 'x' ? m.makeRotationX(a) : s.axis === 'y' ? m.makeRotationY(a) : m.makeRotationZ(a)).setPosition(...p);
+  };
+
+/** Kelp's floats: a little bladder at a blade's tip, holding it up in the water. */
+const float = (tip: THREE.Vector3, r = 0.034): Part => [paint(new THREE.SphereGeometry(r, 8, 6), KFLOAT), { p: [tip.x, tip.y + 0.02, tip.z], s: [1, 1.3, 1] }];
+
+/** Bubbles rising round the wearer, `n` of them between radii r0 and r1 (as the Leviathan Coil's). */
+function kelpBubbles(g: THREE.Group, n: number, r0: number, r1: number, base: number, span: number, seed: number): void {
+  const list = Array.from({ length: n }, (_, i): Mover => {
+    const a = i * 2.39 + seed;
+    const r = r0 + ((i * 0.37) % 1) * (r1 - r0);
+    return { geo: new THREE.SphereGeometry(0.014 + (i % 3) * 0.008, 7, 5), move: rising(Math.sin(a) * r, Math.cos(a) * r, base, span, 0.18 + (i % 4) * 0.05, (i * 0.29) % 1) };
+  });
+  const o = movers(g, BUBBLE, list, new THREE.Sphere(new THREE.Vector3(0, base + span / 2, 0), span / 2 + r1 + 0.05));
+  o.castShadow = false;
+  // The bubbles may clip at the preview's edge rather than shrink the character to fit them.
+  o.userData.unframed = true;
+}
+
+/**
+ * Kelp Cap: woven kelp with a band of gold, and six blades rising off it, each held up by the float at its tip and
+ * swaying as if the sea were still round you; bubbles rise off it. The blades share one mesh, moved on the CPU.
+ */
+function kelpCap(c: Cosmetic, g: THREE.Group): void {
+  const cap: Part[] = [[paint(new THREE.SphereGeometry(0.218, 14, 6, 0, Math.PI * 2, 0, H), c.color), { p: [0, 1.73, 0], s: [1, 0.75, 1] }]];
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    cap.push([paint(new THREE.BoxGeometry(0.05, 0.06, 0.012), i % 2 ? KGOLD : KGOLD_D), { p: [Math.sin(a) * 0.222, 1.76, Math.cos(a) * 0.222], r: [0, a, i % 2 ? 0.4 : -0.4] }]);
+  }
+  addMany(g, painted('satin'), cap);
+  const blades: Mover[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3;
+    const sx = Math.sin(a);
+    const sz = Math.cos(a);
+    const h = 0.5 + (i % 3) * 0.12;
+    const { geo, tip } = kelpBlade([[0, 0, 0], [sx * 0.07, h * 0.35, sz * 0.07], [sx * 0.03, h * 0.7, sz * 0.03], [sx * 0.11, h, sz * 0.11]], 0.08, [sz, 0, -sx], i % 2 ? KGOLD : c.color, 22);
+    blades.push({ geo: merged([[geo, {}], float(tip)]), move: swing([sx * 0.1, 1.86, sz * 0.1], { axis: i % 2 ? 'x' : 'z', amp: 0.14, speed: 0.7, phase: i * 1.1 }) });
+  }
+  movers(g, painted('satin', THREE.DoubleSide), blades, 0.12).castShadow = true;
+  kelpBubbles(g, 8, 0.1, 0.35, 1.9, 0.8, 0.5);
+}
+
+/**
+ * Kelp Wrap: blades wrapped from the shoulders to the hip over olive cloth, a stalk belt, six streamers rising off
+ * your back and floating behind you on their floats, and bubbles rising all round. All 22 blades share one mesh.
+ */
+function kelpWrap(c: Cosmetic, g: THREE.Group): void {
+  const [belt, beltAt] = hoop(0.36, 0.018, 0.82, 26);
+  addMany(g, painted('satin'), [
+    [paint(new THREE.LatheGeometry(SHIRT.map(([r, y]) => new THREE.Vector2(r, y)), 14), c.color), {}],
+    [paint(belt, KGOLD_D), beltAt],
+  ]);
+  const cols = [KGOLD, KOLIVE, KGOLD_D];
+  const blades: Mover[] = [];
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const sx = Math.sin(a);
+    const sz = Math.cos(a);
+    const top: V3 = [sx * 0.24, 1.4, sz * 0.24];
+    const P = (r: number, y: number): V3 => [sx * r - top[0], y - top[1], sz * r - top[2]];
+    const { geo } = kelpBlade([P(0.24, 1.4), P(0.33, 1.2), P(0.345, 0.9), P(0.37, 0.62), P(0.39, 0.5)], 0.16, [sz, 0, -sx], cols[i % 3], 18);
+    blades.push({ geo, move: swing(top, { axis: Math.abs(sz) > 0.7 ? 'x' : 'z', amp: 0.04, speed: 0.8, phase: i * 0.9 }) });
+  }
+  for (let i = 0; i < 6; i++) {
+    const s = i < 3 ? -1 : 1;
+    const k = i % 3;
+    const h = 0.6 + k * 0.16;
+    const { geo, tip } = kelpBlade([[0, 0, 0], [s * 0.08, 0.15, -0.15], [s * 0.18, h * 0.6, -0.3], [s * 0.22, h, -0.38], [s * 0.3, h * 1.15, -0.36]], 0.09, 'flat', cols[k], 24);
+    blades.push({ geo: merged([[geo, {}], float(tip, 0.032)]), move: swing([s * (0.1 + k * 0.07), 1.32 - k * 0.14, -0.3], { axis: 'x', amp: 0.12, speed: 0.6, phase: i }) });
+  }
+  movers(g, painted('satin', THREE.DoubleSide), blades, 0.1).castShadow = true;
+  kelpBubbles(g, 12, 0.35, 0.6, 0.5, 1.8, 2.1);
+}
+
+/** Holdfast Pendant: kelp's roots knotted round a pebble of sea glass, on a cord of stalk. */
+function holdfast(c: Cosmetic, g: THREE.Group): void {
+  const top = beadAt(0, 16);
+  const cord: Part[] = [
+    [paint(new THREE.TorusGeometry(NECK.r + 0.004, 0.01, 5, 24), c.accent), { p: [0, NECK.y, NECK.z], r: [H + NECK.tilt, 0, 0] }],
+    [paint(new THREE.CylinderGeometry(0.006, 0.006, top[1] - 1.16, 4), c.accent), { p: [0, (top[1] + 1.16) / 2, (top[2] + 0.35) / 2], r: [0.35, 0, 0] }],
+  ];
+  for (let k = 0; k < 7; k++) {
+    const a = k * 0.9;
+    const pts: V3[] = [[0, 1.16, 0.37], [Math.sin(a) * 0.04, 1.12, 0.375 + Math.cos(a) * 0.035], [Math.sin(a + 0.6) * 0.045, 1.08, 0.375 + Math.cos(a + 0.6) * 0.03], [Math.sin(a) * 0.02, 1.05, 0.385]];
+    limb(cord, pts, 0.008, 0.004, k % 2 ? KGOLD_D : KOLIVE, 6, 4);
+  }
+  addMany(g, painted('satin'), cord);
+  add(g, new THREE.IcosahedronGeometry(0.036, 0), mat(c.color, 'gem'), { p: [0, 1.1, 0.375] });
+  halo(g, [0, 1.1, 0.41], SEAGLASS, 0.14);
+}
+
+/**
+ * A joint in a small rig, placed once a frame however many ask (`at`): a little jelly, its bell, each link of a
+ * tendril. `local` places it in its parent's frame.
+ */
+class Joint {
+  readonly m = new THREE.Matrix4();
+  private t = NaN;
+  constructor(
+    private local: (t: number, m: THREE.Matrix4) => void,
+    private parent?: Joint,
+  ) {}
+  at(t: number): THREE.Matrix4 {
+    if (t !== this.t) {
+      this.t = t;
+      this.local(t, this.m);
+      if (this.parent) this.m.premultiply(this.parent.at(t));
+    }
+    return this.m;
+  }
+}
+const riding = (j: Joint, geo: THREE.BufferGeometry): Mover => ({ geo, move: (t, m) => void m.copy(j.at(t)) });
+
+/**
+ * The jellies' see-through glow: colour and opacity painted on each vertex, unlit, so the Twilight set's tendrils,
+ * bells and hearts in every colour share one draw call. Both faces in one pass: the jellies are too small to need
+ * their backs drawn first, which would double the draw calls.
+ */
+const JELLY = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
+/** A glowing heart or tip is brighter than its jelly: it can glow past white's brightness. */
+const HEART = 1.3;
+/** Gives every vertex one colour (times `k`) and opacity, for `JELLY`. */
+function paintA(geo: THREE.BufferGeometry, color: number, alpha: number, k = 1): THREE.BufferGeometry {
+  const c = new THREE.Color(color).multiplyScalar(k);
+  const n = geo.attributes.position.count;
+  const rgba = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) rgba.set([c.r, c.g, c.b, alpha], i * 4);
+  geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
+  return geo;
+}
+
+interface TendrilOpts {
+  n: number;
+  len: number;
+  r0: number;
+  r1: number;
+  color: number;
+  alpha: number;
+  /** -1 hangs, +1 grows up. */
+  up: 1 | -1;
+  amp: number;
+  speed: number;
+  phase: number;
+  /** How far behind (radians of the sway) each link follows the one before it, so a ripple runs down. */
+  lag?: number;
+  /** The root's tilt (outward along +z), and how much every later link curls. */
+  bend0?: number;
+  bend?: number;
+  /** A glowing bead at the tip. */
+  tip?: number;
+  tipR?: number;
+  /** Sides round each link. */
+  radial?: number;
+}
+
+/**
+ * A tendril of linked segments rooted at `p` (turned `ry` about y) in `parent`'s frame: each link sways a little after
+ * the one before it, so a wave runs down it. Pushes one mover per link, for the `JELLY` mesh.
+ */
+function tendril(out: Mover[], parent: Joint | undefined, p: V3, ry: number, o: TendrilOpts): void {
+  const { n, len, r0, r1, up, amp, speed, phase, lag = 0.55, bend0 = 0, bend = 0, radial = 3 } = o;
+  const seg = len / n;
+  let j = new Joint((t, m) => void m.makeRotationY(ry).multiply(ROT.makeRotationX(bend0 + Math.sin(t * speed + phase) * amp)).setPosition(...p), parent);
+  for (let i = 0; i < n; i++) {
+    const ra = r0 + ((r1 - r0) * i) / n;
+    const rb = r0 + ((r1 - r0) * (i + 1)) / n;
+    const parts: Part[] = [[paintA(new THREE.CylinderGeometry(up > 0 ? rb : ra, up > 0 ? ra : rb, seg * 1.04, radial, 1, true), o.color, o.alpha), { p: [0, (up * seg) / 2, 0] }]];
+    if (i === n - 1 && o.tip !== undefined) parts.push([paintA(new THREE.SphereGeometry(o.tipR ?? 0.016, 6, 4), o.tip, 1, HEART), { p: [0, up * seg, 0] }]);
+    out.push(riding(j, merged(parts)));
+    if (i < n - 1) {
+      const k = i + 1;
+      j = new Joint((t, m) => void m.makeRotationX(bend + Math.sin(t * speed + phase - k * lag) * amp * 0.7).setPosition(0, up * seg, 0), j);
+    }
+  }
+}
+
+/** Where a soft glow sits: `y` up from a joint, `size` across at the joint's scale. */
+interface GlowAt {
+  j: Joint;
+  y: number;
+  size: number;
+  color: number;
+}
+
+let glowDotsMat: THREE.ShaderMaterial | null = null;
+/**
+ * Soft glows that face the camera, like `halo`'s sprites, but any number in one mesh: each is a quad whose middle the
+ * CPU moves once a frame (`animated`) and whose corners the vertex shader spreads out toward the camera.
+ */
+function glowDotsMaterial(): THREE.ShaderMaterial {
+  glowDotsMat ??= new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: null } }]),
+    vertexShader: /* glsl */ `
+      attribute vec2 corner;
+      attribute float size;
+      attribute vec3 tint;
+      varying vec2 vUv;
+      varying vec3 vTint;
+      #include <fog_pars_vertex>
+      void main() {
+        vUv = corner + 0.5;
+        vTint = tint;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        mvPosition.xy += corner * size * length(modelViewMatrix[0].xyz);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D map;
+      varying vec2 vUv;
+      varying vec3 vTint;
+      #include <fog_pars_fragment>
+      void main() {
+        gl_FragColor = vec4(vTint, texture2D(map, vUv).a * 0.3);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #ifdef USE_FOG
+          #ifdef FOG_EXP2
+            float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+          #else
+            float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+          #endif
+          // Light fades into the fog rather than taking its colour.
+          gl_FragColor.a *= 1.0 - fogFactor;
+        #endif
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: true,
+  });
+  glowDotsMat.uniforms.map.value = haloTexture();
+  return glowDotsMat;
+}
+
+/** The glows round the jellies (see `glowDotsMaterial`), moved with them once a frame; one draw call for the lot. */
+function glowDots(g: THREE.Object3D, list: GlowAt[]): THREE.Mesh {
+  const n = list.length;
+  const pos = new Float32Array(n * 12);
+  const size = new Float32Array(n * 4);
+  const corner = new Float32Array(n * 8);
+  const tint = new Float32Array(n * 12);
+  const idx: number[] = [];
+  const C = new THREE.Color();
+  list.forEach((d, i) => {
+    corner.set([-0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5], i * 8);
+    C.set(d.color);
+    for (let k = 0; k < 4; k++) tint.set([C.r, C.g, C.b], (i * 4 + k) * 3);
+    idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
+  });
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(pos, 3);
+  const sizeAttr = new THREE.BufferAttribute(size, 1);
+  geo.setAttribute('position', posAttr);
+  geo.setAttribute('size', sizeAttr);
+  geo.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
+  geo.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
+  geo.setIndex(idx);
+  const P = new THREE.Vector3();
+  animated((t) => {
+    list.forEach((d, i) => {
+      const m = d.j.at(t);
+      const e = m.elements;
+      P.set(0, d.y, 0).applyMatrix4(m);
+      const s = d.size * Math.hypot(e[0], e[1], e[2]);
+      for (let k = 0; k < 4; k++) {
+        pos.set([P.x, P.y, P.z], (i * 4 + k) * 3);
+        size[i * 4 + k] = s;
+      }
+    });
+    posAttr.needsUpdate = sizeAttr.needsUpdate = true;
+  });
+  geo.computeBoundingSphere();
+  geo.boundingSphere!.radius += 0.3;
+  const o = new THREE.Mesh(geo, glowDotsMaterial());
+  o.castShadow = false;
+  o.userData.light = true;
+  g.add(o);
+  return o;
+}
+
+/**
+ * A little glowing jelly at `root`: a bell that breathes with a bright heart inside, five threads trailing and
+ * rippling under it, and a soft glow round it. Its parts go to `body` (for a `JELLY` mesh) and `glows`.
+ */
+function miniJelly(body: Mover[], glows: GlowAt[], root: Joint, color: number, phase: number): void {
+  const speed = 2.2 + phase * 0.3;
+  const bell = new Joint((t, m) => {
+    const k = Math.sin(t * speed) * 0.12;
+    m.makeScale(1 + k, 1 - k * 0.6, 1 + k);
+  }, root);
+  body.push(
+    riding(
+      bell,
+      merged([
+        [paintA(new THREE.SphereGeometry(0.06, 10, 4, 0, Math.PI * 2, 0, H), color, 0.5), { s: [1, 0.8, 1] }],
+        [paintA(new THREE.SphereGeometry(0.022, 6, 4), color, 1, HEART), { p: [0, 0.02, 0] }],
+      ]),
+    ),
+  );
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * Math.PI * 2;
+    tendril(body, root, [Math.sin(a) * 0.04, 0, Math.cos(a) * 0.04], 0, { n: 4, len: 0.12, r0: 0.004, r1: 0.002, color, alpha: 0.6, up: -1, amp: 0.25, speed: 2.5, phase: phase + k });
+  }
+  glows.push({ j: root, y: 0.01, size: 0.3, color });
+}
+
+/**
+ * Anemone Crown: a lavender band with a glowing seam, nine see-through tendrils swaying up off it with a ripple running
+ * along each, and little jellies rising off it and fading as they go.
+ */
+function anemoneCrown(c: Cosmetic, g: THREE.Group): void {
+  addMany(g, mat(c.color, 'satin'), [hoop(0.212, 0.03, 1.765, 22)]);
+  addMany(g, mat(NV, 'glow'), [hoop(0.215, 0.006, 1.79, 26)]).castShadow = false;
+  const fronds: Mover[] = [];
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * Math.PI * 2;
+    tendril(fronds, undefined, [Math.sin(a) * 0.2, 1.79, Math.cos(a) * 0.2], a, {
+      n: 6,
+      len: 0.26 + (k % 3) * 0.06,
+      r0: 0.016,
+      r1: 0.005,
+      color: k % 2 ? NV : NC,
+      alpha: 0.6,
+      up: 1,
+      bend0: 0.25,
+      bend: 0.03,
+      amp: 0.12,
+      speed: 1.0,
+      phase: k * 0.8,
+      tip: k % 3 ? NC : NM,
+      radial: 5,
+    });
+  }
+  movers(g, JELLY, fronds, 0.08);
+  const rise: Mover[] = [];
+  const glows: GlowAt[] = [];
+  for (let i = 0; i < 4; i++) {
+    const a = i * 1.7;
+    const speed = 0.12 + i * 0.02;
+    const root = new Joint((t, m) => {
+      const k = (i / 4 + t * speed) % 1;
+      const s = Math.sin(k * Math.PI) + 0.05;
+      m.makeScale(s, s, s).setPosition(Math.sin(a) * 0.22, 2.0 + k * 0.7, Math.cos(a) * 0.22);
+    });
+    miniJelly(rise, glows, root, [NC, NM, NV][i % 3], i);
+  }
+  // The rising jellies may clip at the preview's edge rather than shrink the character to fit them.
+  movers(g, JELLY, rise, 0.15).userData.unframed = true;
+  glowDots(g, glows).userData.unframed = true;
+  sparkles(g, NC, 2.0, 0.46, 5, 0.6);
+}
+
+/** A point on the shirt at angle a (round from the front) and height y, `lift` off it. */
+const surf = (a: number, y: number, lift: number): THREE.Vector3 => new THREE.Vector3(Math.sin(a) * (rAt(y) + lift), y, Math.cos(a) * (rAt(y) + lift));
+
+/**
+ * Drift Tunic: lavender like the Twilight's sea, with veins of light branching up from the hem, seven little glowing
+ * jellies circling you slowly at their own heights, and a soft glow on the ground at your feet.
+ */
+function driftTunic(c: Cosmetic, g: THREE.Group): void {
+  const [collar, collarAt] = hoop(0.215, 0.032, 1.42);
+  addMany(g, painted('satin'), [
+    [paint(new THREE.LatheGeometry(SHIRT.map(([r, y]) => new THREE.Vector2(r, y)), 14), c.color), {}],
+    [paint(collar, TDEEP_L), collarAt],
+  ]);
+  const veins = new Map<number, Part[]>([
+    [NV, []],
+    [NC, []],
+    [NM, []],
+  ]);
+  for (let k = 0; k < 7; k++) {
+    const a0 = (k / 7) * Math.PI * 2 + 0.2;
+    const pts: THREE.Vector3[] = [];
+    for (let y = 0.58; y <= 1.3; y += 0.08) pts.push(surf(a0 + Math.sin(y * 9 + k) * 0.15, y, 0.004));
+    veins.get(k % 2 ? NV : NC)!.push([new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.005, 3), {}]);
+    const branch: THREE.Vector3[] = [];
+    for (let y = 0.9; y <= 1.15; y += 0.06) branch.push(surf(a0 + 0.12 + (y - 0.9) * 0.9, y, 0.004));
+    veins.get(NM)!.push([new THREE.TubeGeometry(new THREE.CatmullRomCurve3(branch), 10, 0.004, 3), {}]);
+  }
+  for (const [col, parts] of veins) addMany(g, mat(col, 'glow'), parts).castShadow = false;
+  // Seven little jellies circle you slowly, each at its own height, bobbing.
+  const body: Mover[] = [];
+  const glows: GlowAt[] = [];
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const r = 0.55 + (i % 2) * 0.1;
+    const y = 0.6 + ((i * 0.37) % 1) * 1.1;
+    const s = 0.9 + (i % 3) * 0.2;
+    const root = new Joint((t, m) => {
+      const turn = a + t * 0.25;
+      m.makeRotationY(t * 0.25).scale(SCALE.setScalar(s));
+      m.setPosition(Math.sin(turn) * r, y + Math.sin(t * 1.8 + i) * 0.05, Math.cos(turn) * r);
+    });
+    miniJelly(body, glows, root, [NC, NV, NM][i % 3], i);
+  }
+  movers(g, JELLY, body, 0.15);
+  glowDots(g, glows);
+  // A soft glow on the ground at your feet; `Character.tick` keeps it on the ground through a jump.
+  const pg = new THREE.Group();
+  pg.userData.ground = true;
+  g.add(pg);
+  const floor = add(pg, new THREE.CircleGeometry(0.8, 32), floorGlowMaterial(NV), { p: [0, 0.008, 0], r: [-H, 0, 0] });
+  floor.castShadow = false;
+  floor.userData.light = true;
+  sparkles(g, NC, 1.0, 0.64, 6, -0.5);
+}
+
+const FLOOR_GLOWS = new Map<number, THREE.MeshBasicMaterial>();
+function floorGlowMaterial(color: number): THREE.MeshBasicMaterial {
+  let m = FLOOR_GLOWS.get(color);
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ map: haloTexture(), color, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    FLOOR_GLOWS.set(color, m);
+  }
+  return m;
+}
+
+const LOCKET_GLASS = new THREE.MeshStandardMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0.25, roughness: 0.05, depthWrite: false });
+
+/** Jelly Locket: a glass locket on a fine silver chain, with a tiny glowing jelly drifting inside. */
+function jellyLocket(c: Cosmetic, g: THREE.Group): void {
+  const top = beadAt(0, 16);
+  const L: V3 = [0, 1.12, 0.39];
+  addMany(g, mat(c.color, 'metal'), [
+    [new THREE.TorusGeometry(NECK.r, 0.005, 4, 24), { p: [0, NECK.y, NECK.z], r: [H + NECK.tilt, 0, 0] }],
+    [new THREE.CylinderGeometry(0.003, 0.003, top[1] - 1.18, 3), { p: [0, (top[1] + 1.18) / 2, (top[2] + 0.37) / 2], r: [0.35, 0, 0] }],
+    [new THREE.TorusGeometry(0.048, 0.006, 4, 18), { p: L, r: [0, H, 0] }],
+    [new THREE.CylinderGeometry(0.012, 0.016, 0.014, 8), { p: [L[0], L[1] + 0.052, L[2]] }],
+  ]);
+  add(g, new THREE.SphereGeometry(0.048, 12, 10), LOCKET_GLASS, { p: L }).castShadow = false;
+  const body: Mover[] = [];
+  const glows: GlowAt[] = [];
+  const root = new Joint((t, m) => void m.makeScale(0.45, 0.45, 0.45).setPosition(L[0], L[1] + 0.005 + Math.sin(t * 1.8) * 0.008, L[2]));
+  miniJelly(body, glows, root, c.accent, 0.5);
+  movers(g, JELLY, body, 0.03);
+  glowDots(g, glows);
+  sparkles(g, NC, 1.2, 0.48, 5, 1.0);
+}
+
 // ---------- pets ----------
 
 /**
@@ -1583,7 +2099,8 @@ function outfitPiece(c: Cosmetic): THREE.Group {
 const SILHOUETTE = new THREE.MeshBasicMaterial({ color: 0x3a4250, side: THREE.DoubleSide });
 function silhouette(piece: THREE.Object3D): void {
   piece.traverse((o) => {
-    if (o instanceof THREE.Sprite) o.visible = false;
+    // Halos, and meshes that are only light (`glowDots`, a glow on the ground), would be dark squares and discs.
+    if (o instanceof THREE.Sprite || o.userData.light) o.visible = false;
     else if (o instanceof THREE.Mesh) o.material = SILHOUETTE;
   });
 }

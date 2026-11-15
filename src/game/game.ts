@@ -59,7 +59,7 @@ import {
 import { carryScale, hangLen, hangPitch, heldScale, seaHangPitch, seaHeldScale, waterScale } from './fishscale';
 import type { LeaderRow } from './hub';
 import { buildTin } from './itemmodels';
-import { LEGEND_MARK, legendUp, rankUp, type LegendUp, type RankUp } from './rankup';
+import { LEGEND_MARK, ZONE_MARK, legendUp, rankUp, zoneUp, type LegendUp, type RankUp } from './rankup';
 import {
   fishWeight,
   formatWeight,
@@ -1418,12 +1418,12 @@ export class Game {
     audio.jingle('rare');
   }
 
-  /** A piece of a sea legend's set its landings unlocked, from Captain Reed with coins. */
+  /** A piece of a sea legend's or a zone's set its landings or zone fish unlocked, from Captain Reed with coins. */
   private buyLegend(id: string): void {
     if (this.spin) return;
-    const why = eco.legendBuyError(this.s, id);
+    const why = eco.reedBuyError(this.s, id);
     if (why) return this.toast(why);
-    if (!eco.buyLegendPiece(this.s, id)) return;
+    if (!eco.buyReedPiece(this.s, id)) return;
     this.net.send({ t: 'buylegend', id });
     this.toast(`Bought the ${cosById(id)?.name ?? id} · wear it from here or the Wardrobe`, 3.5);
     audio.jingle('legendary');
@@ -2693,7 +2693,7 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift, legendPiece } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null, 1, this.hookedLured);
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift, legendPiece, zonePiece } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null, 1, this.hookedLured);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch', h: this.holds.encode() });
     if (leveledUp) this.queueNudge();
@@ -2719,6 +2719,9 @@ export class Game {
     const shiny = this.hookedShiny;
     this.rankCard = rankUp(ranks);
     this.legendCard = legendPiece ? legendUp(legendPiece) : null;
+    // A zone set's piece says itself in one line on the card, in the piece's rarity colour (only this player sees it).
+    const zoneLine = zonePiece ? zoneUp(zonePiece) : null;
+    const zoneTier = cosById(zonePiece?.id)?.tier ?? 0;
     el.innerHTML = `${legend ? '<div class="legend-tag">★ LEGEND ★</div>' : ''}<div class="muted">${shiny ? `<b style="color:#ffd23a">✨ SHINY! ✨</b>${shinyFrom ? ` <span class="credit">✨ ${shinyFrom}</span>` : ''} ` : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${color}">${shiny ? '✨ ' : ''}${fish.name}</h2>
@@ -2726,7 +2729,7 @@ export class Game {
       <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean ${this.fightTag}">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
       ${fish.sea && this.fightAt ? catchPearlsHtml(this.fightAt.zone, this.fightAt.marker, { tag: this.fightTag, legend, shiny }) : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
-      <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.legendCard ? `<div class="piece">${escapeHtml(this.legendCard.card)}</div>` : ''}${this.rankButtons()}
+      <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.legendCard ? `<div class="piece">${escapeHtml(this.legendCard.card)}</div>` : ''}${zoneLine ? `<div class="piece zone" style="--c:${COS_RARITY_COLOR[zoneTier]}">${escapeHtml(zoneLine)}</div>` : ''}${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
     // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
@@ -4441,14 +4444,13 @@ export class Game {
         .sort((a, b) => a.level! - b.level!)
         .map((c) => this.itemTile({ ...this.cosLook(c), name: c.name, sub: `🔒 Level ${c.level}`, tier: c.tier + 1, ghost: true, attrs: `data-act="locked" data-try="${slot}:${c.id}"` }))
         .join('');
-      // A legend's pieces not bought yet, so the whole set shows from the start: the landings each still takes, then
-      // once unlocked, that Captain Reed sells it and for how much.
-      const ahead = COSMETICS.filter((c) => c.slot === slot && c.shop === 'legend' && !this.s.owned.includes(c.id))
-        .sort((a, b) => a.legend!.localeCompare(b.legend!) || a.landing! - b.landing!)
+      // Reed's pieces not bought yet (a legend's or a zone set's), so every set shows from the start, in Reed's order:
+      // the landings or zone fish each still takes, then once unlocked, that Captain Reed sells it and for how much.
+      const ahead = eco.reedCosmetics().filter((c) => c.slot === slot && !this.s.owned.includes(c.id))
         .map((c) => {
-          const open = eco.legendUnlocked(this.s, c);
-          const sub = open ? "🔒 At Reed's" : `🔒 Land ${eco.legendName(c)}`;
-          const tip = open ? `Unlocked · ${c.price.toLocaleString('en-US')} coins at Captain Reed's` : eco.landingsText(this.s, c);
+          const open = eco.reedUnlocked(this.s, c);
+          const sub = open ? "🔒 At Reed's" : c.shop === 'zone' ? `🔒 ${eco.zoneName(c.zone!)}` : `🔒 Land ${eco.legendName(c)}`;
+          const tip = open ? `Unlocked · ${c.price.toLocaleString('en-US')} coins at Captain Reed's` : eco.reedUnlockText(this.s, c);
           return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, ghost: true, attrs: `data-act="locked" data-try="${slot}:${c.id}"`, tip });
         })
         .join('');
@@ -4913,21 +4915,24 @@ export class Game {
 
   /**
    * Captain Reed's Wardrobe tab, on the stall's Cosmetics pattern: the preview, everything he sells (`reedCosmetics`:
-   * the sea legends' pieces for now) as one row a set, by zone and in landing order, and the picked item's panel with
-   * its state (`reedOffer`): a silhouette until its zone is reached (Oscar: show all there is to get), the landings it
-   * still takes, its price and [Buy], or [Wear it]. Items from no legend would go under a plain heading of their own.
+   * the zone sets and the sea legends' pieces) as one row a set, by zone (a zone's own set before its legends'), and
+   * the picked item's panel with its state (`reedOffer`): a silhouette until its zone is reached (Oscar: show all there
+   * is to get), the landings or zone fish it still takes, its price and [Buy], or [Wear it]. A zone set reached shows a
+   * bar of the fish landed in its zone, with a mark at each piece's milestone (`zoneProgressHtml`).
    */
   private reedWardrobeHtml(): string {
     const s = this.s;
     const items = eco.reedCosmetics();
-    const zoneOf = (c: Cosmetic) => ZONES.find((z) => z.legends.includes(c.legend ?? ''))?.name.replace(/^The /, 'the ') ?? 'deep water';
+    const zoneOf = (c: Cosmetic) => eco.zoneName(eco.reedZone(c));
     const picked = cosById(this.pick.rcos);
     const chosen = picked && items.includes(picked) ? picked : undefined;
-    // One row a set: "🦑 The Kraken's set · the Abyss" over its pieces in landing order (`reedCosmetics`'s order).
-    const sets = [...new Set(items.map((c) => c.legend ?? ''))];
-    const sections = sets.map((legend) => {
-      const cards = items
-        .filter((c) => (c.legend ?? '') === legend)
+    // One row a set, keyed by its legend or its zone: "🦑 The Kraken's set · the Abyss" or "🌿 Kelp Deep's set", over
+    // its pieces in `reedCosmetics`'s order.
+    const setKey = (c: Cosmetic) => (c.shop === 'zone' ? `zone:${c.zone}` : c.legend ?? '');
+    const sets = [...new Set(items.map(setKey))];
+    const sections = sets.map((key) => {
+      const set = items.filter((c) => setKey(c) === key);
+      const cards = set
         .map((c) => {
           const offer = eco.reedOffer(s, c);
           const wearing = s.look[c.slot] === c.id;
@@ -4935,23 +4940,33 @@ export class Game {
             const look = this.cosLook(c);
             return this.itemTile({ ...look, cls: `${look.cls} shadow`, name: c.name, sub: `🔒 ${zoneOf(c)}`, tier: c.tier + 1, on: chosen?.id === c.id, ghost: true, attrs: `data-pick="rcos" data-id="${c.id}" data-try="${c.slot}:${c.id}:shadow"`, tip: `Fit the boat for ${zoneOf(c)} to see it` });
           }
-          const sub = offer === 'owned' ? (wearing ? 'Wearing' : 'Owned') : offer === 'locked' ? `🔒 Landing ${c.landing}` : '';
-          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, price: offer === 'locked' ? undefined : this.cosPrice(c), tier: c.tier + 1, on: chosen?.id === c.id, check: offer === 'owned', ghost: offer === 'locked' || (offer === 'sale' && s.coins < c.price), attrs: `data-pick="rcos" data-id="${c.id}" data-try="${c.slot}:${c.id}"`, tip: offer === 'locked' ? eco.landingsText(s, c) : undefined });
+          const lock = c.shop === 'zone' ? `🔒 ${c.zoneFish} fish` : `🔒 Landing ${c.landing}`;
+          const sub = offer === 'owned' ? (wearing ? 'Wearing' : 'Owned') : offer === 'locked' ? lock : '';
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, price: offer === 'locked' ? undefined : this.cosPrice(c), tier: c.tier + 1, on: chosen?.id === c.id, check: offer === 'owned', ghost: offer === 'locked' || (offer === 'sale' && s.coins < c.price), attrs: `data-pick="rcos" data-id="${c.id}" data-try="${c.slot}:${c.id}"`, tip: offer === 'locked' ? eco.reedUnlockText(s, c) : undefined });
         })
         .join('');
-      const fish = FISH.find((f) => f.id === legend);
-      const zone = ZONES.find((z) => z.legends.includes(legend));
+      const first = set[0];
+      if (first.shop === 'zone' && first.zone !== undefined) {
+        const zone = ZONES[first.zone];
+        const head = `${ZONE_MARK[zone.id] ?? '✦'} ${escapeHtml(zone.name)}'s set`;
+        // A silhouetted set keeps its numbers to the tiles' and panel's, like a legend's: no bar until it's reached.
+        const bar = eco.zoneSetReached(s, first.zone) ? this.zoneProgressHtml(first.zone, first.tier) : '';
+        return `<h4 class="set-h">${head}</h4>${bar}<div class="tiles">${cards}</div>`;
+      }
+      const fish = FISH.find((f) => f.id === key);
+      const zone = ZONES.find((z) => z.legends.includes(key));
       const head = fish
-        ? `${LEGEND_MARK[legend] ?? '✦'} ${escapeHtml(fish.name)}'s set${zone ? ` <small>· ${zone.name.replace(/^The /, 'the ')}</small>` : ''}`
+        ? `${LEGEND_MARK[key] ?? '✦'} ${escapeHtml(fish.name)}'s set${zone ? ` <small>· ${zone.name.replace(/^The /, 'the ')}</small>` : ''}`
         : 'More from Reed';
       return `<h4 class="set-h">${head}</h4><div class="tiles">${cards}</div>`;
     }).join('');
     // Until a set is reached, Reed points at the nearest one (the first in zone order).
-    const first = items.find((c) => c.legend);
+    const first = items[0];
     const reached = items.some((c) => eco.reedOffer(s, c) !== 'unseen');
+    const how = first?.shop === 'zone' ? 'land fish there' : first ? `land ${eco.legendName(first)}` : '';
     const intro = reached || !first
-      ? `<p class="cos-intro">"Land a legend and I'll have the next piece of its set made up for you. One landing, one piece, paid in coins."</p>`
-      : `<p class="cos-intro">"The sea legends give up the finest gear afloat. Fit the boat for ${zoneOf(first)}, land ${eco.legendName(first)}, and I'll have a piece of its set made up for you."</p>`;
+      ? `<p class="cos-intro">"Land enough fish in a zone, or land one of its legends, and I'll have the next piece of its set made up for you. Paid in coins."</p>`
+      : `<p class="cos-intro">"Every zone out there has a set of its own, and the legends the finest of all. Fit the boat for ${zoneOf(first)}, ${how}, and I'll have a piece made up for you."</p>`;
     if (!chosen) {
       const yours = this.detail({
         top: '<div id="pv-slot"></div>',
@@ -4967,6 +4982,7 @@ export class Game {
     }
     const offer = eco.reedOffer(s, chosen);
     const wearing = s.look[chosen.slot] === chosen.id;
+    const zonePiece = chosen.shop === 'zone';
     const action = offer === 'owned'
       ? wearing
         ? this.btn('Take it off', `data-act="equip" data-slot="${chosen.slot}" data-id=""`, 'plain')
@@ -4974,7 +4990,7 @@ export class Game {
       : offer === 'unseen'
         ? this.btn(`Fit the boat for ${zoneOf(chosen)}`, '', 'plain', true)
       : offer === 'locked'
-        ? this.btn(eco.landingsText(s, chosen), '', 'plain', true)
+        ? this.btn(eco.reedUnlockText(s, chosen), '', 'plain', true)
         : s.coins < chosen.price
           ? this.btn(`Need ${(chosen.price - s.coins).toLocaleString()} ${COIN} more`, '', 'plain', true)
           : this.btn(`Buy for ${this.cosPrice(chosen)}`, `data-act="buylegend" data-id="${chosen.id}"`);
@@ -4983,9 +4999,13 @@ export class Game {
     const state = offer === 'owned'
       ? wearing ? 'You are wearing it.' : 'Yours to wear any time, here or from the Wardrobe.'
       : offer === 'unseen'
-        ? `From ${eco.legendName(chosen)}, out in ${zoneOf(chosen)}. Fit the boat for ${zoneOf(chosen)} to see it, then land ${eco.legendName(chosen)} ${chosen.landing === 1 ? 'once' : `${chosen.landing} times`} to unlock it.`
+        ? zonePiece
+          ? `From ${zoneOf(chosen)}'s set. Fit the boat for ${zoneOf(chosen)} to see it, then land ${chosen.zoneFish} fish there to unlock it.`
+          : `From ${eco.legendName(chosen)}, out in ${zoneOf(chosen)}. Fit the boat for ${zoneOf(chosen)} to see it, then land ${eco.legendName(chosen)} ${chosen.landing === 1 ? 'once' : `${chosen.landing} times`} to unlock it.`
       : offer === 'locked'
-        ? `Unlocks on landing ${chosen.landing} of ${eco.legendName(chosen)}.`
+        ? zonePiece
+          ? `Unlocks at ${chosen.zoneFish} fish landed in ${zoneOf(chosen)}: ${eco.zoneLanded(s, chosen.zone!)} so far.`
+          : `Unlocks on landing ${chosen.landing} of ${eco.legendName(chosen)}.`
         : `Unlocked: ${chosen.price.toLocaleString()} coins.`;
     const detail = this.detail({
       top: '<div id="pv-slot"></div>',
@@ -5001,6 +5021,27 @@ export class Game {
       actions: action,
     });
     return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
+  }
+
+  /**
+   * A zone set's bar at Reed's: the fish landed in the zone toward the next piece's milestone ("87 / 90 fish landed in
+   * Kelp Deep · next: Kelp Wrap"), filled along the whole set with a mark at each piece's milestone, lit once reached;
+   * "Set unlocked" once every piece is. In the set's rarity colour.
+   */
+  private zoneProgressHtml(zone: number, tier: number): string {
+    const p = eco.zoneSetProgress(this.s, zone);
+    const top = Math.max(1, ...p.marks);
+    const where = eco.zoneName(zone);
+    const num = (n: number) => n.toLocaleString('en-US');
+    const text = p.next
+      ? `<span><b>${num(p.landed)} / ${num(p.next.zoneFish!)}</b> fish landed in ${where}</span><small>Next: ${escapeHtml(p.next.name)}</small>`
+      : `<span><b>✔ Set unlocked</b> · ${num(p.landed)} fish landed in ${where}</span>`;
+    const marks = p.marks
+      .map((m) => `<span class="zp-mk${p.landed >= m ? ' on' : ''}" style="left:${((m / top) * 100).toFixed(1)}%">${num(m)}</span>`)
+      .join('');
+    const ticks = p.marks.filter((m) => m < top).map((m) => `<s style="left:${((m / top) * 100).toFixed(1)}%"></s>`).join('');
+    const pct = Math.min(100, (p.landed / top) * 100).toFixed(1);
+    return `<div class="zprog${p.next ? '' : ' done'}" style="--c:${COS_RARITY_COLOR[tier]}"><div class="zp-txt">${text}</div><div class="zp-bar"><i style="width:${pct}%"></i>${ticks}</div><div class="zp-mks">${marks}</div></div>`;
   }
 
   /** Bottom strip in the shop and at the prize counter: how to sell or turn in fish. */

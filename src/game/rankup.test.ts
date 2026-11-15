@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { RANKS, ranksBetween } from '../data/ranks';
 import { COSMETICS } from '../data/cosmetics';
-import { LEGEND_MARK, legendUp, rankUp } from './rankup';
+import { ZONES } from '../data/dive';
+import { LEGEND_MARK, ZONE_MARK, legendUp, rankUp, zoneUp } from './rankup';
 
 describe('rankUp', () => {
   it('names the rank and its outfit', () => {
@@ -59,5 +60,22 @@ describe('legendUp', () => {
   it('is null for an item that is no legend piece', () => {
     expect(legendUp({ id: 'crown', landing: 1, of: 1 })).toBeNull();
     expect(legendUp({ id: 'bogus', landing: 1, of: 1 })).toBeNull();
+  });
+});
+
+describe('zoneUp', () => {
+  it("says in one line which piece is unlocked at Reed's and the fish landed in its zone", () => {
+    expect(zoneUp({ id: 'kelpcap', zone: 2, fish: 40 })).toBe("🌿 Kelp Cap unlocked at Captain Reed's · 40 fish landed in Kelp Deep");
+    expect(zoneUp({ id: 'jellylocket', zone: 3, fish: 550 })).toBe("🪼 Jelly Locket unlocked at Captain Reed's · 550 fish landed in the Twilight");
+  });
+
+  it('has a mark for every zone with a set', () => {
+    for (const c of COSMETICS.filter((x) => x.shop === 'zone')) expect(ZONE_MARK[ZONES[c.zone!].id]).toBeTruthy();
+  });
+
+  it('is null for an item that is no piece of that zone', () => {
+    expect(zoneUp({ id: 'krakencrown', zone: 4, fish: 1 })).toBeNull();
+    expect(zoneUp({ id: 'kelpcap', zone: 3, fish: 40 })).toBeNull();
+    expect(zoneUp({ id: 'bogus', zone: 2, fish: 1 })).toBeNull();
   });
 });
