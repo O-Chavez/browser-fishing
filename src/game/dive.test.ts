@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { byId, FISH } from '../data/content';
 import { ABYSS, BOAT_PARTS, CHARTER_FEE, HOLD, MARKER, PEARLS, ROD, ZONES } from '../data/dive';
 import {
-  abyssLevelCost, afterFight, averagePearls, averageSale, behaviourOdds, canStart, charterFee, holdFish, holdLevelCost, holdZone, markerGrowth, nextHoldBuy, nextRodBuy, payAt,
+  abyssLevelCost, afterFight, averagePearls, averageSale, behaviourOdds, canStart, charterFee, furthestLine, holdFish, isFurthestRecord, holdLevelCost, holdZone, markerGrowth, nextHoldBuy, nextRodBuy, payAt,
   pearlMult, pearlsFor, powInt, ratingOf, rodBuyName, rodStepCost, rollSeaFish, seaFightWords, seaFishTier, seaGap, seaGaps, seaRating, seaRodTier, startDive, stepZone, typicalSale,
   zoneOpen, type SeaRod,
 } from './dive';
@@ -521,5 +521,26 @@ describe('fight left', () => {
     const tiresAfter = (weight: number) => watch({ weight, strength: 0 }, 1).tiredAt;
     // 20 s of surging one rung over the rod, 30 s two over.
     expect(tiresAfter(2) / tiresAfter(1)).toBeGreaterThan(1.3);
+  });
+});
+
+describe('the Furthest Out record', () => {
+  it('is a further zone or, in the same zone, a further marker; ties, the Shelf and no progress are not', () => {
+    expect(isFurthestRecord(null, { zone: 1 })).toBe(true);
+    expect(isFurthestRecord(null, { zone: 0 })).toBe(false);
+    expect(isFurthestRecord({ zone: 2 }, { zone: 3 })).toBe(true);
+    expect(isFurthestRecord({ zone: 3 }, { zone: 3 })).toBe(false);
+    expect(isFurthestRecord({ zone: 4 }, { zone: 4 })).toBe(false);
+    expect(isFurthestRecord({ zone: 4 }, { zone: 4, marker: 1 })).toBe(true);
+    expect(isFurthestRecord({ zone: 4, marker: 7 }, { zone: 4, marker: 7 })).toBe(false);
+    expect(isFurthestRecord({ zone: 4, marker: 7 }, { zone: 4, marker: 8 })).toBe(true);
+    expect(isFurthestRecord({ zone: 4, marker: 7 }, { zone: 3 })).toBe(false);
+  });
+
+  it('words the line in the game\'s terms', () => {
+    expect(furthestLine('Ann', { zone: 4, marker: 12 })).toBe('🧭 Ann has sailed the furthest out: Abyss marker 12!');
+    expect(furthestLine('Ann', { zone: 4 })).toBe('🧭 Ann has sailed the furthest out: the Abyss!');
+    expect(furthestLine('Ann', { zone: 3 })).toBe('🧭 Ann has sailed the furthest out: the Twilight!');
+    expect(furthestLine('Ann', { zone: 2 })).toBe('🧭 Ann has sailed the furthest out: Kelp Deep!');
   });
 });

@@ -968,6 +968,41 @@ describe('the Furthest Out board', () => {
   });
 });
 
+describe('the Furthest Out record line', () => {
+  const lines = (c: { log: { t: string }[] }) => c.log.filter((m) => m.t === 'sys').map((m) => (m as unknown as { text: string }).text).filter((x) => x.startsWith('🧭'));
+  it('tells the server when someone moves past the leader, not on a tie, the Shelf or a fresh start', () => {
+    const t = setup();
+    t.room.furthest = () => t.store.furthest();
+    t.room.furthestStale = () => t.store.furthestStale();
+    const cy = t.store.auth('Cy', 'token-token-token-Cy');
+    if (!cy.ok) throw new Error(cy.msg);
+    cy.account.save.boatParts = 3;
+    const a = t.join('Ann');
+    const b = t.join('Bob');
+    const tick = () => {
+      t.advance(BOARD_MS);
+      t.room.snapshot();
+    };
+    tick();
+    expect(lines(b.c)).toEqual([]); // the board as the server found it
+    a.acct.save.boatParts = 3; // ties Cy (listed by name: Ann first)
+    tick();
+    expect(lines(b.c)).toEqual([]);
+    a.acct.save.boatParts = 4;
+    tick();
+    expect(lines(b.c)).toEqual(['🧭 Ann has sailed the furthest out: the Abyss!']);
+    a.acct.save.abyssRecord = 5; // the leader pushing on
+    tick();
+    b.acct.save.boatParts = 4;
+    b.acct.save.abyssRecord = 5; // a tie
+    tick();
+    b.acct.save.abyssRecord = 6;
+    tick();
+    expect(lines(a.c).slice(-2)).toEqual(['🧭 Ann has sailed the furthest out: Abyss marker 5!', '🧭 Bob has sailed the furthest out: Abyss marker 6!']);
+    expect(lines(b.c)).toHaveLength(3);
+  });
+});
+
 describe('ranks and titles', () => {
   it('announces a new rank to everyone when a catch reaches it', () => {
     const { room, join, advance } = setup();

@@ -5,7 +5,7 @@ import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
 import { NIGHT_BITE, isNight, nightness } from '../src/game/daynight';
 import { fishingSpot, type FishTag } from '../src/game/progression';
-import { afterFight, canStart, charterFee, holdFish, markerGrowth, pearlsFor } from '../src/game/dive';
+import { afterFight, canStart, charterFee, furthestLine, holdFish, isFurthestRecord, markerGrowth, pearlsFor, type Reach } from '../src/game/dive';
 import { replayFight, type Gaps, type LossReason, type ReelTune } from '../src/game/reel';
 import { placeOf, type CasinoGame, type CasinoRecords, type ClientMsg, type DiveEnd, type FurthestRow, type Gamble, type HallRow, type PlayerInfo, type ServerMsg } from '../src/net/protocol';
 import { CASINO_RANGE, ROULETTE_MS, WHEEL_MS, type RouletteBet } from '../src/data/casino';
@@ -116,6 +116,8 @@ export class Room {
   private lastSea = '';
   private lastFurthest = '';
   private lastFurthestRows: FurthestRow[] | null = null;
+  /** The reach of the board's top row as last seen; undefined until the first look, so a server start announces nothing. */
+  private topReach: Reach | null | undefined;
   /** Supplies the all-accounts Furthest Out board (set by the server). */
   furthest: () => FurthestRow[] = () => NO_FURTHEST;
   /** Tells the server's Furthest Out cache that an online player's furthest marker or level changed. */
@@ -1116,6 +1118,10 @@ export class Room {
     const rows = this.furthest();
     if (rows === this.lastFurthestRows) return;
     this.lastFurthestRows = rows;
+    // Whoever now leads by moving strictly past the old leader gets a line for the whole server (a tie or a rename doesn't).
+    const top = rows[0] ? { zone: rows[0].zone, ...(rows[0].marker ? { marker: rows[0].marker } : {}) } : null;
+    if (this.topReach !== undefined && top && isFurthestRecord(this.topReach, top)) this.say({ t: 'sys', text: furthestLine(rows[0].name, top) });
+    this.topReach = top;
     const fk = JSON.stringify(rows);
     if (fk !== this.lastFurthest) {
       this.lastFurthest = fk;
