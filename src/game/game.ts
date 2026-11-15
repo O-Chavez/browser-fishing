@@ -58,7 +58,7 @@ import {
 import { carryScale, hangLen, hangPitch, heldScale, seaHangPitch, seaHeldScale, waterScale } from './fishscale';
 import type { LeaderRow } from './hub';
 import { buildTin } from './itemmodels';
-import { rankUp, type RankUp } from './rankup';
+import { LEGEND_MARK, legendUp, rankUp, type LegendUp, type RankUp } from './rankup';
 import {
   fishWeight,
   formatWeight,
@@ -86,7 +86,7 @@ import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, LURE_BULK_PACKS, LURE_CHARGES, 
 import { blackjackVerdict, cashOutAllChips, cashOutSlots, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
 import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type SaveData } from './state';
-import { BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
+import { ABYSSAL, BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { CharacterPreview } from './character';
 import { KOFI_URL } from '../data/support';
@@ -109,7 +109,7 @@ type Phase =
   | 'landing'
   | 'result';
 
-const defaultLookWith = (color: number, face: string): Look => ({ color, face, hat: null, shirt: null, jewelry: null });
+const defaultLookWith = (color: number, face: string): Look => ({ color, face, hat: null, shirt: null, jewelry: null, pet: null });
 
 /** Item icons shared by the hotbar and the menus. */
 const BAIT_ICON: Record<string, string> = { worm: '🪱', fly: '🪰', minnow: '🐟', lure: '💡', pearl: '🦪' };
@@ -278,7 +278,9 @@ export class Game {
   private tab = 'inventory';
   private shopTab: 'cosmetics' | 'gear' | 'sea' = 'gear';
   /** The item selected in each menu's tile grid, shown in its details panel. */
-  private pick: Partial<Record<'bag' | 'gear' | 'sea' | 'cos' | 'ccos' | 'perk' | 'smoke' | 'dish', string>> = {};
+  private pick: Partial<Record<'bag' | 'gear' | 'sea' | 'cos' | 'ccos' | 'rcos' | 'perk' | 'smoke' | 'dish', string>> = {};
+  /** Captain Reed's tab: his chart and charters, or the Wardrobe of sea legend pieces he sells. */
+  private reedTab: 'charters' | 'wardrobe' = 'charters';
   /** Smokehouse tab. */
   private smokeTab: 'smoker' | 'kitchen' | 'pantry' = 'smoker';
   /** Eating this would replace a snack with time left: the menu asks first. */
@@ -328,6 +330,8 @@ export class Game {
   private bannerTimer = 0;
   /** The rank the latest catch reached, for the catch card's [Wear title] / [Wear it] buttons. */
   private rankCard: RankUp | null = null;
+  /** The piece of a legend's set the latest catch unlocked at Captain Reed's, for the catch card's banner and line. */
+  private legendCard: LegendUp | null = null;
   /** A wheel is spinning or cards are being dealt: other actions wait until the result has landed. */
   private spin = false;
   /** Timers of the reveal in progress; the exit gate waits for them. */
@@ -702,7 +706,7 @@ export class Game {
     this.setMenu(false);
     const { title, line } = welcomeText(name, this.s, chartersToTry(this.s));
     const el = $('banner');
-    el.classList.remove('rank');
+    el.classList.remove('rank', 'abyssal');
     el.classList.add('welcome');
     el.style.color = '';
     // Returning players learn where to switch accounts, and those who could lose theirs with this
@@ -1172,7 +1176,7 @@ export class Game {
   private onMenuClick(el: HTMLElement): void {
     const btn = el.closest('button') as HTMLButtonElement | null;
     if (!btn || btn.disabled) return;
-    const { tab, shop, prize, smoke: smokeTab, pick, act, id } = btn.dataset;
+    const { tab, shop, prize, reed, smoke: smokeTab, pick, act, id } = btn.dataset;
     if (act === 'close') return this.closeMenu();
     if (act === 'locked') return;
     if (tab) {
@@ -1180,6 +1184,7 @@ export class Game {
       this.newsGlance = null;
     } else if (shop) this.shopTab = shop as 'cosmetics' | 'gear' | 'sea';
     else if (prize) this.prizeTab = prize as 'perks' | 'cosmetics';
+    else if (reed) this.reedTab = reed as 'charters' | 'wardrobe';
     else if (smokeTab) {
       this.smokeTab = smokeTab as 'smoker' | 'kitchen' | 'pantry';
       this.confirmEat = null;
@@ -1240,6 +1245,7 @@ export class Game {
     else if (act === 'rodstep' || act === 'abysslevel') this.buyRodUp();
     else if (act === 'holdlevel') this.buyHoldUp();
     else if (act === 'boatpart') this.buyBoatPart();
+    else if (act === 'buylegend') this.buyLegend(id!);
     this.persist();
     this.refreshHud();
     this.renderMenu();
@@ -1379,6 +1385,17 @@ export class Game {
     this.net.send({ t: 'boatpart' });
     this.toast(`Fitted the ${p.name} · ${ZONES[s.boatParts].name} is open`, 3);
     audio.jingle('rare');
+  }
+
+  /** A piece of a sea legend's set its landings unlocked, from Captain Reed with coins. */
+  private buyLegend(id: string): void {
+    if (this.spin) return;
+    const why = eco.legendBuyError(this.s, id);
+    if (why) return this.toast(why);
+    if (!eco.buyLegendPiece(this.s, id)) return;
+    this.net.send({ t: 'buylegend', id });
+    this.toast(`Bought the ${cosById(id)?.name ?? id} · wear it from here or the Wardrobe`, 3.5);
+    audio.jingle('legendary');
   }
 
   private equipRod(id: string): void {
@@ -1780,6 +1797,7 @@ export class Game {
     this.divePick = null;
     this.diveMarkerPick = null;
     this.reedSay = say;
+    this.reedTab = 'charters';
     this.openMenu('reed');
   }
 
@@ -2473,7 +2491,7 @@ export class Game {
     const focus = this.map.sea && fish.legend ? 'Five times the pearls. Stay focused...' : 'Stay focused...';
     if (this.map.sea ? !fish.legend : fish.tier !== this.bait.tier) return;
     const el = $('banner');
-    el.classList.remove('welcome', 'rank', 'legend');
+    el.classList.remove('welcome', 'rank', 'legend', 'abyssal');
     const legendLanded = this.map.sea && verb === 'caught';
     if (legendLanded) el.classList.add('legend');
     const name = this.map.sea ? 'Legend' : `${tierName(fish.tier)} fish`;
@@ -2489,11 +2507,12 @@ export class Game {
     this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), legendLanded ? 4600 : 3200);
   }
 
-  /** The big gold "⚓ BOSUN ⚓" over what the rank gave. */
-  private rankBanner(r: RankUp): void {
+  /** The big gold "⚓ BOSUN ⚓" over what the rank gave, or with `abyssal` the teal one for a piece of a legend's set. */
+  private rankBanner(r: { title: string; line: string }, abyssal = false): void {
     const el = $('banner');
-    el.classList.remove('welcome');
+    el.classList.remove('welcome', 'legend', 'abyssal');
     el.classList.add('rank');
+    el.classList.toggle('abyssal', abyssal);
     el.style.color = '';
     el.innerHTML = `${escapeHtml(r.title)}<small>${escapeHtml(r.line)}</small>`;
     el.classList.remove('hidden');
@@ -2632,7 +2651,7 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null);
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift, legendPiece } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch', h: this.holds.encode() });
     if (leveledUp) this.queueNudge();
@@ -2657,6 +2676,7 @@ export class Game {
     el.classList.toggle('sea', !!fish.sea);
     const shiny = this.hookedShiny;
     this.rankCard = rankUp(ranks);
+    this.legendCard = legendPiece ? legendUp(legendPiece) : null;
     el.innerHTML = `${legend ? '<div class="legend-tag">★ LEGEND ★</div>' : ''}<div class="muted">${shiny ? `<b style="color:#ffd23a">✨ SHINY! ✨</b>${shinyFrom ? ` <span class="credit">✨ ${shinyFrom}</span>` : ''} ` : ''}${first ? 'NEW! ' : ''}${record ? 'PERSONAL BEST ' : ''}</div>
       <div class="catch-ico">${fishIcon(fish.id, { shiny })}</div>
       <h2 style="color:${color}">${shiny ? '✨ ' : ''}${fish.name}</h2>
@@ -2664,7 +2684,7 @@ export class Game {
       <div class="weight"><span class="coin"></span>${Math.round(sellValue(fish, size, shiny) * mult).toLocaleString()}${coinFrom ? `<small class="credit">💰 ${coinFrom}</small>` : ''}</div>${this.landedClean ? `<div class="clean">🧵 Clean catch! +${Math.round(eco.CLEAN_BONUS * 100)}%</div>` : ''}${this.fightTag ? `<div class="clean ${this.fightTag}">${this.fightTag === 'feisty' ? '⚡ Feisty!' : '⚓ Brutish!'} +${Math.round(eco.TAG_BONUS * 100)}%</div>` : ''}
       ${fish.sea && this.fightAt ? catchPearlsHtml(this.fightAt.zone, this.fightAt.marker, { tag: this.fightTag, legend, shiny }) : ''}
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
-      <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.rankButtons()}
+      <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.legendCard ? `<div class="piece">${escapeHtml(this.legendCard.card)}</div>` : ''}${this.rankButtons()}
       <div class="muted">Click to release your hold</div>`;
     el.classList.remove('hidden');
     // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
@@ -2672,8 +2692,12 @@ export class Game {
     void el.offsetWidth;
     el.style.animation = '';
     audio.jingle(shiny || legend ? 'legendary' : fish.sea ? 'epic' : fish.rarity);
-    // A new rank takes the banner from the tier banner, and its jingle follows the catch's.
-    if (this.rankCard) this.rankBanner(this.rankCard);
+    // A legend's piece unlocked, then a new rank, takes the banner from the tier banner, and its jingle follows the
+    // catch's. A rank reached on the same catch keeps its buttons and says itself in a toast.
+    if (this.legendCard) {
+      this.rankBanner(this.legendCard, true);
+      if (this.rankCard) this.toast(`${this.rankCard.title} · ${this.rankCard.line}`, 4);
+    } else if (this.rankCard) this.rankBanner(this.rankCard);
     else this.topTierBanner(fish, 'caught', shiny);
     this.catchMoment(fish, shiny);
 
@@ -3426,7 +3450,8 @@ export class Game {
     const vendor = this.tab === 'shop' || this.tab === 'casino' || this.tab === 'smoke';
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
     $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
-    const card = DIVE_TABS.includes(this.tab);
+    // Reed's Wardrobe tab is a full-height window like the stall's (at his panel's width), not a fitted card.
+    const card = DIVE_TABS.includes(this.tab) && !(this.tab === 'reed' && this.reedTab === 'wardrobe');
     $('menu').classList.toggle('fit', this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || this.tab === 'nudge' || card);
     $('menu').classList.toggle('news', this.tab === 'news');
     $('menu').classList.toggle('nudge', this.tab === 'nudge');
@@ -3495,7 +3520,7 @@ export class Game {
         el.innerHTML = nudgeHtml(escapeHtml(this.net.name));
         break;
       case 'reed':
-        el.innerHTML = reedHtml({ say: this.reedSay, s: this.s, pick: this.reedPick(), open: DIVES_OPEN, marker: this.reedMark() });
+        el.innerHTML = this.reedTab === 'wardrobe' ? this.reedWardrobeHtml() : reedHtml({ say: this.reedSay, s: this.s, pick: this.reedPick(), open: DIVES_OPEN, marker: this.reedMark() });
         break;
       case 'marker':
         el.innerHTML = this.diveHud.view ? outHtml(this.diveHud.view, this.s) : '';
@@ -3648,7 +3673,8 @@ export class Game {
       const busy = this.s.smoke.spots.filter(Boolean).length;
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags's Smokehouse</b><span>${busy ? `${busy} fish smoking` : 'Smoker ready for fish'}</span></div>`;
     }
-    if (this.tab === 'reed') return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>Charters</span></div>`;
+    if (this.tab === 'reed')
+      return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>${this.reedTab === 'wardrobe' ? `<span class="coin sm"></span> ${this.s.coins.toLocaleString()} to spend` : 'Charters'}</span></div>`;
     if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? whereText(this.diveHud.view.zone, this.diveHud.view.marker) : 'Back at the harbour'}</span></div>`;
     if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
     if (this.tab === 'nudge') return `<span class="who-ic">☕</span><div><b>${NUDGE_TITLE}</b></div>`;
@@ -3673,6 +3699,9 @@ export class Game {
         tab('pantry', '🧺', `Pantry${n ? ` (${n})` : ''}`, this.smokeTab === 'pantry', 'data-smoke')
       );
     }
+    // Charters, and the sea legend pieces once there's a chart to show (with the Deep Sea Rod, while charters are open).
+    if (this.tab === 'reed')
+      return DIVES_OPEN && this.s.seaRod ? tab('charters', '⚓', 'Charters', this.reedTab === 'charters', 'data-reed') + tab('wardrobe', '🧥', 'Wardrobe', this.reedTab === 'wardrobe', 'data-reed') : '';
     if (this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || this.tab === 'nudge' || DIVE_TABS.includes(this.tab)) return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
@@ -3694,7 +3723,9 @@ export class Game {
         ? cosById(this.pick.cos)
         : this.tab === 'casino' && this.prizeTab === 'cosmetics'
           ? cosById(this.pick.ccos)
-          : undefined;
+          : this.tab === 'reed' && this.reedTab === 'wardrobe'
+            ? cosById(this.pick.rcos)
+            : undefined;
     return c ? { ...this.s.look, [c.slot]: c.id } : this.s.look;
   }
 
@@ -3702,7 +3733,8 @@ export class Game {
 
   /** A square item tile; clicking it selects the item (`data-pick`) unless `attrs` says otherwise. */
   private itemTile(o: { icon: string; name: string; sub: string; price?: string; tier: number; on?: boolean; check?: boolean; ghost?: boolean; attrs: string; tip?: string; color?: string; cls?: string }): string {
-    const t = Math.max(1, Math.min(5, o.tier));
+    // Up to 7: cosmetics come in at their tier + 1, and Abyssal is tier 6.
+    const t = Math.max(1, Math.min(7, o.tier));
     return `<button class="tile${o.on ? ' sel' : ''}${o.ghost ? ' ghost' : ''}${o.cls ?? ''}" style="--c:${o.color ?? `var(--t${t})`}" ${o.attrs}${o.tip ? ` data-tip="${this.esc(o.tip)}"` : ''}>${o.check ? '<span class="eq">✓</span>' : ''}<span class="ic">${o.icon}</span><span class="nm">${o.name}</span>${o.price ? `<span class="pr">${o.price}</span>` : ''}${o.sub ? `<span class="st">${o.sub}</span>` : ''}</button>`;
   }
 
@@ -3717,7 +3749,7 @@ export class Game {
 
   /** The details panel on the right: big icon, name, stats, one plain sentence, and the main action. */
   private detail(o: { icon: string; name: string; tier: number; badge?: string; body: string; note: string; actions: string; top?: string; color?: string; cls?: string }): string {
-    const t = Math.max(1, Math.min(5, o.tier));
+    const t = Math.max(1, Math.min(7, o.tier));
     return `<aside class="detail${o.cls ?? ''}">${o.top ?? ''}<div class="hero"><span class="ic" style="--c:${o.color ?? `var(--t${t})`}">${o.icon}</span><div><b>${o.name}</b>${o.badge ?? this.badge(o.tier)}</div></div>${o.body}<p>${o.note}</p><div class="actions">${o.actions}</div></aside>`;
   }
 
@@ -3885,7 +3917,7 @@ export class Game {
     if (!st) return;
     if (this.menuOpen && this.newsGlance) return void (this.afterNews = () => this.stageBanner(ids, intro));
     const el = $('banner');
-    el.classList.remove('welcome');
+    el.classList.remove('welcome', 'abyssal');
     el.classList.add('rank');
     el.style.color = '';
     el.innerHTML = intro
@@ -4353,8 +4385,20 @@ export class Game {
         .sort((a, b) => a.level! - b.level!)
         .map((c) => this.itemTile({ ...this.cosLook(c), name: c.name, sub: `🔒 Level ${c.level}`, tier: c.tier + 1, ghost: true, attrs: `data-act="locked" data-try="${slot}:${c.id}"` }))
         .join('');
+      // A legend's pieces not bought yet, so the whole set shows from the start: the landings each still takes, then
+      // once unlocked, that Captain Reed sells it and for how much.
+      const ahead = COSMETICS.filter((c) => c.slot === slot && c.shop === 'legend' && !this.s.owned.includes(c.id))
+        .sort((a, b) => a.legend!.localeCompare(b.legend!) || a.landing! - b.landing!)
+        .map((c) => {
+          const open = eco.legendUnlocked(this.s, c);
+          const sub = open ? "🔒 At Reed's" : `🔒 Land ${eco.legendName(c)}`;
+          const tip = open ? `Unlocked · ${c.price.toLocaleString('en-US')} coins at Captain Reed's` : eco.landingsText(this.s, c);
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, tier: c.tier + 1, ghost: true, attrs: `data-act="locked" data-try="${slot}:${c.id}"`, tip });
+        })
+        .join('');
       const title = this.slotTitle(slot);
-      return `<h4>${title}</h4><div class="tiles">${cards + locked || `<p class="empty">Nothing yet - ${this.map.vendor.name}'s stall sells ${title.toLowerCase()}.</p>`}</div>`;
+      const none = slot === 'pet' ? 'land a sea legend to find one' : `${this.map.vendor.name}'s stall sells ${title.toLowerCase()}`;
+      return `<h4>${title}</h4><div class="tiles">${cards + locked + ahead || `<p class="empty">Nothing yet - ${none}.</p>`}</div>`;
     }).join('');
     return `<div class="cols wardrobe"><div class="side"><div id="pv-slot"></div><p class="drag-hint">Drag to turn</p><h4>Colour</h4><div class="swatches">${this.swatchHtml()}</div></div>
       <div class="main"><h4>Face</h4><div class="faces">${this.facesHtml()}</div><h4>Title</h4>${this.titlesHtml()}${sections}</div></div>`;
@@ -4739,7 +4783,8 @@ export class Game {
 
   /** Icon, rarity colour and tile classes shared by every cosmetic tile and detail panel. */
   private cosLook(c: Cosmetic): { icon: string; color: string; cls: string } {
-    const cls = `${c.tier >= 5 ? ' legend' : c.tier === 4 ? ' mythic' : ''}${c.shop === 'casino' ? ' casino-item' : ''}`;
+    // Abyssal pieces get their own teal shimmer, so they never read as the gold Legendary ones.
+    const cls = `${c.tier >= ABYSSAL ? ' abyssal' : c.tier >= 5 ? ' legend' : c.tier === 4 ? ' mythic' : ''}${c.shop === 'casino' ? ' casino-item' : ''}`;
     return { icon: cosIcon(c.id), color: COS_RARITY_COLOR[c.tier], cls };
   }
 
@@ -4805,6 +4850,87 @@ export class Game {
       badge: `<span class="badge" style="--c:${look.color}">${slotName} · ${COS_RARITY[chosen.tier]}${where}</span>`,
       body: '',
       note: `${chosen.blurb} ${has ? (wearing ? 'You are wearing it.' : 'Yours to wear any time from the Wardrobe.') : 'Hover any item to try it on.'}`,
+      actions: action,
+    });
+    return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
+  }
+
+  /**
+   * Captain Reed's Wardrobe tab, on the stall's Cosmetics pattern: the preview, what he sells (`reedCosmetics`: the sea
+   * legends' pieces for now) as one row a set in landing order, and the picked item's panel with its state
+   * (`reedOffer`): the landings it still takes, its price and [Buy], or [Wear it]. Items from no legend would go under
+   * a plain heading of their own.
+   */
+  private reedWardrobeHtml(): string {
+    const s = this.s;
+    const items = eco.reedCosmetics(s);
+    const picked = cosById(this.pick.rcos);
+    const chosen = picked && items.includes(picked) ? picked : undefined;
+    // One row a set: "🦑 The Kraken's set · the Abyss" over its pieces in landing order (`reedCosmetics`'s order).
+    const sets = [...new Set(items.map((c) => c.legend ?? ''))];
+    const sections = sets.map((legend) => {
+      const cards = items
+        .filter((c) => (c.legend ?? '') === legend)
+        .map((c) => {
+          const offer = eco.reedOffer(s, c);
+          const wearing = s.look[c.slot] === c.id;
+          const sub = offer === 'owned' ? (wearing ? 'Wearing' : 'Owned') : offer === 'locked' ? `🔒 Landing ${c.landing}` : '';
+          return this.itemTile({ ...this.cosLook(c), name: c.name, sub, price: offer === 'locked' ? undefined : this.cosPrice(c), tier: c.tier + 1, on: chosen?.id === c.id, check: offer === 'owned', ghost: offer === 'locked' || (offer === 'sale' && s.coins < c.price), attrs: `data-pick="rcos" data-id="${c.id}" data-try="${c.slot}:${c.id}"`, tip: offer === 'locked' ? eco.landingsText(s, c) : undefined });
+        })
+        .join('');
+      const fish = FISH.find((f) => f.id === legend);
+      const zone = ZONES.find((z) => z.legends.includes(legend));
+      const head = fish
+        ? `${LEGEND_MARK[legend] ?? '✦'} ${escapeHtml(fish.name)}'s set${zone ? ` <small>· ${zone.name.replace(/^The /, 'the ')}</small>` : ''}`
+        : 'More from Reed';
+      return `<h4 class="set-h">${head}</h4><div class="tiles">${cards}</div>`;
+    }).join('');
+    const first = COSMETICS.find((c) => c.legend);
+    const where = first ? ZONES.find((z) => z.legends.includes(first.legend!)) : undefined;
+    const intro = items.length
+      ? `<p class="cos-intro">"Land a legend and I'll have the next piece of its set made up for you. One landing, one piece, paid in coins."</p>`
+      : `<p class="cos-intro">"Nothing here yet. The sea legends give up the finest gear afloat: fit the boat for ${where ? where.name.replace(/^The /, 'the ') : 'deep water'}, land ${first ? eco.legendName(first) : 'a legend'}, and I'll have a piece of its set made up for you."</p>`;
+    if (!chosen) {
+      const yours = this.detail({
+        top: '<div id="pv-slot"></div>',
+        icon: '🪞',
+        name: 'Your look',
+        tier: 1,
+        badge: '<span class="badge" style="--c:var(--t1)">Wearing now</span>',
+        body: '',
+        note: items.length ? 'Hover any piece to try it on. Click one to see what it takes.' : 'Land a sea legend to unlock the first piece of its set.',
+        actions: '',
+      });
+      return `<div class="cols"><div class="main">${intro}${sections}</div>${yours}</div>`;
+    }
+    const offer = eco.reedOffer(s, chosen);
+    const wearing = s.look[chosen.slot] === chosen.id;
+    const action = offer === 'owned'
+      ? wearing
+        ? this.btn('Take it off', `data-act="equip" data-slot="${chosen.slot}" data-id=""`, 'plain')
+        : this.btn('Wear it', `data-act="equip" data-slot="${chosen.slot}" data-id="${chosen.id}"`, 'ok')
+      : offer === 'locked'
+        ? this.btn(eco.landingsText(s, chosen), '', 'plain', true)
+        : s.coins < chosen.price
+          ? this.btn(`Need ${(chosen.price - s.coins).toLocaleString()} ${COIN} more`, '', 'plain', true)
+          : this.btn(`Buy for ${this.cosPrice(chosen)}`, `data-act="buylegend" data-id="${chosen.id}"`);
+    const look = this.cosLook(chosen);
+    const slotName = chosen.slot === 'jewelry' ? 'Jewelry' : chosen.slot[0].toUpperCase() + chosen.slot.slice(1);
+    const state = offer === 'owned'
+      ? wearing ? 'You are wearing it.' : 'Yours to wear any time, here or from the Wardrobe.'
+      : offer === 'locked'
+        ? `Unlocks on landing ${chosen.landing} of ${eco.legendName(chosen)}.`
+        : `Unlocked: ${chosen.price.toLocaleString()} coins.`;
+    const detail = this.detail({
+      top: '<div id="pv-slot"></div>',
+      icon: look.icon,
+      name: chosen.name,
+      tier: chosen.tier + 1,
+      color: look.color,
+      cls: look.cls,
+      badge: `<span class="badge" style="--c:${look.color}">${slotName} · ${COS_RARITY[chosen.tier]}</span>`,
+      body: '',
+      note: `${chosen.blurb} ${state}`,
       actions: action,
     });
     return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;

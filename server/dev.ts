@@ -5,6 +5,7 @@ import { ABYSS, BOAT_PARTS, HOLD, ROD, ZONES } from '../src/data/dive';
 import { seaDepthFor } from '../src/data/sea';
 import * as eco from '../src/game/economy';
 import { DISHES } from '../src/data/smokehouse';
+import { COS_SLOTS, legendPieces } from '../src/data/cosmetics';
 import * as smoke from '../src/game/smoke';
 import { grantRanks, sellValue } from '../src/game/progression';
 import type { SaveData } from '../src/game/state';
@@ -74,6 +75,7 @@ export const TIMES: Record<string, number> = { day: 0.2, dusk: 0.5, night: 0.7, 
 export const HELP = [
   '/coins N · /chips N · /pearls N · /level N · /rodstep 0-8 · /abysslevel N · /hold 0-4 · /fill · /boat 0-4',
   '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
+  '/landed <legend> N (times landed: unlocks its set\'s pieces up to N, to buy at Reed\'s; takes back bought ones past N)',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
   '/sea <zone 0-4> [marker] (start a charter there, no fee; 0 is the Shelf, 4 the Abyss)',
   '/dig (reset worm cooldown) · /tips (show the new-player tips again) · /smoke (finish the smoker) · /smoke <fish> [N]',
@@ -82,6 +84,9 @@ export const HELP = [
   '/resetpass <name> <new password>',
   '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
 ];
+
+/** Landings past every set are only a count; this keeps `/landed` typos sane. */
+const MAX_DEV_LANDED = 999;
 
 /** There is no level cap; this only keeps `/level` typos sane. */
 const MAX_DEV_LEVEL = 999;
@@ -183,6 +188,21 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       const shiny = args.includes('shiny');
       if (!eco.takeItem(s, { k: 'fish', fishId: f.id, size, ...(shiny ? { shiny } : {}) })) return say('Your fish slots are full.');
       return ok(`Added a ${shiny ? 'shiny ' : ''}${size} cm ${f.name}.`);
+    }
+    case 'landed': {
+      // Sets a sea legend's landing count as if landed N times, which unlocks the pieces of its set up to N at Reed's.
+      // Pieces past N that were bought are taken back (and off), so the next landing unlocks the next one again.
+      const f = FISH.find((x) => x.id === args[0] && x.sea && x.legend);
+      const n = int(args[1], 0, MAX_DEV_LANDED);
+      if (!f || n === null) return say(`Usage: /landed <legend> N · legends: ${ids(FISH.filter((x) => x.sea && x.legend))}`);
+      if (n) s.legends[f.id] = n;
+      else delete s.legends[f.id];
+      const set = legendPieces(f.id);
+      const past = new Set(set.filter((c) => !eco.legendUnlocked(s, c)).map((c) => c.id));
+      s.owned = s.owned.filter((id) => !past.has(id));
+      for (const slot of COS_SLOTS) if (past.has(s.look[slot]!)) s.look[slot] = null;
+      const open = set.length - past.size;
+      return ok(`${f.name} landed ${n} time${n === 1 ? '' : 's'}${set.length ? `: ${open} of ${set.length} pieces of its set unlocked at Reed's` : ' (it has no set yet)'}.`);
     }
     case 'smoke': {
       if (!args[0]) {

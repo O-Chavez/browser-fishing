@@ -21,6 +21,7 @@ import charterHold from '../assets/images/news/charter-hold.jpg';
 import charterLures from '../assets/images/news/charter-lures.jpg';
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
+import krakenGear from '../assets/images/news/kraken-gear.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
 import reelFight from '../assets/images/news/reel-fight.jpg';
@@ -41,6 +42,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 11,
+    date: '2026-11-14',
+    title: "The Kraken's gear",
+    image: krakenGear,
+    alt: 'Three players on the pier at sunset: one in the Kraken Crown and the Kraken Armor, a wet crimson shell with squid fins, tentacles and water spiralling round it, standing in a puddle; one in a navy coat with the crown and the Kraken Beak; one in a bucket hat; two little pink Kraken Hatchlings float beside them',
+    body: [
+      "Land <b>the Kraken</b> in <b>the Abyss</b> and <b>Captain Reed</b> can make you something from it. Your first Kraken unlocks the <b>Kraken Crown</b>, the second the <b>Kraken Armor</b>, the third the <b>Kraken Beak</b>, and the fourth the <b>Kraken Hatchling</b>, a little Kraken that floats after you wherever you go.",
+      "Once a piece is unlocked, find it in the new <b>Wardrobe</b> tab of Reed's menu, try it on, and buy it there. They don't come cheap: the crown is 3,000,000 coins. Wear them from your own Wardrobe (<kbd>Tab</kbd>) too, where pets have a row of their own.",
+      "They're the first <b>Abyssal</b> pieces, a new rarity above Legendary that only comes from the Abyss. Krakens count from today on.",
+    ],
+  },
   {
     id: 10,
     date: '2026-11-14',

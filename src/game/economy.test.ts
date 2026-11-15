@@ -7,7 +7,7 @@ import { mulberry } from './env';
 import { FIGHT_DT, P, Reel, type ReelTune } from './reel';
 import { BACKPAY_VERSION, FISH_SPREAD, FLAT_LEVEL, TAG_TIERS, backPayXp, sellValue, xpForNextLevel } from './progression';
 import { Drops } from './drops';
-import { COSMETICS, COS_SLOTS, cosById, isFace } from '../data/cosmetics';
+import { COSMETICS, COS_SLOTS, cleanLook, cosById, isFace } from '../data/cosmetics';
 
 const fishSlot = (size = 20) => ({ k: 'fish' as const, fishId: FISH[0].id, size });
 /** Distinct fish that survive the size clamp in `migrate`. */
@@ -590,7 +590,9 @@ describe('charms & perks summary', () => {
 
 describe('cosmetics shops', () => {
   it('keeps every tier in every slot, with casino items at each counter', () => {
-    for (const slot of COS_SLOTS) {
+    // Pets come only from the sea legends.
+    expect(COSMETICS.filter((c) => c.slot === 'pet').every((c) => c.shop === 'legend')).toBe(true);
+    for (const slot of COS_SLOTS.filter((x) => x !== 'pet')) {
       const stall = COSMETICS.filter((c) => c.slot === slot && c.shop === 'stall');
       expect(stall.some((c) => c.tier === 0)).toBe(true);
       expect(stall.some((c) => c.tier === 5)).toBe(true);
@@ -618,6 +620,136 @@ describe('cosmetics shops', () => {
     expect(eco.buyCosmetic(s, 'cap', 'stall')).toBe(true);
     expect(s.coins).toBe(1_000_000 - cosById('cap')!.price);
     expect(s.owned).toEqual(['visor', 'cap']);
+  });
+});
+
+describe("a sea legend's set", () => {
+  const kraken = byId(FISH, 'kraken');
+  const leviathan = byId(FISH, 'leviathan');
+  const land = (s: SaveData, f = kraken, shiny = false, tag: 'feisty' | null = null) => eco.applyCatch(s, f, f.minSize, shiny, false, true, tag).legendPiece;
+  const piece = (id: string) => cosById(id)!;
+
+  it('unlocks the next piece on each landing, in order, then just counts, and gives nothing', () => {
+    const s = newSave();
+    expect(land(s)).toEqual({ id: 'krakencrown', landing: 1, of: 3 });
+    // A shiny or tagged Kraken counts the same.
+    expect(land(s, kraken, true)).toEqual({ id: 'krakenarmor', landing: 2, of: 3 });
+    expect(land(s, kraken, false, 'feisty')).toEqual({ id: 'krakenbeak', landing: 3, of: 3 });
+    expect(land(s)).toEqual({ id: 'krakenpet', landing: 4, of: 3 });
+    expect(land(s)).toBeUndefined();
+    expect(s.legends).toEqual({ kraken: 5 });
+    expect(s.owned).toEqual([]);
+    expect(['krakencrown', 'krakenarmor', 'krakenbeak', 'krakenpet'].every((id) => eco.legendUnlocked(s, piece(id)))).toBe(true);
+  });
+
+  it('unlocks only by landings, and says nothing for a piece already owned', () => {
+    const s = newSave();
+    expect(eco.legendUnlocked(s, piece('krakencrown'))).toBe(false);
+    expect(eco.legendUnlocked(s, piece('crown'))).toBe(false);
+    s.legends = { kraken: 2 };
+    expect(eco.legendUnlocked(s, piece('krakenarmor'))).toBe(true);
+    expect(eco.legendUnlocked(s, piece('krakenbeak'))).toBe(false);
+    s.owned = ['krakenbeak'];
+    expect(land(s)).toBeUndefined();
+    expect(s.legends.kraken).toBe(3);
+  });
+
+  it('counts every sea legend, and nothing else', () => {
+    const s = newSave();
+    expect(land(s, leviathan)).toBeUndefined();
+    eco.applyCatch(s, byId(FISH, 'krakenspawn'), 300, false, false, true);
+    eco.applyCatch(s, FISH[0], FISH[0].minSize);
+    const top = FISH.find((f) => f.tier === 5 && !f.sea)!;
+    eco.applyCatch(s, top, top.minSize);
+    expect(s.legends).toEqual({ leviathan: 1 });
+  });
+
+  it('starts fresh for saves from before it, whatever the Fishdex says, and keeps only sane counts', () => {
+    const old = { ...newSave(), dex: { kraken: { count: 7, best: 1200 } } } as Partial<SaveData>;
+    delete old.legends;
+    const s = migrate(old);
+    expect(s.legends).toEqual({});
+    expect(s.dex.kraken.count).toBe(7);
+    expect(land(s)?.id).toBe('krakencrown');
+    const odd = migrate({ ...newSave(), legends: { kraken: 2.7, leviathan: -1, minnow: 3, nope: 4, dreamer: 'x' } as never });
+    expect(odd.legends).toEqual({ kraken: 2 });
+    expect(migrate({ ...newSave(), legends: null as never }).legends).toEqual({});
+  });
+
+  it('says how many landings a piece still takes', () => {
+    const s = newSave();
+    expect(eco.legendLandingsLeft(s, 'krakencrown')).toBe(1);
+    expect(eco.legendLandingsLeft(s, 'krakenpet')).toBe(4);
+    expect(eco.landingsText(s, piece('krakencrown'))).toBe('Land the Kraken once');
+    expect(eco.landingsText(s, piece('krakenpet'))).toBe('Land the Kraken 4 times');
+    land(s);
+    expect(eco.legendLandingsLeft(s, 'krakencrown')).toBe(0);
+    expect(eco.legendLandingsLeft(s, 'krakenbeak')).toBe(2);
+    expect(eco.landingsText(s, piece('krakenarmor'))).toBe('Land the Kraken once more');
+    expect(eco.landingsText(s, piece('krakenbeak'))).toBe('Land the Kraken 2 more times');
+    expect(eco.legendLandingsLeft(s, 'crown')).toBe(0);
+  });
+
+  it("is sold only by Captain Reed, once unlocked, for coins, and only once", () => {
+    const s = newSave();
+    s.coins = 1e9;
+    s.chips = 1e9;
+    // Never at the stall or the prize counter.
+    for (const at of ['stall', 'casino', 'earned', 'legend'] as const) expect(eco.buyCosmetic(s, 'krakencrown', at)).toBe(false);
+    expect(eco.legendBuyError(s, 'krakencrown')).toBe('Land the Kraken once to unlock the Kraken Crown.');
+    expect(eco.buyLegendPiece(s, 'krakencrown')).toBe(false);
+    expect(eco.legendBuyError(s, 'crown')).toBe('Captain Reed has nothing like that.');
+    expect(eco.legendBuyError(s, 'bogus')).toBe('Captain Reed has nothing like that.');
+    s.legends = { kraken: 1 };
+    s.coins = 2_999_999;
+    expect(eco.legendBuyError(s, 'krakencrown')).toBe('The Kraken Crown costs 3,000,000 coins.');
+    expect(eco.buyLegendPiece(s, 'krakencrown')).toBe(false);
+    expect(eco.legendBuyError(s, 'krakenarmor')).toBe('Land the Kraken once more to unlock the Kraken Armor.');
+    s.coins = 3_000_100;
+    expect(eco.buyLegendPiece(s, 'krakencrown')).toBe(true);
+    expect(s.coins).toBe(100);
+    expect(s.owned).toEqual(['krakencrown']);
+    s.coins = 1e9;
+    expect(eco.legendBuyError(s, 'krakencrown')).toBe('You already have the Kraken Crown.');
+    expect(eco.buyLegendPiece(s, 'krakencrown')).toBe(false);
+    expect(s.coins).toBe(1e9);
+    expect([3_000_000, 4_000_000, 2_500_000, 5_000_000]).toEqual(['krakencrown', 'krakenarmor', 'krakenbeak', 'krakenpet'].map((id) => piece(id).price));
+  });
+
+  it("shows at Reed's once its zone is open or it has been landed, locked, on sale or owned", () => {
+    const s = newSave();
+    expect(eco.reedCosmetics(s)).toEqual([]);
+    expect(eco.legendSetShown(s, 'kraken')).toBe(false);
+    s.boatParts = 4;
+    expect(eco.reedCosmetics(s).map((c) => c.id)).toEqual(['krakencrown', 'krakenarmor', 'krakenbeak', 'krakenpet']);
+    const early = { ...newSave(), legends: { kraken: 1 } };
+    expect(eco.legendSetShown(early, 'kraken')).toBe(true);
+    expect(eco.reedCosmetics(early)).toHaveLength(4);
+    // Only Reed's counters: nothing from the stall, the casino or the ranks.
+    expect(eco.reedCosmetics(s).every((c) => eco.REED_SHOPS.includes(c.shop))).toBe(true);
+    s.legends = { kraken: 2 };
+    s.owned = ['krakencrown'];
+    expect(['krakencrown', 'krakenarmor', 'krakenbeak'].map((id) => eco.reedOffer(s, piece(id)))).toEqual(['owned', 'sale', 'locked']);
+  });
+
+  it('wears its pet only when owned, in the pet slot', () => {
+    const s = newSave();
+    expect(eco.equipCosmetic(s, 'pet', 'krakenpet')).toBe(false);
+    s.owned.push('krakenpet');
+    expect(eco.equipCosmetic(s, 'hat', 'krakenpet')).toBe(false);
+    expect(eco.equipCosmetic(s, 'pet', 'krakenpet')).toBe(true);
+    expect(s.look.pet).toBe('krakenpet');
+    expect(eco.equipCosmetic(s, 'pet', null)).toBe(true);
+    expect(s.look.pet).toBeNull();
+  });
+
+  it('keeps an owned pet on a cleaned look and drops one not owned', () => {
+    const look = { ...newSave().look, pet: 'krakenpet' };
+    expect(cleanLook(look, ['krakenpet']).pet).toBe('krakenpet');
+    expect(cleanLook(look, []).pet).toBeNull();
+    expect(cleanLook({ ...look, pet: 'krakencrown' }, ['krakencrown']).pet).toBeNull();
+    expect(migrate({ ...newSave(), owned: ['krakenpet'], look }).look.pet).toBe('krakenpet');
+    expect(migrate({ ...newSave(), look }).look.pet).toBeNull();
   });
 });
 

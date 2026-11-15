@@ -37,6 +37,11 @@
   --t3: #4a90e2;
   --t4: #b05ce6;
   --t5: #ffc933;
+  /* cosmetic tiles come in at tier + 1: Legendary, then Abyssal (COS_RARITY_COLOR) */
+  --t6: #ffc933;
+  --t7: #43e3d2;
+  --abyssal: #43e3d2;
+  --abyssal-dark: #1f8f86;
 }
 
 * { box-sizing: border-box; }
@@ -255,6 +260,8 @@ body.touch #seagear { bottom: 236px; right: 30px; }
 #banner.legend { color: var(--gold); font-size: 56px; animation-duration: 4.6s; }
 #banner.legend small { margin-top: 6px; color: var(--cream); font-size: 22px; text-shadow: 0 1px 3px #000, 0 2px 12px rgba(0,0,0,.9); }
 #banner.welcome small { margin-top: 6px; color: var(--cream); }
+/* a piece of a sea legend's set: the rank banner in the Abyssal teal */
+#banner.rank.abyssal { color: var(--abyssal); }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 
 #purse, #chipbox { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 9px; border-radius: 999px; background: var(--hud-bg); box-shadow: var(--hud-edge); font-size: 22px; font-weight: 900; color: var(--gold); }
@@ -357,9 +364,20 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 .detail.mythic .hero .ic { background: radial-gradient(circle at 50% 38%, #ffe2c4, var(--paper-3) 75%); }
 .detail .hero .ic .cosico { width: 50px; height: 50px; }
 .cos-intro { margin: 0 0 10px; font-size: 14px; font-weight: 800; color: var(--ink-muted); }
+/* Reed's Wardrobe: a heading per legend set, in the set's own words rather than a slot's small caps */
+.main > h4.set-h { margin: 4px 0 10px; font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.main > h4.set-h small { font-size: 13px; font-weight: 800; color: var(--ink-muted); }
 @keyframes cos-shine { 0% { background-position: 0% 0; } 60%, 100% { background-position: 100% 0; } }
 @keyframes cos-twinkle { 0%, 100% { filter: drop-shadow(0 0 0 rgba(255,210,58,0)); } 50% { filter: drop-shadow(0 0 5px rgba(255,210,58,.95)); } }
-@media (prefers-reduced-motion: reduce) { .tile.legend::after, .tile.legend .cosico { animation: none; } }
+/* Abyssal (tier 6, pieces from the Abyss): a cool teal shimmer in place of Legendary's gold */
+.tile.abyssal { overflow: hidden; background: radial-gradient(circle at 50% 36%, #e2fcf7, #b4efe6 55%, #86dccf); box-shadow: inset 0 -4px 0 var(--c), 0 0 0 2px var(--abyssal-dark), 0 0 14px rgba(67,227,210,.55); }
+.tile.abyssal::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 40%, rgba(220,255,250,.6) 50%, transparent 60%); background-size: 300% 100%; background-repeat: no-repeat; animation: cos-shine 4.2s ease-in-out infinite; }
+.tile.abyssal.sel { box-shadow: inset 0 -4px 0 var(--c), 0 0 0 3px var(--gold), 0 0 18px rgba(67,227,210,.85); }
+.tile.abyssal .cosico, .cosico.abyssal { animation: cos-twinkle-teal 2.8s ease-in-out infinite; }
+.tile.abyssal.ghost { opacity: .6; }
+.detail.abyssal .hero .ic { background: radial-gradient(circle at 50% 36%, #e2fcf7, #86dccf); box-shadow: inset 0 -4px 0 var(--c), 0 0 16px rgba(67,227,210,.6); }
+@keyframes cos-twinkle-teal { 0%, 100% { filter: drop-shadow(0 0 0 rgba(67,227,210,0)); } 50% { filter: drop-shadow(0 0 6px rgba(67,227,210,.95)); } }
+@media (prefers-reduced-motion: reduce) { .tile.legend::after, .tile.legend .cosico, .tile.abyssal::after, .tile.abyssal .cosico, .cosico.abyssal { animation: none; } }
 
 /* charms & perks summary in the Bag: one row of effect chips */
 .perks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
@@ -505,6 +523,7 @@ canvas.preview.dragging { cursor: grabbing; }
 #catch .rank-acts { display: flex; gap: 8px; justify-content: center; margin: 8px 0 2px; }
 #catch .btn.mini { padding: 6px 12px; font-size: 13px; border-radius: 10px; box-shadow: 0 3px 0 var(--gold-dark); }
 #catch .btn.mini:disabled { background: var(--paper-3); color: var(--ink-muted); box-shadow: none; }
+#catch .piece { display: inline-block; margin: 6px 0 0; padding: 3px 12px; border-radius: 999px; font-size: 13px; font-weight: 900; color: #0c3532; background: var(--abyssal); box-shadow: 0 0 12px rgba(67,227,210,.6); }
 #catch .btn.mini kbd { font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(0,0,0,.15); }
 body.touch #catch .btn.mini { padding: 10px 18px; font-size: 16px; }
 #catch .catch-ico { position: relative; }
@@ -793,6 +812,8 @@ body.touch .dcard .btn kbd { display: none; }
 .rate.easy { background: #46b866; } .rate.fair { background: #2f8ea3; } .rate.tough { background: #e79a2c; color: #3a2716; } .rate.over { background: #d9523a; }
 /* Reed's chart: a card for each zone, shelf light teal to abyss dark indigo */
 #menu.reedwin .win { width: min(820px, 96vw); }
+/* Reed's chart is taller than a phone held sideways: there the window stops at the screen's edge and its sheet scrolls. */
+#menu.reedwin.fit .win { max-height: calc(100vh - 24px); }
 .reed .zcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 8px; }
 .reed .zcard { display: flex; flex-direction: column; min-width: 0; padding: 0; border-radius: 12px; overflow: hidden; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.14); font: inherit; color: var(--ink); text-align: left; }
 .reed button.zcard { cursor: pointer; }

@@ -1,5 +1,7 @@
-import { cosById } from '../data/cosmetics';
+import { cosById, legendPieces } from '../data/cosmetics';
+import { FISH } from '../data/content';
 import type { Rank } from '../data/ranks';
+import type { LegendPiece } from './economy';
 
 export interface RankUp {
   /** The big gold banner: "⚓ BOSUN ⚓". */
@@ -24,4 +26,29 @@ export function rankUp(ranks: Rank[]): RankUp | null {
     ? `Level ${top.level} · ${list(names)} added to your Wardrobe`
     : `Level ${top.level} · new title${titles.length > 1 ? 's' : ''}: ${list(titles)}`;
   return { title: `⚓ ${top.title.toUpperCase()} ⚓`, line, titleId: top.id, outfit: outfits.at(-1) };
+}
+
+/** Each legend's mark on its pieces' banners; a legend without one gets a plain star. */
+export const LEGEND_MARK: Record<string, string> = { kraken: '🦑' };
+
+export interface LegendUp {
+  /** The big teal banner: "🦑 KRAKEN CROWN 🦑". */
+  title: string;
+  /** The line under it: "Unlocked at Captain Reed's · piece 1 of 3". */
+  line: string;
+  /** The catch card's line, with the piece's mark: "🦑 Kraken Crown · unlocked at Reed's". */
+  card: string;
+}
+
+/** The banner and catch-card line for a piece of a legend's set that a landing unlocked (bought at Captain Reed's). */
+export function legendUp(p: LegendPiece): LegendUp | null {
+  const c = cosById(p.id);
+  const fish = FISH.find((f) => f.id === c?.legend);
+  if (!c || !fish) return null;
+  const mark = LEGEND_MARK[fish.id] ?? '✦';
+  return {
+    title: `${mark} ${c.name.toUpperCase()} ${mark}`,
+    line: c.slot === 'pet' ? `${fish.name}'s pet · unlocked at Captain Reed's` : `Unlocked at Captain Reed's · piece ${p.landing} of ${p.of}`,
+    card: `${mark} ${c.name} · unlocked at Reed's`,
+  };
 }

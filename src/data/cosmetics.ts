@@ -1,17 +1,22 @@
-export type CosSlot = 'hat' | 'shirt' | 'jewelry';
+export type CosSlot = 'hat' | 'shirt' | 'jewelry' | 'pet';
 
-export const COS_SLOTS: CosSlot[] = ['hat', 'shirt', 'jewelry'];
+/** Every slot a look has. The pet slot (2026-11-14) holds a sea legend's pet, which rides at the shoulder. */
+export const COS_SLOTS: CosSlot[] = ['hat', 'shirt', 'jewelry', 'pet'];
 
-/** Where an item comes from: Marlow's stall (coins), the casino prize counter (chips only), or a level rank (never sold). */
-export type CosShop = 'stall' | 'casino' | 'earned';
+/**
+ * Where an item comes from: Marlow's stall (coins), the casino prize counter (chips only), a level rank (never sold),
+ * or a sea legend (each landing of the legend unlocks the next piece of its set, then its pet, which Captain Reed then
+ * sells for coins).
+ */
+export type CosShop = 'stall' | 'casino' | 'earned' | 'legend';
 
 export interface Cosmetic {
   id: string;
   slot: CosSlot;
   name: string;
-  /** Coins at the stall, chips at the casino (see `shop`). */
+  /** Coins at the stall and at Captain Reed's (a legend's pieces), chips at the casino (see `shop`). */
   price: number;
-  /** 0 (plain) to 5 (legendary): drives how fancy the model, icon and tile are. */
+  /** 0 (plain) to 6 (Abyssal): drives how fancy the model, icon and tile are. */
   tier: number;
   color: number;
   accent: number;
@@ -20,11 +25,19 @@ export interface Cosmetic {
   blurb: string;
   /** Earned items: the level whose rank gives it. */
   level?: number;
+  /** Legend items: the sea legend (a fish id) whose landings give it, and which landing (1 = the first). */
+  legend?: string;
+  landing?: number;
 }
 
-/** Rarity names and colours for cosmetic tiers 0-5. Tier 5 also gets a shimmer in the UI and sparkles in 3D. */
-export const COS_RARITY = ['Plain', 'Fine', 'Rare', 'Epic', 'Mythic', 'Legendary'] as const;
-export const COS_RARITY_COLOR = ['#b9b9b9', '#4cd964', '#4a90e2', '#b05ce6', '#ff8a3d', '#ffc933'] as const;
+/**
+ * Rarity names and colours for cosmetic tiers 0-6. Tier 5 and up get a shimmer in the UI and sparkles in 3D. Tier 6,
+ * Abyssal (2026-11-14), is only for pieces from the Abyss, so its teal says where a piece came from at a glance.
+ */
+export const COS_RARITY = ['Plain', 'Fine', 'Rare', 'Epic', 'Mythic', 'Legendary', 'Abyssal'] as const;
+export const COS_RARITY_COLOR = ['#b9b9b9', '#4cd964', '#4a90e2', '#b05ce6', '#ff8a3d', '#ffc933', '#43e3d2'] as const;
+/** The Abyssal tier. */
+export const ABYSSAL = 6;
 
 /** What a character wears. Item ids are validated against COSMETICS. */
 export interface Look {
@@ -34,6 +47,7 @@ export interface Look {
   hat: string | null;
   shirt: string | null;
   jewelry: string | null;
+  pet: string | null;
 }
 
 const c = (id: string, slot: CosSlot, name: string, price: number, tier: number, color: number, accent: number, blurb: string, shop: CosShop = 'stall'): Cosmetic => ({
@@ -43,6 +57,15 @@ const c = (id: string, slot: CosSlot, name: string, price: number, tier: number,
 const earned = (id: string, slot: CosSlot, name: string, level: number, tier: number, color: number, accent: number, blurb: string): Cosmetic => ({
   ...c(id, slot, name, 0, tier, color, accent, blurb, 'earned'),
   level,
+});
+/**
+ * A sea legend's piece: unlocked by the `landing`-th landing of `fish` (`legendUnlocked`), then sold by Captain Reed for
+ * `price` coins. Prices are about an hour of Abyss coins each (Oscar, 2026-11-14), for the coins piling up out there.
+ */
+const legendPiece = (id: string, slot: CosSlot, name: string, fish: string, landing: number, price: number, tier: number, color: number, accent: number, blurb: string): Cosmetic => ({
+  ...c(id, slot, name, price, tier, color, accent, blurb, 'legend'),
+  legend: fish,
+  landing,
 });
 const casino = (id: string, slot: CosSlot, name: string, chips: number, tier: number, color: number, accent: number, blurb: string): Cosmetic =>
   c(id, slot, name, chips, tier, color, accent, blurb, 'casino');
@@ -84,9 +107,21 @@ export const COSMETICS: Cosmetic[] = [
   earned('bicorne', 'hat', "Admiral's Bicorne", 50, 5, 0x14213d, 0xffc933, 'Navy and gold, with a star on the rosette. Worn by the Admiral of Lakeside.'),
 
   casino('jackpot', 'jewelry', 'Jackpot Medallion', 450, 5, 0xe0b441, 0xff4f9a, 'A giant golden chip that glows like the casino sign. The ultimate flex.'),
+
+  // The Kraken's set and pet (deep sea cosmetics step 1, 2026-11-14): its 1st to 3rd landings unlock the set, the 4th the pet.
+  legendPiece('krakencrown', 'hat', 'Kraken Crown', 'kraken', 1, 3_000_000, 6, 0xa3203f, 0xff3a5a, "Six tentacles rise from a gold band set with the Kraken's ruby eye."),
+  legendPiece('krakenarmor', 'shirt', 'Kraken Armor', 'kraken', 2, 4_000_000, 6, 0xb02a48, 0xff3a5a, 'A wet crimson shell with squid fins and barnacles, the sea spiralling round it, and tentacles that curl off the shoulders and trail behind.'),
+  legendPiece('krakenbeak', 'jewelry', 'Kraken Beak', 'kraken', 3, 2_500_000, 6, 0x2a1a24, 0xff3a5a, "The Kraken's beak on a cord of suckers, set with its glowing ruby eye."),
+  legendPiece('krakenpet', 'pet', 'Kraken Hatchling', 'kraken', 4, 5_000_000, 6, 0xe2708e, 0xb94a6c, 'A baby Kraken that floats along after you and watches the water.'),
 ];
 
 export const cosById = (id: string | null | undefined): Cosmetic | undefined => COSMETICS.find((x) => x.id === id);
+
+/** A legend's pieces in the order its landings unlock them (empty for a fish with none). */
+export const legendPieces = (fish: string): Cosmetic[] =>
+  COSMETICS.filter((x) => x.legend === fish).sort((a, b) => (a.landing ?? 0) - (b.landing ?? 0));
+/** The piece the `n`-th landing of `fish` unlocks, if any. */
+export const legendPieceFor = (fish: string, n: number): Cosmetic | undefined => legendPieces(fish).find((x) => x.landing === n);
 
 export const BODY_COLORS = [0xe8704a, 0xf2b441, 0x7bc86c, 0x38b6a8, 0x4a90e2, 0x8e6bd8, 0xe06aa8, 0xc9c9c9];
 export const DEFAULT_COLOR = BODY_COLORS[4];
@@ -106,7 +141,7 @@ export type FaceId = (typeof FACES)[number]['id'];
 export const isFace = (id: unknown): id is FaceId => FACES.some((f) => f.id === id);
 export const randomFace = (rng: () => number = Math.random): FaceId => FACES[Math.floor(rng() * FACES.length)].id;
 
-export const defaultLook = (): Look => ({ color: DEFAULT_COLOR, face: 'smile', hat: null, shirt: null, jewelry: null });
+export const defaultLook = (): Look => ({ color: DEFAULT_COLOR, face: 'smile', hat: null, shirt: null, jewelry: null, pet: null });
 
 /** Clamps untrusted look data from a client or an old save. */
 export function cleanLook(raw: Partial<Look> | undefined, owned: readonly string[]): Look {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RANKS, ranksBetween } from '../data/ranks';
-import { rankUp } from './rankup';
+import { legendUp, rankUp } from './rankup';
 
 describe('rankUp', () => {
   it('names the rank and its outfit', () => {
@@ -27,5 +27,23 @@ describe('rankUp', () => {
   it('is null with no rank', () => {
     expect(rankUp([])).toBeNull();
     expect(rankUp(RANKS.slice(0, 0))).toBeNull();
+  });
+});
+
+describe('legendUp', () => {
+  it("names the piece in the legend's mark and says it's unlocked at Reed's", () => {
+    expect(legendUp({ id: 'krakencrown', landing: 1, of: 3 })).toEqual({
+      title: '🦑 KRAKEN CROWN 🦑',
+      line: "Unlocked at Captain Reed's · piece 1 of 3",
+      card: "🦑 Kraken Crown · unlocked at Reed's",
+    });
+    const pet = legendUp({ id: 'krakenpet', landing: 4, of: 3 })!;
+    expect(pet.title).toBe('🦑 KRAKEN HATCHLING 🦑');
+    expect(pet.line).toBe("The Kraken's pet · unlocked at Captain Reed's");
+  });
+
+  it('is null for an item that is no legend piece', () => {
+    expect(legendUp({ id: 'crown', landing: 1, of: 1 })).toBeNull();
+    expect(legendUp({ id: 'bogus', landing: 1, of: 1 })).toBeNull();
   });
 });

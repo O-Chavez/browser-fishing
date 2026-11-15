@@ -222,12 +222,14 @@ class Avatar {
     // The jump plays at full height on top of the smoothed ground, not through the lerp, which would flatten it.
     this.groundY += (this.target.y - this.groundY) * k;
     if (this.jumpT >= 0) this.jumpT = this.jumpT + dt >= JUMP_TIME ? -1 : this.jumpT + dt;
-    this.group.position.y = this.groundY + jumpLift(this.jumpT);
+    const lift = jumpLift(this.jumpT);
+    this.group.position.y = this.groundY + lift;
     const d = Math.atan2(Math.sin(p.yaw - this.yaw), Math.cos(p.yaw - this.yaw));
     this.yaw += d * k;
     // Camera yaw 0 looks along -z, the model's front is +z.
     this.group.rotation.y = this.yaw + Math.PI;
-    this.char.tick(t);
+    // The ground is `lift` below the character mid-jump, so a puddle stays on it.
+    this.char.tick(t, -lift);
     this.setAct(p.act ?? null);
     if (this.bubble) {
       const left = this.bubble.until - performance.now();

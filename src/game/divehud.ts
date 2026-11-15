@@ -514,3 +514,4 @@ export function endHtml(e: DiveEnd, record = false, s: PartSave | null = null): 
     </div>
     <div class="btns"><button class="btn" data-act="close">OK</button></div></div>`;
 }
+

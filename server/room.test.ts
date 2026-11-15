@@ -42,8 +42,10 @@ const fought = (c: { log: ServerMsg[] }) => {
 const setup = () => {
   let now = 1_000_000;
   let roll = 0.5;
+  /** Rolls used once each, in order, before `roll` again. */
+  const rolls: number[] = [];
   const store = new AccountStore();
-  const room = new Room('r', MAPS, () => {}, () => now, () => roll);
+  const room = new Room('r', MAPS, () => {}, () => now, () => rolls.shift() ?? roll);
   const join = (name: string) => {
     const res = store.auth(name, 'token-token-token-' + name);
     if (!res.ok) throw new Error(res.msg);
@@ -55,7 +57,7 @@ const setup = () => {
     const v = MAPS[0].vendor.shop;
     room.place(p.id, v.x - 2, v.z, 0);
   };
-  return { room, join, store, atShop, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r) };
+  return { room, join, store, atShop, advance: (ms: number) => (now += ms), setRoll: (r: number) => (roll = r), queueRolls: (...r: number[]) => rolls.push(...r) };
 };
 
 describe('Room economy', () => {
@@ -1325,6 +1327,92 @@ describe('charters', () => {
     t.room.handle(a.id, { t: 'headhome' });
     expect(last(a.c, 'diveend').end).toEqual({ why: 'home', zone: 2, marker: 0, tally: lastDive(a).tally });
     expect(a.acct.save.pearls).toBe(424);
+  });
+
+  it("unlocks the next piece of the Kraken's set with each Kraken landed, only for the player who landed it", () => {
+    const t = setup();
+    const a = diver(t);
+    const b = t.join('Bob');
+    const s = a.acct.save;
+    Object.assign(s, { boatParts: 4, rodStep: 8, abyssLevels: 60, holdLevel: 4, coins: 1e9 });
+    t.room.handle(a.id, { t: 'dive', zone: 4, marker: 1 });
+    expect(s.location).toBe('sea');
+    const krakens = () => {
+      // A sea cast rolls the legend chance first, then which of the Abyss's three legends: the last is the Kraken.
+      t.queueRolls(0.01, 0.99);
+      fight(t, a);
+      expect(last(a.c, 'castok').fishId).toBe('kraken');
+    };
+    krakens();
+    expect(s.legends).toEqual({ kraken: 1 });
+    expect(last(a.c, 'state').save.legends).toEqual({ kraken: 1 });
+    // Unlocked, not given: Reed sells it.
+    expect(s.owned).toEqual([]);
+    krakens();
+    // An everyday fish doesn't count; another legend counts for itself.
+    t.setRoll(0.5);
+    fight(t, a);
+    t.queueRolls(0.01, 0);
+    fight(t, a);
+    expect(last(a.c, 'castok').fishId).toBe('leviathan');
+    expect(s.legends).toEqual({ kraken: 2, leviathan: 1 });
+    krakens();
+    krakens();
+    krakens();
+    expect(s.legends.kraken).toBe(5);
+    expect(s.owned).toEqual([]);
+    // Nobody else hears about it.
+    expect(b.c.log.some((m) => m.t === 'sys' && /Kraken/.test(m.text))).toBe(false);
+  });
+
+  it("sells an unlocked legend piece for coins at Reed's seaplane only, and wears it once bought", () => {
+    const t = setup();
+    const a = diver(t);
+    const b = t.join('Bob');
+    const s = a.acct.save;
+    const buy = (id = 'krakencrown') => t.room.handle(a.id, { t: 'buylegend', id });
+    s.coins = 1e9;
+    // Locked until the Kraken is landed.
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('Land the Kraken once to unlock the Kraken Crown.');
+    s.legends = { kraken: 1 };
+    // Not anywhere else, not something else, not without the coins.
+    t.room.place(a.id, HARBOUR.stand.x + 40, HARBOUR.stand.z);
+    buy();
+    expect(last(a.c, 'notice').msg).toMatch(/Reed's seaplane/);
+    atReed(t, a);
+    buy('crown');
+    expect(last(a.c, 'notice').msg).toBe('Captain Reed has nothing like that.');
+    buy('krakenarmor');
+    expect(last(a.c, 'notice').msg).toBe('Land the Kraken once more to unlock the Kraken Armor.');
+    s.coins = 2_999_999;
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('The Kraken Crown costs 3,000,000 coins.');
+    expect(s.owned).toEqual([]);
+    s.coins = 3_000_000;
+    buy();
+    expect(s.owned).toEqual(['krakencrown']);
+    expect(s.coins).toBe(0);
+    expect(last(a.c, 'state').save.owned).toEqual(['krakencrown']);
+    s.coins = 1e9;
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('You already have the Kraken Crown.');
+    expect(s.coins).toBe(1e9);
+    // The stall never sells it, whatever the coins.
+    t.atShop(a);
+    s.legends = { kraken: 4 };
+    t.room.handle(a.id, { t: 'buycos', id: 'krakenpet' });
+    expect(s.owned).toEqual(['krakencrown']);
+    // A pet is worn only once bought, and everyone sees it.
+    t.room.handle(a.id, { t: 'equip', slot: 'pet', id: 'krakenpet' });
+    expect(s.look.pet).toBeNull();
+    atReed(t, a);
+    buy('krakenpet');
+    t.room.handle(a.id, { t: 'equip', slot: 'bogus' as never, id: 'krakenpet' });
+    expect(s.look.pet).toBeNull();
+    t.room.handle(a.id, { t: 'equip', slot: 'pet', id: 'krakenpet' });
+    expect(s.look.pet).toBe('krakenpet');
+    expect(last(b.c, 'look')).toMatchObject({ id: a.id, look: { pet: 'krakenpet' } });
   });
 
   it('counts sea casts, lured ones and the pearls landed for /lakestats', () => {

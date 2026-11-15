@@ -111,6 +111,12 @@ export interface SaveData {
    * Level n goes on sale once zone n is open. Saves from before the hold start at 0 (Oscar, 2026-11-14).
    */
   holdLevel: number;
+  /**
+   * Times each sea legend has been landed (fish id to count), from the legend cosmetics on (2026-11-14): each landing
+   * of a legend with a set unlocks its next piece (`legendUnlocked`), which Captain Reed then sells. It starts fresh, not
+   * from the Fishdex (Oscar).
+   */
+  legends: Record<string, number>;
   /** Boat parts bought from Reed with Black Pearls (0 to 4, `BOAT_PARTS`): zone z of the sea is open with z of them. */
   boatParts: number;
   /** The furthest Abyss marker a charter has reached (0 before the Abyss); Abyss charters may start at any marker up to it. */
@@ -171,6 +177,7 @@ export const newSave = (): SaveData => ({
   rodStep: 0,
   abyssLevels: 0,
   holdLevel: 0,
+  legends: {},
   boatParts: 0,
   abyssRecord: 0,
   seaV: SEA_VERSION,
@@ -249,6 +256,16 @@ function cleanSmoke(raw: unknown): Smoke {
  * the Deep Sea Rod stays bought, and coins and everything at the pond stay as they were.
  */
 export const SEA_VERSION = 1;
+
+/** Keeps whole, positive landing counts of known sea legends. */
+function cleanLegends(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [id, n] of Object.entries(raw)) {
+    if (typeof n === 'number' && Number.isFinite(n) && n >= 1 && FISH.some((f) => f.id === id && f.sea && f.legend)) out[id] = Math.floor(n);
+  }
+  return out;
+}
 
 /** Saves from before the Deep Sea Rod: the old Deep Sea Line's level (`seaLine`), read only here. */
 interface OldSea {
@@ -347,6 +364,7 @@ export function migrate(raw: object): SaveData {
   out.boatParts = whole(data.boatParts, BOAT_PARTS.length) ?? 0;
   out.abyssLevels = whole(data.abyssLevels) ?? 0;
   out.abyssRecord = whole(data.abyssRecord) ?? 0;
+  out.legends = cleanLegends(data.legends);
   out.seaRod = out.seaRod === true;
   out.lureOff = out.lureOff === true;
   // Saves from before the tips only get them if they haven't started playing yet.

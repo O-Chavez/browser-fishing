@@ -214,6 +214,36 @@ describe('dev commands in a room', () => {
     expect(markTip(a.save, 'start')).toBe(true);
   });
 
+  it("sets a sea legend's landings with /landed, unlocking its set's pieces up to there and taking back bought ones past it", () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    const b = join('Bob');
+    room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(a.id, { t: 'cmd', text: '/landed kraken 3' });
+    expect(a.save.legends).toEqual({ kraken: 3 });
+    // Unlocked to buy at Reed's, not given.
+    expect(a.save.owned).toEqual([]);
+    expect(devLines(a.log).at(-1)).toBe("The Kraken landed 3 times: 3 of 4 pieces of its set unlocked at Reed's.");
+    expect([...a.log].reverse().find((m) => m.t === 'state')).toMatchObject({ save: { legends: { kraken: 3 } } });
+    a.save.owned.push('krakencrown', 'krakenarmor', 'cap');
+    room.handle(a.id, { t: 'equip', slot: 'shirt', id: 'krakenarmor' });
+    room.handle(a.id, { t: 'cmd', text: '/landed kraken 1' });
+    expect(a.save.owned).toEqual(['krakencrown', 'cap']);
+    // The piece taken back comes off, for everyone.
+    expect(a.save.look.shirt).toBeNull();
+    expect([...b.log].reverse().find((m) => m.t === 'look')).toMatchObject({ look: { shirt: null } });
+    room.handle(a.id, { t: 'cmd', text: '/landed kraken 0' });
+    expect(a.save.legends).toEqual({});
+    expect(a.save.owned).toEqual(['cap']);
+    room.handle(a.id, { t: 'cmd', text: '/landed leviathan 2' });
+    expect(a.save.legends).toEqual({ leviathan: 2 });
+    expect(devLines(a.log).at(-1)).toBe('The Leviathan landed 2 times (it has no set yet).');
+    for (const bad of ['/landed minnow 2', '/landed kraken', '/landed']) {
+      room.handle(a.id, { t: 'cmd', text: bad });
+      expect(devLines(a.log).at(-1)).toMatch(/^Usage: \/landed <legend> N · legends: grouper/);
+    }
+  });
+
   it('stocks cooked dishes and reports the Smokehouse stats', () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');

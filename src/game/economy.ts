@@ -1,7 +1,7 @@
 import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_BULK_PACKS, LURE_CHARGES, VEST_SLOTS, perkById } from '../data/casino';
-import { COS_SLOTS, cosById, isFace, type CosShop, type CosSlot } from '../data/cosmetics';
+import { COSMETICS, COS_SLOTS, cosById, isFace, legendPieceFor, legendPieces, type CosShop, type CosSlot, type Cosmetic } from '../data/cosmetics';
 import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_FISH, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
-import { BOAT_PARTS, glowStep } from '../data/dive';
+import { BOAT_PARTS, ZONES, glowStep } from '../data/dive';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, overGear, type Gifts, pickFish, rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, TAG_BONUS, type FishTag, type SpotId } from './progression';
 import { P, type Gaps, type ReelTune } from './reel';
@@ -374,8 +374,8 @@ export function buyPerk(s: SaveData, id: string, count = 1): boolean {
  */
 export function buyCosmetic(s: SaveData, id: string, at: CosShop = 'stall'): boolean {
   const c = cosById(id);
-  // Earned outfits come only with a rank, never from a counter.
-  if (!c || c.shop === 'earned' || c.shop !== at || s.owned.includes(id)) return false;
+  // Earned outfits come only with a rank, never from a counter; a legend's pieces only from Captain Reed (`buyLegendPiece`).
+  if (!c || c.shop === 'earned' || c.shop === 'legend' || c.shop !== at || s.owned.includes(id)) return false;
   if (c.shop === 'casino') {
     if (s.chips < c.price) return false;
     s.chips = Math.round((s.chips - c.price) * 10) / 10;
@@ -596,6 +596,93 @@ export interface CatchResult {
   mult: number;
   /** Coins for a fish sold as it was landed (on a dive), instead of going in a slot. */
   sold?: number;
+  /** The piece of a legend's set this landing unlocked at Captain Reed's. */
+  legendPiece?: LegendPiece;
+}
+
+/** A piece of a legend's set: its id, its place in the set (`Cosmetic.landing`) and how many pieces the set has, not counting its pet. */
+export interface LegendPiece {
+  id: string;
+  landing: number;
+  of: number;
+}
+
+/**
+ * Counts a landing of a sea legend (`SaveData.legends`) and returns the piece of its set this landing unlocks, if any:
+ * the one whose landing it is (`legendUnlocked`). Captain Reed sells it from then on (`buyLegendPiece`). Every sea
+ * legend is counted, set or not, so sets added later pick up from there; past the set it just counts.
+ */
+export function landLegend(s: SaveData, fish: Fish): LegendPiece | undefined {
+  if (!fish.sea || !fish.legend) return undefined;
+  const n = (s.legends[fish.id] ?? 0) + 1;
+  s.legends[fish.id] = n;
+  const piece = legendPieceFor(fish.id, n);
+  if (!piece || s.owned.includes(piece.id)) return undefined;
+  return { id: piece.id, landing: n, of: legendPieces(fish.id).filter((c) => c.slot !== 'pet').length };
+}
+
+/** A legend's piece is unlocked once its legend has been landed as many times as its landing. */
+export function legendUnlocked(s: Pick<SaveData, 'legends'>, c: Cosmetic): boolean {
+  return !!c.legend && (s.legends[c.legend] ?? 0) >= (c.landing ?? Infinity);
+}
+
+/** Landings of its legend still needed to unlock a piece (0 once unlocked, and for anything else). */
+export function legendLandingsLeft(s: Pick<SaveData, 'legends'>, id: string): number {
+  const c = cosById(id);
+  if (!c?.legend || c.landing === undefined) return 0;
+  return Math.max(0, c.landing - (s.legends[c.legend] ?? 0));
+}
+
+/** A legend's name mid-sentence: "the Kraken". */
+export const legendName = (c: Cosmetic): string => (FISH.find((f) => f.id === c.legend)?.name ?? 'a legend').replace(/^The /, 'the ');
+
+/** What a locked legend piece still takes: "Land the Kraken once", "… once more", "… 3 more times" or "… 4 times". */
+export function landingsText(s: Pick<SaveData, 'legends'>, c: Cosmetic): string {
+  const left = legendLandingsLeft(s, c.id);
+  const landed = !!c.legend && (s.legends[c.legend] ?? 0) > 0;
+  return `Land ${legendName(c)} ${left === 1 ? (landed ? 'once more' : 'once') : `${left}${landed ? ' more' : ''} times`}`;
+}
+
+/** Why Captain Reed won't sell this legend piece now, or null when he will. */
+export function legendBuyError(s: Pick<SaveData, 'legends' | 'owned' | 'coins'>, id: string): string | null {
+  const c = cosById(id);
+  if (!c || c.shop !== 'legend' || !c.legend) return 'Captain Reed has nothing like that.';
+  if (s.owned.includes(c.id)) return `You already have the ${c.name}.`;
+  if (!legendUnlocked(s, c)) return `${landingsText(s, c)} to unlock the ${c.name}.`;
+  if (s.coins < c.price) return `The ${c.name} costs ${c.price.toLocaleString('en-US')} coins.`;
+  return null;
+}
+
+/**
+ * The counters whose items Captain Reed's Wardrobe tab shows: the sea legends' pieces for now. Sea gear and zone sets
+ * sold for coins can join as their own shop later (with their own buy path; `reedOffer` treats them as plain sales).
+ */
+export const REED_SHOPS: readonly CosShop[] = ['legend'];
+
+/** A legend's set shows at Reed's once its zone is open or it has been landed (so a set never shows out of nowhere). */
+export function legendSetShown(s: Pick<SaveData, 'legends' | 'boatParts'>, fish: string): boolean {
+  return (s.legends[fish] ?? 0) > 0 || zoneOpen(s, Math.max(0, ZONES.findIndex((z) => z.legends.includes(fish))));
+}
+
+/** What Reed's Wardrobe tab shows: his counters' items, a legend's pieces only while its set shows, in set order. */
+export function reedCosmetics(s: Pick<SaveData, 'legends' | 'boatParts'>): Cosmetic[] {
+  return COSMETICS.filter((c) => REED_SHOPS.includes(c.shop) && (!c.legend || legendSetShown(s, c.legend)))
+    .sort((a, b) => (a.legend ?? '').localeCompare(b.legend ?? '') || (a.landing ?? 0) - (b.landing ?? 0) || a.price - b.price);
+}
+
+/** Where an item at Reed's stands: still locked by its legend's landings, on sale for coins, or already owned. */
+export function reedOffer(s: Pick<SaveData, 'legends' | 'owned'>, c: Cosmetic): 'locked' | 'sale' | 'owned' {
+  if (s.owned.includes(c.id)) return 'owned';
+  return c.legend && !legendUnlocked(s, c) ? 'locked' : 'sale';
+}
+
+/** Buys an unlocked legend piece from Captain Reed with coins (`legendBuyError`). */
+export function buyLegendPiece(s: SaveData, id: string): boolean {
+  const c = cosById(id);
+  if (!c || legendBuyError(s, id)) return false;
+  s.coins -= c.price;
+  s.owned.push(c.id);
+  return true;
 }
 
 /** A clean catch (landed without fraying the line) is worth this much more. */
@@ -631,8 +718,9 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   const ranks = gainXp(s, gained);
   const stages = openStages(s).ids;
   const gift = serveGifts(s);
+  const legendPiece = landLegend(s, fish);
   return {
-    stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult, ...(sell ? { sold } : {}),
+    stored: true, first, record, gained, leveledUp: s.level > before, level: s.level, ranks, stages, mult, ...(sell ? { sold } : {}), ...(legendPiece ? { legendPiece } : {}),
     ...(xp ? { xpFrom: xp.from } : {}), ...(coin ? { coinFrom: coin.from } : {}), ...(sh ? { shinyFrom: sh.from } : {}), ...(gift ? { gift } : {}),
   };
 }

@@ -3,7 +3,7 @@ import { cosById, type Cosmetic } from '../data/cosmetics';
 /**
  * A small inline-SVG icon per cosmetic, drawn in the item's own colours with the same dark outline
  * as the rod icons so it reads on parchment and wood alike. Mythic items get a glint and
- * legendary items twinkle with stars, matching the 3D models.
+ * legendary items twinkle with stars, matching the 3D models; Abyssal stars are teal, and there are four.
  */
 
 const INK = '#2a1b0f';
@@ -21,6 +21,15 @@ const SHIRT = 'M11 8 L16 5.5 Q20 9 24 5.5 L29 8 L36 14 L31.5 18.5 L29 16.5 L29 3
 const COAT = 'M11 8 L16 5.5 Q20 9 24 5.5 L29 8 L36 14 L31.5 18.5 L29.5 16.5 L31 37 L9 37 L10.5 16.5 L8.5 18.5 L4 14 Z';
 /** A necklace hanging in a U, with the pendant point at (20, 27). */
 const NECK = 'M7 6 Q9 25 20 26 Q31 25 33 6';
+
+/** The Kraken's colours, as on the 3D pieces. */
+const KRAKEN = '#a3203f';
+const KRAKEN_DARK = '#6e1430';
+const SUCKER = '#f4b8c4';
+/** A tentacle: a thick outlined stroke along `d`. */
+const tentacle = (d: string, w = 3, fill = KRAKEN) =>
+  `<path d="${d}" fill="none" stroke="${INK}" stroke-width="${w + 1.8}" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${fill}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+const dot = (x: number, y: number, r = 0.8, fill = SUCKER) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/>`;
 
 function hat(c: Cosmetic): string {
   const col = hex(c.color);
@@ -44,6 +53,9 @@ function hat(c: Cosmetic): string {
       return `<path d="M2 20 Q20 2 38 20 Q20 38 2 20 Z" fill="${col}" ${line}/><path d="M3.5 19 Q20 4.5 36.5 19" stroke="${acc}" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M10 11 Q20 3 30 11 Q20 6 10 11 Z" fill="#fff" ${line}/><circle cx="2.5" cy="20" r="1.8" fill="${acc}" ${line}/><circle cx="37.5" cy="20" r="1.8" fill="${acc}" ${line}/><circle cx="27" cy="21" r="5" fill="${acc}" ${line}/>${star(27, 21, 3.2, '#fff6c8')}`;
     case 'visor':
       return `<path d="M7 18 Q20 13 33 18 L33 23 Q20 19 7 23 Z" fill="${col}" ${line}/><path d="M7 23 Q20 19 33 23 Q30 33 20 33 Q10 33 7 23 Z" fill="#2fa66a" ${line}/><path d="M8 23.5 Q20 19.5 32 23.5" stroke="${acc}" stroke-width="2" fill="none"/><path d="M7.5 18 Q20 13 32.5 18" stroke="${acc}" stroke-width="1.6" fill="none"/>`;
+    case 'krakencrown':
+      // Tentacles curl up from behind a gold band set with the ruby eye.
+      return `${tentacle('M15 18 Q13 9 10 6.5 Q8 5 7.5 8')}${tentacle('M25 18 Q27 9 30 6.5 Q32 5 32.5 8')}${tentacle('M20 16 Q20 8 20.5 4 Q21 1.8 23 3')}<path d="M10 24 Q10 14 20 14 Q30 14 30 24 Z" fill="${KRAKEN_DARK}" ${line}/>${tentacle('M10.5 22 Q6 15 3.5 14 Q1.5 13.5 2 16')}${tentacle('M29.5 22 Q34 15 36.5 14 Q38.5 13.5 38 16')}${dot(13.6, 10.5)}${dot(26.4, 10.5)}${dot(6, 16)}${dot(34, 16)}${dot(20.2, 9)}<path d="M8 23 H32 L31 31 H9 Z" fill="${GOLD}" ${line}/><path d="M9.3 28.5 H30.7" stroke="${INK}" stroke-width=".8" opacity=".4"/><ellipse cx="20" cy="27" rx="3.8" ry="2.7" fill="${acc}" ${line}/><ellipse cx="20" cy="27" rx=".8" ry="2" fill="${INK}"/>`;
     case 'tophat':
       return `<path d="M3 30 Q20 36 37 30 Q35 27 20 27 Q5 27 3 30 Z" fill="${col}" ${line}/><path d="M11 28 L12 5 H28 L29 28 Z" fill="${col}" ${line}/><path d="M11.7 21 H28.3 L28.6 26 H11.4 Z" fill="${acc}" ${line}/><path d="M20 9 Q24 13 22.5 15.5 Q21 16.5 20 15 Q19 16.5 17.5 15.5 Q16 13 20 9 Z M20 15 L21 18 H19 Z" fill="${GOLD}" stroke="${INK}" stroke-width=".9"/><path d="M14.5 7 V18" stroke="#fff" stroke-width="1.2" opacity=".35"/>`;
   }
@@ -74,6 +86,10 @@ function shirt(c: Cosmetic, clip: string): string {
       return `<path d="M7 10 Q20 4 33 10 L38 38 H2 Z" fill="#3d2a8f" ${line}/><path d="M3 36.5 H37" stroke="${acc}" stroke-width="2.4"/>${body(col, COAT)}<path d="M15 6 Q20 10 25 6" stroke="#ff7ad9" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M9.5 35.5 H30.5" stroke="${acc}" stroke-width="2"/>${star(20, 14, 3.5)}`;
     case 'dealer':
       return `${body('#f6f2e8')}<path d="M11 8 L16 5.5 L19 14 L19 34.5 H11 Z M29 8 L24 5.5 L21 14 L21 34.5 H29 Z" fill="${col}" ${line}/><path d="M15.5 10 L20 12 L24.5 10 L24.5 14.5 L20 12.5 L15.5 14.5 Z" fill="${acc}" stroke="${INK}" stroke-width="1"/>${[19, 24, 29].map((y) => `<circle cx="20" cy="${y}" r="1.3" fill="${GOLD}" stroke="${INK}" stroke-width=".6"/>`).join('')}`;
+    case 'krakenarmor':
+      // A wet shell with squid fins behind the shoulders, a pale ridged belly, a gold collar and ruby, tentacles curling
+      // off the shoulders and trailing behind, a stream of water across it and drops falling.
+      return `<path d="M12 10 L7.5 0.8 Q2 4 1.2 13 Z" fill="#b02a48" ${line}/><path d="M28 10 L32.5 0.8 Q38 4 38.8 13 Z" fill="#b02a48" ${line}/>${tentacle('M13 31 Q10 37 5.5 37 Q3.5 36.5 4.5 34.5')}${tentacle('M27 31 Q30 37 34.5 37 Q36.5 36.5 35.5 34.5')}<defs><clipPath id="${clip}"><path d="${SHIRT}"/></clipPath></defs>${body('#b02a48')}<g clip-path="url(#${clip})"><g fill="${KRAKEN_DARK}"><rect x="0" y="21" width="40" height="1.6"/><rect x="0" y="27" width="40" height="1.6"/></g><rect x="16.5" y="18" width="7" height="17" fill="#f2b8c2"/><path d="M16.5 23 H23.5 M16.5 27.5 H23.5 M16.5 32 H23.5" stroke="#d88a9a" stroke-width="1"/></g><path d="${SHIRT}" fill="none" ${line}/>${collar(GOLD)}${tentacle('M9 9 Q6 3 3 4 Q1.2 5 2.8 7')}${tentacle('M31 9 Q34 3 37 4 Q38.8 5 37.2 7')}${dot(6.3, 4.6)}${dot(33.7, 4.6)}<path d="M5 24 Q20 32 35 21" stroke="#bff4ff" stroke-width="1.8" fill="none" stroke-linecap="round" opacity=".85"/><circle cx="20" cy="14" r="3.8" fill="none" stroke="${GOLD}" stroke-width="1.6"/><path d="M20 10.2 L22.6 14 L20 17.8 L17.4 14 Z" fill="${acc}" ${line}/>${dot(4.2, 38.8, 0.9, '#7fd8f4')}${dot(35.8, 38.8, 0.9, '#7fd8f4')}`;
     case 'tux':
       return `${body(col, COAT)}<path d="M16 5.5 L20 22 L24 5.5 Z" fill="#f6f2e8" stroke="${INK}" stroke-width="1"/><path d="M16 5.5 L20 22 L14 12 Z M24 5.5 L20 22 L26 12 Z" fill="${acc}" stroke="${INK}" stroke-width="1"/><path d="M15.5 9 L20 11 L24.5 9 L24.5 13.5 L20 11.5 L15.5 13.5 Z" fill="#ff4f9a" stroke="${INK}" stroke-width="1"/><path d="M25 18 L28 17 L28 20 Z" fill="#ff4f9a"/><circle cx="20" cy="27" r="1.4" fill="${acc}" stroke="${INK}" stroke-width=".6"/>`;
   }
@@ -110,13 +126,35 @@ function jewelry(c: Cosmetic): string {
         `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-4.5" y="-4.5" width="9" height="9" rx="1.8" fill="${acc}" ${line}/>${pips.map(([px, py]) => `<circle cx="${px}" cy="${py}" r="1" fill="#fff"/>`).join('')}</g>`;
       return `${chain(col)}${die(15.5, 31, -12, [[-2, -2], [0, 0], [2, 2]])}${die(25, 31.5, 10, [[-2, -2], [2, -2], [-2, 2], [2, 2]])}`;
     }
+    case 'krakenbeak': {
+      // A dark cord of suckers, the ruby in gold, and the beak hooking down below it.
+      const q = (t: number, a: number, b: number, c: number) => (1 - t) ** 2 * a + 2 * (1 - t) * t * b + t * t * c;
+      const suckers = [0.3, 0.65].flatMap((t) => [dot(q(t, 7, 9, 20), q(t, 6, 25, 26), 1.4), dot(q(1 - t, 20, 31, 33), q(1 - t, 26, 25, 6), 1.4)]);
+      return `${chain('#3a0f20', 1.6)}${suckers.join('')}<path d="M13.5 29 Q20 26 26.5 29 Q26 35 20 38.5 Q14 35 13.5 29 Z" fill="${col}" ${line}/><path d="M20 29.5 Q21.5 34 20 38" stroke="#6a4a5a" stroke-width="1.2" fill="none" stroke-linecap="round"/><path d="M16 30.5 Q17 34 19 36" stroke="#fff" stroke-width="1" opacity=".3" fill="none" stroke-linecap="round"/><circle cx="20" cy="26.5" r="3.2" fill="${GOLD}" ${line}/><circle cx="20" cy="26.5" r="1.7" fill="${acc}"/>`;
+    }
     case 'jackpot':
       return `${chain(col, 3.4)}<circle cx="20" cy="30" r="8.5" fill="${acc}" ${line}/><circle cx="20" cy="30" r="8.5" fill="none" stroke="#ffe9a8" stroke-width="2.6" stroke-dasharray="2.6 3.6"/><circle cx="20" cy="30" r="5" fill="#1b1b24"/><path d="M20 26.2 L21.1 28.9 L24 29 L21.8 30.8 L22.5 33.6 L20 32 L17.5 33.6 L18.2 30.8 L16 29 L18.9 28.9 Z" fill="#ffd24a"/>`;
   }
   return '';
 }
 
+function pet(c: Cosmetic): string {
+  const col = hex(c.color);
+  const acc = hex(c.accent);
+  switch (c.id) {
+    case 'krakenpet': {
+      // Kraken Hatchling: a round pink head, big eyes and little tentacles.
+      const arms = ['M12 24 Q8 30 9 35', 'M16 26 Q14.5 32 16 37', 'M20 27 Q20.5 33 19 37.5', 'M24 26 Q25.5 32 24 37', 'M28 24 Q32 30 31 35'].map((d) => tentacle(d, 2.6, col)).join('');
+      const eye = (x: number) => `<circle cx="${x}" cy="20" r="4" fill="#fff" ${line}/><circle cx="${x + 0.4}" cy="20.6" r="2.2" fill="${INK}"/><circle cx="${x - 0.5}" cy="19.4" r=".8" fill="#fff"/>`;
+      return `${arms}<ellipse cx="20" cy="15.5" rx="11" ry="12" fill="${col}" ${line}/>${dot(15, 7.5, 1.4, acc)}${dot(25.5, 9.5, 1.2, acc)}${dot(22, 5.5, 1, acc)}${eye(15.5)}${eye(24.5)}`;
+    }
+  }
+  return '';
+}
+
 const cache = new Map<string, string>();
+/** Abyssal stars: teal, where legendary ones are gold. */
+const ABYSS_STAR = '#8ff5e8';
 
 /** Inline SVG for a cosmetic (empty for unknown ids). */
 export function cosIcon(id: string): string {
@@ -124,9 +162,17 @@ export function cosIcon(id: string): string {
   if (hit) return hit;
   const c = cosById(id);
   if (!c) return '';
-  const art = c.slot === 'hat' ? hat(c) : c.slot === 'shirt' ? shirt(c, `cosclip${++uid}`) : jewelry(c);
-  const extra = c.tier >= 5 ? star(6, 6, 4) + star(34, 9, 2.6) + star(35, 35, 3.2) : c.tier === 4 ? star(34, 7, 2.6) : '';
-  const svg = `<svg class="cosico${c.tier >= 5 ? ' legend' : ''}" viewBox="0 0 40 40" aria-hidden="true">${art}${extra}</svg>`;
+  const art = c.slot === 'hat' ? hat(c) : c.slot === 'shirt' ? shirt(c, `cosclip${++uid}`) : c.slot === 'pet' ? pet(c) : jewelry(c);
+  const extra =
+    c.tier >= 6
+      ? star(6, 6, 4, ABYSS_STAR) + star(34, 9, 2.6, ABYSS_STAR) + star(35, 35, 3.2, ABYSS_STAR) + star(5, 33, 2.4, ABYSS_STAR)
+      : c.tier === 5
+        ? star(6, 6, 4) + star(34, 9, 2.6) + star(35, 35, 3.2)
+        : c.tier === 4
+          ? star(34, 7, 2.6)
+          : '';
+  const cls = c.tier >= 6 ? ' legend abyssal' : c.tier >= 5 ? ' legend' : '';
+  const svg = `<svg class="cosico${cls}" viewBox="0 0 40 40" aria-hidden="true">${art}${extra}</svg>`;
   cache.set(id, svg);
   return svg;
 }

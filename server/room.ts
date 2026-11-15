@@ -283,7 +283,8 @@ export class Room {
       case 'buyrod':
         changed = this.atVendor(m) && this.stocks(m).rods.includes(str(msg.id)) && eco.buyRod(s, str(msg.id));
         break;
-      // Captain Reed sells the Deep Sea Rod, its steps and Abyss levels, the hold's levels, and the boat parts.
+      // Captain Reed sells the Deep Sea Rod, its steps and Abyss levels, the hold's levels, the boat parts, and the sea
+      // legends' set pieces their landings have unlocked.
       case 'buysearod':
         changed = this.atReed(m) && eco.buySeaRod(s);
         break;
@@ -298,6 +299,9 @@ export class Room {
         break;
       case 'boatpart':
         changed = this.atReed(m) && this.ok(m, eco.boatPartError(s)) && eco.buyBoatPart(s);
+        break;
+      case 'buylegend':
+        changed = this.atReed(m) && this.ok(m, eco.legendBuyError(s, str(msg.id))) && eco.buyLegendPiece(s, str(msg.id));
         break;
       case 'buyline':
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));
@@ -579,6 +583,7 @@ export class Room {
     if (m.spin || m.bj) return reply(['Finish the spin or hand first.']);
     let time: number | null | undefined;
     let depth: number | undefined;
+    const wore = JSON.stringify(m.acct.save.look);
     const res = runDev({
       save: m.acct.save,
       maps: this.maps,
@@ -606,6 +611,8 @@ export class Room {
     this.syncCarry(m);
     this.onChange();
     m.conn.send({ t: 'state', save: m.acct.save });
+    // `/landed` can take back a piece being worn.
+    if (JSON.stringify(m.acct.save.look) !== wore) this.broadcast({ t: 'look', id: m.info.id, look: m.acct.save.look });
   }
 
   /** After `/backpay apply`: an online player gets their new save and hears what it paid. */
