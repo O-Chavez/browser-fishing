@@ -1336,7 +1336,7 @@ export class Game {
       this.loggingOut = true;
       this.net.send({ t: 'forget' });
     }
-    else if (act === 'buyrod' || act === 'buybait' || act === 'buyline') this.buy(act === 'buyrod' ? 'rod' : act === 'buyline' ? 'line' : 'bait', id!);
+    else if (act === 'buyrod' || act === 'buybait' || act === 'buyline') this.buy(act === 'buyrod' ? 'rod' : act === 'buyline' ? 'line' : 'bait', id!, Number(btn.dataset.n) || eco.BAIT_PACK);
     else if (act === 'buysearod') this.buySeaRod();
     else if (act === 'rodstep' || act === 'abysslevel') this.buyRodUp();
     else if (act === 'holdlevel') this.buyHoldUp();
@@ -1457,7 +1457,7 @@ export class Game {
     this.refreshHud();
   }
 
-  private buy(kind: 'rod' | 'bait' | 'line', id: string): void {
+  private buy(kind: 'rod' | 'bait' | 'line', id: string, n = 1): void {
     if (this.spin) return;
     const s = this.s;
     if (kind === 'line') {
@@ -1478,12 +1478,13 @@ export class Game {
       this.toast(`Bought the ${r.name}${eco.hasRod(s, id) ? ' · equipped' : ''}`);
     } else {
       const b = byId(BAITS, id);
-      const cost = b.price * eco.BAIT_PACK;
+      const pack = n === eco.BAIT_PACK_BIG ? n : eco.BAIT_PACK;
+      const cost = b.price * pack;
       if (s.level < b.unlockLevel) return this.toast(`${b.name} unlocks at level ${b.unlockLevel}.`);
       if (s.coins < cost) return this.toast(`Not enough coins (${cost} 🪙).`);
-      if (!eco.buyBait(s, id)) return this.toast('Your locker is full of that bait.');
-      this.net.send({ t: 'buybait', id });
-      this.toast(`Bought ${eco.BAIT_PACK} ${b.name}`);
+      if (!eco.buyBait(s, id, pack)) return this.toast('Your locker is full of that bait.');
+      this.net.send(pack === eco.BAIT_PACK ? { t: 'buybait', id } : { t: 'buybait', id, n: pack });
+      this.toast(`Bought ${pack} ${b.name}`);
       // The gear warning outranks the one-time bait tip, which waits for a buy that doesn't need it.
       const warn = baitWarning(s, b, `${b.name}'s top fish`);
       if (warn?.too) this.showGuide(warn.text);
@@ -4910,7 +4911,7 @@ export class Game {
       return this.itemTile({ icon: BAIT_ICON[id] ?? '🪱', name: `${b.name} ×${eco.BAIT_PACK}`, sub: lvl ? `🔒 Lv ${b.unlockLevel}` : '', price: this.baitPackPrice(b), tier: b.tier, on: this.pick.gear === `bait:${id}`, ghost: lvl || s.coins < cost, attrs: `data-pick="gear" data-id="bait:${id}"` });
     }).join('');
     const sign = s.level >= DEEP_SEA_ROD.unlockLevel || s.seaRod ? `<p class="signpost">⛵ Deep sea gear: see Captain Reed on the west beach</p>` : '';
-    return `<div class="cols"><div class="main">${sign}<h4>Rods</h4><div class="tiles">${rods}</div><h4>Line</h4><div class="tiles">${lines}</div><h4>Bait · packs of ${eco.BAIT_PACK}</h4><div class="tiles">${baits}</div>
+    return `<div class="cols"><div class="main">${sign}<h4>Rods</h4><div class="tiles">${rods}</div><h4>Line</h4><div class="tiles">${lines}</div><h4>Bait · packs of ${eco.BAIT_PACK} or ${eco.BAIT_PACK_BIG}</h4><div class="tiles">${baits}</div>
       <p class="foot">Rods and bait go to your tackle locker; equip them from your Bag (${this.touch ? '🎒' : '<kbd>Tab</kbd>'}). Line spools straight onto your rod.</p>${eco.canDig(s) ? `<p class="foot">🪱 ${eco.DIG_HINT}</p>` : ''}</div>${this.gearDetail()}</div>`;
   }
 
@@ -4942,11 +4943,20 @@ export class Game {
       const b = byId(BAITS, id);
       const cost = b.price * eco.BAIT_PACK;
       const lvl = s.level < b.unlockLevel;
+      const bigCost = b.price * eco.BAIT_PACK_BIG;
+      const held = eco.lockerBait(s, b.id);
+      const big = s.coins < bigCost
+        ? this.btn(`Need ${bigCost.toLocaleString()} ${COIN}`, '', 'plain', true)
+        : held + eco.BAIT_PACK_BIG > eco.LOCKER_CAP
+          ? this.btn('Locker full', '', 'plain', true)
+          : this.btn(`Buy ${eco.BAIT_PACK_BIG} for ${bigCost.toLocaleString()} ${COIN}`, `data-act="buybait" data-id="${b.id}" data-n="${eco.BAIT_PACK_BIG}"`);
       const action = lvl
         ? this.btn(`Unlocks at level ${b.unlockLevel} · ${this.baitPackPrice(b)}`, '', 'plain', true)
-        : s.coins < cost
-          ? this.btn(`Need ${cost.toLocaleString()} ${COIN}`, '', 'plain', true)
-          : this.btn(`Buy ${eco.BAIT_PACK} for ${cost.toLocaleString()} ${COIN}`, `data-act="buybait" data-id="${b.id}"`);
+        : `<div class="btnrow">${
+            s.coins < cost
+              ? this.btn(`Need ${cost.toLocaleString()} ${COIN}`, '', 'plain', true)
+              : this.btn(`Buy ${eco.BAIT_PACK} for ${cost.toLocaleString()} ${COIN}`, `data-act="buybait" data-id="${b.id}"`)
+          }${big}</div>`;
       return this.detail({
         icon: BAIT_ICON[b.id] ?? '🪱',
         name: b.name,

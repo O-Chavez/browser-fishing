@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as eco from './economy';
 import { ROD_SLOT, SEA_VERSION, SLOT_COUNT, migrate, newSave, type SaveData } from './state';
-import { FISH, LINES, byId } from '../data/content';
+import { BAITS, FISH, LINES, byId } from '../data/content';
 import { GLOVES_CONTROL } from '../data/casino';
 import { mulberry } from './env';
 import { ZONES } from '../data/dive';
@@ -58,6 +58,30 @@ describe('carry slots', () => {
     expect(s.slots[1]).toMatchObject({ n: 20 });
     expect(eco.baitCount(s, 'worm')).toBe(20);
     expect(eco.freeSlots(s)).toBe(3);
+  });
+
+  it('sells bait in packs of 5 or 25 at the same price per bait, and nothing else', () => {
+    const s = newSave();
+    s.coins = 999;
+    const worm = byId(BAITS, 'worm');
+    const before = s.coins;
+    expect(eco.buyBait(s, 'worm', 25)).toBe(true);
+    expect(before - s.coins).toBe(worm.price * 25);
+    expect(eco.baitCount(s, 'worm')).toBe(40);
+    for (const n of [0, 1, 10, 26, 100, -5, 5.5, NaN]) expect(eco.buyBait(s, 'worm', n)).toBe(false);
+    expect(eco.baitCount(s, 'worm')).toBe(40);
+  });
+
+  it('refuses a pack of 25 when it cannot be paid for or would pass the locker cap', () => {
+    const s = newSave();
+    s.coins = 0;
+    expect(eco.buyBait(s, 'worm', 25)).toBe(false);
+    s.coins = 99_999;
+    s.locker.bait.worm = eco.LOCKER_CAP - 24;
+    const coins = s.coins;
+    expect(eco.buyBait(s, 'worm', 25)).toBe(false);
+    expect(s.coins).toBe(coins);
+    expect(eco.buyBait(s, 'worm', 5)).toBe(true);
   });
 
   it('keeps a big bait supply in one hotbar stack, spilling only past 99 into the locker', () => {

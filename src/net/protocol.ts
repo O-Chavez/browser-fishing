@@ -106,7 +106,7 @@ export type ClientMsg =
    * have unlocked it (`buyReedPiece`). Named for the legend sets, which came first.
    */
   | { t: 'buylegend'; id: string }
-  | { t: 'buybait'; id: string }
+  | { t: 'buybait'; id: string; n?: number }
   /** Gear from the tackle locker into the hotbar's rod or bait slot (the one it replaces goes back). */
   | { t: 'equiprod'; id: string }
   | { t: 'equipbait'; id: string }
