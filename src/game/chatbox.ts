@@ -56,6 +56,38 @@ export const typedCommand = (text: string): Command | undefined => {
   return m ? COMMANDS.find((c) => c.cmd === m[1].toLowerCase()) : undefined;
 };
 
+/** A command whose secret is asked for in its own starred-out panel (`DevPrompt`) instead of being typed into the chat. */
+export type SecretPrompt = { kind: 'login' } | { kind: 'resetpass'; name: string };
+
+/**
+ * `/login` on its own, or `/resetpass <name>` with the name but no password, wants the panel. Anything typed in
+ * full ("/login user pass", "/resetpass Big Fish pass") is left alone and still works the old way.
+ */
+export const secretPrompt = (text: string): SecretPrompt | null => {
+  const t = text.trim();
+  if (/^\/login$/i.test(t)) return { kind: 'login' };
+  const m = /^\/resetpass\s+(\S+)$/i.exec(t);
+  return m ? { kind: 'resetpass', name: m[1] } : null;
+};
+
+/** The commands the panel sends, exactly as the server reads them (`command` in `server/room.ts`). */
+export const loginCommand = (user: string, pass: string): string => `/login ${user} ${pass}`;
+export const resetPassCommand = (name: string, pass: string): string => `/resetpass ${name} ${pass}`;
+
+/** A command as the local echo shows it, with the password hidden. */
+export const maskedEcho = (text: string): string =>
+  text.replace(/^(\/login\s+\S+\s+).*/, '$1••••').replace(/^(\/resetpass\s+.+\s)\S+$/, '$1••••');
+
+/** What the panel's echo says: the user name and password stay out of the chat. */
+export const promptEcho = (p: SecretPrompt): string => (p.kind === 'login' ? '/login ••••' : `/resetpass ${p.name} ••••`);
+
+/** Why the panel won't send these values yet, or null. The server splits a command at spaces, so a space would change what it reads. */
+export const secretError = (values: string[]): string | null => {
+  if (values.some((v) => !v)) return 'Fill in every box.';
+  if (values.some((v) => /\s/.test(v))) return 'No spaces, please.';
+  return null;
+};
+
 /**
  * The global chat window in the top right: a short log, a "Press Enter to chat" hint, and an
  * input that takes over the keyboard while open. Tab in the input completes a half-typed slash
@@ -99,8 +131,9 @@ export class ChatBox {
       e.stopPropagation();
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         const text = this.input.value.trim();
-        if (text) this.opts.send(text);
+        // Closed first: a send can open the login panel, which takes the focus.
         this.close();
+        if (text) this.opts.send(text);
       } else if (e.code === 'Escape') {
         this.escapedAt = performance.now();
         this.close();

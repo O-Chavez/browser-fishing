@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_TTL_MS, FLASH_MS, commandMatches, flashElapsed, liveLines, shownLines, typedCommand, type ChatLine } from './chatbox';
+import { CHAT_TTL_MS, FLASH_MS, commandMatches, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
 
 const line = (text: string, map = 'pond', at = 0): ChatLine => ({ name: 'Ann', map, text, self: false, at });
 
@@ -52,5 +52,44 @@ describe('slash command completion', () => {
     expect(typedCommand('/Idea ')?.cmd).toBe('idea');
     expect(typedCommand('/bug')).toBeUndefined();
     expect(typedCommand('/login admin x')).toBeUndefined();
+  });
+});
+
+describe('dev login panel', () => {
+  it('opens for /login on its own and /resetpass with just a name', () => {
+    expect(secretPrompt('/login')).toEqual({ kind: 'login' });
+    expect(secretPrompt('  /Login ')).toEqual({ kind: 'login' });
+    expect(secretPrompt('/resetpass Ann')).toEqual({ kind: 'resetpass', name: 'Ann' });
+  });
+
+  it('leaves the full typed forms and everything else alone', () => {
+    expect(secretPrompt('/login admin hunter2')).toBeNull();
+    expect(secretPrompt('/resetpass Ann hunter2')).toBeNull();
+    expect(secretPrompt('/resetpass')).toBeNull();
+    expect(secretPrompt('/logout')).toBeNull();
+    expect(secretPrompt('/bug login')).toBeNull();
+    expect(secretPrompt('login')).toBeNull();
+  });
+
+  it('builds the commands the server reads', () => {
+    expect(loginCommand('admin', 'hunter2')).toBe('/login admin hunter2');
+    expect(resetPassCommand('Ann', 'n3wpass')).toBe('/resetpass Ann n3wpass');
+  });
+
+  it('never shows the typed values in the echo', () => {
+    expect(promptEcho({ kind: 'login' })).toBe('/login ••••');
+    expect(promptEcho({ kind: 'resetpass', name: 'Ann' })).toBe('/resetpass Ann ••••');
+    const echo = promptEcho({ kind: 'login' });
+    expect(echo).not.toContain('admin');
+    expect(echo).not.toContain('hunter2');
+    expect(maskedEcho('/login admin hunter2')).toBe('/login admin ••••');
+    expect(maskedEcho('/resetpass Big Fish hunter2')).toBe('/resetpass Big Fish ••••');
+    expect(maskedEcho('/bug it broke')).toBe('/bug it broke');
+  });
+
+  it('refuses empty values and spaces, which would change what the server reads', () => {
+    expect(secretError(['admin', 'hunter2'])).toBeNull();
+    expect(secretError(['admin', ''])).not.toBeNull();
+    expect(secretError(['admin', 'hunter 2'])).not.toBeNull();
   });
 });
