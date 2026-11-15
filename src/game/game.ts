@@ -1571,10 +1571,13 @@ export class Game {
   private applyState(save: SaveData): void {
     const from = this.s.location;
     const moved = !!save.location && save.location !== from;
+    // The first save on joining places you; it isn't a trip. `from` there is this browser's offline save,
+    // which can still say "sea" from long ago and would land you by Captain Reed's.
+    const arriving = this.joining || this.pendingWelcome;
     Object.assign(this.s, save);
     if (this.joining) this.finishJoin();
     else if (this.pendingWelcome) this.welcome();
-    if (moved) this.applyLocation(from);
+    if (moved) this.applyLocation(arriving ? undefined : from);
     this.setGateSign();
     this.refreshHud();
     if (this.menuOpen) this.renderMenu();
