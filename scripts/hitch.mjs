@@ -3,15 +3,23 @@
 // link, texture and buffer uploads), new shader programs per frame, and long tasks. It waits on the
 // join screen, joins, stands 3 s, turns a full circle over 4 s and stands 3 s more.
 //
-//   npm run bench:load -- [--phone] [--online] [--night] [--runs N] [--wait S] [--json]
+//   npm run bench:load -- [--phone] [--online] [--returning] [--casino] [--slow-compile S] [--night] [--runs N] [--wait S] [--json]
 //
 // --phone:  SwiftShader at the touch resolution (1400x647, DPR 1) as a touch device, tapping
 //           "Try touch controls" after 1 s: a rough phone stand-in (slow and noisy, repeat it).
 // --online: a game server with another player at the spawn; joins through the join screen.
+// --returning: --online as a returning player: this browser has joined before (`fishing-auto`), so the
+//           game joins by itself as the page loads, and "join" is when the join card hides (no --wait).
+// --casino: --returning with the account saved in Casino Cove, so the casino is built and warmed up on joining.
+// --slow-compile S: background shader compiles (KHR_parallel_shader_compile) report "not done" until S s after load,
+//           a stand-in for a GPU that compiles slowly in the background while the server answers fast (on the M1
+//           and SwiftShader the warm-up is done before the server's answer is handled). The programs are really done,
+//           so frames drawn before then don't stall here: read `warmedVsJoin` (> 0: the game showed before the warm-up).
 // --trace FILE / --load-trace FILE: a Chrome trace of the join / of the first 2.5 s.
 // "slow" lists frames over 34 ms as seconds-from-join:gap/callback ms/compile ms/texture ms/programs.
 // BENCH_ROOT points it at another checkout (e.g. a worktree of main) for before/after runs.
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,13 +35,16 @@ const RUNS = Number(opt('--runs', 3));
 const WAIT = Number(opt('--wait', 5)) * 1000; // time on the join screen before joining
 const PORT = Number(opt('--port', 5317));
 const JSON_OUT = flag('--json');
+const SLOW_COMPILE = Number(opt('--slow-compile', 0)) * 1000;
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const ROOT = path.resolve(process.env.BENCH_ROOT ?? '.');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --online: a game server with one other player standing at the spawn, and the probe joins through
 // the join screen like a new player (so other players' avatars appear right after joining).
-const ONLINE = flag('--online');
+const CASINO = flag('--casino');
+const RETURNING = flag('--returning') || CASINO;
+const ONLINE = flag('--online') || RETURNING;
 // The server runs in its own process group (`detached`): npx starts tsx, which starts the server, and
 // stopping only npx would leave the server on the port. stopServer() signals the whole group.
 let serverGroup = null;
@@ -66,6 +77,14 @@ let game = null;
 if (ONLINE) {
   const SERVER_PORT = Number(opt('--server-port', 8797));
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fishing-hitch-'));
+  // --casino: one account per run, last seen in Casino Cove (the server fills in the rest of the save).
+  if (CASINO) {
+    const accounts = {};
+    for (let run = 0; run < RUNS; run++) {
+      accounts[`back${run}`] = { name: `Back${run}`, tokens: [createHash('sha256').update(`hitch-returning-token-${run}`).digest('hex')], save: { version: 1, level: 20, location: 'casino' } };
+    }
+    fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify(accounts));
+  }
   game = spawn('npx', ['tsx', 'server/index.ts'], { cwd: ROOT, env: { ...process.env, DATA_DIR: dataDir, PORT: String(SERVER_PORT), DATABASE_URL: '', DISCORD_FEEDBACK_WEBHOOK: '', DISCORD_WEBHOOK: '', TEST_HOOKS: '1' }, stdio: ['ignore', 'pipe', 'inherit'], detached: true });
   serverGroup = game.pid;
   await new Promise((res) => game.stdout.on('data', (d) => /fishing server on port/.test(String(d)) && res()));
@@ -77,8 +96,15 @@ await server.listen();
 const gpuArgs = PHONE ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'];
 const viewport = PHONE ? { width: 1400, height: 647, deviceScaleFactor: 1, isMobile: true, hasTouch: true } : { width: 1600, height: 900, deviceScaleFactor: 2 };
 
-function probe(night) {
+function probe(night, slowCompile) {
   const now = () => performance.now();
+  if (slowCompile) {
+    const get = WebGL2RenderingContext.prototype.getProgramParameter;
+    WebGL2RenderingContext.prototype.getProgramParameter = function (p, pname) {
+      // COMPLETION_STATUS_KHR
+      return pname === 0x91b1 && now() < slowCompile ? false : get.call(this, p, pname);
+    };
+  }
   const B = (window.__glt = { compile: 0, tex: 0, buf: 0, draw: 0, other: 0 });
   const groups = {
     compile: ['compileShader', 'linkProgram', 'getProgramParameter', 'getShaderParameter', 'getProgramInfoLog', 'getShaderInfoLog', 'getActiveUniform', 'getActiveAttrib', 'getUniformLocation', 'getAttribLocation', 'getUniformBlockIndex'],
@@ -99,6 +125,12 @@ function probe(night) {
       }
     }
   }
+  // When the join card started saying "Loading…" (the server let the player in; the warm-up still running).
+  document.addEventListener('DOMContentLoaded', () => {
+    const msg = document.getElementById('join-msg');
+    if (!msg) return;
+    new MutationObserver(() => { if (msg.textContent === 'Loading…' && window.__loadingAt == null) window.__loadingAt = now(); }).observe(msg, { childList: true, characterData: true, subtree: true });
+  });
   const frames = (window.__frames = []);
   const longs = (window.__longs = []);
   try {
@@ -137,7 +169,8 @@ function probe(night) {
   const tick = (ts) => {
     // One record per frame: gap since the last frame, and what the callbacks spent.
     if (cur) frames.push(cur);
-    cur = { ts, t: now(), cb: 0, compile: 0, tex: 0, buf: 0, draw: 0, newProg: [] };
+    // `ready`: the map's shader warm-up (`World.prewarm`) is done.
+    cur = { ts, t: now(), cb: 0, compile: 0, tex: 0, buf: 0, draw: 0, newProg: [], ready: !!window.__g?.world.ready };
     raf(tick);
   };
   raf(tick);
@@ -179,6 +212,9 @@ function summarize(frames, longs, joinAt) {
     };
   };
   const first = rows.length ? rows[0].t : 0;
+  // When the last warm-up in the run finished: the first frame of the last stretch with it done.
+  let warmedAt = null;
+  for (let i = rows.length - 1; i >= 0 && rows[i].ready; i--) warmedAt = rows[i].t;
   const top = [...rows].sort((a, b) => b.gap - a.gap).slice(0, 6).map((x) => ({
     at: +(x.t / 1000).toFixed(2), gap: +x.gap.toFixed(0), cb: +x.cb.toFixed(0), compile: +x.compile.toFixed(0), tex: +x.tex.toFixed(0), buf: +x.buf.toFixed(0), progs: x.newProg.length,
   }));
@@ -186,6 +222,13 @@ function summarize(frames, longs, joinAt) {
   return {
     slow,
     firstFrameAt: +(first / 1000).toFixed(2),
+    // Seconds from joining to the warm-up done (negative: done before joining).
+    warmedVsJoin: warmedAt === null ? null : +((warmedAt - joinAt) / 1000).toFixed(2),
+    // Seconds from joining to the last legend pieces' programs (`Avatars.warmLegends`; named by their models).
+    legendsVsJoin: (() => {
+      const r = rows.filter((x) => x.newProg.some((n) => /kraken|leviathan|dreamer/i.test(n))).at(-1);
+      return r ? +((r.t - joinAt) / 1000).toFixed(2) : null;
+    })(),
     joinScreen: phase(0, joinAt),
     afterJoin: phase(joinAt, joinAt + 10000),
     top,
@@ -213,26 +256,41 @@ try {
     const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: [...gpuArgs], defaultViewport: viewport });
     const page = await browser.newPage();
     page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
-    await page.evaluateOnNewDocument(probe, NIGHT ? 0.7 : 0.1);
+    await page.evaluateOnNewDocument(probe, NIGHT ? 0.7 : 0.1, SLOW_COMPILE);
     // Every "What's new" entry read, so no card opens over the join (--online).
     await page.evaluateOnNewDocument(() => localStorage.setItem('fishing-news', String(Number.MAX_SAFE_INTEGER)));
     if (!JSON_OUT) page.on('console', (m) => /^pre-frame/.test(m.text()) && console.log(m.text()));
     const LTRACE = opt('--load-trace', '');
     if (LTRACE) await page.tracing.start({ path: LTRACE, categories: ['toplevel', 'gpu', 'viz', 'cc', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-gpu.service', 'disabled-by-default-gpu.decoder', 'disabled-by-default-gpu.angle', 'gpu.angle', 'disabled-by-default-gpu.device'] });
+    // A returning player: a name saved and an earlier join, so the page joins by itself (a new name each run, so the
+    // server makes the account then and there; it answers the same as for a known token).
+    if (RETURNING) {
+      await page.evaluateOnNewDocument((n, token) => {
+        localStorage.setItem('fishing-name', n);
+        localStorage.setItem('fishing-auto', '1');
+        if (token) localStorage.setItem('fishing-token', token);
+      }, CASINO ? `Back${run}` : `Back${run}x${Date.now() % 1000}`, CASINO ? `hitch-returning-token-${run}` : '');
+    }
     const q = [ONLINE && 'room=hitch'].filter(Boolean).join('&');
-    await page.goto(`http://localhost:${PORT}/${q ? '?' + q : ''}`, { waitUntil: 'load' });
-    await page.waitForFunction(() => window.__game);
+    await page.goto(`http://localhost:${PORT}/${q ? '?' + q : ''}`, { waitUntil: 'load', timeout: 90000 });
+    await page.waitForFunction(() => window.__game, { timeout: 90000 });
     // A phone opens on the "made for desktop" notice (the world isn't drawn); the player taps "Try touch controls".
     if (PHONE) {
       await sleep(1000);
       await page.evaluate(() => document.getElementById('desktop-anyway').click());
     }
-    if (LTRACE) { await sleep(2500); await page.tracing.stop(); await sleep(WAIT - 2500); } else
-    await sleep(WAIT);
+    if (LTRACE) { await sleep(2500); await page.tracing.stop(); if (!RETURNING) await sleep(WAIT - 2500); } else
+    if (!RETURNING) await sleep(WAIT);
     const TRACE = opt('--trace', '');
     if (TRACE) await page.tracing.start({ path: TRACE, categories: ['toplevel', 'gpu', 'viz', 'cc', 'blink', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-gpu.service', 'disabled-by-default-gpu.decoder', 'webaudio', 'audio', 'media'] });
-    const joinAt = await page.evaluate(() => performance.now());
-    if (ONLINE) {
+    let joinAt = await page.evaluate(() => performance.now());
+    if (RETURNING) {
+      await page.waitForFunction(() => document.getElementById('join').classList.contains('hidden'), { timeout: 60000, polling: 'raf' }).catch(async (e) => {
+        console.log('join card still up:', await page.evaluate(() => document.getElementById('join-msg').textContent));
+        throw e;
+      });
+      joinAt = await page.evaluate(() => performance.now());
+    } else if (ONLINE) {
       await page.type('#join-name', `Newbie${run}x${Date.now() % 1000}`);
       await page.click('#join-go');
       await page.waitForFunction(() => document.getElementById('join').classList.contains('hidden'), { timeout: 30000 });
@@ -254,12 +312,15 @@ try {
       requestAnimationFrame(step);
     }));
     await sleep(3000);
-    const { frames, longs, gpu, progs } = await page.evaluate(() => {
+    const { frames, longs, gpu, progs, loadingAt } = await page.evaluate(() => {
       const gl = window.__game.world.renderer.getContext();
       const ext = gl.getExtension('WEBGL_debug_renderer_info');
-      return { frames: window.__frames, longs: window.__longs, gpu: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '?', progs: window.__game.world.renderer.info.programs.length };
+      return { frames: window.__frames, longs: window.__longs, gpu: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '?', progs: window.__game.world.renderer.info.programs.length, loadingAt: window.__loadingAt ?? null };
     });
     const s = summarize(frames, longs, joinAt);
+    s.joinedAt = +(joinAt / 1000).toFixed(2);
+    // How long the join card said "Loading…" before it went (null: it never did, as on main before this hold).
+    s.loadingFor = loadingAt === null ? null : +((joinAt - loadingAt) / 1000).toFixed(2);
     s.gpu = gpu;
     s.programsAtEnd = progs;
     results.push(s);

@@ -154,6 +154,8 @@ const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
 const GRAPHICS_KEY = 'fishing-graphics';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
 const MAX_HOLD_PITCH = 1.5;
+/** The longest the join card waits on the shader warm-up after the server lets you in ("Loading…"), so a stuck one can't keep you out. A play-test default. */
+const JOIN_WARM_CAP_MS = 10_000;
 
 export class Game {
   private s: SaveData = load();
@@ -179,6 +181,10 @@ export class Game {
   private seaDepth = 1;
   /** When the "Casting off" card went up, while it covers a trip to or from the sea. */
   private castOffAt: number | null = null;
+  /** Joined online but still on the join card ("Loading…") until the shaders are warmed up (`finishJoin`), at the latest by this `performance.now()`. */
+  private enterBy: number | null = null;
+  /** What waits for the join card to go (`enterGame`). */
+  private onEnter: (() => void)[] = [];
   private screenSpray = new ScreenSpray();
   private timer = 0;
 
@@ -388,7 +394,7 @@ export class Game {
       onBlackjack: (v) => this.dealt(v),
       onNotice: (msg) => this.toast(msg),
       // On joining, after the welcome banner has had its moment.
-      onStages: (ids, intro) => window.setTimeout(() => this.stageBanner(ids, intro), 4600),
+      onStages: (ids, intro) => this.afterEnter(() => window.setTimeout(() => this.stageBanner(ids, intro), 4600)),
       onChat: (m) => {
         const self = m.room === this.net.room && m.id === this.net.id;
         this.chat.add({ name: m.name, map: m.map, text: m.text, self, sup: this.net.isSupporter(m.name) });
@@ -692,10 +698,29 @@ export class Game {
     ($('join-pass') as HTMLInputElement).value = '';
     $('join-pass-row').classList.add('hidden');
     $('join-switch').classList.add('hidden');
+    this.world.hub?.setLeaders(this.anglers());
+    // Returning players join by themselves within moments of the page loading, often before the map's shaders
+    // (`World.prewarm`, and the map the save is on, built right after this) and the legend pieces' stand-ins
+    // (`Avatars.warmLegends`) are done. The card stays up meanwhile ("Loading…", the world not drawn behind it while
+    // the map's compile, see `holdForShaders`), so the first frames in game don't stall on the rest; the frame loop
+    // takes it down (`enterGame`), at the latest after `JOIN_WARM_CAP_MS`.
+    this.joinMessage('Loading…', false);
+    this.enterBy = performance.now() + JOIN_WARM_CAP_MS;
+  }
+
+  /** Takes the join card down once the shaders are ready (or the wait has run out) and greets the player. */
+  private enterGame(): void {
+    this.enterBy = null;
     $('join').classList.add('hidden');
     this.preview?.stop();
-    this.world.hub?.setLeaders(this.anglers());
     this.welcome();
+    for (const f of this.onEnter.splice(0)) f();
+  }
+
+  /** Runs `f` now, or once the join card is down if it's still loading. */
+  private afterEnter(f: () => void): void {
+    if (this.enterBy === null) f();
+    else this.onEnter.push(f);
   }
 
   /** After joining online: unread "What's new" entries open in a card, and this browser has then read up to the newest. */
@@ -2934,6 +2959,7 @@ export class Game {
     // Behind the join screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
     this.updateCastOff();
     this.showDiveDue();
+    if (this.enterBy !== null && ((this.world.ready && this.world.warmedAll && !this.avatars.buildingLegends) || performance.now() >= this.enterBy)) this.enterGame();
     this.world.holdForShaders = !$('join').classList.contains('hidden') || this.castOffAt !== null;
     this.world.update(dt);
     const sea = this.world.sea;
