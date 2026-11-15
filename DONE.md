@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Show the player's Black Pearls next to their coins at the bottom of Reed's chart (Oscar, 2026-11-14; done 2026-11-14, branch `reed-chart-pearls`)
+  - The chart's foot (`src/game/divehud.ts`, `.reed .foot` in `src/style.css`) now reads "coins" on the left and "Black Pearls" on the right, always shown ("0 Black Pearls" with none); the foot wraps with a small gap if a narrow chart runs out of room
+  - Checked: headless screenshots of Reed's chart on desktop and a landscape phone (`?touch`), with 12,345,678 coins and 1,234 pearls, and with 90 coins and none; build, tests
 - [x] `npm run screenshots -- outfits` times out on a busy machine: the navigation in `join` gets a 150 s timeout, not puppeteer's 30 s (done 2026-11-14, branch `screenshots-join-timeout`)
   - Checked: `npx tsc -p tsconfig.scripts.json --noEmit` (the scripts config covers `scripts/`)
 - [x] Out-of-date text found while updating the README (2026-11-13; done 2026-11-14, branch `docs-endgame-refresh`)
