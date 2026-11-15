@@ -95,7 +95,8 @@ import { World } from './world';
 import { ScreenSpray } from './screenspray';
 import { seaDepthFor, zoneAt } from '../data/sea';
 import { CAST_OFF_CARD, cardColours } from './castoffcard';
-import { RESTART_PROBE_TIMEOUT_MS, waitForRestart } from './restart';
+import { autoReload, RESTART_PROBE_TIMEOUT_MS, waitForRestart } from './restart';
+import { clientLog, setLogMap } from './clientlog';
 import { dayFraction } from './daynight';
 import { ABYSS, DIVES_OPEN, ZONES, glowColor } from '../data/dive';
 
@@ -152,6 +153,8 @@ const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
 
 /** 'full' or 'lite', remembered per browser; unset means the device's default. */
 const GRAPHICS_KEY = 'fishing-graphics';
+/** Times this tab reloaded to reconnect (`reconnect`), so a server that drops every join can't loop it. */
+const AUTO_RELOAD_KEY = 'fishing-auto-reload';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
 const MAX_HOLD_PITCH = 1.5;
 /** The longest the join card waits on the shader warm-up after the server lets you in ("Loading…"), so a stuck one can't keep you out. A play-test default. */
@@ -369,7 +372,10 @@ export class Game {
     // "sad canvas" meanwhile), so offer a reload, which starts in lite graphics to ease the load.
     const canvas = this.world.renderer.domElement;
     canvas.addEventListener('webglcontextlost', () => {
-      localStorage.setItem(GRAPHICS_KEY, 'lite');
+      clientLog('gpu', `context lost, ${document.hidden ? 'hidden' : 'visible'}`);
+      try {
+        localStorage.setItem(GRAPHICS_KEY, 'lite');
+      } catch {}
       this.showOffline('Graphics stopped working', 'Reload to keep playing. Lite graphics will be on, which is easier on your device.', 'gpu');
     });
     canvas.addEventListener('webglcontextrestored', () => $('offline').classList.add('hidden'));
@@ -437,6 +443,7 @@ export class Game {
       },
       onFurthest: () => this.world.town?.setFurthest(this.net.furthest),
       onFailed: () => {
+        clientLog('failed', this.joining ? 'join' : 'auto-join');
         if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
         else if (this.pendingWelcome) {
           this.showOffline("Can't reach the game server");
@@ -526,12 +533,16 @@ export class Game {
         this.dropsView.sync(this.localDrops.all(), this.map.id);
         this.fb.giveUp(OFFLINE_MSG);
         this.renderFeedback();
-        this.showOffline(this.offlineWhy ?? 'Disconnected');
+        clientLog('close', `${this.offlineWhy ?? 'dropped'}, ${document.hidden ? 'hidden' : 'visible'}`);
+        // The server sent a reason (kicked, signed in elsewhere): reconnecting would only repeat it.
+        if (this.offlineWhy) this.showOffline(this.offlineWhy);
+        else this.reconnect();
         this.offlineWhy = undefined;
       },
       onRestart: () => this.startRestart(),
     });
     this.world.clock = () => this.net.now();
+    setLogMap(() => this.map.id);
     this.applyLocation();
     this.devPrompt = new DevPrompt($('devprompt'), {
       send: (text, echo) => {
@@ -1746,6 +1757,56 @@ export class Game {
         this.renderFeedback();
         this.showOffline('Disconnected');
       },
+    });
+  }
+
+  /**
+   * The connection dropped with no reason given (a phone that slept or switched apps, a network blip): say so, and
+   * reload once the server answers and the page is in view, which rejoins with the saved login. Gives up to the
+   * plain offline banner after a couple of minutes, or when it has already reloaded twice in a few minutes.
+   */
+  private reconnect(): void {
+    let history: number[] = [];
+    try {
+      history = JSON.parse(sessionStorage.getItem(AUTO_RELOAD_KEY) ?? '[]') as number[];
+    } catch {}
+    const r = autoReload(Array.isArray(history) ? history : [], Date.now());
+    if (!r.ok) return this.showOffline('Disconnected');
+    this.showOffline('Reconnecting…', 'Lost the connection. Getting you back in.');
+    const health = `${NetClient.serverBase().replace(/^ws/, 'http')}/health`;
+    const visible = () => new Promise<void>((done) => {
+      if (!document.hidden) return done();
+      const on = () => {
+        if (document.hidden) return;
+        document.removeEventListener('visibilitychange', on);
+        done();
+      };
+      document.addEventListener('visibilitychange', on);
+    });
+    void waitForRestart({
+      probe: async () => {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), RESTART_PROBE_TIMEOUT_MS * 2);
+        try {
+          return (await fetch(health, { cache: 'no-store', signal: ctl.signal })).ok;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+      socketClosed: () => this.net.socketClosed,
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+      reload: () => {
+        void visible().then(() => {
+          try {
+            sessionStorage.setItem(AUTO_RELOAD_KEY, JSON.stringify([...r.keep, Date.now()]));
+          } catch {}
+          clientLog('reconnect', 'reloading');
+          location.reload();
+        });
+      },
+      giveUp: () => this.showOffline('Disconnected'),
+      cancelled: () => this.restarting || this.loggingOut,
     });
   }
 

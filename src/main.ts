@@ -1,6 +1,9 @@
 import './style.css';
 import { Game } from './game/game';
 import { touchOnly } from './game/touch';
+import { clientLog, watchErrors } from './game/clientlog';
+
+watchErrors();
 
 // Touch-only devices get a "made for desktop" notice (shown by CSS); "Try touch controls" dismisses it
 // for this tab and turns on the on-screen controls. `?touch` forces touch mode, for testing on desktop.
@@ -13,6 +16,7 @@ const ANYWAY = 'desktop-anyway';
  */
 function showStartError(e: unknown): void {
   const webgl = String(e).includes('WebGL');
+  clientLog('failed', `start: ${String(e)}`);
   const panel = notice.querySelector('.panel')!;
   panel.innerHTML = webgl
     ? `<img src="/apple-touch-icon.png" alt="" /><h2>Lakeside couldn't start its 3D graphics</h2>

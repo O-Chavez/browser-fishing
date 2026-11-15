@@ -11,6 +11,7 @@ import { DevGate } from './dev';
 import { JoinFeed, NOT_FORUM, postWebhook } from './discord';
 import { FeedbackGate, feedbackPost, parseTags, type FeedbackReport } from './feedback';
 import { matchTip, parseKofi, tipMessage } from './kofi';
+import { CLIENT_LOG_MAX_BYTES, ClientLogGate, clientLogLine, parseClientLog } from './clientlog';
 import { guarded } from './guard';
 import { createShutdown, type ShutdownConn } from './shutdown';
 import { Room } from './room';
@@ -174,6 +175,7 @@ const TYPES: Record<string, string> = {
 // Serves the built client (npm run build) from the same port as the game socket.
 const http = createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/kofi') return kofiHook(req, res);
+  if (req.method === 'POST' && req.url === '/clientlog') return clientLogHook(req, res);
   let path: string;
   try {
     path = decodeURIComponent((req.url ?? '/').split('?')[0]);
@@ -199,6 +201,27 @@ const http = createServer((req, res) => {
   createReadStream(file).pipe(res);
 });
 /** Ko-fi's tip webhook: a small form-encoded POST. */
+const clientLogGate = new ClientLogGate();
+/** A problem report from a player's browser (`server/clientlog.ts`): one line in the server log. */
+function clientLogHook(req: IncomingMessage, res: ServerResponse): void {
+  // Render puts the player's address first in x-forwarded-for.
+  const addr = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+  let body = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk: string) => {
+    body += chunk;
+    if (body.length > CLIENT_LOG_MAX_BYTES) {
+      res.writeHead(413, { 'access-control-allow-origin': '*' }).end();
+      req.destroy();
+    }
+  });
+  req.on('end', () => {
+    if (res.headersSent) return;
+    const r = parseClientLog(body);
+    if (r && clientLogGate.allow(addr)) console.log(clientLogLine(r));
+    res.writeHead(r ? 204 : 400, { 'access-control-allow-origin': '*' }).end();
+  });
+}
 function kofiHook(req: IncomingMessage, res: ServerResponse): void {
   let body = '';
   req.setEncoding('utf8');

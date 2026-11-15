@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRestartClose, RESTART_GIVE_UP_MS, RESTART_SETTLE_MS, restartReady, waitForRestart, type RestartDeps } from './restart';
+import { AUTO_RELOAD_WINDOW_MS, AUTO_RELOADS, autoReload, isRestartClose, RESTART_GIVE_UP_MS, RESTART_SETTLE_MS, restartReady, waitForRestart, type RestartDeps } from './restart';
 
 describe('restart logic', () => {
   it('only close code 1012 is a restart', () => {
@@ -55,5 +55,22 @@ describe('restart logic', () => {
     const out = await run(() => false);
     expect(out).toMatchObject({ reloads: 0, giveUps: 1 });
     expect(RESTART_GIVE_UP_MS).toBe(120000);
+  });
+});
+
+describe('autoReload', () => {
+  it('allows a couple of reloads, then waits out the window', () => {
+    let h: number[] = [];
+    for (let i = 0; i < AUTO_RELOADS; i++) {
+      const r = autoReload(h, 1000 + i);
+      expect(r.ok).toBe(true);
+      h = [...r.keep, 1000 + i];
+    }
+    expect(autoReload(h, 2000).ok).toBe(false);
+    expect(autoReload(h, 1000 + AUTO_RELOAD_WINDOW_MS + AUTO_RELOADS).ok).toBe(true);
+  });
+
+  it('ignores junk and future times', () => {
+    expect(autoReload([NaN, 5e15, 1, 2], 10).keep).toEqual([1, 2]);
   });
 });

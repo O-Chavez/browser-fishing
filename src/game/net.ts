@@ -50,6 +50,9 @@ export interface NetEvents {
   onFailed(): void;
 }
 
+/** Nothing from the server this long (it sends the clock every minute) means the socket is dead. */
+const SILENT_MS = 150_000;
+
 /** Connection to the room server. The game stays fully playable offline if it can't connect. */
 export class NetClient {
   connected = false;
@@ -123,16 +126,44 @@ export class NetClient {
       ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, color: this.color, pass: this.pass }));
       this.pass = undefined;
     };
-    ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
-    ws.onclose = (e) => {
-      const was = this.connected;
-      this.connected = false;
-      this.players.clear();
-      this.events.onPlayers();
-      if (this.restarted || isRestartClose(e.code)) this.restarting();
-      else if (was) this.events.onClose();
-      else this.events.onFailed();
+    ws.onmessage = (e) => {
+      this.heardAt = performance.now();
+      this.onMessage(JSON.parse(e.data));
     };
+    ws.onclose = (e) => this.closed(e.code);
+    this.heardAt = performance.now();
+    if (!this.watchdog) this.watchdog = setInterval(() => this.checkAlive(), 10_000);
+  }
+
+  private closed(code: number): void {
+    const was = this.connected;
+    this.connected = false;
+    this.players.clear();
+    this.events.onPlayers();
+    if (this.restarted || isRestartClose(code)) this.restarting();
+    else if (was) this.events.onClose();
+    else this.events.onFailed();
+  }
+
+  /** `performance.now()` when the server last sent anything; it sends the clock at least once a minute (`CLOCK_MS`). */
+  private heardAt = 0;
+  private watchdog: ReturnType<typeof setInterval> | 0 = 0;
+  /**
+   * A phone that slept can come back to a socket that still reads as open but is dead (the network dropped it), and
+   * a dead socket can take minutes to report its close. Hearing nothing for well over the clock's minute, while the
+   * page is in view, counts as closed now.
+   */
+  private checkAlive(): void {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN || document.hidden) return;
+    if (performance.now() - this.heardAt < SILENT_MS) return;
+    ws.onclose = null;
+    ws.onmessage = null;
+    try {
+      ws.close();
+    } catch {}
+    this.ws = null;
+    this.closed(1006);
   }
 
   /** The server's time (ms), which the day/night cycle follows so every player sees the same sky. */
