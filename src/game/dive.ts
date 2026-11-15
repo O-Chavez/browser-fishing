@@ -275,6 +275,29 @@ export function canStart(p: SeaProgress, zone: unknown, marker: unknown = 0): bo
   return typeof marker === 'number' && Number.isInteger(marker) && marker >= 1 && marker <= Math.max(1, p.abyssRecord);
 }
 
+/** How far out someone's charters reach: a zone, and in the Abyss the furthest marker (a Furthest Out row's `zone` and `marker`). */
+export interface Reach {
+  zone: number;
+  marker?: number;
+}
+
+/**
+ * Whether `next` takes the top of the Furthest Out board from `prev` (null when the board was empty): a further zone, or
+ * the same zone and a further Abyss marker. A tie is no record, and the Shelf alone never is (the board's first row
+ * for a first sea fish isn't news). The sole leader pushing further counts, since `prev` is the leader's old reach.
+ */
+export function isFurthestRecord(prev: Reach | null, next: Reach): boolean {
+  if (next.zone < 1) return false;
+  if (!prev) return true;
+  return next.zone > prev.zone || (next.zone === prev.zone && (next.marker ?? 0) > (prev.marker ?? 0));
+}
+
+/** The chat line for a new Furthest Out record (a play-test default): "🧭 Ann has sailed the furthest out: Abyss marker 12!". */
+export function furthestLine(name: string, r: Reach): string {
+  const where = r.zone === ABYSS && r.marker ? `Abyss marker ${r.marker}` : (ZONES[r.zone]?.name ?? 'the sea').replace(/^The /, 'the ');
+  return `🧭 ${name} has sailed the furthest out: ${where}!`;
+}
+
 /** A charter's running tally, for the cards. */
 export interface Tally {
   landed: number;
