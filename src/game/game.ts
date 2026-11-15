@@ -27,7 +27,7 @@ import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
-import { TouchControls, touchOnly } from './touch';
+import { TouchControls, touchLayoutWidth, touchOnly } from './touch';
 import { ChatBox, maskedEcho, secretPrompt, unreadLabel, type SecretPrompt } from './chatbox';
 import { DevPrompt } from './devprompt';
 import { FEEDBACK_MAX, FEEDBACK_WAIT_MS, FeedbackForm, OFFLINE_MSG, type FeedbackKind } from './feedback';
@@ -1154,9 +1154,9 @@ export class Game {
   enableTouch(): void {
     if (this.touch) return;
     document.body.classList.add('touch');
-    // Lay the page out 1400px wide and let the browser scale it to the screen, so the desktop HUD and
-    // menus fit a phone in landscape at about 0.6x without a separate layout.
-    document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=1400, user-scalable=no');
+    // Lay the page out wide and let the browser scale it to the screen, so the desktop HUD and menus fit a phone
+    // in landscape at about 0.6x without a separate layout (`touchLayoutWidth`).
+    document.querySelector('meta[name=viewport]')?.setAttribute('content', `width=${touchLayoutWidth(screen.width, screen.height)}, user-scalable=no`);
     this.world.setPixelCap(1);
     this.forceActive = true;
     $('resume').classList.add('hidden');

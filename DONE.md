@@ -2,6 +2,15 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 🎨 HUD at phone size, step 4 of full mobile support (from the mobile plan, 2026-11-15; done 2026-11-15, branch `mobile`)
+  - Measured first on an 844x390 phone: since the touch test build the HUD was already near the spec's sizes (level ring about 37 pt, hotbar slots 45 pt, 💬 and 🎒 48 pt, the action button 95 pt, the reel ring about 120 pt with its words under it and the hotbar hidden in a fight), so the spec's "smaller ring and hotbar" wasn't needed. What was off: small text, small phones and clutter in a fight
+  - Small phones (`touchLayoutWidth`, `src/game/touch.ts`): the layout is no longer always 1400px wide; it's the screen's long side / 0.6, between 1000 and 1400, so an iPhone SE-size phone (667x375) lays out 1112 wide at 0.6x instead of shrinking everything to 0.48x. Tablets keep 1400. The menus fit at 1112 (checked: Bag and Wardrobe)
+  - Text (`src/style.css`, touch only): chat lines 16 to 19px and the window 480px wide, the spot, night and lure chips 14 to 19px, the fight tag's small line 11 to 15px, toasts 20 to 22px: about 11 pt or more on a phone
+  - A fight shows only what it needs: JUMP, 💬 and 🎒 and the chat log step aside while reeling, like the hotbar already did (new lines still count on the badge)
+  - Narrow layouts (under 1300px) centre the hotbar in the room left of JUMP and the action button, so even 7 slots (Tackle Vest) clear them; on an 844 phone the hotbar stays centred
+  - Fixed: tapping chat's ✕ closed chat and then the same tap opened the Bag (✕ sits where 🎒 is). ✕, Send, the filter button and the Send key now act on the click, which they keep
+  - Safe areas: the page keeps the default `viewport-fit`, under which phones keep content out of the notch and rounded corners; not checked on a real phone
+  - Checked: build, tests (2 new for `touchLayoutWidth`); headless Chrome on 844x390 and 667x375 touch phones: idle HUD with chat, chat typing, ✕ then 🎒, Bag and Wardrobe at 1112, a fight and the catch card; the hotbar's right edge 581 against JUMP at 754 on the small phone; `npm run smoke` 114/114. No What's new entry (lands with the phone release)
 - [x] Touch wording and small fixes, step 3 of full mobile support (from the mobile plan, 2026-11-15; done 2026-11-15, branch `mobile`)
   - Wording on touch (`clickWord` and `fishKeys`, `src/game/game.ts`): "Tap" for "Click" on the catch card ("Tap to release your hold"), the Smokehouse, and the sell and turn-in strips; "Hold a fish (tap one in your hotbar)" for "(3-5)" in the casino hints and toasts; the chip tray's "Tap to trade", "Prize case: tap it", "Tap red, black or green on the table to bet"; the Bag (🎒) for Tab in Marlow's foot note; no Esc key on the menu's close button. Neutral words where one line serves both: Smoke all's note ("pick one in your hotbar") and the roulette dealer's line ("pick red, black or green")
   - Settings > Controls lists the touch controls on touch (thumb, drag, JUMP, the prompt, the big button, tap and hold, slots, 🎒, 💬)

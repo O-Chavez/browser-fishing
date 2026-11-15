@@ -704,7 +704,18 @@ body.touch input { -webkit-user-select: text; user-select: text; font-size: 22px
 #touch .t-view { position: absolute; inset: 0; }
 body.touch #hud { z-index: 2; }
 body.touch #help, body.touch #crosshair { display: none; }
-body.touch #chat { top: 108px; font-size: 16px; }
+body.touch #chat { top: 108px; width: 480px; font-size: 19px; }
+body.touch #chat .chat-tag { font-size: 15px; }
+/* Phone-sized text (step 4 of full mobile support): the touch layout shows at about 0.6x, so 14-16px labels came out
+   near 9pt. These are about 11pt on a phone. */
+body.touch #spot, body.touch #nightchip, body.touch #lurechip { font-size: 19px; padding: 6px 14px; }
+body.touch #fishtag b small { font-size: 15px; }
+body.touch #toast { font-size: 22px; }
+/* A fight needs only the gauge and the button: JUMP and the top buttons step aside, like the hotbar. */
+body.touch[data-phase="reeling"] #touch .t-jump, body.touch[data-phase="reeling"] #touch .t-top, body.touch[data-phase="reeling"] #chat:not(.typing) { visibility: hidden; }
+/* Narrow layouts (small phones, touchLayoutWidth under 1300): centre the hotbar in the room left of JUMP and the action
+   button (their 360px at the right), so even 7 slots clear them. */
+@media (max-width: 1299px) { body.touch #hotbar, body.touch #heldname { left: calc((100% - 360px) / 2); } }
 body.touch #prompt { pointer-events: auto; bottom: 128px; padding: 14px 24px; box-shadow: 0 0 0 4px var(--gold), 0 8px 18px rgba(0,0,0,.35); }
 body.touch #hotbar { pointer-events: auto; }
 body.touch #catch { z-index: 3; pointer-events: auto; }

@@ -261,7 +261,8 @@ export class ChatBox {
       e.preventDefault();
       if (!el) return;
       const k = keyOf(el.dataset.k!);
-      if (!k || ('act' in k && k.act === 'native')) return;
+      // Keys that close the keyboard act on the click instead (below), or that same tap's click lands on what was under it.
+      if (!k || ('act' in k && (k.act === 'native' || k.act === 'send'))) return;
       el.classList.add('down');
       // On the window: a press can redraw the keys (⇧, 123), and the finger lifts over the new ones.
       const up = () => {
@@ -279,16 +280,20 @@ export class ChatBox {
         }, REPEAT_DELAY_MS);
       }
     });
-    // The phone's keyboard opens only from a click (iOS counts it as the user's gesture), so 🌐 acts on click.
+    // The phone's keyboard opens only from a click (iOS counts it as the user's gesture), so 🌐 acts on click; Send
+    // too, since closing on pointerdown would hand the tap's click to the button under it (the action button).
     this.keysEl.addEventListener('click', (e) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-k="native"]');
-      if (el) this.toNative();
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-k]');
+      if (el?.dataset.k === 'native') this.toNative();
+      else if (el?.dataset.k === 'send') this.submit();
     });
-    const tap = (sel: string, fn: () => void) =>
-      this.root.querySelector(sel)!.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        fn();
-      });
+    // pointerdown keeps the focus where it is (the phone's keyboard stays up for Send); the click does the work, so a
+    // closing chat doesn't pass the tap on (✕ sits where 🎒 is).
+    const tap = (sel: string, fn: () => void) => {
+      const el = this.root.querySelector(sel)!;
+      el.addEventListener('pointerdown', (e) => e.preventDefault());
+      el.addEventListener('click', () => fn());
+    };
     tap('.chat-send', () => this.submit());
     tap('.chat-x', () => this.close());
     tap('.chat-scope', () => {
