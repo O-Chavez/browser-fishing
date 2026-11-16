@@ -237,7 +237,8 @@ export type ServerMsg =
   /** The casino's all-time biggest single win and loss, sent on join and whenever one is beaten. */
   | { t: 'records'; records: CasinoRecords }
   /** A chat line from anyone on the server; `room` and `id` let same-room clients show a bubble. */
-  | { t: 'chat'; room: string; id: number; name: string; map: string; text: string }
+  /** `level` is the speaker's, for the max-rank anchor by their name (missing from older servers). */
+  | { t: 'chat'; room: string; id: number; name: string; map: string; text: string; level?: number }
   /** A server-wide notice for the chat window ("Ann has joined"). */
   | { t: 'sys'; text: string }
   /**

@@ -2,6 +2,13 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 🎨 An anchor by the name at the last rank (player feedback via Oscar, 2026-11-15; done 2026-11-15, branch `max-rank-anchor`)
+  - Oscar, 2026-11-15: 150 stays the top, so the asked-for ranks up to 250 (titles at 200 and 250, gold and glowing anchors, capes) are dropped; only the anchor at max rank was kept. Picked from options: the anchor goes left of the 💗, drawn in the level pill's aurora colours, on the name tag, in chat and in the Anglers lists
+  - `MAX_RANK` / `atMaxRank` (`src/data/ranks.ts`) go by level, so a Lord of the Deep wearing another title keeps the anchor. The anchor is one stroke path (`ANCHOR_PATH`, `src/game/anchor.ts`): drawn with an outline on the name tag's canvas (`plateTexture`, `src/game/avatars.ts`), and in HTML a `.anchor` span whose aurora gradient is masked by that path (set once as `--anchor-mask`) and drifts like the pill, holding still under reduced motion. The server's chat message gains the speaker's `level`; older clients ignore it
+  - What's new entry 14, "An anchor for the Lord of the Deep" (no photo). README and GAME_DESIGN.md (ranks) updated
+  - 🎨 Play-test defaults: the anchor's size (26px on the 256px name tag, about the 💗's; 18px in the Anglers lists with a dark edge so the mint reads on paper), its shape
+  - Checked: build, tests (`anchor.test.ts`, the chat message's level in `server/room.test.ts`); headless Chrome with players at levels 160 (supporter, wearing the title), 150 and 149: the anchor on the 150 and 160 name tags and chat lines and in the Anglers list, not on 149's. Smoke not run (a name-tag mark only)
+
 - [x] 💬 The catch card shows far fewer coins than the charter tally deep in the Abyss (Mighty, 2026-11-15; done 2026-11-15, branch `card-marker-coins`)
   - The server pays a sea fish with its Abyss marker's growth (`markerGrowth`, ×1.12 a marker past the first) and adds that to "This charter", but the card's `applyCatch` call on the client passed a growth of 1, so at marker 36 the card showed about 1/53 of what the fish paid (247,443 shown for ~13M paid). `finishCatch` now passes `markerGrowth` for the fight's zone and marker (`src/game/game.ts`). The pearls line already had it. The tally and the payouts were right all along: ~250M coins a charter at marker 38 is the design's growth (a balance question, passed to the endgame design work)
   - Checked: build, tests. Smoke skipped (the card's number only)

@@ -45,6 +45,15 @@ export interface NewsEntry {
 
 export const NEWS: NewsEntry[] = [
   {
+    id: 14,
+    date: '2026-11-15',
+    title: 'An anchor for the Lord of the Deep',
+    body: [
+      'Reach <b>level 150</b> and become <b>Lord of the Deep</b>, the top rank, and an aurora anchor appears before your name, for every angler to see.',
+      'It shows on your name tag over your head, on your chat lines and in the 👥 Anglers list, and it stays whichever title you wear.',
+    ],
+  },
+  {
     id: 13,
     date: '2026-11-15',
     title: 'Lakeside on phones and tablets',

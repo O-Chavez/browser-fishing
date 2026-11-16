@@ -1,3 +1,5 @@
+import { atMaxRank } from '../data/ranks';
+import { anchorHtml } from './anchor';
 import { coinText, escapeHtml as esc } from './format';
 import { BOTTOM, keyFace, keyId, keyOf, pressKey, REPEAT_DELAY_MS, REPEAT_MS, ROWS, startKeys, type Key, type KeyState } from './softkeys';
 
@@ -21,6 +23,8 @@ export interface ChatLine {
   system?: boolean;
   /** The speaker tipped on Ko-fi: a 💗 before their name. */
   sup?: boolean;
+  /** The speaker is at the last rank: the aurora anchor before their name (and before the 💗). */
+  top?: boolean;
   at: number;
 }
 
@@ -411,7 +415,7 @@ export class ChatBox {
       .map((l) => {
         if (l.system) return `${open(l, ' sys')}${coinText(l.text)}</div>`;
         const tag = !this.onlyHere && l.map !== here ? `<span class="chat-tag">${esc(this.opts.mapName(l.map))}</span> ` : '';
-        return `${open(l, l.self ? ' self' : '')}${tag}<b>${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${coinText(l.text)}</div>`;
+        return `${open(l, l.self ? ' self' : '')}${tag}<b>${anchorHtml(!!l.top)}${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${coinText(l.text)}</div>`;
       })
       .join('');
     this.renderHint();
