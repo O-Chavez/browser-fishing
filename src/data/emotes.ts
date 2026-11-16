@@ -76,17 +76,22 @@ const deep = (id: string, name: string, icon: string, seconds: number, price: Em
  *   no boat part is left, so pearls pile up. Its gate is the three legends' sets and pets, 43.5 million coins of
  *   pieces, so whoever meets it has spent many hours out there. The emote is 8,000,000 coins (over the dearest piece,
  *   the 5 million pets) and 40,000 pearls (about three hours of first-marker pearls, under one past marker 10).
- * - Master of the Deep: the goal for a player settled in the Abyss. A play tester at marker 32 held over 300,000
- *   pearls with nothing to buy (TODO.md, "Sinks for coins and Black Pearls"), and pearl pay compounds 12% a marker,
- *   so a player ten markers short of that holds roughly a third as many. 150,000 pearls is half that hoard: within
- *   reach from about marker 26, well short of the furthest players. 20,000,000 coins is about twice the other three
- *   emotes together, or four of the legends' pets.
+ * - Master of the Deep: priced for a player who uses Shiny Lures and levels the rod (Oscar, 2026-11-16: "the cost
+ *   should be significant for players using lures; non lure players should know to use them"). Abyss pay compounds:
+ *   a marker pays 12% more and a rod level costs 12% more, so a lured charter always buys about three levels and pay
+ *   climbs by about a third a charter. The Abyss journey sim (`npx tsx scripts/abyssjourney.ts`) has that player own
+ *   the three sets about 6 hours into the Abyss with a charter paying 7 to 26 million, where the first price
+ *   (20,000,000 coins and 150,000 pearls) was a charter or two; a play tester at marker 67 made 2 billion a charter
+ *   and proposed 250 million and a million pearls. At 250,000,000 coins and 1,000,000 pearls it comes 3 to 5 lured
+ *   hours after the sets, near rod Abyss level 25, where a charter pays about 100 million; coins and pearls run out
+ *   at about the same time. Each doubling adds only about an hour. Plain casts take 7 to 10 hours with the rod
+ *   levelled, and about 46 with no Abyss levels at all.
  */
 export const EMOTE_PRICES = {
   kelp: { coins: 300_000, pearls: 1_000 },
   twilight: { coins: 2_000_000, pearls: 6_000 },
   abyss: { coins: 8_000_000, pearls: 40_000 },
-  master: { coins: 20_000_000, pearls: 150_000 },
+  master: { coins: 250_000_000, pearls: 1_000_000 },
 } satisfies Record<string, EmotePrice>;
 
 /** Every emote. Ids never change (saves keep the bought ones); names, icons and lengths can. */

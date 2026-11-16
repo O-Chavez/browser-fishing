@@ -57,7 +57,7 @@ describe('emote catalog', () => {
       kelp: { coins: 300_000, pearls: 1_000 },
       twilight: { coins: 2_000_000, pearls: 6_000 },
       abyss: { coins: 8_000_000, pearls: 40_000 },
-      master: { coins: 20_000_000, pearls: 150_000 },
+      master: { coins: 250_000_000, pearls: 1_000_000 },
     });
     for (const id of ['kelp', 'twilight', 'abyss', 'master'] as const) expect(emoteById(id)!.price).toEqual(EMOTE_PRICES[id]);
     const dearest = (id: string) => Math.max(...emoteById(id)!.gate!.pieces.map((p) => cosById(p)!.price));
