@@ -25,6 +25,8 @@ Finished items move to [DONE.md](DONE.md).
 - [ ] 🎨 Separate top catch boards for the lake and the charters (Oscar, 2026-11-15)
   - Today Top Anglers ranks one best catch per player from the lake or the sea (`best` in `SaveData`, `src/game/state.ts`; ranked in `server/accounts.ts`; drawn by `setLeaders`, `src/game/hub.ts`; the Anglers menu's "best single catch" list, `src/game/game.ts`). Sea fish pay far more, so charter catches push lake catches off the board. That needs a second best catch in the save (a sea one), with the lake board filled from lake fish only. Saved best catches made since the sea reset may be sea fish, so the split must move those to the sea board; the player's best lake fish isn't kept anywhere, so they'd leave the lake board until their next lake catch
   - Decide where the charter board stands (by the Furthest Out board on Reed's wharf, or beside Top Anglers at the campfire), what it's called, and whether the Anglers menu shows both lists
+- [ ] Speech bubbles show the whole message (Oscar, 2026-11-15)
+  - The bubble over a player's head cuts a message at 40 characters with "…" (`BUBBLE_CHARS` in `say`, `src/game/avatars.ts`), and draws it on one line. Chat is already capped at 120 characters (`CHAT_MAX`, `server/chat.ts`), so drop the cut and wrap long messages onto several lines (the canvas grows taller and the sprite's height and position follow, so it still sits just above the name tag). The chat log already shows whole lines
 
 ## Endgame
 
