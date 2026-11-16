@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 The storm in the Abyss is too loud (Mighty, 2026-11-15: bring it down about 30%; done 2026-11-15, branch `abyss-storm-volume`)
+  - The sea's whole mix (the wash and whitecaps, the wind and its howl, the rain) fades toward `STORM_VOL` = 0.7 as the storm builds (`stormAt`), so the Shelf sounds as before and the full storm in the Abyss is 30% quieter; thunder takes 0.7 whole, since it only rolls in the storm (`src/game/audio.ts`). The music's duck under the storm is unchanged. 0.7 is a play-test default
+  - Checked: build, tests. Not listened to in a browser here; smoke skipped (audio levels only)
 - [x] 💬 Buy bait in bigger stacks (Mighty, 2026-11-15; done 2026-11-15, branch `bait-packs`)
   - Marlow's stall now has a "Buy 25" button beside "Buy 5" in the bait detail pane: same price per bait, no discount. `buyBait(s, id, n)` takes only 5 or 25 (`BAIT_PACK_BIG`, `src/game/economy.ts`); the `buybait` message gains an optional `n` (missing = 5, so old clients still work) and the server rejects any other size. The 25 button shows "Need X" when you can't afford it and "Locker full" when it would pass the 200 cap; the toast says "Bought 25 Worm". Tiles still show the per-5 price
   - The two buttons sit in the existing `btnrow` used by other two-action panes, so the pane fits on phones
