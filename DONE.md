@@ -2,6 +2,9 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 The catch card shows far fewer coins than the charter tally deep in the Abyss (Mighty, 2026-11-15; done 2026-11-15, branch `card-marker-coins`)
+  - The server pays a sea fish with its Abyss marker's growth (`markerGrowth`, ×1.12 a marker past the first) and adds that to "This charter", but the card's `applyCatch` call on the client passed a growth of 1, so at marker 36 the card showed about 1/53 of what the fish paid (247,443 shown for ~13M paid). `finishCatch` now passes `markerGrowth` for the fight's zone and marker (`src/game/game.ts`). The pearls line already had it. The tally and the payouts were right all along: ~250M coins a charter at marker 38 is the design's growth (a balance question, passed to the endgame design work)
+  - Checked: build, tests. Smoke skipped (the card's number only)
 - [x] 💬 The storm in the Abyss is too loud (Mighty, 2026-11-15: bring it down about 30%; done 2026-11-15, branch `abyss-storm-volume`)
   - The sea's whole mix (the wash and whitecaps, the wind and its howl, the rain) fades toward `STORM_VOL` = 0.7 as the storm builds (`stormAt`), so the Shelf sounds as before and the full storm in the Abyss is 30% quieter; thunder takes 0.7 whole, since it only rolls in the storm (`src/game/audio.ts`). The music's duck under the storm is unchanged. 0.7 is a play-test default
   - Checked: build, tests. Not listened to in a browser here; smoke skipped (audio levels only)
