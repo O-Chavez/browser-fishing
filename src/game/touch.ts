@@ -23,6 +23,14 @@ export interface TouchHandlers {
   press(): void;
   release(): void;
   jump(): void;
+  /**
+   * The 👋 button, for the emote wheel: a finger went down on it, dragged to (dx, dy) from where it went down, and
+   * came up `ms` later (`emoteUp`), or the touch was taken away (`emoteCancel`).
+   */
+  emoteDown(): void;
+  emoteDrag(dx: number, dy: number): void;
+  emoteUp(ms: number, dx: number, dy: number): void;
+  emoteCancel(): void;
   bag(): void;
   chat(): void;
 }
@@ -38,7 +46,7 @@ const TAP_PX = 10;
 
 /**
  * On-screen controls for touch-only devices: a floating move stick on the left, drag anywhere
- * else to look, and big buttons for the action (cast/hook/reel), jump, bag and chat.
+ * else to look, and big buttons for the action (cast/hook/reel), jump, emotes, bag and chat.
  */
 export class TouchControls {
   readonly root = document.createElement('div');
@@ -59,7 +67,8 @@ export class TouchControls {
     this.root.innerHTML = `
       <div class="t-view"></div>
       <div class="t-top"><button class="t-btn" data-t="chat" aria-label="Chat">💬<span class="t-badge" hidden></span></button><button class="t-btn" data-t="bag" aria-label="Bag">🎒</button></div>
-      <button class="t-jump" aria-label="Jump">JUMP</button>`;
+      <button class="t-jump" aria-label="Jump">JUMP</button>
+      <button class="t-emote" aria-label="Emotes">👋</button>`;
     this.stick.className = 't-stick';
     this.knob.className = 't-knob';
     this.stick.append(this.knob);
@@ -90,6 +99,31 @@ export class TouchControls {
       e.preventDefault();
       this.h.jump();
     });
+    // The 👋 button is held like F: the finger's drag from where it went down picks from the wheel, and letting go
+    // plays the pick. `Game` tells a quick tap from a hold (`touchRelease`).
+    const emote = this.root.querySelector<HTMLElement>('.t-emote')!;
+    let held: { id: number; x: number; y: number; t: number } | null = null;
+    emote.addEventListener('pointerdown', (e) => {
+      if (held) return;
+      e.preventDefault();
+      emote.setPointerCapture(e.pointerId);
+      held = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp };
+      emote.classList.add('down');
+      this.h.emoteDown();
+    });
+    emote.addEventListener('pointermove', (e) => {
+      if (held?.id === e.pointerId) this.h.emoteDrag(e.clientX - held.x, e.clientY - held.y);
+    });
+    const emoteEnd = (e: PointerEvent, ended: boolean): void => {
+      if (held?.id !== e.pointerId) return;
+      const h = held;
+      held = null;
+      emote.classList.remove('down');
+      if (ended) this.h.emoteUp(e.timeStamp - h.t, e.clientX - h.x, e.clientY - h.y);
+      else this.h.emoteCancel();
+    };
+    emote.addEventListener('pointerup', (e) => emoteEnd(e, true));
+    emote.addEventListener('pointercancel', (e) => emoteEnd(e, false));
     // Click (not pointerdown) so iOS counts it as a user gesture and opens the keyboard for chat.
     this.root.querySelector('.t-top')!.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-t]')?.dataset.t;

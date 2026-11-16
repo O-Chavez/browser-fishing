@@ -89,6 +89,13 @@ export type ClientMsg =
   | { t: 'pos'; x: number; z: number; yaw: number }
   /** The player jumped; others on the map replay the arc. */
   | { t: 'jump' }
+  /**
+   * The player started an emote they own (an id from `EMOTES`), or with `null` ended the one playing early (they
+   * moved, jumped or cast). Others on the map play or stop it on their avatar.
+   */
+  | { t: 'emote'; id: string | null }
+  /** From Captain Reed: a deep sea emote whose gate is met (`buyEmote`). */
+  | { t: 'buyemote'; id: string }
   | { t: 'buyrod'; id: string }
   | { t: 'buyline'; id: string }
   /**
@@ -221,6 +228,11 @@ export type ServerMsg =
   | { t: 'act'; id: number; act: Activity | null }
   /** Player `id` jumped (sent to the others on their map). */
   | { t: 'jump'; id: number }
+  /**
+   * Player `id` started emote `emote` (sent to the others on their map), standing at (`x`, `z`), or with `null` ended
+   * it early. The spot comes with it because the emote can arrive before the snap that carries the player's last step.
+   */
+  | { t: 'emote'; id: number; emote: string | null; x?: number; z?: number }
   | { t: 'look'; id: number; look: Look }
   /** Player `id` (possibly the receiver) changed their name. */
   | { t: 'named'; id: number; name: string }

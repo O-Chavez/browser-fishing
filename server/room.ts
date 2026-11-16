@@ -1,5 +1,6 @@
 import { DEEP_SEA_ROD, FISH, byId } from '../src/data/content';
 import { ABYSS, DIVE, DIVES_OPEN, type Behaviour } from '../src/data/dive';
+import { EMOTE_GAP_MS, emoteById } from '../src/data/emotes';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
@@ -65,6 +66,9 @@ interface Member {
   moved?: boolean;
   /** When this player last jumped, to rate-limit jump relays. */
   jumpAt?: number;
+  /** When this player last started an emote, to rate-limit the relays, and when the one playing ends (0 once it's over). */
+  emoteAt?: number;
+  emoteUntil?: number;
   /** When their buffs last ticked down: buffs only run while the player is online. */
   smokeAt: number;
   /** Metres the player may still move (`MAX_SPEED`, `MOVE_BUDGET`), as of `posAt`. */
@@ -265,6 +269,8 @@ export class Room {
     if (msg.t === 'cmd') return this.command(m, msg.text);
     // Jumps show mid-spin and mid-hand too.
     if (msg.t === 'jump') return this.jump(m);
+    // Emotes too: they change nothing on the save.
+    if (msg.t === 'emote') return this.emote(m, msg.id);
     this.settle(m);
     const s = m.acct.save;
     let changed = false;
@@ -308,6 +314,10 @@ export class Room {
       // still buy. The unlock (landings, or fish landed in the zone) is checked here from the save, never the client.
       case 'buylegend':
         changed = this.atReed(m) && this.ok(m, eco.reedBuyError(s, str(msg.id))) && eco.buyReedPiece(s, str(msg.id));
+        break;
+      // Reed's deep sea emotes: the gate (set pieces owned, other emotes owned) is checked here from the save.
+      case 'buyemote':
+        changed = this.atReed(m) && this.ok(m, eco.emoteBuyError(s, str(msg.id))) && eco.buyEmote(s, str(msg.id));
         break;
       case 'buyline':
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));
@@ -1155,6 +1165,30 @@ export class Room {
     const place = placeOf(m.info);
     const here = [...this.members.values()].filter((o) => o !== m && placeOf(o.info) === place);
     if (here.length) this.sendAll(here, { t: 'jump', id: m.info.id });
+  }
+
+  /**
+   * Shows an emote to everyone else on the player's map, if the player owns it (`ownsEmote`: the base ones, or bought
+   * and in the save), has no fish on the line, and didn't start one within `EMOTE_GAP_MS`. `null` ends the one playing
+   * early, and is only passed on while one is.
+   */
+  private emote(m: Member, id: unknown): void {
+    const now = this.now();
+    let emote: string | null = null;
+    if (id === null) {
+      if (!m.emoteUntil || now >= m.emoteUntil) return;
+      m.emoteUntil = 0;
+    } else {
+      const def = emoteById(id);
+      if (!def || !eco.ownsEmote(m.acct.save, def.id) || m.pending) return;
+      if (m.emoteAt !== undefined && now - m.emoteAt < EMOTE_GAP_MS) return;
+      m.emoteAt = now;
+      m.emoteUntil = now + def.seconds * 1000;
+      emote = def.id;
+    }
+    const place = placeOf(m.info);
+    const here = [...this.members.values()].filter((o) => o !== m && placeOf(o.info) === place);
+    if (here.length) this.sendAll(here, { t: 'emote', id: m.info.id, emote, ...(emote ? { x: round(m.info.x), z: round(m.info.z) } : {}) });
   }
 
   /** Sends the players who moved since the last tick to everyone on their map (or dive). */

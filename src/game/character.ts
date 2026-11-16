@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { COS_SLOTS, cosById, type Cosmetic, type CosSlot, type Look } from '../data/cosmetics';
+import { applyPose, restPose, type EmotePose } from './emotes/types';
 import { faceTexture } from './faces';
+import { haloTexture } from './textures';
 
 // ---------- materials ----------
 
@@ -699,17 +701,7 @@ function swaying(g: THREE.Object3D, p: V3, sway: Sway, parts: Part[], finish: Fi
   return o;
 }
 
-/** A soft additive glow around a gem; one shared texture, and one material per colour. */
-let haloTex: THREE.CanvasTexture | null = null;
-const haloTexture = (): THREE.CanvasTexture =>
-  (haloTex ??= canvasTex((x, s) => {
-    const gr = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    gr.addColorStop(0, 'rgba(255,255,255,1)');
-    gr.addColorStop(0.35, 'rgba(255,255,255,0.45)');
-    gr.addColorStop(1, 'rgba(255,255,255,0)');
-    x.fillStyle = gr;
-    x.fillRect(0, 0, s, s);
-  }));
+/** A soft additive glow around a gem; one shared texture (`haloTexture`), and one material per colour. */
 const HALOS = new Map<number, THREE.SpriteMaterial>();
 function halo(g: THREE.Group, p: V3, color: number, size: number): void {
   let m = HALOS.get(color);
@@ -2039,8 +2031,14 @@ interface Bounds {
   /** The highest and lowest points, each pushed out by how much bigger it looks turned toward the preview's camera. */
   top: number;
   low: number;
+  /**
+   * For effects that must clear the outfit (`Character.extent`): the highest point as it is, and how far the outfit
+   * reaches along x or z, whichever is more (the box round it, which is what the emote looks were designed against).
+   */
+  high: number;
+  wide: number;
 }
-const NO_BOUNDS: Bounds = { reach: 0, top: 0, low: 2 };
+const NO_BOUNDS: Bounds = { reach: 0, top: 0, low: 2, high: 0, wide: 0 };
 
 /** The Wardrobe preview's vertical field of view (degrees). */
 const PREVIEW_FOV = 32;
@@ -2066,6 +2064,8 @@ function boundsOf(t: THREE.Group): Bounds {
         v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
         const r = Math.hypot(v.x, v.z);
         b.reach = Math.max(b.reach, r);
+        b.high = Math.max(b.high, v.y);
+        b.wide = Math.max(b.wide, Math.abs(v.x), Math.abs(v.z));
         b.top = Math.max(b.top, v.y + (r + FRAME_SWAY) * FRAME_UP);
         b.low = Math.min(b.low, v.y - (r + FRAME_SWAY) * FRAME_DOWN);
       }
@@ -2106,10 +2106,26 @@ function silhouette(piece: THREE.Object3D): void {
 }
 
 const PET_GOAL = new THREE.Vector3();
+const REST = restPose();
+
+/** The bare character's top (the head's) and how far its body reaches from its centre line, in metres. */
+const BARE = { top: 1.82, reach: 0.28 };
 
 /** A character facing +z, about 1.9 tall, without held items. `set` swaps the body color and outfit. */
 export class Character {
   readonly group = new THREE.Group();
+  /**
+   * The body, head and outfit, which an emote's pose moves as one piece (`pose`). A live character's pet and ground
+   * effects sit beside it in `loose`, so a leaning or hopping body doesn't drag them along.
+   */
+  private poser = new THREE.Group();
+  private loose = new THREE.Group();
+  /** A playing emote's own objects (`EmotePlay.group`), in the character's space; the pose doesn't move them. */
+  readonly effects = new THREE.Group();
+  /** The top of the character with its outfit and how far the outfit reaches out, without the pet (`EmoteCtx`). */
+  extent = { ...BARE };
+  /** What the character wears now (`set`). */
+  look!: Look;
   private bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true });
   private body = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(new THREE.CapsuleGeometry(0.28, 0.7, 4, 10), this.bodyMat);
   /** Skin and face come from the face texture, so the material stays white. */
@@ -2144,7 +2160,8 @@ export class Character {
     this.body.position.y = 0.85;
     this.head.position.y = 1.62;
     this.body.castShadow = this.head.castShadow = true;
-    this.group.add(this.body, this.head, this.outfit);
+    this.poser.add(this.body, this.head, this.outfit);
+    this.group.add(this.poser, this.loose, this.effects);
     this.set(look);
   }
 
@@ -2156,12 +2173,15 @@ export class Character {
     const key = JSON.stringify(look) + shadow.join();
     if (key === this.key) return;
     this.key = key;
+    this.look = look;
     this.bodyMat.color.setHex(look.color);
     const head = this.headMat;
     head.map = faceTexture(look.face);
     head.needsUpdate = true;
     // Pieces are clones of shared templates, so there is nothing to dispose.
     this.outfit.clear();
+    this.loose.clear();
+    this.extent = { ...BARE };
     this.spinners = [];
     this.swayers = [];
     this.bobbers = [];
@@ -2174,12 +2194,13 @@ export class Character {
       if (!c) continue;
       const piece = outfitPiece(c);
       if (SHARED_ANIM.has(c.id)) this.animIds.push(c.id);
+      const ground: THREE.Object3D[] = [];
       piece.traverse((o) => {
         if (o.userData.spin) this.spinners.push(o);
         if (o.userData.sway) this.swayers.push(o);
         if (o.userData.bob) this.bobbers.push(o);
         if (o.userData.ground) {
-          if (this.live) this.grounded.push(o);
+          if (this.live) ground.push(o);
           else o.visible = false;
         }
         if (o.userData.follow) this.pet = { o, at: new THREE.Vector3(), yaw: 0, placed: false };
@@ -2188,14 +2209,30 @@ export class Character {
       b.reach = Math.max(b.reach, pb.reach);
       b.top = Math.max(b.top, pb.top);
       b.low = Math.min(b.low, pb.low);
-      this.outfit.add(piece);
+      // A live pet trails in the world, and ground effects stay on the ground (pieces sit at the character's origin,
+      // so moving one of their parts to `loose` leaves it where it was).
+      const free = this.live && slot === 'pet';
+      (free ? this.loose : this.outfit).add(piece);
+      for (const o of ground) {
+        if (!free && o.parent === piece) this.loose.add(o);
+        this.grounded.push(o);
+      }
+      if (slot !== 'pet') this.extent = { top: Math.max(this.extent.top, pb.high), reach: Math.max(this.extent.reach, pb.wide) };
     }
     this.bounds = b;
     // Any unreached piece worn: the whole character goes dark (pieces are fresh clones, so only the body needs restoring).
     const dark = COS_SLOTS.some((slot) => !!look[slot] && shadow.includes(look[slot]!));
     this.body.material = dark ? SILHOUETTE : this.bodyMat;
     this.head.material = dark ? SILHOUETTE : this.headMat;
-    if (dark) silhouette(this.outfit);
+    if (dark) {
+      silhouette(this.outfit);
+      silhouette(this.loose);
+    }
+  }
+
+  /** Moves the body, head and outfit as one piece for an emote (`applyPose`); `null` stands it back at rest. */
+  pose(p: EmotePose | null): void {
+    applyPose(this.poser, p ?? REST);
   }
 
   /** Frees the body and head geometry; materials and outfit pieces are left for reuse (see `disposeTree`). */

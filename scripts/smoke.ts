@@ -1202,6 +1202,75 @@ async function chatChecks(): Promise<void> {
   });
   check('jump: other players see the jump and the landing', arc.peak - ground > 0.6 && Math.abs(arc.end - ground) < 0.05, JSON.stringify({ ground, ...arc }));
 
+  // Emotes: Ann holds F, moves the mouse up to Wave and lets go. Her own view goes to third person with her model
+  // in it, and Bob sees the emote on her avatar.
+  await sleep(300);
+  const annId = (await a.page.evaluate(() => window.__game.netId())) as number;
+  const emoteNow = async () => ({
+    own: (await a.page.evaluate(() => window.__game.emoteState())) as { id: string | null; dist: number; body: boolean; wheel: boolean; picked: string | null },
+    seen: (await b.page.evaluate((id) => window.__game.avatarEmote(id), annId)) as string | null,
+    cam: (await a.page.evaluate(() => { const g = window.__game; return Math.hypot(g.world.camera.position.x - g.player().x, g.world.camera.position.z - g.player().z); })) as number,
+  });
+  await a.page.mouse.move(640, 360);
+  await a.page.keyboard.down('KeyF');
+  await a.page.mouse.move(640, 250, { steps: 4 });
+  const held = await emoteNow();
+  await a.page.screenshot({ path: `${SHOTS}/emote-wheel.png` });
+  check('emote: holding F opens the wheel and the mouse picks from it', held.own.wheel && held.own.picked === 'wave' && held.own.id === null, JSON.stringify(held.own));
+  await a.page.keyboard.up('KeyF');
+  await sleep(1000);
+  const waving = await emoteNow();
+  await a.page.screenshot({ path: `${SHOTS}/emote-own.png` });
+  await b.page.screenshot({ path: `${SHOTS}/emote-seen.png` });
+  check('emote: letting go plays it in third person, with your own model in view', !waving.own.wheel && waving.own.id === 'wave' && waving.own.body && waving.cam > 2.5, JSON.stringify(waving));
+  check('emote: other players see it on your avatar', waving.seen === 'wave', String(waving.seen));
+  // A step ends it early for both, and the view comes home to first person.
+  await a.page.keyboard.down('KeyS');
+  await sleep(150);
+  await a.page.keyboard.up('KeyS');
+  await sleep(700);
+  const stepped = await emoteNow();
+  check('emote: a step ends it for you and for the others, back in first person', stepped.own.id === null && !stepped.own.body && stepped.own.dist === 0 && stepped.cam < 0.01 && stepped.seen === null, JSON.stringify(stepped));
+  // Left to run, it ends by itself on both screens; letting go of the wheel in the middle plays nothing.
+  await sleep(500);
+  await a.page.evaluate(() => window.__game.emote('yes'));
+  await sleep(500);
+  const nodding = await emoteNow();
+  await sleep(2300);
+  const done = await emoteNow();
+  check('emote: it ends by itself after its length, on both screens', nodding.own.id === 'yes' && nodding.seen === 'yes' && done.own.id === null && done.own.dist === 0 && done.seen === null, JSON.stringify({ nodding, done }));
+  await a.page.keyboard.down('KeyF');
+  await a.page.keyboard.up('KeyF');
+  // One the player doesn't own doesn't play, here or for anyone else.
+  const locked = (await a.page.evaluate(() => window.__game.emote('kelp'))) as boolean;
+  await sleep(400);
+  const none = await emoteNow();
+  check("emote: the middle of the wheel plays nothing, and an emote you don't own doesn't play", !locked && none.own.id === null && !none.own.wheel && none.seen === null, JSON.stringify(none));
+
+  // A deep sea emote, given by the dev console: its look plays on both screens in the circling camera, and when a
+  // step cuts it short everything it made is freed again, here and on the other player's screen.
+  await a.page.evaluate(() => window.__game.cmd('/login smoke smoke-dev-pass'));
+  await sleep(300);
+  await a.page.evaluate(() => window.__game.cmd('/emote kelp'));
+  await a.page.waitForFunction(() => (window.__game.s as any).emotes.includes('kelp'), { timeout: 5000 }).catch(() => null);
+  await a.page.evaluate(() => window.__game.cmd('/logout'));
+  const made = async () => Promise.all([a.page, b.page].map((p) => p.evaluate(() => { const i = (window.__game.world as any).renderer.info; return [i.memory.geometries, i.memory.textures, i.programs.length] as number[]; })));
+  const madeBefore = await made();
+  const kelpOk = (await a.page.evaluate(() => window.__game.emote('kelp'))) as boolean;
+  await sleep(2600);
+  const kelping = await emoteNow();
+  const madeDuring = await made();
+  await a.page.screenshot({ path: `${SHOTS}/emote-kelp-own.png` });
+  await b.page.screenshot({ path: `${SHOTS}/emote-kelp-seen.png` });
+  await a.page.keyboard.down('KeyS');
+  await sleep(150);
+  await a.page.keyboard.up('KeyS');
+  await sleep(900);
+  const kelpEnded = await emoteNow();
+  const madeAfter = await made();
+  check('emote: a deep sea look plays on both screens, in the circling camera', kelpOk && kelping.own.id === 'kelp' && kelping.own.body && kelping.own.dist > 4 && kelping.seen === 'kelp' && madeDuring[0][0] > madeBefore[0][0] && madeDuring[1][0] > madeBefore[1][0], JSON.stringify({ kelping, madeBefore, madeDuring }));
+  check('emote: a look cut short frees what it made on both screens, and compiled no new shaders', kelpEnded.own.id === null && kelpEnded.seen === null && JSON.stringify(madeAfter) === JSON.stringify(madeBefore), JSON.stringify({ madeBefore, madeAfter }));
+
   // Esc while typing releases the mouse in a real browser: that cancels the chat without pausing.
   await a.page.evaluate(() => { (window.__game as any).activate(); });
   await a.page.keyboard.press('Enter');

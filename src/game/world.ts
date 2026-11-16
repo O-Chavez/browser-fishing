@@ -38,6 +38,8 @@ import { DEEP_LOOKS, deepLookAt, gloomAt, nightDarkAt, nightSkyKeep, seaMood } f
 import { FX } from './fx';
 import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
+import { WALL_H } from './casinoroom';
+import type { CamView } from './emotes/thirdperson';
 
 import { dayFraction, nightness, twilight } from './daynight';
 import { ColliderList } from './colliderlist';
@@ -155,6 +157,11 @@ export class World {
   /** Eye position, driven by the player each frame. */
   readonly eye = new THREE.Vector3(0, 2.4, -1.2);
   walkBob = 0;
+  /**
+   * Where the camera is while an emote plays in third person (`ThirdPerson`), set by `Game` each frame; null is the
+   * first-person view from `eye` along `yaw` and `pitch`, which stay the way the player faces either way.
+   */
+  view: CamView | null = null;
   hub: Hub | null = null;
   town: Town | null = null;
   hall: CasinoHall | null = null;
@@ -1361,6 +1368,11 @@ export class World {
     return waveHeight(x, z, this.time);
   }
 
+  /** The ceiling's height inside the casino, Infinity under the sky: the third-person camera stays below it. */
+  get ceiling(): number {
+    return this.indoor ? WALL_H : Infinity;
+  }
+
   addShake(v: number): void {
     this.shake = Math.max(this.shake, v);
   }
@@ -1393,11 +1405,9 @@ export class World {
     }
 
     const s = this.shake;
-    this.camera.position.set(
-      this.eye.x,
-      this.eye.y + Math.sin(t * 1.3) * 0.012 + this.walkBob,
-      this.eye.z,
-    );
+    const v = this.view;
+    if (v) this.camera.position.set(v.x, v.y, v.z);
+    else this.camera.position.set(this.eye.x, this.eye.y + Math.sin(t * 1.3) * 0.012 + this.walkBob, this.eye.z);
     this.sun.target.position.set(this.eye.x, 0, this.eye.z);
     this.sun.position
       .copy(SUN_DIR)
@@ -1413,10 +1423,10 @@ export class World {
     this.lightPool.update(dt, this.eye);
     this.glow?.update(t, this.night, this.eye, this.renderer.domElement.height, this.renderer.getPixelRatio());
     this.camera.rotation.set(
-      this.pitch +
+      (v ? v.pitch : this.pitch) +
         this.pitchKick +
         (Math.sin(t * 41) + Math.sin(t * 57)) * 0.5 * s * 0.012,
-      this.yaw + (Math.sin(t * 47) + Math.sin(t * 63)) * 0.5 * s * 0.012,
+      (v ? v.yaw : this.yaw) + (Math.sin(t * 47) + Math.sin(t * 63)) * 0.5 * s * 0.012,
       Math.sin(t * 29) * s * 0.01,
     );
     const fov = 70 + this.fovKick;

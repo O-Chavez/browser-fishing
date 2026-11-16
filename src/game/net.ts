@@ -23,6 +23,8 @@ export interface NetEvents {
   onFurthest(): void;
   onAct(p: PlayerInfo, act: Activity | null): void;
   onJump(id: number): void;
+  /** Another player started an emote, or with `null` ended theirs early. */
+  onEmote(p: PlayerInfo, emote: string | null): void;
   onCast(roll: Roll): void;
   onCastFail(msg: string): void;
   /** The player's dive changed (or resumed on joining); comes before the save that takes them to sea. */
@@ -294,6 +296,14 @@ export class NetClient {
       case 'jump':
         if (m.id !== this.id) this.events.onJump(m.id);
         break;
+      case 'emote': {
+        const p = this.players.get(m.id);
+        if (!p || m.id === this.id) break;
+        // Where they stood as it began, which the next snap may not have brought yet.
+        if (typeof m.x === 'number' && typeof m.z === 'number') Object.assign(p, { x: m.x, z: m.z });
+        this.events.onEmote(p, m.emote);
+        break;
+      }
       case 'snap':
         for (const [id, x, z, yaw] of m.p) {
           const p = this.players.get(id);

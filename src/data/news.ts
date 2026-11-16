@@ -24,6 +24,7 @@ import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
 import phones from '../assets/images/news/phones.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
+import emotes from '../assets/images/news/emotes.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
 import reelFight from '../assets/images/news/reel-fight.jpg';
 import seaWeather from '../assets/images/news/sea-weather.jpg';
@@ -44,6 +45,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 15,
+    date: '2026-11-16',
+    title: 'Emotes',
+    image: emotes,
+    alt: 'Three anglers on the pier, seen from behind the nearest one: she waves a mittened hand, one of the two facing her waves back and the other claps over his head with a burst of sparkles',
+    body: [
+      'Say it without typing: hold <kbd>F</kbd> for the <b>emote wheel</b>, move the mouse to an emote and let go to play it. On a phone or tablet, hold the 👋 button and drag to one, or tap 👋 and tap one.',
+      'Every angler has four: <b>Wave</b>, <b>Nice!</b>, <b>Yes</b> and <b>No</b>. While one plays, your view pulls back so you see yourself, and everyone nearby sees it too. A step, a jump or a cast ends it.',
+      "<b>Captain Reed</b> on the west beach sells a deep sea emote for <b>Kelp Deep</b>, <b>the Twilight</b> and <b>the Abyss</b>, at the end of each zone's row in his <b>Wardrobe</b> tab. Own the zone's whole set to unlock its emote (in the Abyss, all three legends' sets with their pets), then buy it for coins and Black Pearls. What it does is a surprise until you play it. Own all three and there's one more: <b>Master of the Deep</b>.",
+    ],
+  },
   {
     id: 14,
     date: '2026-11-15',

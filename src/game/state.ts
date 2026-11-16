@@ -1,6 +1,7 @@
 import { BAITS, FISH, LINES, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
+import { emoteById } from '../data/emotes';
 import { TITLES } from '../data/ranks';
 import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, sellValue, xpPastFlat, type Gifts } from './progression';
@@ -87,6 +88,11 @@ export interface SaveData {
   /** Character appearance and the cosmetics bought so far. */
   look: Look;
   owned: string[];
+  /**
+   * Emotes bought so far (ids from `EMOTES`, `src/data/emotes.ts`). The base ones aren't listed: every account has
+   * them (`ownsEmote`). Saves from before emotes start with none.
+   */
+  emotes: string[];
   /** Tackle locker: rods and bait you own but are not carrying in the hotbar. */
   locker: { rods: string[]; bait: Record<string, number> };
   /** Most valuable fish ever caught, for the leaderboard. */
@@ -168,6 +174,7 @@ export const newSave = (): SaveData => ({
   seen: [],
   look: { ...defaultLook(), face: randomFace() },
   owned: [],
+  emotes: [],
   locker: { rods: [], bait: {} },
   best: null,
   bottles: [],
@@ -385,6 +392,9 @@ export function migrate(raw: object): SaveData {
   if (data.seaRod === undefined && (whole(old.seaLine) ?? 0) > 0 && (LINES.find((l) => l.id === out.line)?.tier ?? 1) < 5) out.line = 'moonsilk';
   layoutSlots(out, slotCount(out));
   if (!Array.isArray(out.owned)) out.owned = [];
+  // Saves from before emotes have none bought; only known, bought emotes are kept, once each.
+  const bought = (id: unknown): id is string => !!emoteById(id) && emoteById(id)!.tier !== 'base';
+  out.emotes = Array.isArray(data.emotes) ? [...new Set(data.emotes.filter(bought))] : [];
   out.seen = Array.isArray(data.seen) ? [...new Set(data.seen.filter((id): id is string => typeof id === 'string' && FISH.some((f) => f.id === id) && !out.dex[id]))] : [];
   out.titles = Array.isArray(data.titles) ? data.titles.filter((id) => TITLES.some((t) => t.id === id)) : [];
   grantRanks(out);

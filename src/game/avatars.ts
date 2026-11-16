@@ -5,6 +5,8 @@ import { atMaxRank, titleName } from '../data/ranks';
 import { placeOf, type Activity, type PlayerInfo } from '../net/protocol';
 import { drawAnchor } from './anchor';
 import { Character } from './character';
+import type { EmoteDef } from '../data/emotes';
+import { EmotePlayer } from './emotes/player';
 import { standHeight } from './env';
 import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
 import { remoteHang, remoteScale } from './fishscale';
@@ -22,6 +24,14 @@ const BUBBLE_FAR = 20;
 /** ...and fade away when you stand on top of the speaker, so they don't cover your view. */
 const BUBBLE_HIDE_IN = 1.2;
 const BUBBLE_FULL_AT = 2.5;
+/** Heights of the name tag (lower with a title under the name) and of a chat bubble above it, in metres over the feet. */
+const PLATE_Y = 2.25;
+const PLATE_TITLED_Y = 2.1625;
+const BUBBLE_Y = 2.62;
+/** Room left between the name tag's lower edge and an emote's hands held up over the head, in metres. */
+const PLATE_GAP = 0.03;
+/** An avatar that walks this far from where its emote began has moved on: the emote ends, even if the word that it ended was lost. */
+const EMOTE_DRIFT = 0.3;
 
 class Avatar {
   group = new THREE.Group();
@@ -49,6 +59,9 @@ class Avatar {
   /** The worn title's display name, or null. */
   private titled: string | null = null;
   private bubble: { sprite: THREE.Sprite; until: number } | null = null;
+  private emotes: EmotePlayer;
+  /** Where the avatar's player stood when its emote began. */
+  private emoteAt = { x: 0, z: 0 };
 
   constructor(
     info: PlayerInfo,
@@ -57,6 +70,7 @@ class Avatar {
   ) {
     const mat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
     this.char = new Character(info.look);
+    this.emotes = new EmotePlayer(this.char);
     // The model faces +z; the rod points forward and up from the right hand.
     this.rod = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.035, 1.6, 6), mat(0x4a3320));
     this.rod.position.set(-0.3, 1.2, 0.55);
@@ -82,7 +96,7 @@ class Avatar {
   private nameplate(name: string): THREE.Sprite {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.plateTexture(name, false, false, null), depthTest: false, transparent: true }));
     s.scale.set(1.4, 0.35, 1);
-    s.position.y = 2.25;
+    s.position.y = PLATE_Y;
     s.renderOrder = 10;
     return s;
   }
@@ -138,7 +152,7 @@ class Avatar {
     this.plate.material.map = this.plateTexture(name, sup, top, title);
     this.plate.material.needsUpdate = true;
     this.plate.scale.set(1.4, title ? 0.525 : 0.35, 1);
-    this.plate.position.y = title ? 2.1625 : 2.25;
+    this.plate.position.y = title ? PLATE_TITLED_Y : PLATE_Y;
   }
 
   /** Shows a short speech bubble above the head; a new line replaces the old one. */
@@ -169,7 +183,7 @@ class Avatar {
     // A little smaller than the nameplate's 256 px = 1.4 m, sitting just above it.
     const px = (1.4 / 256) * 0.8;
     sprite.scale.set(w * px, 72 * px, 1);
-    sprite.position.y = 2.62;
+    sprite.position.y = BUBBLE_Y;
     sprite.renderOrder = 11;
     this.group.add(sprite);
     this.bubble = { sprite, until: performance.now() + BUBBLE_MS };
@@ -186,6 +200,22 @@ class Avatar {
 
   jump(): void {
     this.jumpT = 0;
+    this.emotes.stop();
+  }
+
+  /**
+   * Plays an emote on the avatar from its start, or with `null` ends the one playing. `at` is where its player stood
+   * as it began, `dark` the night (0 to 1).
+   */
+  emote(def: EmoteDef | null, at: { x: number; z: number }, dark = 0): void {
+    if (!def) return this.emotes.stop();
+    this.emoteAt = { x: at.x, z: at.z };
+    this.emotes.start(def, dark, false);
+  }
+
+  /** The id of the emote playing on the avatar, or null. */
+  get emoting(): string | null {
+    return this.emotes.playing?.id ?? null;
   }
 
   setLook(look: PlayerInfo['look']): void {
@@ -194,7 +224,10 @@ class Avatar {
 
   setVisible(v: boolean): void {
     this.group.visible = v;
-    if (!v) this.setAct(null);
+    if (!v) {
+      this.setAct(null);
+      this.emotes.clear();
+    }
   }
 
   private setAct(act: Activity | null): void {
@@ -205,6 +238,8 @@ class Avatar {
       this.held = null;
     }
     const cast = act?.a === 'cast';
+    // A cast ends an emote, like on the player's own screen.
+    if (cast) this.emotes.stop();
     const dangle = act?.a === 'hold' || act?.a === 'carry';
     this.bobber.visible = this.line.visible = cast || dangle;
     if (act?.a === 'cast') this.bobber.position.set(act.x, this.surface(act.x, act.z), act.z);
@@ -241,6 +276,21 @@ class Avatar {
     // The ground is `lift` below the character mid-jump, so a puddle stays on it.
     this.char.tick(t, -lift);
     this.setAct(p.act ?? null);
+    // An emote ends when its player walks off. The rod and anything on it are put away while one plays: the looks
+    // are whole-body motion, and a stiff rod beside a leaning body would spoil them.
+    if (this.emotes.playing && Math.hypot(p.x - this.emoteAt.x, p.z - this.emoteAt.z) > EMOTE_DRIFT) this.emotes.stop();
+    const busy = this.emotes.update(dt);
+    // The name tag and a chat bubble rise with a body an emote lifts, so they stay as far over the head as at rest;
+    // and over hands an emote holds up over the head, which they'd hide, as they're drawn over everything.
+    const plateY = this.titled ? PLATE_TITLED_Y : PLATE_Y;
+    const over = this.emotes.over;
+    const up = Math.max(this.emotes.lift, over > 0 ? over + PLATE_GAP + this.plate.scale.y / 2 - plateY : 0);
+    this.plate.position.y = plateY + up;
+    if (this.bubble) this.bubble.sprite.position.y = BUBBLE_Y + up;
+    this.rod.visible = !busy;
+    if (this.held) this.held.group.visible = !busy;
+    if (busy) this.line.visible = false;
+    else if (this.act) this.line.visible = true;
     if (this.bubble) {
       const left = this.bubble.until - performance.now();
       if (left <= 0) this.clearBubble();
@@ -280,6 +330,7 @@ class Avatar {
 
   dispose(): void {
     this.setAct(null);
+    this.emotes.clear();
     this.clearBubble();
     this.scene.remove(this.group, this.bobber, this.line);
     // Free what this avatar owns; the face texture and outfit pieces are shared, so they stay.
@@ -294,7 +345,7 @@ class Avatar {
  * Runs `f` when the page is idle, with the idle milliseconds left (Safari has no `requestIdleCallback`: soon after,
  * with none to spare).
  */
-const whenIdle = (f: (left: () => number) => void): void => {
+export const whenIdle = (f: (left: () => number) => void): void => {
   if (typeof requestIdleCallback === 'function') requestIdleCallback((d) => f(() => d.timeRemaining()), { timeout: 3000 });
   else setTimeout(() => f(() => 0), 50);
 };
@@ -382,6 +433,17 @@ export class Avatars {
   say(id: number, text: string): void {
     const a = this.list.get(id);
     if (a?.group.visible) a.say(text);
+  }
+
+  /** Player `p` started an emote where they stand (or with `null` ended theirs early); `dark` is the night, 0 to 1. */
+  emote(p: PlayerInfo, def: EmoteDef | null, dark: number): void {
+    const a = this.list.get(p.id);
+    if (a?.group.visible) a.emote(def, p, dark);
+  }
+
+  /** The id of the emote playing on player `id`'s avatar, or null. */
+  emoting(id: number): string | null {
+    return this.list.get(id)?.emoting ?? null;
   }
 
   /** `viewX`/`viewZ` is the local player, for fading chat bubbles by distance. */
