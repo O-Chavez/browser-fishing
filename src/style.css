@@ -53,6 +53,45 @@ canvas { display: block; position: fixed; inset: 0; }
 .hidden { display: none !important; }
 
 #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,.8); pointer-events: none; }
+/* No aim dot over the player's own model in third person (an emote), or under the emote wheel. */
+body.third #crosshair, body:has(#emotewheel:not(.hidden)) #crosshair { display: none; }
+
+/* ---------- emote wheel (EmoteWheel, src/game/emotes/wheelview.ts; GAME_DESIGN.md §40) ----------
+   Eight round slots about the middle of the screen. With a mouse it is held open with F and the pointer dot picks a
+   direction; on touch (.taps) the slots are tapped and a tap anywhere else closes it. */
+#emotewheel { position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; pointer-events: none; background: radial-gradient(circle at center, rgba(24, 15, 8, .55) 0, rgba(24, 15, 8, .55) 250px, transparent 380px); }
+#emotewheel.taps { pointer-events: auto; }
+.ew-ring { --r: 176px; --slot: 88px; position: relative; width: 0; height: 0; }
+.ew-slot { --k: 1; position: absolute; left: calc(var(--slot) / -2); top: calc(var(--slot) / -2); width: var(--slot); height: var(--slot); padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; transform: translate(calc(var(--sx) * var(--r)), calc(var(--sy) * var(--r))) scale(var(--k)); font: inherit; color: var(--cream); background: var(--hud-bg); box-shadow: var(--hud-edge), 0 6px 14px rgba(0,0,0,.35); transition: transform .08s ease-out; -webkit-tap-highlight-color: transparent; }
+.ew-slot .ic { font-size: 40px; line-height: 1; }
+/* The name sits on the outside of its slot, away from the middle. */
+.ew-slot .nm { position: absolute; left: calc(50% + var(--sx) * (var(--slot) / 2 + 10px)); top: calc(50% + var(--sy) * (var(--slot) / 2 + 10px)); transform: translate(calc(-50% + var(--sx) * 50%), calc(-50% + var(--sy) * 50%)); white-space: nowrap; font-size: 14px; font-weight: 900; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.6); }
+.ew-slot.on { --k: 1.14; background: var(--wood-700); box-shadow: 0 0 0 4px var(--gold), 0 8px 18px rgba(0,0,0,.4); }
+.ew-slot.on .nm { color: var(--gold); }
+.ew-slot.locked .ic { filter: grayscale(1) brightness(.8); opacity: .55; }
+.ew-slot.locked .nm { color: var(--cream-muted); opacity: .8; }
+/* The padlock sits on the slot's edge toward the middle, clear of the name on the outside. */
+.ew-slot .lk { position: absolute; left: calc(50% - var(--sx) * (var(--slot) / 2 - 3px)); top: calc(50% - var(--sy) * (var(--slot) / 2 - 3px)); transform: translate(-50%, -50%); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: var(--wood-800); box-shadow: 0 0 0 2px var(--wood-900); }
+.ew-slot.on.locked { box-shadow: 0 0 0 4px var(--cream-muted), 0 8px 18px rgba(0,0,0,.4); }
+.ew-slot.on.locked .nm { color: var(--cream); opacity: 1; }
+.ew-mid { position: absolute; left: 0; top: 0; width: 210px; transform: translate(-50%, -50%); display: grid; gap: 4px; text-align: center; text-shadow: 0 1px 3px #000; }
+.ew-mid b { font-size: 22px; font-weight: 900; color: var(--gold); }
+.ew-mid small { font-size: 13px; font-weight: 800; line-height: 1.25; color: var(--cream); opacity: .9; }
+.ew-mid.locked b { color: var(--cream-muted); }
+.ew-dot { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; background: var(--cream); box-shadow: 0 0 0 2px var(--wood-900), 0 2px 6px rgba(0,0,0,.4); opacity: .55; }
+.ew-dot.out { background: var(--gold); opacity: 1; }
+#emotewheel.taps .ew-dot { display: none; }
+/* Touch: sized for the wide touch layout (shown at about 0.6x), like the other touch controls. */
+body.touch #emotewheel { background: radial-gradient(circle at center, rgba(24, 15, 8, .6) 0, rgba(24, 15, 8, .6) 290px, rgba(24, 15, 8, .25) 460px); }
+body.touch .ew-ring { --r: 200px; --slot: 116px; }
+/* On touch the wheel reaches down over the hotbar, which steps aside while it is open. */
+body.touch:has(#emotewheel:not(.hidden)) #hotbar, body.touch:has(#emotewheel:not(.hidden)) #heldname, body.touch:has(#emotewheel:not(.hidden)) #seagear { visibility: hidden; }
+body.touch .ew-slot .ic { font-size: 54px; }
+body.touch .ew-slot .nm { font-size: 19px; }
+body.touch .ew-slot .lk { width: 40px; height: 40px; font-size: 20px; }
+body.touch .ew-mid { width: 250px; }
+body.touch .ew-mid b { font-size: 28px; }
+body.touch .ew-mid small { font-size: 19px; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; }
 
@@ -87,7 +126,8 @@ canvas { display: block; position: fixed; inset: 0; }
 .bpearl { display: inline-block; width: 26px; height: 26px; border-radius: 50%; flex: none; background: radial-gradient(circle at 34% 30%, #f6f2ff, #9d8fc4 16%, #3a3450 45%, #14111c 80%); box-shadow: inset 0 -2px 0 #3fe6c855; }
 .bpearl.t { width: .8em; height: .8em; vertical-align: -.08em; box-shadow: inset 0 -.08em 0 #3fe6c855; }
 
-#toast { position: absolute; top: 28%; left: 50%; transform: translateX(-50%); max-width: 70vw; padding: 10px 20px; border-radius: 14px; background: var(--hud-bg); box-shadow: var(--hud-edge); text-align: center; font-size: 20px; font-weight: 800; opacity: 0; transition: opacity .3s; }
+/* Outside the HUD so it shows over an open menu too (a purchase at Captain Reed's says what it did), under the full-screen cards. */
+#toast { position: fixed; z-index: 35; pointer-events: none; top: 28%; left: 50%; transform: translateX(-50%); max-width: 70vw; padding: 10px 20px; border-radius: 14px; background: var(--hud-bg); box-shadow: var(--hud-edge); text-align: center; font-size: 20px; font-weight: 800; opacity: 0; transition: opacity .3s; }
 #toast:empty { display: none; }
 /* in the shop and at the prize counter, keep messages above the hotbar instead of over the window */
 body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
@@ -406,6 +446,14 @@ h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; t
 @media (prefers-reduced-motion: reduce) { .tile.legend::after, .tile.legend .cosico, .tile.abyssal::after, .tile.abyssal .cosico, .cosico.abyssal { animation: none; } }
 /* a piece the player hasn't reached yet (Reed's Wardrobe tab): its icon as a still, dark silhouette */
 .tile.shadow .cosico, .detail.shadow .hero .cosico { animation: none; filter: brightness(0) opacity(.5); }
+/* Captain Reed's purse line: each amount stays whole when the line wraps in the touch layout's narrow rail. */
+.who .nb { white-space: nowrap; }
+body.touch .who span:has(> .nb) { flex-wrap: wrap; row-gap: 0; overflow: visible; }
+/* A deep sea emote at Captain Reed's is a mystery until it is bought: a question mark in the dark, in the silhouettes' style. */
+.mystery { display: grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%; font-weight: 900; font-size: .8em; line-height: 1; color: var(--paper-3); background: rgba(40, 46, 58, .55); box-shadow: inset 0 0 0 2px rgba(40, 46, 58, .35); }
+.tile.emote { background: radial-gradient(circle at 50% 36%, #eef6f8, #d3e6ea 60%, #b9d4da); }
+.tile.emote .pr { font-size: 11px; }
+.tile.emote .pr .coin.t, .tile.emote .pr .bpearl.t { width: .85em; height: .85em; }
 
 /* charms & perks summary in the Bag: one row of effect chips */
 .perks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
@@ -723,6 +771,8 @@ body.touch #fishtag b small { font-size: 15px; }
 body.touch #toast { font-size: 22px; }
 /* A fight needs only the gauge and the button: JUMP and the top buttons step aside, like the hotbar. */
 body.touch[data-phase="reeling"] #touch .t-jump, body.touch[data-phase="reeling"] #touch .t-top, body.touch[data-phase="reeling"] #chat:not(.typing) { visibility: hidden; }
+/* Emotes only play with nothing on the line, so their button steps aside for the rest of a cast too. */
+body.touch:not([data-phase="idle"]) #touch .t-emote { visibility: hidden; }
 /* Narrow layouts (small phones, touchLayoutWidth under 1300): centre the hotbar in the room left of JUMP and the action
    button (their 360px at the right), so even 7 slots clear them. */
 @media (max-width: 1299px) { body.touch #hotbar, body.touch #heldname { left: calc((100% - 360px) / 2); } }
@@ -753,6 +803,9 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .t-action.danger { color: #fff; background: var(--bad); box-shadow: 0 8px 0 #9c2b1b, 0 0 0 10px rgba(229,83,61,.35); }
 @keyframes hookFlash { to { transform: scale(1.1); box-shadow: 0 8px 0 var(--gold-dark), 0 0 0 16px rgba(255,201,51,.45); } }
 .t-jump { position: absolute; right: 262px; bottom: 54px; width: 96px; height: 96px; border: 0; border-radius: 50%; font: 900 17px Nunito, ui-rounded, system-ui, sans-serif; letter-spacing: .05em; color: var(--cream); background: var(--hud-bg); box-shadow: 0 0 0 4px var(--wood-600); }
+/* Emotes: above JUMP, the same kind of round button. */
+.t-emote { position: absolute; right: 268px; bottom: 168px; width: 84px; height: 84px; border: 0; border-radius: 50%; display: grid; place-items: center; font-size: 40px; line-height: 1; color: var(--cream); background: var(--hud-bg); box-shadow: 0 0 0 4px var(--wood-600); }
+.t-emote.down { transform: translateY(3px); box-shadow: 0 0 0 4px var(--gold); }
 /* Holding a hotbar slot offers Drop over it (wireHoldToDrop). */
 #dropask { position: fixed; z-index: 4; transform: translate(-50%, -100%); padding: 14px 24px; border: 0; border-radius: 16px; font: 900 22px Nunito, ui-rounded, system-ui, sans-serif; color: #fff; background: var(--bad); box-shadow: 0 5px 0 #9c2b1b, 0 10px 22px rgba(0,0,0,.35); white-space: nowrap; pointer-events: auto; -webkit-tap-highlight-color: transparent; }
 #dropask.hidden { display: none; }
@@ -831,7 +884,7 @@ body.touch #chat.native .chat-bar { order: -1; height: 76px; margin-right: 440px
 body.touch #chat.native .chat-hint:not(:empty) { order: -1; }
 body.touch #chat.native .chat-log { margin-top: 4px; }
 /* Typing hides what the keyboard would sit on, and what it would cover anyway. */
-body.touch:has(#chat.typing) #touch .t-action, body.touch:has(#chat.typing) #touch .t-jump, body.touch:has(#chat.typing) #touch .t-top,
+body.touch:has(#chat.typing) #touch .t-action, body.touch:has(#chat.typing) #touch .t-jump, body.touch:has(#chat.typing) #touch .t-emote, body.touch:has(#chat.typing) #touch .t-top,
 body.touch:has(#chat.typing) #ctx, body.touch:has(#chat.typing) #hud-tl, body.touch:has(#chat.typing) #divehud { visibility: hidden; }
 #chat button { -webkit-tap-highlight-color: transparent; }
 /* The prompt is tapped, not keyed: swap its E badge for a finger. */

@@ -20,8 +20,8 @@ import {
 } from '../data/content';
 import { audio } from './audio';
 import { MAPS, arrivalSpot, type MapDef } from '../data/maps';
-import { isWater, mulberry, standHeight } from './env';
-import { Avatars } from './avatars';
+import { EYE_HEIGHT, isWater, mulberry, standHeight } from './env';
+import { Avatars, whenIdle } from './avatars';
 import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
 import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
@@ -90,11 +90,17 @@ import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
 import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type SaveData } from './state';
 import { ABYSSAL, BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
-import { CharacterPreview } from './character';
+import { Character, CharacterPreview } from './character';
+import { EMOTES, EMOTE_GAP_MS, WHEEL_SLOTS, emoteById, type EmoteDef } from '../data/emotes';
+import { EmotePlayer } from './emotes/player';
+import { LookWarmer } from './emotes/warm';
+import { ThirdPerson, type CamEnv } from './emotes/thirdperson';
+import { touchRelease, wheelSlots } from './emotes/wheel';
+import { EmoteWheel } from './emotes/wheelview';
 import { KOFI_URL } from '../data/support';
 import { World } from './world';
 import { ScreenSpray } from './screenspray';
-import { seaDepthFor, zoneAt } from '../data/sea';
+import { BOAT, seaDepthFor, zoneAt } from '../data/sea';
 import { CAST_OFF_CARD, cardColours } from './castoffcard';
 import { autoReload, RESTART_PROBE_TIMEOUT_MS, waitForRestart } from './restart';
 import { clientLog, setLogMap } from './clientlog';
@@ -164,6 +170,9 @@ const AUTO_RELOAD_KEY = 'fishing-auto-reload';
 const MAX_HOLD_PITCH = 1.5;
 /** The longest the join card waits on the shader warm-up after the server lets you in ("Loading…"), so a stuck one can't keep you out. A play-test default. */
 const JOIN_WARM_CAP_MS = 10_000;
+
+/** The wheelhouse's footprint on the charter boat (x0, x1, z0, z1): the one of `BOAT.blocked` that stands over its middle. */
+const WHEELHOUSE = BOAT.blocked.find(([x0, x1]) => x0 < BOAT.wheelhouse && BOAT.wheelhouse < x1) ?? [0, 0, 0, 0];
 
 /** Where an angler is, by map id, for the Anglers tab's Online now list. The sea map is only ever a charter. */
 const WHERE: Record<string, string> = { pond: '🎣 At the lake', casino: '🎰 At the casino', sea: '⛵ On a charter' };
@@ -374,6 +383,22 @@ export class Game {
   private aim: { k: string; id: string } | null = null;
   private tableHtml = '';
   private last = performance.now();
+  /**
+   * Emotes (GAME_DESIGN.md §40). The player's own model, which only shows while an emote has the camera in third
+   * person (`tp`); the emote playing on it; and the wheel that picks one.
+   */
+  private body = new Character(defaultLookWith(BODY_COLORS[4], 'smile'));
+  private bodyEmotes = new EmotePlayer(this.body);
+  private tp = new ThirdPerson();
+  private emote: EmoteDef | null = null;
+  /** When the last emote began, to keep them `EMOTE_GAP_MS` apart like the server does. */
+  private emoteAt = -Infinity;
+  private lookWarm!: LookWarmer;
+  /** Touch: a finger is down on the 👋 button, holding the wheel open (`held`) or having just put the tap menu away (`closing`). */
+  private wheelPress: 'held' | 'closing' | null = null;
+  /** Test hook: the player's own emote stops its clock at this many seconds in, to look at a moment of it. */
+  private emoteHold: number | null = null;
+  private wheel = new EmoteWheel($('emotewheel'), (i) => this.tapWheel(i), () => audio.tick(0.04));
   private gauge = $('gauge') as HTMLCanvasElement;
   private gctx = this.gauge.getContext('2d')!;
 
@@ -394,7 +419,11 @@ export class Game {
     this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name));
     // Builds the legend pieces in idle moments and compiles them, so the first one worn nearby doesn't stall.
     this.avatars.warmLegends((o) => this.world.warm(o));
+    // The emotes' looks likewise, so the first one played nearby doesn't either.
+    this.lookWarm = new LookWarmer(this.world.scene, (o) => this.world.warm(o), whenIdle);
     this.dropsView = new DropsView(this.world.scene, (x, z) => this.world.surface(x, z));
+    this.body.group.visible = false;
+    this.world.scene.add(this.body.group);
     const q = new URLSearchParams(location.search);
     const urlName = q.get('name');
     const name = urlName || localStorage.getItem('fishing-name') || '';
@@ -474,6 +503,7 @@ export class Game {
           this.toast(`${p.name} caught a ${act.shiny ? '✨ SHINY ' : ''}${f.name} (${Math.round(sellValue(f, act.size, act.shiny) * (act.mult ?? 1))} 🪙)!`);
       },
       onJump: (id) => this.avatars.jump(id),
+      onEmote: (p, emote) => this.avatars.emote(p, emote === null ? null : emoteById(emote) ?? null, this.world.night),
       onCast: (roll) => {
         this.roll = roll;
       },
@@ -506,6 +536,7 @@ export class Game {
       onCorrect: (x, z) => {
         this.corrections++;
         this.player.teleport(x, z);
+        this.dropEmote();
       },
       onError: (msg, need) => {
         if (this.joining) {
@@ -912,6 +943,23 @@ export class Game {
       day: (f: number | null) => { this.world.dayOverride = f; },
       splash: (k = 1) => this.screenSpray.burst(k),
       interact: () => this.interact(),
+      /** Emotes: play one, hold the wheel open (`aim` moves its pointer like the mouse) or let go of it, and what's going on. */
+      emote: (id: string) => this.startEmote(id),
+      emoteWheel: (open: boolean, play = true) => (open ? this.openWheel(false) : this.closeWheel(play)),
+      emoteAim: (dx: number, dy: number) => this.wheel.move(dx, dy),
+      /** Holds the player's own emote (and its camera) at `t` seconds in once it gets there; null lets it run on. */
+      emoteHold: (t: number | null) => { this.emoteHold = t; },
+      emoteState: () => ({
+        id: this.emote?.id ?? null,
+        t: this.bodyEmotes.t,
+        dist: this.tp.dist,
+        body: this.body.group.visible,
+        wheel: this.wheel.isOpen,
+        picked: this.wheel.picked?.emote.id ?? null,
+      }),
+      /** The emote playing on another player's avatar (by player id), or null. */
+      avatarEmote: (id: number) => this.avatars.emoting(id),
+      netId: () => this.net.id,
       openMenu: (tab: string) => this.openMenu(tab),
       /** The "What's new" check that runs on joining. */
       showNews: () => this.showNews(),
@@ -1040,6 +1088,7 @@ export class Game {
     });
     document.addEventListener('pointerlockchange', () => {
       $('resume').classList.add('hidden');
+      if (!this.locked) this.closeWheel(false);
       // Letting go of the mouse for the login panel isn't a pause.
       if (this.devPrompt.isOpen) return;
       if (this.locked) {
@@ -1074,10 +1123,16 @@ export class Game {
         this.renderMenu();
       }
     });
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.closeWheel(false);
+    });
     // Touch devices also send emulated mouse events; in touch mode only the on-screen controls count.
     document.addEventListener('mousemove', (e) => {
-      if (!this.touch) this.turn(e.movementX * 0.0022, e.movementY * 0.0022);
+      if (this.touch) return;
+      // While the emote wheel is held open the mouse picks from it instead of turning the view.
+      if (this.wheel.isOpen) this.wheel.move(e.movementX, e.movementY);
+      else this.turn(e.movementX * 0.0022, e.movementY * 0.0022);
     });
     document.addEventListener('mousedown', (e) => {
       if (e.button === 0 && !this.touch) this.pointerDown();
@@ -1085,7 +1140,11 @@ export class Game {
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0 && !this.touch) this.pointerUp();
     });
-    document.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    document.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      // Letting go of F plays the emote the wheel's pointer is on.
+      if (e.code === 'KeyF' && !this.touch) this.closeWheel(true);
+    });
     const wheel = new WheelStepper();
     document.addEventListener('wheel', (e) => {
       if (!this.active || this.menuOpen || this.phase !== 'idle') return;
@@ -1099,6 +1158,7 @@ export class Game {
       if (this.active && e.code.startsWith('Key')) {
         this.keys.add(e.code);
         if (e.code === 'KeyE' && !e.repeat && this.phase === 'idle') this.interact();
+        if (e.code === 'KeyF' && !e.repeat) this.openWheel(false);
       } else if (e.code.startsWith('Shift') && this.active) this.keys.add(e.code);
       if (e.code === 'Tab') {
         e.preventDefault();
@@ -1134,19 +1194,23 @@ export class Game {
 
   /** Jumps, and lets the other players on the map see it. */
   private jump(): void {
-    if (this.player.jump()) this.net.send({ t: 'jump' });
+    if (!this.player.jump()) return;
+    this.endEmote(true);
+    this.net.send({ t: 'jump' });
   }
 
   /** Mouse look and touch drags both turn the camera; pitch stops short of straight up or down. */
   private turn(dYaw: number, dPitch: number): void {
     if (!this.active || this.dbgLock) return;
+    // While an emote plays, a drag turns the camera round the player, who keeps facing the way they were.
+    if (this.tp.framing) return this.tp.drag(dYaw, dPitch);
     this.world.yaw -= dYaw;
     this.world.pitch = Math.max(-1.2, Math.min(0.6, this.world.pitch - dPitch));
   }
 
   /** Left mouse button or the touch action button going down: cast, hook, reel, bet. */
   private pointerDown(): void {
-    if (!this.active || this.dbgLock || this.chat.isOpen) return;
+    if (!this.active || this.dbgLock || this.chat.isOpen || this.wheel.isOpen) return;
     this.holding = true;
     this.onPress();
   }
@@ -1172,6 +1236,7 @@ export class Game {
   private openChat(): void {
     if (!this.net.connected) return this.toast('Chat needs a server connection.');
     this.keys.clear();
+    this.closeWheel(false);
     this.chat.open();
   }
 
@@ -1215,6 +1280,31 @@ export class Game {
       release: () => this.pointerUp(),
       jump: () => {
         if (this.active && this.phase === 'idle') this.jump();
+      },
+      // The 👋 button. Held, it works like F: the wheel opens, the finger's drag picks, letting go plays it (the
+      // middle, back on the button, plays nothing). A quick tap leaves the wheel open to tap a slot instead.
+      emoteDown: () => {
+        wake();
+        // A press while the tap menu is up just puts it away.
+        this.wheelPress = this.wheel.isOpen ? 'closing' : 'held';
+        if (this.wheel.isOpen) this.closeWheel(false);
+        else this.openWheel(false, true);
+      },
+      emoteDrag: (dx, dy) => {
+        if (this.wheelPress === 'held') this.wheel.aim(dx, dy);
+      },
+      emoteUp: (ms, dx, dy) => {
+        const was = this.wheelPress;
+        this.wheelPress = null;
+        if (was !== 'held' || !this.wheel.isOpen) return;
+        const end = touchRelease(ms, dx, dy, WHEEL_SLOTS);
+        if (end.kind === 'tap') return this.wheel.toTaps();
+        this.wheel.aim(dx, dy);
+        this.closeWheel(end.kind === 'pick');
+      },
+      emoteCancel: () => {
+        if (this.wheelPress === 'held') this.closeWheel(false);
+        this.wheelPress = null;
       },
       bag: () => this.openMenu('inventory'),
       chat: () => this.openChat(),
@@ -1343,6 +1433,7 @@ export class Game {
     else if (act === 'holdlevel') this.buyHoldUp();
     else if (act === 'boatpart') this.buyBoatPart();
     else if (act === 'buylegend') this.buyLegend(id!);
+    else if (act === 'buyemote') this.buyEmote(id!);
     this.persist();
     this.refreshHud();
     this.renderMenu();
@@ -1552,9 +1643,33 @@ export class Game {
     if (this.spin) return;
     const why = eco.reedBuyError(this.s, id);
     if (why) return this.toast(why);
+    const before = this.emotesOnSale();
     if (!eco.buyReedPiece(this.s, id)) return;
     this.net.send({ t: 'buylegend', id });
-    this.toast(`Bought the ${cosById(id)?.name ?? id} · wear it from here or the Wardrobe`, 3.5);
+    // The piece that completes a set opens its emote: say so, since nothing else on screen changes but a tile.
+    const opened = this.emotesOnSale().find((e) => !before.includes(e));
+    this.toast(opened ? `Bought the ${cosById(id)?.name ?? id} · that unlocks the ${opened.name.replace(/^The /, '')} emote, here at Captain Reed's` : `Bought the ${cosById(id)?.name ?? id} · wear it from here or the Wardrobe`, opened ? 5 : 3.5);
+    audio.jingle('legendary');
+  }
+
+  /** The emotes whose gate is met and that aren't bought yet: what Captain Reed has on sale. */
+  private emotesOnSale(): EmoteDef[] {
+    return EMOTES.filter((e) => e.gate && eco.emoteOffer(this.s, e) === 'sale');
+  }
+
+  /** Buys a deep sea emote from Captain Reed, for coins and Black Pearls: it goes on the emote wheel. */
+  private buyEmote(id: string): void {
+    if (this.spin) return;
+    const e = emoteById(id);
+    const why = eco.emoteBuyError(this.s, id);
+    if (!e || why) return this.toast(why ?? 'Captain Reed has nothing like that.');
+    const before = this.emotesOnSale();
+    if (!eco.buyEmote(this.s, id)) return;
+    this.net.send({ t: 'buyemote', id });
+    // What it looks like stays a surprise until it is played, so it only says where to find it.
+    const how = this.touch ? 'tap 👋 to play it' : 'hold F to play it';
+    const opened = this.emotesOnSale().find((x) => !before.includes(x));
+    this.toast(`${e.icon} ${e.name} is on your emote wheel now · ${how}${opened ? ` · ${opened.name} is unlocked too` : ''}`, opened ? 6 : 4.5);
     audio.jingle('legendary');
   }
 
@@ -1976,6 +2091,7 @@ export class Game {
     this.player = new Player(this.map.radius);
     const at = arrivalSpot(this.map, from);
     this.player.teleport(at.x, at.z);
+    this.dropEmote();
     this.world.yaw = at.yaw;
     // The last map's spot (its gate, say) is stale until the next frame picks one here: an E pressed in between does nothing.
     this.near = null;
@@ -2102,6 +2218,11 @@ export class Game {
       }
     }
     if (!open) $('tip').classList.add('hidden');
+    // A menu over the view ends an emote and puts the wheel away.
+    if (open) {
+      this.closeWheel(false);
+      this.endEmote(true);
+    }
     this.menuOpen = open;
     $('menu').classList.toggle('hidden', !open);
     // Shop mode hides parts of the HUD; it must end with the menu, not wait for the next redraw.
@@ -2472,14 +2593,138 @@ export class Game {
     this.near?.act();
   }
 
+  // ---------- emotes ----------
+
+  /** Emotes play standing on the ground with nothing on the line: not mid-cast, mid-fight or with a catch held up. */
+  private canEmote(): boolean {
+    return this.active && this.phase === 'idle' && !this.player.airborne && !this.chat.isOpen && this.castOffAt === null && $('join').classList.contains('hidden');
+  }
+
+  /** Opens the emote wheel, held open: with F on desktop, or by a `finger` on the touch 👋 button (a quick tap there turns it into a tap menu). */
+  private openWheel(taps: boolean, finger = false): void {
+    if (this.wheel.isOpen || !this.canEmote()) return;
+    this.wheel.open(wheelSlots(this.s), taps, finger);
+  }
+
+  /** Puts the wheel away; with `play`, the emote its pointer is on plays (nothing from the middle). */
+  private closeWheel(play: boolean): void {
+    if (!this.wheel.isOpen) return;
+    const picked = this.wheel.picked;
+    this.wheel.close();
+    if (play && picked) this.startEmote(picked.emote.id);
+  }
+
+  /** Touch: a tap on wheel slot `i` plays it; a tap anywhere else (-1) closes the wheel. */
+  private tapWheel(i: number): void {
+    const slot = wheelSlots(this.s)[i];
+    this.wheel.close();
+    if (slot) this.startEmote(slot.emote.id);
+  }
+
+  /**
+   * Plays one of the player's emotes: on their own model in third person, and on their avatar for everyone else on
+   * the map. One they don't own says where it comes from instead.
+   */
+  private startEmote(id: string): boolean {
+    const def = emoteById(id);
+    if (!def || !this.canEmote()) return false;
+    if (!eco.ownsEmote(this.s, def.id)) {
+      const hint = eco.emoteHint(this.s, def);
+      this.toast(`🔒 ${eco.emoteGateMet(this.s, def) ? `${def.name} · ${hint}` : hint}`, 4);
+      return false;
+    }
+    const now = performance.now();
+    const move = this.moveInput();
+    if (now - this.emoteAt < EMOTE_GAP_MS || move.fwd || move.strafe) return false;
+    this.emoteAt = now;
+    this.emote = def;
+    this.body.set(this.s.look);
+    this.bodyEmotes.start(def, this.world.night, true);
+    this.tp.start(def.camera, def.seconds, def.cameraDistance);
+    // Where the player stands goes first (position updates are throttled), so the others' copies start on the right spot.
+    this.net.send({ t: 'pos', x: this.player.x, z: this.player.z, yaw: this.world.yaw });
+    this.net.send({ t: 'emote', id: def.id });
+    return true;
+  }
+
+  /** Ends the emote playing and sends the camera home. `early`: it was cut short (a step, a jump, a cast), so the others are told. */
+  private endEmote(early: boolean): void {
+    if (!this.emote) return;
+    this.emote = null;
+    this.bodyEmotes.stop();
+    this.tp.end();
+    if (early) this.net.send({ t: 'emote', id: null });
+  }
+
+  /** The player was moved (a new map, a move the server sent back): any emote ends and the view is first person at once. */
+  private dropEmote(): void {
+    this.closeWheel(false);
+    if (this.emote) this.net.send({ t: 'emote', id: null });
+    this.emote = null;
+    this.bodyEmotes.clear();
+    this.tp.reset();
+    this.world.view = null;
+    this.showBody(false);
+  }
+
+  /** The player's own model shows only in third person, in place of the first-person rod and the crosshair. */
+  private showBody(on: boolean): void {
+    if (this.body.group.visible === on) return;
+    this.body.group.visible = on;
+    document.body.classList.toggle('third', on);
+  }
+
+  /** What the third-person camera keeps clear of: the map's solid things, the ground or water, and a ceiling indoors. */
+  private camEnv(): CamEnv {
+    const w = this.world;
+    // On the boat only the wheelhouse stands in the camera's way: the boxes, the barrel and the net drum that block
+    // a walk are low enough to look over.
+    const [hx0, hx1, hz0, hz1] = WHEELHOUSE;
+    const blocked = this.map.sea
+      ? (x: number, z: number) => x > hx0 && x < hx1 && z > hz0 && z < hz1
+      : (x: number, z: number) => w.colliders.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
+    return { blocked, floor: (x, z) => Math.max(standHeight(x, z), w.surface(x, z)), ceiling: w.ceiling };
+  }
+
+  /** Runs the player's own emote each frame: the body's motion, the camera out and home again, and the model that shows meanwhile. */
+  private tickEmote(dt: number): void {
+    const w = this.world;
+    if (this.emoteHold !== null && this.emote) dt = Math.max(0, Math.min(dt, this.emoteHold - this.bodyEmotes.t));
+    const playing = this.bodyEmotes.update(dt);
+    // It ran its length (the others' copies end by themselves too).
+    if (this.emote && !playing) this.endEmote(false);
+    if (!this.tp.active) {
+      w.view = null;
+      return this.showBody(false);
+    }
+    w.view = this.tp.update(dt, { x: w.eye.x, y: w.eye.y + w.walkBob, z: w.eye.z }, w.yaw, w.pitch, this.camEnv());
+    this.showBody(this.tp.showsBody);
+    if (!this.body.group.visible) return;
+    this.body.set(this.s.look);
+    // The model stands where the player does and faces the way they do (the model's front is +z, yaw 0 looks along -z).
+    const lift = this.player.bob;
+    this.body.group.position.set(this.player.x, this.player.eyeY - EYE_HEIGHT + lift, this.player.z);
+    this.body.group.rotation.y = w.yaw + Math.PI;
+    this.body.tick(w.time, -Math.max(0, lift));
+  }
+
+  /** The walk keys and the touch stick, as forward and strafe. */
+  private moveInput(): { fwd: number; strafe: number } {
+    const k = this.keys;
+    const tm = this.touchMove;
+    return { fwd: Number(k.has('KeyW')) - Number(k.has('KeyS')) + tm.y, strafe: Number(k.has('KeyD')) - Number(k.has('KeyA')) + tm.x };
+  }
+
   private updateWalking(dt: number): void {
     const w = this.world;
     const walking = this.active && this.phase === 'idle';
     const k = this.keys;
-    const tm = this.touchMove;
-    const fwd = walking ? Number(k.has('KeyW')) - Number(k.has('KeyS')) + tm.y : 0;
-    const strafe = walking ? Number(k.has('KeyD')) - Number(k.has('KeyA')) + tm.x : 0;
-    const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || tm.sprint;
+    const move = this.moveInput();
+    const fwd = walking ? move.fwd : 0;
+    const strafe = walking ? move.strafe : 0;
+    const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || this.touchMove.sprint;
+    // A step ends an emote.
+    if (fwd || strafe) this.endEmote(true);
     this.player.update(dt, fwd, strafe, sprint, w.yaw, w.colliders);
     w.eye.set(this.player.x, this.player.eyeY, this.player.z);
     w.walkBob = this.player.bob;
@@ -2537,7 +2782,8 @@ export class Game {
     if (this.diveHud.view?.state === 'full') spots.push({ d: -50, label: "Hold's full · head home", act: () => this.openMenu('marker') });
 
     const c = this.map.casino;
-    this.updateTable(walking);
+    // The casino's pieces are aimed at with the middle of the first-person view, so the tables wait while an emote has the camera out.
+    this.updateTable(walking && !this.tp.active);
     const play = this.tablePlay();
     if (play) spots.push({ d: -30, ...play });
     if (c) {
@@ -2579,7 +2825,8 @@ export class Game {
       );
     }
     const looking = (face?: number) => face === undefined || Math.abs(Math.atan2(Math.sin(w.yaw - face), Math.cos(w.yaw - face))) <= FACE_CONE;
-    const best = walking ? spots.filter((sp) => sp.d < 3 && looking(sp.face)).sort((a, b) => a.d - b.d)[0] : undefined;
+    // No prompt while an emote plays: it would sit on the player's own model, and a step away brings it back.
+    const best = walking && !this.emote ? spots.filter((sp) => sp.d < 3 && looking(sp.face)).sort((a, b) => a.d - b.d)[0] : undefined;
     this.near = best ?? null;
     const prompt = $('prompt');
     prompt.classList.toggle('hidden', !best);
@@ -2610,8 +2857,11 @@ export class Game {
         break;
       case 'idle':
       {
+        // A cast (or a bet) ends an emote.
+        this.endEmote(true);
         if (this.spin || performance.now() < this.castLockUntil) return;
-        if (this.map.casino) return this.tableClick();
+        // In the casino the click that ends an emote isn't a bet: the tables wait until the view is first person again.
+        if (this.map.casino) return this.tp.active ? undefined : this.tableClick();
         if (this.diveHud.view?.state === 'full') return this.openMenu('marker');
         const can = eco.canCastAt(this.s, !!this.map.sea);
         if (can === 'nobait' && eco.canDig(this.s)) return this.toast(eco.DIG_HINT, 5);
@@ -2998,7 +3248,9 @@ export class Game {
     const it = this.map.sea ? null : this.s.slots[this.s.held];
     const key = it?.k === 'fish' ? `f:${it.fishId}:${it.size}:${it.shiny ? 1 : 0}` : it?.k === 'bait' ? `b:${it.id}` : '';
     const w = this.world;
-    w.rig.root.visible = this.phase !== 'idle' || this.rodInHand();
+    // In third person the player's own model shows instead of the rod and whatever is in hand.
+    const third = this.body.group.visible;
+    w.rig.root.visible = !third && (this.phase !== 'idle' || this.rodInHand());
     const sea = !!this.map.sea;
     const step = eco.seaRodGlow(this.s, this.rod.id);
     const look = `${this.rod.id}:${step}`;
@@ -3014,7 +3266,7 @@ export class Game {
       this.carry = null;
     }
     // A fish bet at a table leaves your hand while the spin or hand plays out, and comes back if it wins.
-    if (this.carry) this.carry.obj.visible = !(this.spin || (this.bj && !this.bj.done));
+    if (this.carry) this.carry.obj.visible = !third && !(this.spin || (this.bj && !this.bj.done));
     if (!key || this.carry || !it || it.k === 'rod') return;
     let model: FishModel | null = null;
     let obj: THREE.Object3D;
@@ -3155,7 +3407,7 @@ export class Game {
     // Behind the join screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
     this.updateCastOff();
     this.showDiveDue();
-    if (this.enterBy !== null && ((this.world.ready && this.world.warmedAll && !this.avatars.buildingLegends) || performance.now() >= this.enterBy)) this.enterGame();
+    if (this.enterBy !== null && ((this.world.ready && this.world.warmedAll && !this.avatars.buildingLegends && !this.lookWarm.building) || performance.now() >= this.enterBy)) this.enterGame();
     this.world.holdForShaders = !$('join').classList.contains('hidden') || this.castOffAt !== null;
     this.world.update(dt);
     const sea = this.world.sea;
@@ -3258,6 +3510,7 @@ export class Game {
     this.syncBystanders();
     if (!this.net.connected && this.localDrops.expire()) this.dropsView.sync(this.localDrops.all(), this.map.id);
     this.dropsView.update(this.world.time);
+    this.tickEmote(dt);
     this.updateCarry();
     this.tickCarry(this.world.time);
     const w = this.world;
@@ -3935,7 +4188,7 @@ export class Game {
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags's Smokehouse</b><span>${busy ? `${busy} fish smoking` : 'Smoker ready for fish'}</span></div>`;
     }
     if (this.tab === 'reed')
-      return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>${this.reedTab === 'wardrobe' ? `<span class="coin sm"></span> ${this.s.coins.toLocaleString()} to spend` : 'Charters'}</span></div>`;
+      return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>${this.reedTab === 'wardrobe' ? `<span class="nb"><span class="coin sm"></span> ${this.s.coins.toLocaleString()}</span> · <span class="nb">${PEARL} ${this.s.pearls.toLocaleString()}</span> to spend` : 'Charters'}</span></div>`;
     if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? whereText(this.diveHud.view.zone, this.diveHud.view.marker) : 'Back at the harbour'}</span></div>`;
     if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
     if (this.tab === 'nudge') return `<span class="who-ic">☕</span><div><b>${NUDGE_TITLE}</b></div>`;
@@ -4770,12 +5023,14 @@ export class Game {
   private settingsHtml(): string {
     const keys: [string, string][] = this.touch ? [
       ['Left thumb', 'Walk: drag anywhere on the left; push to the edge to run'], ['Drag', 'Look around'], ['JUMP', 'Jump'],
+      ['👋', 'Emotes: tap one to play it; a step ends it'],
       ['Tap the prompt', 'Talk / interact'], ['Hold the big button', 'Charge a cast - let go in the gold zone for a perfect cast'],
       ['Tap', 'Hook when the ! appears'], ['Hold', 'Reel - when the fish surges, keep the gauge green'],
       ['Tap a slot', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['Hold a slot', 'Drop that item'],
       ['🎒', 'Open your bag'], ['💬', 'Chat'],
     ] : [
       ['W A S D', 'Walk'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Talk / interact'],
+      ['Hold F', 'Emotes: move the mouse to one and let go to play it; a step ends it'],
       ['Hold click', 'Charge a cast - let go in the gold zone for a perfect cast'], ['Click', 'Hook when the ! appears'],
       ['Hold click', 'Reel - when the fish surges, keep the gauge green'], ['1-5 / Scroll', 'Take an item in hand: 1 is your rod, 2 your bait, 3 and up fish'], ['G', 'Drop the item in hand'],
       ['Tab', 'Open your bag'], ['Enter', 'Chat'], ['M', 'Music on / off'], ['Esc', 'Menu / close'],
@@ -5146,6 +5401,13 @@ export class Game {
     // its pieces in `reedCosmetics`'s order.
     const setKey = (c: Cosmetic) => (c.shop === 'zone' ? `zone:${c.zone}` : c.legend ?? '');
     const sets = [...new Set(items.map(setKey))];
+    // The deep sea emotes are sold here too: a zone's as the last tile of its row (the Abyss's after its last legend's
+    // set), Master of the Deep in a row of its own at the foot (Oscar, 2026-11-16). `pick.rcos` holds "emote:<id>".
+    const sold = EMOTES.filter((e) => e.gate);
+    const chosenEmote = this.pick.rcos?.startsWith('emote:') ? sold.find((e) => `emote:${e.id}` === this.pick.rcos) : undefined;
+    const zoneOfSet = (key: string): number => (key.startsWith('zone:') ? Number(key.slice(5)) : ZONES.findIndex((z) => z.legends.includes(key)));
+    const emoteAfter = (key: string): EmoteDef | undefined =>
+      sets.filter((k) => zoneOfSet(k) === zoneOfSet(key)).at(-1) === key ? sold.find((e) => e.id === ZONES[zoneOfSet(key)]?.id) : undefined;
     const sections = sets.map((key) => {
       const set = items.filter((c) => setKey(c) === key);
       const cards = set
@@ -5160,7 +5422,7 @@ export class Game {
           const sub = offer === 'owned' ? (wearing ? 'Wearing' : 'Owned') : offer === 'locked' ? lock : '';
           return this.itemTile({ ...this.cosLook(c), name: c.name, sub, price: offer === 'locked' ? undefined : this.cosPrice(c), tier: c.tier + 1, on: chosen?.id === c.id, check: offer === 'owned', ghost: offer === 'locked' || (offer === 'sale' && s.coins < c.price), attrs: `data-pick="rcos" data-id="${c.id}" data-try="${c.slot}:${c.id}"`, tip: offer === 'locked' ? eco.reedUnlockText(s, c) : undefined });
         })
-        .join('');
+        .join('') + this.emoteTileHtml(emoteAfter(key), chosenEmote);
       const first = set[0];
       if (first.shop === 'zone' && first.zone !== undefined) {
         const zone = ZONES[first.zone];
@@ -5175,14 +5437,15 @@ export class Game {
         ? `${LEGEND_MARK[key] ?? '✦'} ${escapeHtml(fish.name)}'s set${zone ? ` <small>· ${zone.name.replace(/^The /, 'the ')}</small>` : ''}`
         : 'More from Reed';
       return `<h4 class="set-h">${head}</h4><div class="tiles">${cards}</div>`;
-    }).join('');
+    }).join('') + sold.filter((e) => !ZONES.some((z) => z.id === e.id)).map((e) => `<h4 class="set-h">${e.icon} ${escapeHtml(e.name)} <small>· for the angler with every deep sea emote</small></h4><div class="tiles">${this.emoteTileHtml(e, chosenEmote)}</div>`).join('');
     // Until a set is reached, Reed points at the nearest one (the first in zone order).
     const first = items[0];
     const reached = items.some((c) => eco.reedOffer(s, c) !== 'unseen');
     const how = first?.shop === 'zone' ? 'land fish there' : first ? `land ${eco.legendName(first)}` : '';
     const intro = reached || !first
-      ? `<p class="cos-intro">"Land enough fish in a zone, or land one of its legends, and I'll have the next piece of its set made up for you. Paid in coins."</p>`
+      ? `<p class="cos-intro">"Land enough fish in a zone, or land one of its legends, and I'll have the next piece of its set made up for you. Paid in coins. Own a whole set and there's an emote in it for you too, for coins and Black Pearls."</p>`
       : `<p class="cos-intro">"Every zone out there has a set of its own, and the legends the finest of all. Fit the boat for ${zoneOf(first)}, ${how}, and I'll have a piece made up for you."</p>`;
+    if (chosenEmote) return `<div class="cols"><div class="main">${intro}${sections}</div>${this.emoteDetailHtml(chosenEmote)}</div>`;
     if (!chosen) {
       const yours = this.detail({
         top: '<div id="pv-slot"></div>',
@@ -5237,6 +5500,78 @@ export class Game {
       actions: action,
     });
     return `<div class="cols"><div class="main">${intro}${sections}</div>${detail}</div>`;
+  }
+
+  /** An emote's price: short on a tile ("300k 🪙 · 1k ⚫"), in full in its panel. */
+  private emotePriceHtml(e: EmoteDef, long = false): string {
+    if (!e.price) return '';
+    const n = (v: number) => (long ? v.toLocaleString('en-US') : shortCoins(v));
+    return `${n(e.price.coins)} ${COIN} · ${n(e.price.pearls)} ${PEARL}`;
+  }
+
+  /**
+   * A deep sea emote's tile in Captain Reed's Wardrobe tab. Until it is bought it is a mystery: a question mark in the
+   * dark, like the silhouettes of pieces not reached yet, with its name, its gate and its price but nothing of what it
+   * looks like (Oscar, 2026-11-16: "preview should be hidden so it's a surprise"). No try-on either.
+   */
+  private emoteTileHtml(e: EmoteDef | undefined, chosen: EmoteDef | undefined): string {
+    if (!e) return '';
+    const s = this.s;
+    const offer = eco.emoteOffer(s, e);
+    const p = eco.emoteGateProgress(s, e);
+    const short = eco.emoteShort(s, e);
+    const sub = offer === 'owned' ? 'On your wheel' : offer === 'locked' ? `🔒 ${p.have} / ${p.of} ${p.what}` : 'Emote';
+    const tip = offer === 'owned' ? `${this.touch ? 'Tap 👋' : 'Hold F'} to play it` : offer === 'locked' ? `An emote · ${e.gate!.text}` : 'An emote · a surprise until you play it';
+    return this.itemTile({
+      icon: offer === 'owned' ? e.icon : '<span class="mystery">?</span>',
+      name: escapeHtml(e.name),
+      sub,
+      price: offer === 'owned' ? undefined : this.emotePriceHtml(e),
+      tier: ABYSSAL + 1,
+      cls: ` emote${offer === 'owned' ? '' : ' shadow'}`,
+      on: chosen?.id === e.id,
+      check: offer === 'owned',
+      ghost: offer === 'locked' || (offer === 'sale' && (short.coins > 0 || short.pearls > 0)),
+      attrs: `data-pick="rcos" data-id="emote:${e.id}"`,
+      tip,
+    });
+  }
+
+  /** The picked emote's panel at Captain Reed's: its gate with how far along the player is, its price, and [Buy]. Never what it looks like. */
+  private emoteDetailHtml(e: EmoteDef): string {
+    const s = this.s;
+    const offer = eco.emoteOffer(s, e);
+    const p = eco.emoteGateProgress(s, e);
+    const short = eco.emoteShort(s, e);
+    const price = this.emotePriceHtml(e, true);
+    const need = [short.coins ? `${short.coins.toLocaleString('en-US')} ${COIN}` : '', short.pearls ? `${short.pearls.toLocaleString('en-US')} ${PEARL}` : ''].filter(Boolean).join(' and ');
+    const how = this.touch ? 'Tap 👋 and pick it' : 'Hold F and pick it';
+    const action = offer === 'owned'
+      ? this.btn(`On your emote wheel · ${this.touch ? 'tap 👋' : 'hold F'}`, '', 'plain', true)
+      : offer === 'locked'
+        ? this.btn(`${e.gate!.text} · ${p.have} of ${p.of}`, '', 'plain', true)
+        : need
+          ? this.btn(`Need ${need} more`, '', 'plain', true)
+          : this.btn(`Buy for ${price}`, `data-act="buyemote" data-id="${e.id}"`);
+    const state = offer === 'owned'
+      ? `Yours. ${how} to play it.`
+      : offer === 'locked'
+        ? `${e.gate!.text} to unlock it: you have ${p.have} of ${p.of} ${p.what}. Then ${price}.`
+        : need
+          ? `Unlocked: ${price}. You need ${need} more.`
+          : `Unlocked: ${price}.`;
+    return this.detail({
+      top: '<div id="pv-slot"></div>',
+      icon: offer === 'owned' ? e.icon : '<span class="mystery">?</span>',
+      name: `${escapeHtml(e.name)} emote`,
+      tier: ABYSSAL + 1,
+      cls: offer === 'owned' ? '' : ' shadow',
+      badge: `<span class="badge" style="--c:var(--abyssal)">Emote · Deep sea</span>`,
+      body: '',
+      // What it does stays a surprise until the first time it is played.
+      note: offer === 'owned' ? state : `"That one I won't spoil. You'll see what it is the first time you play it." ${state}`,
+      actions: action,
+    });
   }
 
   /**

@@ -354,6 +354,22 @@ function drawFluteTexture(): THREE.CanvasTexture {
   return toTex(c);
 }
 
+/**
+ * A soft white radial glow, tinted by whatever draws it: the outfits' halos and pools of light (character.ts) and the
+ * emotes' glows (`src/game/emotes/`). One shared texture, never disposed.
+ */
+export const haloTexture = once(() => {
+  const [c, g] = canvas(64);
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+});
 export const groundTexture = once(drawGroundTexture);
 export const damaskTexture = once(drawDamaskTexture);
 export const panelTexture = once(drawPanelTexture);

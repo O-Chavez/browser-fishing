@@ -797,6 +797,160 @@ describe('jumping', () => {
   });
 });
 
+describe('emotes', () => {
+  const emotes = (x: { log: ServerMsg[] }) => x.log.filter((m): m is Extract<ServerMsg, { t: 'emote' }> => m.t === 'emote');
+  /** Ann and Bob at the pond, Cat in the casino. */
+  const three = () => {
+    const t = setup();
+    const a = t.join('Ann');
+    const b = t.join('Bob');
+    const res = t.store.auth('Cat', 'token-token-token-Cat');
+    if (!res.ok) throw new Error(res.msg);
+    res.account.save.location = 'casino';
+    const c = conn();
+    t.room.join(c, res.account);
+    return { ...t, a, b, c };
+  };
+
+  it('shows a base emote to the others on the same map only', () => {
+    const { room, a, b, c } = three();
+    // It says where the player stands as it begins: the emote can arrive before the snap with their last step.
+    room.place(a.id, 3.456, -2.004);
+    room.handle(a.id, { t: 'emote', id: 'wave' });
+    expect(emotes(b.c)).toEqual([{ t: 'emote', id: a.id, emote: 'wave', x: 3.46, z: -2 }]);
+    expect(emotes(a.c)).toHaveLength(0);
+    expect(emotes(c)).toHaveLength(0);
+    // It changes nothing on the save, so no state goes out.
+    expect(a.c.log.filter((m) => m.t === 'state')).toHaveLength(0);
+  });
+
+  it("never shows an emote the player doesn't own, or one that doesn't exist", () => {
+    const { room, a, b, advance } = three();
+    for (const id of ['kelp', 'twilight', 'abyss', 'master', 'nope', 'constructor', '', 7, {}, undefined, ['wave']]) {
+      room.handle(a.id, { t: 'emote', id: id as string });
+      advance(5000);
+    }
+    expect(emotes(b.c)).toHaveLength(0);
+    // Bought (in the save): it shows. The save is the server's, never the client's word.
+    a.acct.save.emotes.push('kelp');
+    room.handle(a.id, { t: 'emote', id: 'kelp' });
+    expect(emotes(b.c)).toMatchObject([{ t: 'emote', id: a.id, emote: 'kelp' }]);
+    advance(5000);
+    room.handle(a.id, { t: 'emote', id: 'abyss' });
+    expect(emotes(b.c)).toHaveLength(1);
+  });
+
+  it('drops emotes started within a second of the last, whichever they are', () => {
+    const { room, a, b, advance } = three();
+    room.handle(a.id, { t: 'emote', id: 'wave' });
+    advance(400);
+    room.handle(a.id, { t: 'emote', id: 'yes' });
+    advance(400);
+    room.handle(a.id, { t: 'emote', id: 'no' });
+    expect(emotes(b.c).map((m) => m.emote)).toEqual(['wave']);
+    advance(300);
+    room.handle(a.id, { t: 'emote', id: 'nice' });
+    expect(emotes(b.c).map((m) => m.emote)).toEqual(['wave', 'nice']);
+    // Bob's own limit is his own.
+    room.handle(b.id, { t: 'emote', id: 'wave' });
+    expect(emotes(a.c)).toMatchObject([{ t: 'emote', id: b.id, emote: 'wave' }]);
+  });
+
+  it('passes on an early end only while an emote is playing', () => {
+    const { room, a, b, advance } = three();
+    // Nothing playing: nothing to end.
+    room.handle(a.id, { t: 'emote', id: null });
+    expect(emotes(b.c)).toHaveLength(0);
+    room.handle(a.id, { t: 'emote', id: 'wave' });
+    advance(500);
+    room.handle(a.id, { t: 'emote', id: null });
+    expect(emotes(b.c).at(-1)).toEqual({ t: 'emote', id: a.id, emote: null });
+    // Ended once; saying it again is dropped, and so is one after the emote ran its length.
+    room.handle(a.id, { t: 'emote', id: null });
+    expect(emotes(b.c)).toHaveLength(2);
+    advance(1000);
+    room.handle(a.id, { t: 'emote', id: 'yes' });
+    advance(2500);
+    room.handle(a.id, { t: 'emote', id: null });
+    expect(emotes(b.c).map((m) => m.emote)).toEqual(['wave', null, 'yes']);
+  });
+
+  it('plays none with a fish on the line', () => {
+    const { room, a, b, advance } = three();
+    room.handle(a.id, { t: 'cast', x: 0, z: -10 });
+    expect(last(a.c, 'castok').fishId).toBeTruthy();
+    room.handle(a.id, { t: 'emote', id: 'wave' });
+    expect(emotes(b.c)).toHaveLength(0);
+    room.handle(a.id, { t: 'lost' });
+    advance(100);
+    room.handle(a.id, { t: 'emote', id: 'wave' });
+    expect(emotes(b.c)).toHaveLength(1);
+  });
+
+  it("sells a deep sea emote at Reed's seaplane once its gate is met, for coins and Black Pearls, once", () => {
+    const t = setup();
+    const a = t.join('Ann');
+    const s = a.acct.save;
+    const atReed = () => t.room.place(a.id, HARBOUR.stand.x, HARBOUR.stand.z + 1.5);
+    const buy = (id = 'kelp') => t.room.handle(a.id, { t: 'buyemote', id });
+    s.coins = 1e9;
+    s.pearls = 1e9;
+    // Not anywhere but Reed's.
+    t.atShop(a);
+    buy();
+    expect(last(a.c, 'notice').msg).toMatch(/Reed's seaplane/);
+    atReed();
+    // Locked until the whole Kelp Deep set is owned, whatever the client thinks.
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('Own the Kelp Deep set to unlock the Kelp Deep emote.');
+    s.owned.push('kelpcap', 'kelpwrap');
+    buy();
+    expect(s.emotes).toEqual([]);
+    s.owned.push('holdfast');
+    // Both currencies, checked from the save: short of either one sells nothing and takes nothing.
+    s.coins = 299_999;
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('The Kelp Deep emote costs 300,000 coins and 1,000 Black Pearls: you need 1 more coin.');
+    s.coins = 300_000;
+    s.pearls = 999;
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('The Kelp Deep emote costs 300,000 coins and 1,000 Black Pearls: you need 1 more Black Pearl.');
+    expect(s).toMatchObject({ emotes: [], coins: 300_000, pearls: 999 });
+    s.pearls = 1_000;
+    buy();
+    expect(s.emotes).toEqual(['kelp']);
+    expect(s).toMatchObject({ coins: 0, pearls: 0 });
+    expect(last(a.c, 'state').save).toMatchObject({ emotes: ['kelp'], coins: 0, pearls: 0 });
+    s.coins = 1e9;
+    s.pearls = 1e9;
+    buy();
+    expect(last(a.c, 'notice').msg).toBe('You already have the Kelp Deep emote.');
+    expect(s).toMatchObject({ coins: 1e9, pearls: 1e9 });
+    // The base ones and made-up ones aren't for sale.
+    for (const id of ['wave', 'nope', 'constructor']) {
+      buy(id);
+      expect(last(a.c, 'notice').msg).toBe('Captain Reed has nothing like that.');
+    }
+    // Master of the Deep takes the other three emotes, not their sets.
+    buy('master');
+    expect(last(a.c, 'notice').msg).toBe('Own the other three deep sea emotes to unlock the Master of the Deep emote.');
+    s.emotes.push('twilight', 'abyss');
+    buy('master');
+    expect(s.emotes).toEqual(['kelp', 'twilight', 'abyss', 'master']);
+    expect(s).toMatchObject({ coins: 1e9 - 20_000_000, pearls: 1e9 - 150_000 });
+  });
+
+  it('takes bought emotes away with an account reset', () => {
+    const { room, a, b, advance } = three();
+    a.acct.save.emotes.push('kelp');
+    room.handle(a.id, { t: 'reset' });
+    expect(a.acct.save.emotes).toEqual([]);
+    advance(5000);
+    room.handle(a.id, { t: 'emote', id: 'kelp' });
+    expect(emotes(b.c)).toHaveLength(0);
+  });
+});
+
 describe('faces', () => {
   it('changes face, tells the room, and keeps it through a reset', () => {
     const { room, join } = setup();

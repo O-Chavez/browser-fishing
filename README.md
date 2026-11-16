@@ -26,7 +26,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 **📈 Level up from Worm to Moon Pearl.** Sell your catch, buy better bait, line and rods, and reach new tiers of fish. Levels have no cap: from level 20 you earn nautical ranks, from Deckhand to Admiral at 50 and on to Lord of the Deep at 150, which puts an anchor by your name. None of it is pay-to-win: everything is earned on the water.
 
-**⚓ Charter out to the deep sea.** At level 20, **Captain Reed** on the west beach sells the **Deep Sea Rod** and takes you out on a charter. Pick one of five zones, from **the Shelf** to **the Abyss**, and cast off. Each charter fills Reed's **hold** for a small fee: 10 fish to start, up to 30 as you buy bigger holds, and a fish that gets away takes no room. Fish pay coins and **Black Pearls**, and each zone out pays about twice the coins of the one before. Coins buy the hold and the rod's eight steps, and pearls fill the bar for four **boat parts** that open the zones one by one. Only the Abyss has **markers**: every three fish you land takes you one further out, where the fish fight harder and pay more. The rarest sea fish are legends, up to **the Kraken**, and the **Furthest Out** board by Reed's lane shows how far each angler's boat reaches.
+**⚓ Charter out to the deep sea.** At level 20, **Captain Reed** on the west beach sells the **Deep Sea Rod** and takes you out on a charter. Pick one of five zones, from **the Shelf** to **the Abyss**, and cast off. Each charter fills Reed's **hold** for a small fee: 10 fish to start, up to 30 as you buy bigger holds, and a fish that gets away takes no room. Fish pay coins and **Black Pearls**, and each zone out pays about twice the coins of the one before. Coins buy the hold and the rod's eight steps, and pearls fill the bar for four **boat parts** that open the zones one by one. Only the Abyss has **markers**: every three fish you land takes you one further out, where the fish fight harder and pay more. The rarest sea fish are legends, up to **the Kraken**, and the **Furthest Out** board by Reed's lane shows how far each angler's boat reaches. In his **Wardrobe** tab Reed makes up sets from the deep (one each for Kelp Deep and the Twilight, and one for each Abyss legend, with a pet) and, once you own a zone's sets, sells its deep sea emote for coins and Black Pearls.
 
 ![Captain Reed's chart: a card for each of the five zones with how it rates for your rod, what a fish pays and the fee, then the Deep Sea Rod's step, the hold, the next boat part and a Cast off button](src/assets/images/news/charter-hold.jpg)
 
@@ -36,7 +36,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 **🔥 Smoke your catch.** From level 3, Mags Cinder's Smokehouse across the path from Marlow's stall smokes your spare fish in seconds (and keeps smoking while you're offline). Sell small fry smoked for more, eat one as a snack for ⭐ more XP or 💰 more coins on every catch, or cook smoked fish into dishes that give several buffs at once, up to ✨ more shinies.
 
-**👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, and race for a spot on the **Top Anglers** leaderboard.
+**👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, wave, clap or nod from the emote wheel, and race for a spot on the **Top Anglers** leaderboard.
 
 ![Two players in hats chatting on the end of the pier at sunset, one with a speech bubble above their head](docs/images/dock.jpg)
 
@@ -60,7 +60,8 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 - Casino Cove with roulette, blackjack, the Lucky Wheel and a perk shop
 - A Smokehouse that turns spare fish into snacks and dishes that buff your catches
 - Fishdex, records, a live leaderboard and a Furthest Out board for charters
-- Character customisation: faces, colours, hats, shirts and jewellery
+- Character customisation: faces, colours, hats, shirts and jewellery, plus deep sea sets and pets
+- Emotes: a wheel of eight, four for everyone and four earned at sea
 - Your progress is saved on the server, so just log back in with your name
 
 ## Support
@@ -78,6 +79,7 @@ Lakeside is free with no ads, made by one person. If you enjoy it, you can leave
 | Click | Hook a bite |
 | Hold click | Reel (let go when the fish surges) |
 | E | Talk / interact |
+| Hold F | Emote wheel: move the mouse to an emote, let go to play it |
 | 1-5 / scroll | Pick a hotbar item (1 rod, 2 bait, 3+ fish) |
 | G | Drop the item in your hand |
 | Tab | Bag and player list |
@@ -85,7 +87,7 @@ Lakeside is free with no ads, made by one person. If you enjoy it, you can leave
 | M | Music on/off |
 | Esc | Menu / close |
 
-**On a phone or tablet:** play in landscape. Push the left thumbstick to walk (past the rim to run), drag anywhere else to look, and hold the big button to cast and reel. Tap the prompt to talk, a hotbar slot to switch (hold one to drop it), and the casino tables to bet. 🎒 opens your bag and 💬 opens chat with its own keyboard.
+**On a phone or tablet:** play in landscape. Push the left thumbstick to walk (past the rim to run), drag anywhere else to look, and hold the big button to cast and reel. Tap the prompt to talk, a hotbar slot to switch (hold one to drop it), and the casino tables to bet. 🎒 opens your bag and 💬 opens chat with its own keyboard. Hold 👋 and drag to an emote to play it, or tap 👋 and tap one.
 
 ## Tech stack
 

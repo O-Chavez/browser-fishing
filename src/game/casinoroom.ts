@@ -4,7 +4,8 @@ import { DARK, cyl, mat, rbox, textPlane } from './hub';
 import type { Circle } from './player';
 import { boxUV, damaskTexture, fluteTexture, latticeTexture, panelTexture } from './textures';
 
-const WALL_H = 5.4;
+/** The hall's wall height, which is its ceiling's. */
+export const WALL_H = 5.4;
 const GOLD = 0xe0b441;
 const PLUM = 0x6a2a44;
 /** Chandelier spots (x, z, strong light), shared with the ceiling medallions above them. */

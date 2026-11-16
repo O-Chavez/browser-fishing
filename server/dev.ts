@@ -6,6 +6,7 @@ import { seaDepthFor } from '../src/data/sea';
 import * as eco from '../src/game/economy';
 import { DISHES } from '../src/data/smokehouse';
 import { COS_SLOTS, legendPieces } from '../src/data/cosmetics';
+import { EMOTES } from '../src/data/emotes';
 import * as smoke from '../src/game/smoke';
 import { grantRanks, sellValue } from '../src/game/progression';
 import type { SaveData } from '../src/game/state';
@@ -77,6 +78,7 @@ export const HELP = [
   '/bait <id> [N] · /rod <id> · /line <id> · /fish <id> [cm] [shiny]',
   '/landed <legend> N (times landed: unlocks its set\'s pieces up to N, to buy at Reed\'s; takes back bought ones past N)',
   '/zonefish <zone 0-4 or id> N (fish landed in a zone, set in its Fishdex: unlocks its set\'s pieces up to N at Reed\'s; takes back bought ones past N)',
+  '/emote <id|all> [off] (gives a bought emote without its gate or price, or takes it back)',
   '/tp <map> · /goto x z · /time day|dusk|night|dawn|auto',
   '/sea <zone 0-4> [marker] (start a charter there, no fee; 0 is the Shelf, 4 the Abyss)',
   '/dig (reset worm cooldown) · /tips (show the new-player tips again) · /smoke (finish the smoker) · /smoke <fish> [N]',
@@ -233,6 +235,16 @@ export function runDev(t: DevTarget, cmd: string, args: string[]): { lines: stri
       const landed = eco.zoneLanded(s, zone);
       const kept = legends > n ? ` (its legends' ${legends} stay)` : '';
       return ok(`${z.name}: ${landed} fish landed${kept}${set.length ? `, ${set.length - past.size} of ${set.length} pieces of its set unlocked at Reed's` : ' (it has no set)'}.`);
+    }
+    case 'emote': {
+      // Gives (or with `off` takes back) a bought emote, past its gate and price: the base ones are everyone's already.
+      const sold = EMOTES.filter((e) => e.tier !== 'base');
+      const picked = args[0] === 'all' ? sold : sold.filter((e) => e.id === args[0]);
+      if (!picked.length) return say(`Usage: /emote <id|all> [off] · emotes: ${ids(sold)} · yours: ${s.emotes.join(', ') || 'none bought'}`);
+      const off = args[1] === 'off';
+      const pickedIds = picked.map((e) => e.id);
+      s.emotes = off ? s.emotes.filter((id) => !pickedIds.includes(id)) : [...new Set([...s.emotes, ...pickedIds])];
+      return ok(`${off ? 'Took back' : 'Added'} the ${picked.map((e) => e.name).join(', ')} emote${picked.length === 1 ? '' : 's'}.`);
     }
     case 'smoke': {
       if (!args[0]) {

@@ -249,6 +249,19 @@ describe('carry slots', () => {
     expect('ownedRods' in s).toBe(false);
   });
 
+  it('starts saves from before emotes with none bought, and keeps only known bought ones', () => {
+    const old = structuredClone(newSave()) as Partial<SaveData>;
+    delete old.emotes;
+    expect(migrate(old).emotes).toEqual([]);
+    // The base four are everyone's and never listed; made-up ids, repeats and junk go.
+    const messy = { ...newSave(), emotes: ['kelp', 'wave', 'kelp', 'nope', 7, null, 'master', 'constructor'] } as unknown as SaveData;
+    expect(migrate(messy).emotes).toEqual(['kelp', 'master']);
+    for (const bad of ['kelp', 3, null, { 0: 'kelp', length: 1 }]) expect(migrate({ ...newSave(), emotes: bad } as unknown as SaveData).emotes).toEqual([]);
+    const s = { ...newSave(), emotes: ['twilight', 'abyss'] };
+    expect(migrate(structuredClone(s))).toEqual(s);
+    expect(newSave().emotes).toEqual([]);
+  });
+
   it('leaves saves that already have the rod and bait slots alone', () => {
     const s = newSave();
     expect(migrate(structuredClone(s))).toEqual(s);

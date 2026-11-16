@@ -257,6 +257,35 @@ describe('dev commands in a room', () => {
     }
   });
 
+  it('gives and takes back bought emotes with /emote, past their gates and prices', () => {
+    const { room, join, devLines } = setup();
+    const a = join('Ann');
+    room.handle(a.id, { t: 'cmd', text: '/emote kelp' });
+    expect(a.save.emotes).toEqual([]);
+    room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
+    room.handle(a.id, { t: 'cmd', text: '/emote kelp' });
+    expect(a.save.emotes).toEqual(['kelp']);
+    expect(devLines(a.log).at(-1)).toBe('Added the Kelp Deep emote.');
+    expect(a.save.coins).toBe(20);
+    // Twice is still once.
+    room.handle(a.id, { t: 'cmd', text: '/emote kelp' });
+    expect(a.save.emotes).toEqual(['kelp']);
+    room.handle(a.id, { t: 'cmd', text: '/emote all' });
+    expect(a.save.emotes).toEqual(['kelp', 'twilight', 'abyss', 'master']);
+    expect((a.log.findLast((m) => m.t === 'state') as Extract<ServerMsg, { t: 'state' }>).save.emotes).toHaveLength(4);
+    room.handle(a.id, { t: 'cmd', text: '/emote abyss off' });
+    expect(a.save.emotes).toEqual(['kelp', 'twilight', 'master']);
+    room.handle(a.id, { t: 'cmd', text: '/emote all off' });
+    expect(a.save.emotes).toEqual([]);
+    expect(devLines(a.log).at(-1)).toBe('Took back the Kelp Deep, The Twilight, The Abyss, Master of the Deep emotes.');
+    // The base four are everyone's: there is nothing to give.
+    for (const bad of ['/emote', '/emote wave', '/emote nope']) {
+      room.handle(a.id, { t: 'cmd', text: bad });
+      expect(devLines(a.log).at(-1)).toBe('Usage: /emote <id|all> [off] · emotes: kelp, twilight, abyss, master · yours: none bought');
+    }
+    expect(a.save.emotes).toEqual([]);
+  });
+
   it("sets the fish landed in a zone with /zonefish, unlocking its set's pieces up to there and taking back bought ones past it", () => {
     const { room, join, devLines } = setup();
     const a = join('Ann');

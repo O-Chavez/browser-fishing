@@ -2,6 +2,7 @@ import { CHARM_BONUS, GLOVES_CONTROL, LANTERN_NIGHT_LUCK, LURE_BULK_PACKS, LURE_
 import { COSMETICS, COS_SLOTS, cosById, isFace, legendPieceFor, legendPieces, type CosShop, type CosSlot, type Cosmetic } from '../data/cosmetics';
 import { BAITS, DEEP_SEA_ROD, FISH, LINES, RODS, SEA_FISH, SEA_ROD_SHORT, byId, type Bait, type BaitType, type Fish, type Line, type Rod } from '../data/content';
 import { BOAT_PARTS, ZONES, glowStep } from '../data/dive';
+import { emoteById, type EmoteDef } from '../data/emotes';
 import { TITLES, type Rank } from '../data/ranks';
 import { applyXp, catchXp, eligibleFish, fightGaps, grantRanks, levelGifts, overGear, type Gifts, pickFish, rollFishGaps, rollSize, sellValue, SHINY_CHANCE, SHINY_CHANCE_NIGHT, SPOTS, TAG_BONUS, type FishTag, type SpotId } from './progression';
 import { P, type Gaps, type ReelTune } from './reel';
@@ -806,6 +807,82 @@ export function buyReedPiece(s: SaveData, id: string): boolean {
   if (!c || reedBuyError(s, id)) return false;
   s.coins -= c.price;
   s.owned.push(c.id);
+  return true;
+}
+
+/**
+ * Whether a player can play an emote: everyone has the base ones, the rest are in the save once bought
+ * (`SaveData.emotes`). The server checks it before showing an emote to anyone else.
+ */
+export function ownsEmote(s: Pick<SaveData, 'emotes'>, id: string): boolean {
+  const e = emoteById(id);
+  return !!e && (e.tier === 'base' || s.emotes.includes(e.id));
+}
+
+/** A bought emote's gate is met: every piece and every other emote it names is owned (`EmoteGate`). */
+export function emoteGateMet(s: Pick<SaveData, 'owned' | 'emotes'>, e: EmoteDef): boolean {
+  return !!e.gate && e.gate.pieces.every((id) => s.owned.includes(id)) && e.gate.emotes.every((id) => ownsEmote(s, id));
+}
+
+/** Where an emote stands for a player: theirs to play, on sale (its gate is met), or still locked behind its gate. */
+export function emoteOffer(s: Pick<SaveData, 'owned' | 'emotes'>, e: EmoteDef): 'owned' | 'sale' | 'locked' {
+  return ownsEmote(s, e.id) ? 'owned' : emoteGateMet(s, e) ? 'sale' : 'locked';
+}
+
+/** What a player without an emote reads on the wheel: its gate and who sells it, or just the seller once the gate is met. */
+export function emoteHint(s: Pick<SaveData, 'owned' | 'emotes'>, e: EmoteDef): string {
+  if (!e.gate || ownsEmote(s, e.id)) return '';
+  return emoteGateMet(s, e) ? `${e.seller} sells it` : `${e.gate.text}, then ${e.seller} sells it`;
+}
+
+/** An emote mid-sentence: "the Kelp Deep emote", "the Twilight emote". */
+const theEmote = (e: EmoteDef): string => `the ${e.name.replace(/^The /, '')} emote`;
+
+/** How much of an emote's gate a player has: the pieces of its set owned (or, for Master of the Deep, the other emotes). */
+export function emoteGateProgress(s: Pick<SaveData, 'owned' | 'emotes'>, e: EmoteDef): { have: number; of: number; what: 'pieces' | 'emotes' } {
+  const pieces = e.gate?.pieces ?? [];
+  const emotes = e.gate?.emotes ?? [];
+  // A gate names pieces or emotes; one that named both would count them together, as pieces.
+  return {
+    have: pieces.filter((id) => s.owned.includes(id)).length + emotes.filter((id) => ownsEmote(s, id)).length,
+    of: pieces.length + emotes.length,
+    what: pieces.length ? 'pieces' : 'emotes',
+  };
+}
+
+/** The coins and Black Pearls a player is still short of an emote's price (0 for what they have enough of). */
+export function emoteShort(s: Pick<SaveData, 'coins' | 'pearls'>, e: EmoteDef): { coins: number; pearls: number } {
+  return { coins: Math.max(0, (e.price?.coins ?? 0) - s.coins), pearls: Math.max(0, (e.price?.pearls ?? 0) - s.pearls) };
+}
+
+const num = (n: number): string => n.toLocaleString('en-US');
+
+/** An emote's price in words: "300,000 coins and 1,000 Black Pearls". */
+export const emotePriceText = (e: EmoteDef): string => (e.price ? `${num(e.price.coins)} coins and ${num(e.price.pearls)} Black Pearls` : '');
+
+/**
+ * Why a bought emote can't be bought now, or null when it can: its gate met, for coins, once. The client asks before
+ * buying and the server again from the save, like `reedBuyError`.
+ */
+export function emoteBuyError(s: Pick<SaveData, 'owned' | 'emotes' | 'coins' | 'pearls'>, id: string): string | null {
+  const e = emoteById(id);
+  if (!e || !e.gate || e.price === undefined) return 'Captain Reed has nothing like that.';
+  if (ownsEmote(s, e.id)) return `You already have ${theEmote(e)}.`;
+  if (!emoteGateMet(s, e)) return `${e.gate.text} to unlock ${theEmote(e)}.`;
+  // Both are paid, so it says which is short, and by how much.
+  const short = emoteShort(s, e);
+  const need = [short.coins ? `${num(short.coins)} more coin${short.coins === 1 ? '' : 's'}` : '', short.pearls ? `${num(short.pearls)} more Black Pearl${short.pearls === 1 ? '' : 's'}` : ''].filter(Boolean);
+  if (need.length) return `T${theEmote(e).slice(1)} costs ${emotePriceText(e)}: you need ${need.join(' and ')}.`;
+  return null;
+}
+
+/** Buys an emote whose gate is met, for its coins and its Black Pearls (`emoteBuyError`). */
+export function buyEmote(s: SaveData, id: string): boolean {
+  const e = emoteById(id);
+  if (!e || emoteBuyError(s, id)) return false;
+  s.coins -= e.price!.coins;
+  s.pearls -= e.price!.pearls;
+  s.emotes.push(e.id);
   return true;
 }
 
