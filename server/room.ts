@@ -313,7 +313,7 @@ export class Room {
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));
         break;
       case 'buybait':
-        changed = this.atVendor(m) && this.stocks(m).bait.includes(str(msg.id)) && eco.buyBait(s, str(msg.id));
+        changed = this.atVendor(m) && this.stocks(m).bait.includes(str(msg.id)) && eco.buyBait(s, str(msg.id), msg.n === undefined ? eco.BAIT_PACK : Number(msg.n));
         break;
       case 'equiprod':
         changed = eco.equipRod(s, str(msg.id));

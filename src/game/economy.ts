@@ -31,7 +31,7 @@ export function baitCount(s: SaveData, id: string): number {
   return s.slots.reduce((a, sl) => a + (sl?.k === 'bait' && sl.id === id ? sl.n : 0), 0) + (s.locker.bait[id] ?? 0);
 }
 
-const lockerBait = (s: SaveData, id: string): number => s.locker.bait[id] ?? 0;
+export const lockerBait = (s: SaveData, id: string): number => s.locker.bait[id] ?? 0;
 function addLocker(s: SaveData, id: string, n: number): void {
   const total = lockerBait(s, id) + n;
   if (total > 0) s.locker.bait[id] = total;
@@ -66,6 +66,7 @@ export function selectSlot(s: SaveData, index: number): boolean {
 }
 
 export const BAIT_PACK = 5;
+export const BAIT_PACK_BIG = 25;
 
 /** Stall prices: bait is sold in packs, rods one at a time. Purchases go to the tackle locker. */
 export function buyRod(s: SaveData, id: string): boolean {
@@ -136,13 +137,15 @@ export function buyLine(s: SaveData, id: string): boolean {
   return true;
 }
 
-export function buyBait(s: SaveData, id: string): boolean {
+/** Bait comes in packs of 5 or 25 at the same price per bait. */
+export function buyBait(s: SaveData, id: string, n: number = BAIT_PACK): boolean {
+  if (n !== BAIT_PACK && n !== BAIT_PACK_BIG) return false;
   const b = BAITS.find((x) => x.id === id);
   if (!b) return false;
-  const cost = b.price * BAIT_PACK;
-  if (s.level < b.unlockLevel || s.coins < cost || lockerBait(s, id) + BAIT_PACK > LOCKER_CAP) return false;
+  const cost = b.price * n;
+  if (s.level < b.unlockLevel || s.coins < cost || lockerBait(s, id) + n > LOCKER_CAP) return false;
   s.coins -= cost;
-  addLocker(s, id, BAIT_PACK);
+  addLocker(s, id, n);
   const cur = BAITS.find((x) => x.id === s.bait);
   const carried = s.slots.some((sl) => sl?.k === 'bait' && sl.id === s.bait);
   if (!carried || (cur && b.tier > cur.tier)) equipBait(s, id);

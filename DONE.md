@@ -2,6 +2,10 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 Buy bait in bigger stacks (Mighty, 2026-11-15; done 2026-11-15, branch `bait-packs`)
+  - Marlow's stall now has a "Buy 25" button beside "Buy 5" in the bait detail pane: same price per bait, no discount. `buyBait(s, id, n)` takes only 5 or 25 (`BAIT_PACK_BIG`, `src/game/economy.ts`); the `buybait` message gains an optional `n` (missing = 5, so old clients still work) and the server rejects any other size. The 25 button shows "Need X" when you can't afford it and "Locker full" when it would pass the 200 cap; the toast says "Bought 25 Worm". Tiles still show the per-5 price
+  - The two buttons sit in the existing `btnrow` used by other two-action panes, so the pane fits on phones
+  - Checked: build, tests (cost, locker cap and invalid sizes in `economy.test.ts`; a size-25 buy and a bad size in `server/room.test.ts`); headless Chrome at the stall, desktop and a `?touch` phone: both buttons, "Need 50" when poor, and a real Buy 25 through the server (+25 worms, 50 coins). Smoke not run
 - [x] Open the doors, step 6 of full mobile support (from the mobile plan, 2026-11-15; done 2026-11-15, branch `mobile`)
   - Phones and tablets go straight into the game with touch controls: the "Lakeside is made for desktop" notice and its "Try touch controls (early test)" link are gone (`src/main.ts`, `index.html`). The notice's panel stays as the start-error panel ("Lakeside couldn't start its 3D graphics"), shown only when the game can't start. No more covering the world until the player opts in
   - What's new entry 13, "Lakeside on phones and tablets", with a photo (`src/assets/images/news/phones.jpg`, 1280x720, 91 KB): the sunset pier on a phone held sideways, two players chatting, staged headlessly on three `?touch` phones and framed in a phone outline. README and GAME_DESIGN.md's platform line updated

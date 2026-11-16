@@ -145,6 +145,11 @@ describe('Room economy', () => {
     expect(a.acct.save.rod).toBe('twig');
     room.handle(a.id, { t: 'buybait', id: 'worm' });
     expect(a.acct.save.coins).toBeLessThan(500);
+    const worms = eco.baitCount(a.acct.save, 'worm');
+    room.handle(a.id, { t: 'buybait', id: 'worm', n: 10 });
+    expect(eco.baitCount(a.acct.save, 'worm')).toBe(worms);
+    room.handle(a.id, { t: 'buybait', id: 'worm', n: 25 });
+    expect(eco.baitCount(a.acct.save, 'worm')).toBe(worms + 25);
   });
 
   it('spools line only at the vendor, from its stock, unlocked, paid for and a step up', () => {
