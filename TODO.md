@@ -27,6 +27,9 @@ Finished items move to [DONE.md](DONE.md).
   - Decide where the charter board stands (by the Furthest Out board on Reed's wharf, or beside Top Anglers at the campfire), what it's called, and whether the Anglers menu shows both lists
 - [ ] Speech bubbles show the whole message (Oscar, 2026-11-15)
   - The bubble over a player's head cuts a message at 40 characters with "…" (`BUBBLE_CHARS` in `say`, `src/game/avatars.ts`), and draws it on one line. Chat is already capped at 120 characters (`CHAT_MAX`, `server/chat.ts`), so drop the cut and wrap long messages onto several lines (the canvas grows taller and the sprite's height and position follow, so it still sits just above the name tag). The chat log already shows whole lines
+- [ ] Each title raises the player's luck at the lake, so by level 150 they catch fewer tier 3-4 fish and more tier 5 (Oscar, 2026-11-15)
+  - The titles are the 11 ranks from Deckhand at 20 to Lord of the Deep at 150 (`RANKS`, `src/data/ranks.ts`). Today luck only weighs tier 1 fish against all the others (`pickFish`, `src/game/progression.ts`), so a bigger luck number wouldn't move tier 3-4 catches to tier 5. The title bonus needs its own weight that favours the pool's top tier (or a stronger `OUTGROWN` falloff), applied at the lake only, not at sea. Tier 5 still only bites on tier 5 gear (`gearTier`)
+  - Decide how big each step is (how often a level 150 player gets tier 5 compared with someone new on the same gear) and whether the rank card and the title list say so. More tier 5 means more coins, so check it with the economy repass (Ideas > Economy)
 
 ## Endgame
 
