@@ -29,6 +29,12 @@ export const RANKS: Rank[] = [
   { level: 150, id: 'lorddeep', title: 'Lord of the Deep', pill: 'aurora' },
 ];
 
+/** The last rank, Lord of the Deep: reaching it puts the aurora anchor by the player's name (`src/game/anchor.ts`). */
+export const MAX_RANK: Rank = RANKS.at(-1)!;
+
+/** Whether a level has reached the last rank. Levels keep going past it, the ranks don't. */
+export const atMaxRank = (level: number | undefined): boolean => (level ?? 0) >= MAX_RANK.level;
+
 /** Every title a player can wear. Ranks only for now; charter zones and the Derby add more later. */
 export const TITLES: { id: string; name: string }[] = RANKS.map((r) => ({ id: r.id, name: r.title }));
 

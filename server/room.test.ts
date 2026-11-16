@@ -701,7 +701,7 @@ describe('chat', () => {
     const a = join('Ann');
     const b = join('Bob');
     room.handle(a.id, { t: 'chat', text: '  hi  shit ' });
-    expect(last(b.c, 'chat')).toMatchObject({ room: 'r', id: a.id, name: 'Ann', map: 'pond', text: 'hi ****' });
+    expect(last(b.c, 'chat')).toMatchObject({ room: 'r', id: a.id, name: 'Ann', map: 'pond', text: 'hi ****', level: 1 });
     room.handle(a.id, { t: 'chat', text: 'two' });
     room.handle(a.id, { t: 'chat', text: 'three' });
     b.c.log.length = 0;

@@ -35,7 +35,8 @@ import { fishIcon } from './fishicon';
 import { rodIcon, seaRodIcon } from './rodicon';
 import { cosIcon } from './cosicon';
 import { FISH_BLURB, FISH_LOOK, SEA_THEME, TIER_THEME } from '../data/fishlook';
-import { RANKS, TITLES, pillTier, rankAt, titleName } from '../data/ranks';
+import { RANKS, TITLES, atMaxRank, pillTier, rankAt, titleName } from '../data/ranks';
+import { anchorHtml } from './anchor';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import charterPreview from '../assets/images/charter-preview.jpg';
 import { NEWS, type NewsEntry } from '../data/news';
@@ -415,7 +416,7 @@ export class Game {
       onStages: (ids, intro) => this.afterEnter(() => window.setTimeout(() => this.stageBanner(ids, intro), 4600)),
       onChat: (m) => {
         const self = m.room === this.net.room && m.id === this.net.id;
-        this.chat.add({ name: m.name, map: m.map, text: m.text, self, sup: this.net.isSupporter(m.name) });
+        this.chat.add({ name: m.name, map: m.map, text: m.text, self, sup: this.net.isSupporter(m.name), top: atMaxRank(m.level) });
         if (!self && m.room === this.net.room && m.map === this.map.id && this.net.players.get(m.id)?.dive === (this.net.dive || undefined)) this.avatars.say(m.id, m.text);
       },
       onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
@@ -4735,15 +4736,16 @@ export class Game {
 
   // ---------- Anglers ----------
 
-  private heart(name: string): string {
-    return this.net.isSupporter(name) ? '<span class="sup" title="Lakeside supporter">💗</span>' : '';
+  /** The marks after a name in the Anglers lists: the max-rank anchor, then the supporter 💗. */
+  private marks(name: string, level: number): string {
+    return `${anchorHtml(atMaxRank(level))}${this.net.isSupporter(name) ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}`;
   }
 
   private playersHtml(): string {
     const rows = this.leaders()
       .map(
         (p, i) =>
-          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><div class="who2"><b>${escapeHtml(p.name)}${this.heart(p.name)}${p.me ? ' <span class="you">you</span>' : ''}</b>${p.title ? `<span class="ttl">${p.title}</span>` : ''}${p.where ? `<span>${p.where}</span>` : ''}</div><span class="lv">Lv ${p.level}</span></div>`,
+          `<div class="angler${p.me ? ' me' : ''}"><span class="rank">${i === 0 ? '👑' : i + 1}</span><img src="${this.faceSrc(p.face)}" alt="" style="box-shadow:0 0 0 3px #${p.color.toString(16).padStart(6, '0')}"><div class="who2"><b>${escapeHtml(p.name)}${this.marks(p.name, p.level)}${p.me ? ' <span class="you">you</span>' : ''}</b>${p.title ? `<span class="ttl">${p.title}</span>` : ''}${p.where ? `<span>${p.where}</span>` : ''}</div><span class="lv">Lv ${p.level}</span></div>`,
       )
       .join('');
     const head = this.net.connected ? `<b>${this.net.players.size + 1}</b> online now` : 'Playing offline - join a server to fish with others.';
@@ -4754,7 +4756,7 @@ export class Game {
       .map((a, i) => {
         const f = FISH.find((x) => x.name === a.fish);
         const me = a.name === this.net.name;
-        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}${this.heart(a.name)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span>${a.title ? `<span class="ttl">${a.title}</span>` : ''}</div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
+        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}${this.marks(a.name, a.level)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span>${a.title ? `<span class="ttl">${a.title}</span>` : ''}</div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
       })
       .join('');
     return `<div class="cols anglers-cols">

@@ -532,7 +532,7 @@ export class Room {
       if (res.msg) m.conn.send({ t: 'notice', msg: res.msg });
       return;
     }
-    this.say({ t: 'chat', room: this.name, id: m.info.id, name: m.info.name, map: m.info.map, text: res.text });
+    this.say({ t: 'chat', room: this.name, id: m.info.id, name: m.info.name, map: m.info.map, text: res.text, level: m.acct.save.level });
   }
 
   private feedback(m: Member, kind: FeedbackKind, text: string, reply: (lines: string[], extra: { sent: boolean }) => void): void {

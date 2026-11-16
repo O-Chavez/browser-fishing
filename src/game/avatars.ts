@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { FISH } from '../data/content';
 import { COSMETICS, defaultLook } from '../data/cosmetics';
-import { titleName } from '../data/ranks';
+import { atMaxRank, titleName } from '../data/ranks';
 import { placeOf, type Activity, type PlayerInfo } from '../net/protocol';
+import { drawAnchor } from './anchor';
 import { Character } from './character';
 import { standHeight } from './env';
 import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
@@ -43,6 +44,8 @@ class Avatar {
   private plate: THREE.Sprite;
   private name: string;
   private sup = false;
+  /** At the last rank: the aurora anchor left of the name (and of the 💗). */
+  private top = false;
   /** The worn title's display name, or null. */
   private titled: string | null = null;
   private bubble: { sprite: THREE.Sprite; until: number } | null = null;
@@ -61,7 +64,7 @@ class Avatar {
     this.tip.position.set(-0.3, 1.2 + 0.8 * Math.cos(0.9), 0.55 + 0.8 * Math.sin(0.9));
     this.name = info.name;
     this.plate = this.nameplate(info.name);
-    this.setPlate(info.name, false, info.title);
+    this.setPlate(info.name, false, atMaxRank(info.level), info.title);
     this.group.add(this.char.group, this.rod, this.tip, this.plate);
     this.group.visible = false;
 
@@ -77,15 +80,18 @@ class Avatar {
   }
 
   private nameplate(name: string): THREE.Sprite {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.plateTexture(name, false, null), depthTest: false, transparent: true }));
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.plateTexture(name, false, false, null), depthTest: false, transparent: true }));
     s.scale.set(1.4, 0.35, 1);
     s.position.y = 2.25;
     s.renderOrder = 10;
     return s;
   }
 
-  /** The name, with a 💗 in front for a Ko-fi supporter and the worn title in smaller type under it. */
-  private plateTexture(name: string, sup: boolean, title: string | null): THREE.CanvasTexture {
+  /**
+   * The name, with a 💗 in front for a Ko-fi supporter, the aurora anchor in front of that at the last rank, and the
+   * worn title in smaller type under it.
+   */
+  private plateTexture(name: string, sup: boolean, top: boolean, title: string | null): THREE.CanvasTexture {
     const c = document.createElement('canvas');
     c.width = 256;
     c.height = title ? 96 : 64;
@@ -97,13 +103,16 @@ class Avatar {
     g.strokeText(name, 128, 42);
     g.fillStyle = '#fff';
     g.fillText(name, 128, 42);
+    // The marks sit just left of the centred name, so the name doesn't move: the 💗 nearest it, the anchor before that.
+    let right = 128 - g.measureText(name).width / 2 - 4;
     if (sup) {
-      // The heart sits just left of the centred name, so the name doesn't move.
-      const left = 128 - g.measureText(name).width / 2;
       g.font = '24px system-ui, sans-serif';
       g.textAlign = 'right';
-      g.fillText('💗', Math.max(30, left - 4), 40);
+      const x = Math.max(top ? 58 : 30, right);
+      g.fillText('💗', x, 40);
+      right = x - g.measureText('💗').width - 2;
     }
+    if (top) drawAnchor(g, Math.max(2, right - 26), 17, 26);
     if (title) {
       g.font = '600 24px system-ui, sans-serif';
       g.textAlign = 'center';
@@ -117,15 +126,16 @@ class Avatar {
     return tex;
   }
 
-  /** Redraws the name tag after a rename, or when the 💗 or the title changed. The name stays put; the title hangs below it. */
-  setPlate(name: string, sup: boolean, titleId: string | null | undefined): void {
+  /** Redraws the name tag after a rename, or when the 💗, the anchor or the title changed. The name stays put; the title hangs below it. */
+  setPlate(name: string, sup: boolean, top: boolean, titleId: string | null | undefined): void {
     const title = titleName(titleId);
-    if (name === this.name && sup === this.sup && title === this.titled) return;
+    if (name === this.name && sup === this.sup && top === this.top && title === this.titled) return;
     this.name = name;
     this.sup = sup;
+    this.top = top;
     this.titled = title;
     this.plate.material.map?.dispose();
-    this.plate.material.map = this.plateTexture(name, sup, title);
+    this.plate.material.map = this.plateTexture(name, sup, top, title);
     this.plate.material.needsUpdate = true;
     this.plate.scale.set(1.4, title ? 0.525 : 0.35, 1);
     this.plate.position.y = title ? 2.1625 : 2.25;
@@ -359,7 +369,7 @@ export class Avatars {
         this.list.set(p.id, a);
       }
       a.setLook(p.look);
-      a.setPlate(p.name, this.supporter(p.name), p.title);
+      a.setPlate(p.name, this.supporter(p.name), atMaxRank(p.level), p.title);
       a.setVisible(placeOf(p) === place);
     }
   }
