@@ -45,7 +45,7 @@ import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from 
 import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
 import { DiveHud, catchPearlsHtml, endHtml, headHomeHtml, outHtml, ratePill, ratingToast, rodProgress, reedHtml, reedMarkerPick, reedZone, startText, whereText } from './divehud';
 import type { Behaviour } from '../data/dive';
-import { holdFish, nextBoatPart, nextRodBuy, RATING_NAMES, rodBuyName, seaRating, zoneOpen } from './dive';
+import { holdFish, markerGrowth, nextBoatPart, nextRodBuy, RATING_NAMES, rodBuyName, seaRating, zoneOpen } from './dive';
 import { drawFightGauge } from './fightgauge';
 import { Player } from './player';
 import {
@@ -2904,7 +2904,9 @@ export class Game {
   private finishCatch(): void {
     const fish = this.hooked!;
     const size = this.hookedSize;
-    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift, legendPiece, zonePiece } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null, 1, this.hookedLured);
+    // An Abyss marker grows a fish's coins as the server does (`land`), so the card shows what the charter tally adds.
+    const grow = this.fightAt ? markerGrowth(this.fightAt.zone, this.fightAt.marker) : 1;
+    const { stored, first, record, gained, leveledUp, level, ranks, stages, mult, xpFrom, coinFrom, shinyFrom, gift, legendPiece, zonePiece } = eco.applyCatch(this.s, fish, size, this.hookedShiny, this.landedClean, !!this.map.sea, this.fightTag ?? null, grow, this.hookedLured);
     if (!stored) return this.reset('No free slot - the fish got away!');
     this.net.send({ t: 'catch', h: this.holds.encode() });
     if (leveledUp) this.queueNudge();
