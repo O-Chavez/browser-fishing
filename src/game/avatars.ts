@@ -4,6 +4,7 @@ import { COSMETICS, defaultLook } from '../data/cosmetics';
 import { atMaxRank, titleName } from '../data/ranks';
 import { placeOf, type Activity, type PlayerInfo } from '../net/protocol';
 import { drawAnchor } from './anchor';
+import { bubbleMs, wrapBubble } from './bubbletext';
 import { Character } from './character';
 import type { EmoteDef } from '../data/emotes';
 import { EmotePlayer } from './emotes/player';
@@ -14,20 +15,28 @@ import { JUMP_TIME, jumpLift } from './player';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-/** Chat bubbles: how long they stay, how long they take to fade, and how much text they show. */
-const BUBBLE_MS = 6000;
+/** Chat bubbles: how long they take to fade (`bubbleMs` says how long they stay). */
 const BUBBLE_FADE_MS = 1000;
-const BUBBLE_CHARS = 40;
+/** A bubble's text in canvas pixels: the font, the widest a line gets before the message wraps, a line's height and the padding round the text. */
+const BUBBLE_FONT = '600 30px system-ui, sans-serif';
+const BUBBLE_TEXT_W = 440;
+const BUBBLE_LINE_H = 36;
+const BUBBLE_PAD_X = 20;
+/** The rounded box round one line of text, and the tail under it. */
+const BUBBLE_BOX_H = 52;
+const BUBBLE_TAIL_H = 14;
+/** Metres per canvas pixel: a little smaller than the name tag's 256 px = 1.4 m. */
+const BUBBLE_PX = (1.4 / 256) * 0.8;
 /** Bubbles show only to players nearby, fading out between these distances (metres). */
 const BUBBLE_NEAR = 15;
 const BUBBLE_FAR = 20;
 /** ...and fade away when you stand on top of the speaker, so they don't cover your view. */
 const BUBBLE_HIDE_IN = 1.2;
 const BUBBLE_FULL_AT = 2.5;
-/** Heights of the name tag (lower with a title under the name) and of a chat bubble above it, in metres over the feet. */
+/** Heights of the name tag (lower with a title under the name) and of a chat bubble's foot just above it, in metres over the feet. */
 const PLATE_Y = 2.25;
 const PLATE_TITLED_Y = 2.1625;
-const BUBBLE_Y = 2.62;
+const BUBBLE_Y = 2.4625;
 /** Room left between the name tag's lower edge and an emote's hands held up over the head, in metres. */
 const PLATE_GAP = 0.03;
 /** An avatar that walks this far from where its emote began has moved on: the emote ends, even if the word that it ended was lost. */
@@ -155,38 +164,44 @@ class Avatar {
     this.plate.position.y = title ? PLATE_TITLED_Y : PLATE_Y;
   }
 
-  /** Shows a short speech bubble above the head; a new line replaces the old one. */
+  /**
+   * Shows the whole message in a speech bubble above the head, wrapped onto as many lines as it needs; the bubble
+   * grows upwards from the name tag. A new line replaces the old one.
+   */
   say(text: string): void {
     this.clearBubble();
-    const shown = text.length > BUBBLE_CHARS ? `${text.slice(0, BUBBLE_CHARS - 1).trimEnd()}…` : text;
     const c = document.createElement('canvas');
     const g = c.getContext('2d')!;
-    const font = '600 30px system-ui, sans-serif';
-    g.font = font;
-    const w = Math.ceil(g.measureText(shown).width) + 40;
+    g.font = BUBBLE_FONT;
+    const lines = wrapBubble(text, BUBBLE_TEXT_W, (s) => g.measureText(s).width);
+    if (!lines.length) return;
+    const w = Math.ceil(Math.max(...lines.map((l) => g.measureText(l).width))) + BUBBLE_PAD_X * 2;
+    const boxH = BUBBLE_BOX_H + (lines.length - 1) * BUBBLE_LINE_H;
+    const h = boxH + BUBBLE_TAIL_H + 6;
     c.width = w;
-    c.height = 72;
-    g.font = font;
+    c.height = h;
+    // Sizing the canvas resets its state.
+    g.font = BUBBLE_FONT;
     g.fillStyle = 'rgba(255,255,255,0.92)';
     g.beginPath();
-    g.roundRect(2, 2, w - 4, 52, 18);
-    g.moveTo(w / 2 - 10, 54);
-    g.lineTo(w / 2, 68);
-    g.lineTo(w / 2 + 10, 54);
+    g.roundRect(2, 2, w - 4, boxH, 18);
+    g.moveTo(w / 2 - 10, boxH + 2);
+    g.lineTo(w / 2, boxH + 2 + BUBBLE_TAIL_H);
+    g.lineTo(w / 2 + 10, boxH + 2);
     g.fill();
     g.fillStyle = '#1b2433';
     g.textAlign = 'center';
-    g.fillText(shown, w / 2, 39);
+    lines.forEach((l, i) => g.fillText(l, w / 2, 39 + i * BUBBLE_LINE_H));
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-    // A little smaller than the nameplate's 256 px = 1.4 m, sitting just above it.
-    const px = (1.4 / 256) * 0.8;
-    sprite.scale.set(w * px, 72 * px, 1);
+    // Hung by its foot, so a taller bubble still sits just above the name tag.
+    sprite.center.set(0.5, 0);
+    sprite.scale.set(w * BUBBLE_PX, h * BUBBLE_PX, 1);
     sprite.position.y = BUBBLE_Y;
     sprite.renderOrder = 11;
     this.group.add(sprite);
-    this.bubble = { sprite, until: performance.now() + BUBBLE_MS };
+    this.bubble = { sprite, until: performance.now() + bubbleMs(text) };
   }
 
   private clearBubble(): void {
