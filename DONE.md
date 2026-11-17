@@ -2,6 +2,12 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 The chat keyboard's bottom row sits clear of the iPhone's home bar (2026-11-16, branch `keyboard-clear-home-bar`). Players told Oscar the keyboard is tough to use on a phone; Oscar saw that the space bar is so close to the home bar that taps on it were taken as a swipe to another app, a swipe up to close, or (two taps) "Type to Siri"
+  - Cause: the bottom row (123, 🌐, comma, space, full stop, Send) ended 26px of the touch layout above the foot of the screen, about 15 real points on a phone, inside the bottom 21 points an iPhone gives its home bar in landscape
+  - A web page can't turn those gestures off: holding them back is for installed apps only, iPhones have no full-screen mode for pages, and a page added to the Home Screen keeps the bar. So the keys move out of the strip
+  - Fix: the keyboard's panel runs on under the keys as an empty lip 32 real screen points tall (`KEYS_CLEAR_PT`, `keysLiftPx`, `src/game/softkeys.ts`; `--kb-lift`, set by `ChatBox` when the keys open): 54px of the layout on a phone, 38 on a tablet. The keys keep their size and move up by about 17 points; the chat lines above lose that much. On every touch device, not only iPhones: one layout
+  - 🎨 Default for Oscar to keep or change: 32 points. On an iPhone in Safari the page is narrower than the screen (it stops short of the notch), so 32 comes out nearer 29 there
+  - Checked: staged in headless Chrome's phone emulation at 844x390, 667x375 and 1180x820: the space bar ends 32 points above the foot on each, the keys are the same size as before, and tapped keys and spaces type. Tests for the lip's size. Smoke skipped (CSS and one style variable). Not checked on a real iPhone, which is the only place the home bar's gestures show (TODO.md, "Play it on real phones")
 - [x] 💬 Names with a space can log in on a phone again (2026-11-16, branch `dev-rename`). Players told Oscar they couldn't log in when their name has a space
   - Cause: the touch layout counts as "mouse captured" from the page load (`forceActive`), so the game was live behind the join screen and took its keys. Space jumped and was kept from the name box, so "Big Fish" was sent as "BigFish": another account, or a new one. The password box lost spaces the same way. Since the mobile steps merged (2026-11-15)
   - Fix: the game is never active while the join screen is up (`active`, `src/game/game.ts`), which is how it already was with a mouse

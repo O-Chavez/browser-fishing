@@ -854,8 +854,10 @@ body.touch.shopping #tip.bar { bottom: 150px; }
    While typing, chat fills the screen over a light dim: the log at the left, the field and Send above our own
    keyboard (about 40% of the screen), ✕ and the world filter where the 💬 and 🎒 buttons sit. The world shows through
    and still takes drags to look. With 🌐 (the phone's keyboard) the field moves to the top, clear of that keyboard.
-   Key height, keyboard height and the dim are play-test defaults. */
-body.touch #chat.typing { --kb-h: 40vh; position: fixed; inset: 0 !important; width: auto; z-index: 6; padding: 0; gap: 10px; justify-content: flex-end; font-size: 22px; background: linear-gradient(rgba(16, 10, 5, .1), rgba(16, 10, 5, .45)); pointer-events: none; }
+   Under the keys the panel runs on to the foot of the screen as an empty lip (--kb-lift, set by ChatBox from
+   keysLiftPx: about 54px on a phone), so no key sits in the strip an iPhone's home bar takes taps from.
+   Key height, keyboard height, the lip and the dim are play-test defaults. */
+body.touch #chat.typing { --kb-h: calc(40vh - 26px); --kb-lift: 54px; position: fixed; inset: 0 !important; width: auto; z-index: 6; padding: 0; gap: 10px; justify-content: flex-end; font-size: 22px; background: linear-gradient(rgba(16, 10, 5, .1), rgba(16, 10, 5, .45)); pointer-events: none; }
 body.touch #chat.typing .chat-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 12px; pointer-events: auto; }
 body.touch #chat.typing .chat-top button { height: 76px; min-width: 76px; padding: 0 20px; border: 0; border-radius: 20px; font: 900 26px Nunito, ui-rounded, system-ui, sans-serif; color: var(--cream); background: var(--hud-bg); box-shadow: var(--hud-edge); }
 body.touch #chat.typing .chat-x { font-size: 34px; }
@@ -871,7 +873,7 @@ body.touch #chat.soft .chat-field .ph { color: var(--ink-muted); }
 body.touch #chat.soft .chat-field .caret { flex: none; width: 3px; height: 1.1em; margin: 0 1px; background: #2a7bf6; animation: caret 1s steps(1) infinite; }
 @keyframes caret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { body.touch #chat.soft .chat-field .caret { animation: none; } }
-body.touch #chat.soft .chat-keys { display: grid; grid-auto-rows: 1fr; gap: 8px; height: var(--kb-h); padding: 12px 80px 26px; box-sizing: border-box; background: rgba(42, 27, 15, .94); box-shadow: 0 -4px 0 var(--wood-600); pointer-events: auto; touch-action: none; }
+body.touch #chat.soft .chat-keys { display: grid; grid-auto-rows: 1fr; gap: 8px; height: calc(var(--kb-h) + var(--kb-lift)); padding: 12px 80px var(--kb-lift); box-sizing: border-box; background: rgba(42, 27, 15, .94); box-shadow: 0 -4px 0 var(--wood-600); pointer-events: auto; touch-action: none; }
 .chat-keys .row { display: flex; gap: 8px; justify-content: center; min-height: 0; }
 .chat-keys .k { flex: 0 0 calc((100% - 72px) / 10); min-width: 0; border: 0; border-radius: 12px; font: 800 30px Nunito, ui-rounded, system-ui, sans-serif; color: var(--ink); background: var(--paper-3); box-shadow: 0 4px 0 #b99f74; }
 .chat-keys .k.fn { font-size: 26px; background: var(--paper-2); }
