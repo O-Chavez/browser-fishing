@@ -2037,8 +2037,17 @@ interface Bounds {
    */
   high: number;
   wide: number;
+  /**
+   * For things held in front of the body (the campfire band's instruments): how far forward (+z) the piece reaches
+   * over the chest (`CHEST`), and over the lower face where something is held to the mouth (`MOUTH`).
+   */
+  front: number;
+  face: number;
 }
-const NO_BOUNDS: Bounds = { reach: 0, top: 0, low: 2, high: 0, wide: 0 };
+const NO_BOUNDS: Bounds = { reach: 0, top: 0, low: 2, high: 0, wide: 0, front: 0, face: 0 };
+/** The heights (m, at rest) between which a piece counts as in front of the chest, and of the mouth. */
+const CHEST: [number, number] = [0.45, 1.4];
+const MOUTH: [number, number] = [1.42, 1.66];
 
 /** The Wardrobe preview's vertical field of view (degrees). */
 const PREVIEW_FOV = 32;
@@ -2066,6 +2075,8 @@ function boundsOf(t: THREE.Group): Bounds {
         b.reach = Math.max(b.reach, r);
         b.high = Math.max(b.high, v.y);
         b.wide = Math.max(b.wide, Math.abs(v.x), Math.abs(v.z));
+        if (v.y > CHEST[0] && v.y < CHEST[1]) b.front = Math.max(b.front, v.z);
+        if (v.y > MOUTH[0] && v.y < MOUTH[1]) b.face = Math.max(b.face, v.z);
         b.top = Math.max(b.top, v.y + (r + FRAME_SWAY) * FRAME_UP);
         b.low = Math.min(b.low, v.y - (r + FRAME_SWAY) * FRAME_DOWN);
       }
@@ -2108,8 +2119,11 @@ function silhouette(piece: THREE.Object3D): void {
 const PET_GOAL = new THREE.Vector3();
 const REST = restPose();
 
-/** The bare character's top (the head's) and how far its body reaches from its centre line, in metres. */
-const BARE = { top: 1.82, reach: 0.28 };
+/**
+ * The bare character's top (the head's) and how far its body reaches from its centre line, in metres; and how far
+ * forward its chest and its face reach (`Bounds.front`, `Bounds.face`).
+ */
+const BARE = { top: 1.82, reach: 0.28, front: 0.28, face: 0.2 };
 
 /** A character facing +z, about 1.9 tall, without held items. `set` swaps the body color and outfit. */
 export class Character {
@@ -2122,7 +2136,7 @@ export class Character {
   private loose = new THREE.Group();
   /** A playing emote's own objects (`EmotePlay.group`), in the character's space; the pose doesn't move them. */
   readonly effects = new THREE.Group();
-  /** The top of the character with its outfit and how far the outfit reaches out, without the pet (`EmoteCtx`). */
+  /** The top of the character with its outfit, how far the outfit reaches out, and how far forward over the chest and the face, without the pet (`EmoteCtx`). */
   extent = { ...BARE };
   /** What the character wears now (`set`). */
   look!: Look;
@@ -2217,7 +2231,10 @@ export class Character {
         if (!free && o.parent === piece) this.loose.add(o);
         this.grounded.push(o);
       }
-      if (slot !== 'pet') this.extent = { top: Math.max(this.extent.top, pb.high), reach: Math.max(this.extent.reach, pb.wide) };
+      if (slot !== 'pet') {
+        const e = this.extent;
+        this.extent = { top: Math.max(e.top, pb.high), reach: Math.max(e.reach, pb.wide), front: Math.max(e.front, pb.front), face: Math.max(e.face, pb.face) };
+      }
     }
     this.bounds = b;
     // Any unreached piece worn: the whole character goes dark (pieces are fresh clones, so only the body needs restoring).
@@ -2233,6 +2250,12 @@ export class Character {
   /** Moves the body, head and outfit as one piece for an emote (`applyPose`); `null` stands it back at rest. */
   pose(p: EmotePose | null): void {
     applyPose(this.poser, p ?? REST);
+  }
+
+  /** Test hook: how high the body's lowest point is in the world now, pose and all (a seated body's should be its seat's top). */
+  footY(): number {
+    this.group.updateWorldMatrix(true, true);
+    return new THREE.Box3().setFromObject(this.body, true).min.y;
   }
 
   /** Frees the body and head geometry; materials and outfit pieces are left for reuse (see `disposeTree`). */

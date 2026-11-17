@@ -3,7 +3,7 @@ import type { EmoteDef } from '../../data/emotes';
 import type { Character } from '../character';
 import { WATER_ORDER } from '../env';
 import { emoteLook } from './looks';
-import { restPose, type EmotePlay, type EmotePose } from './types';
+import { restPose, type EmotePlay, type EmotePose, type SeatCtx } from './types';
 
 /** After an emote ends, the body takes this long to ease back to rest from wherever the pose left it. */
 const SETTLE_SECS = 0.18;
@@ -57,12 +57,17 @@ export class EmotePlayer {
     return this.cur?.t ?? 0;
   }
 
-  /** Starts an emote from its beginning, ending one already playing. `dark` is the night (0 to 1), `local` the player's own model. */
-  start(def: EmoteDef, dark: number, local: boolean): void {
+  /**
+   * Starts an emote from its beginning, ending one already playing. `dark` is the night (0 to 1), `local` the
+   * player's own model, `seat` the seat a player sitting down takes (its height, and its instrument at one of the
+   * Great Fire's logs).
+   */
+  start(def: EmoteDef, dark: number, local: boolean, seat?: SeatCtx): void {
     this.stop();
     let play: EmotePlay;
     try {
-      play = emoteLook(def.id)({ look: this.char.look, top: this.char.extent.top, reach: this.char.extent.reach, dark, local });
+      const { top, reach, front, face } = this.char.extent;
+      play = emoteLook(def.id)({ look: this.char.look, top, reach, dark, local, front, face, seatTop: seat?.top, band: seat?.band });
     } catch (e) {
       // A broken look shouldn't stop the game: the emote just doesn't show.
       console.warn(`Couldn't build the ${def.id} emote:`, e);

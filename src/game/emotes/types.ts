@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { InstrumentId } from '../../data/band';
 import type { Look } from '../../data/cosmetics';
 
 /**
@@ -39,6 +40,25 @@ export interface EmoteCtx {
   dark: number;
   /** True on the player's own screen, false on another player's avatar. */
   local: boolean;
+  /** How far forward (+z) the outfit reaches over the chest and over the lower face, in metres (about 0.28 and 0.2 bare), for a look that holds something there. */
+  front?: number;
+  face?: number;
+  /** Sitting down (`SIT`): how high the seat's top is over the ground the character stood on (`SEAT_TOP`, src/data/maps.ts), so the body rests on it. */
+  seatTop?: number;
+  /** Seated at one of the Great Fire's logs (`bandLog`, src/data/band.ts): the instrument the character plays while it sits. */
+  band?: BandSeat;
+}
+
+/** What a character sitting down is told about its seat: its height, and its instrument if it is one of the band's. */
+export interface SeatCtx {
+  top?: number;
+  band?: BandSeat;
+}
+
+/** A seat in the campfire band: the log's instrument, and the shared clock (ms) its notes are timed by. */
+export interface BandSeat {
+  id: InstrumentId;
+  clock: () => number;
 }
 
 /** One playing emote. */

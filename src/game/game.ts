@@ -19,7 +19,7 @@ import {
   type Rod,
 } from '../data/content';
 import { audio } from './audio';
-import { MAPS, arrivalSpot, type MapDef } from '../data/maps';
+import { MAPS, arrivalSpot, campSeats, type MapDef } from '../data/maps';
 import { EYE_HEIGHT, isWater, mulberry, standHeight } from './env';
 import { Avatars, whenIdle } from './avatars';
 import { Drops, PICKUP_RANGE, dropSpot, type Drop } from './drops';
@@ -43,7 +43,7 @@ import { NEWS, type NewsEntry } from '../data/news';
 import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
 import { baitWarning, charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, NUDGE_BEAT_SECS, NUDGE_TITLE, nudgeHtml, nudgesDue, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
-import { placeOf, waitText, type DiveEnd, type DiveView } from '../net/protocol';
+import { placeOf, waitText, type DiveEnd, type DiveView, type PlayerInfo } from '../net/protocol';
 import { DiveHud, catchPearlsHtml, endHtml, headHomeHtml, outHtml, ratePill, ratingToast, rodProgress, reedHtml, reedMarkerPick, reedZone, startText, whereText } from './divehud';
 import type { Behaviour } from '../data/dive';
 import { holdFish, markerGrowth, nextBoatPart, nextRodBuy, RATING_NAMES, rodBuyName, seaRating, zoneOpen } from './dive';
@@ -91,9 +91,11 @@ import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type Sa
 import { ABYSSAL, BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { Character, CharacterPreview } from './character';
+import { INSTRUMENTS, bandLog, partBit, seatPrompt } from '../data/band';
 import { EMOTES, EMOTE_GAP_MS, SIT, WHEEL_SLOTS, emoteById, type EmoteDef } from '../data/emotes';
 import type { Circle } from './player';
 import type { Seat } from './town';
+import type { BandSeat, SeatCtx } from './emotes/types';
 import { EmotePlayer } from './emotes/player';
 import { LookWarmer } from './emotes/warm';
 import { ThirdPerson, type CamEnv } from './emotes/thirdperson';
@@ -431,7 +433,7 @@ export class Game {
       this.showOffline('Graphics stopped working', 'Reload to keep playing. Lite graphics will be on, which is easier on your device.', 'gpu');
     });
     canvas.addEventListener('webglcontextrestored', () => $('offline').classList.add('hidden'));
-    this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name));
+    this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name), (x, z) => this.seatAt(x, z));
     // Builds the legend pieces in idle moments and compiles them, so the first one worn nearby doesn't stall.
     this.avatars.warmLegends((o) => this.world.warm(o));
     // The emotes' looks likewise, so the first one played nearby doesn't either.
@@ -973,9 +975,21 @@ export class Game {
         body: this.body.group.visible,
         wheel: this.wheel.isOpen,
         picked: this.wheel.picked?.emote.id ?? null,
+        /** Seated: where the player will stand back up (null when not on a seat). */
+        seat: this.seat && { ...this.seat },
       }),
       /** The emote playing on another player's avatar (by player id), or null. */
       avatarEmote: (id: number) => this.avatars.emoting(id),
+      /** The campfire band: the parts being played (bit i is `INSTRUMENTS[i]`), the fire's distance, and what the audio makes of them (the parts sounding, the bar, the band's and the town layer's levels, the music switch), and how loud the music is now. */
+      band: () => ({ ...this.bandNow, audio: audio.bandState(), level: audio.musicLevel() }),
+      /** How high the lowest point of the player's own body is drawn, and of another player's (by id; the made-up sitters' ids start at 900000): a seated body's is its seat's top. */
+      bodyFoot: () => this.body.footY(),
+      avatarFoot: (id: number) => this.avatars.footY(id),
+      /** Staging only: holds the band's players' clock at `ms` (null lets it run), and seats made-up players (`fakeSitters`). */
+      bandClock: (ms: number | null) => { this.bandClockAt = ms; },
+      bandFakes: (sitters: Parameters<Game['fakeSitters']>[0]) => this.fakeSitters(sitters),
+      /** Where another player's avatar is drawn (by player id), or null while it's hidden. */
+      avatarAt: (id: number) => this.avatars.drawnAt(id),
       netId: () => this.net.id,
       openMenu: (tab: string) => this.openMenu(tab),
       /** The "What's new" check that runs on joining. */
@@ -2674,7 +2688,8 @@ export class Game {
     if (def !== SIT) this.leaveSeat();
     this.emote = def;
     this.body.set(this.s.look);
-    this.bodyEmotes.start(def, this.world.night, true);
+    // Sitting down at one of the Great Fire's logs picks up its instrument (the player already stands on the seat).
+    this.bodyEmotes.start(def, this.world.night, true, def === SIT ? this.seatAt(this.player.x, this.player.z) : undefined);
     this.tp.start(def.camera, def.seconds, def.cameraDistance, def.cameraTurn);
     // Where the player stands goes first (position updates are throttled), so the others' copies start on the right spot.
     this.net.send({ t: 'pos', x: this.player.x, z: this.player.z, yaw: this.world.yaw });
@@ -2834,7 +2849,7 @@ export class Game {
       // players never share one.
       const taken = (s: Seat) => w.others.some((o) => (o.x - s.x) ** 2 + (o.z - s.z) ** 2 < SEAT_TAKEN * SEAT_TAKEN);
       const seat = town.seatNear(x, z, SEAT_RANGE, (s) => looking(Math.atan2(x - s.x, z - s.z)) && !taken(s));
-      if (seat) spots.push({ d: Math.hypot(seat.x - x, seat.z - z), label: 'Sit down', act: () => this.sit(seat) });
+      if (seat) spots.push({ d: Math.hypot(seat.x - x, seat.z - z), label: seatPrompt(this.map, seat.x, seat.z), act: () => this.sit(seat) });
       for (const b of town.bottles) {
         if (this.s.bottles.includes(b.id)) continue;
         const db = Math.hypot(b.pos.x - x, b.pos.z - z);
@@ -3490,6 +3505,7 @@ export class Game {
     const sea = this.world.sea;
     this.screenSpray.update(dt, sea ? this.world.mood : 0, sea?.slam ?? 0, this.world.night);
     audio.seaSound(dt, sea ? { mood: this.world.mood, slam: sea.slam, rise: sea.swell > 0.05 ? Math.max(-1, Math.min(1, sea.motion.heave / sea.swell)) : 0, night: this.world.night, buoy: sea.buoyAlongside } : null);
+    this.playBand();
     this.drawGauge(now / 1000);
     if (this.phase !== this.shownPhase) {
       // CSS hides parts of the touch HUD by phase (e.g. the hotbar during a fight).
@@ -3556,6 +3572,75 @@ export class Game {
     if (fishing === this.ctxShown) return;
     this.ctxShown = fishing;
     $('ctx').classList.toggle('hidden', !fishing);
+  }
+
+  /** The campfire band as last worked out (`playBand`): the parts being played, as a mask, and how far the fire is (m). */
+  private bandNow = { mask: 0, dist: Infinity };
+  /**
+   * The campfire band (`src/data/band.ts`), each frame: a player seated on one of the Great Fire's six logs plays
+   * that log's instrument. Who sits where is already known here (this player's own seat, and the seated avatars
+   * of the others on this map), so every player works out the same band with no message for it, and the shared
+   * clock keeps them in time. Away from the town (a charter, the casino) nobody plays and the tune is as it was.
+   */
+  private playBand(): void {
+    const map = this.map;
+    let mask = 0;
+    let dist = Infinity;
+    if (map.camp && !this.net.dive) {
+      const part = (x: number, z: number) => {
+        const log = bandLog(map, x, z);
+        if (log >= 0) mask |= partBit(log);
+      };
+      if (this.emote === SIT) part(this.player.x, this.player.z);
+      for (const p of this.net.players.values()) {
+        if (p.id !== this.net.id && placeOf(p) === this.here() && this.avatars.emoting(p.id) === SIT.id) part(p.x, p.z);
+      }
+      dist = Math.hypot(this.player.x - map.campfire.x, this.player.z - map.campfire.z);
+    }
+    this.bandNow = { mask, dist };
+    audio.band(mask, dist, this.net.now());
+    // An instrument somebody plays is in their hands, not standing by its log.
+    this.world.town?.setBand(mask);
+  }
+
+  /** Test hook: the band's clock held at a moment (ms), so a staged picture shows the hands at a chosen beat. */
+  private bandClockAt: number | null = null;
+  /** The clock the band's players move by: the server's shared one (`Net.now`), like the notes. */
+  private bandClock = (): number => this.bandClockAt ?? this.net.now();
+  /**
+   * What a player sitting down at this spot is told about the seat (`SeatCtx`): how high it is, from the seat that
+   * is there (a seated player stands on the seat's own spot; another player's is known to a few centimetres), and
+   * its instrument.
+   */
+  private seatAt(x: number, z: number): SeatCtx {
+    return { top: this.world.town?.seatNear(x, z, SEAT_TAKEN)?.top, band: this.bandSeat(x, z) };
+  }
+  /** The instrument a player seated at this spot plays (`EmoteCtx.band`): one for each seat of the Great Fire's six logs, none anywhere else. */
+  private bandSeat(x: number, z: number): BandSeat | undefined {
+    const log = this.net.dive ? -1 : bandLog(this.map, x, z);
+    return log < 0 ? undefined : { id: INSTRUMENTS[log].id, clock: this.bandClock };
+  }
+
+  /**
+   * Test hook, for staging only (`scripts/band-views.ts`): made-up players seated on camp seats (`campSeats`'s
+   * numbers) or at a spot (a bench's seat), each in the look given. They are put in the list of players as the server's would be and sat down the
+   * way a real player's avatar is, so they hold and play their logs' instruments and count in the band; a new call
+   * replaces the last one's, and an empty list clears them. Never called by the game itself.
+   */
+  private fakeSitters(sitters: { seat?: number; at?: { x: number; z: number; facing: number }; look?: Partial<Look>; name?: string }[]): void {
+    const FAKE_ID = 900_000;
+    for (const id of [...this.net.players.keys()]) if (id >= FAKE_ID) this.net.players.delete(id);
+    const seats = campSeats(this.map);
+    const made: PlayerInfo[] = [];
+    sitters.forEach((f, i) => {
+      const seat = f.at ?? seats[f.seat ?? -1];
+      if (!seat) return;
+      const p: PlayerInfo = { id: FAKE_ID + i, name: f.name ?? `Test ${i + 1}`, map: this.map.id, x: seat.x, z: seat.z, yaw: seat.facing + Math.PI, look: { ...this.s.look, ...f.look }, coins: 0 };
+      this.net.players.set(p.id, p);
+      made.push(p);
+    });
+    this.avatars.sync(this.net.players, this.net.id, this.here());
+    for (const p of made) this.avatars.emote(p, SIT, this.world.night);
   }
 
   /** Where this player is for seeing others: the map, or their dive's sea. */

@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { LOG, archPosts, atBearing, campLogs, campRim, campSeats, seatPlanks, type Arc, type CampDef, type MapDef, type NpcDef, type Spot } from '../data/maps';
+import { LOG, SEAT_TOP, archPosts, atBearing, campLogs, campRim, campSeats, campStands, seatPlanks, type Arc, type CampDef, type MapDef, type NpcDef, type Spot } from '../data/maps';
 import { DOCK_TOP, REED_WHARF, groundHeight, onDock, smooth, standHeight, terrainHeight, waveHeight } from './env';
 import { LOCATIONS } from '../data/content';
 import { DARK, WOOD, ball, cyl, limb, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
+import { INSTRUMENTS, partBit } from '../data/band';
+import { restInstrument } from './instruments';
 import { NpcWalker, type Bystander } from './npcwalk';
 import { glowTag } from './nightglow';
 import { BOARD_POSTS, FurthestBoard } from './furthestboard';
@@ -73,13 +75,18 @@ export interface TownBottle {
 
 /** Cottages, cobbled streets, townsfolk and hidden bottles around the shop. */
 /** A place to sit: where the sitter's body rests and the way they face (0 = toward +z). */
-export interface Seat { x: number; z: number; facing: number }
+/** A place to sit: where the sitter rests and which way they face, and how high the seat's top is over the ground there (`SEAT_TOP`). */
+export interface Seat { x: number; z: number; facing: number; top: number }
 
 export class Town {
   readonly group = new THREE.Group();
   readonly colliders: Circle[] = [];
   /** Places to sit: two on every bench and every log seat, one on each plank of the campfire's seat wall. */
   readonly seats: Seat[] = [];
+  /** The campfire band's instruments standing by their fire logs, in the logs' order (`INSTRUMENTS`). */
+  readonly instruments: THREE.Object3D[] = [];
+  /** The instruments being played (`setBand`), which are in their players' hands. */
+  private bandMask = 0;
   readonly npcs: TownNpc[] = [];
   readonly bottles: TownBottle[] = [];
   private bottleMeshes = new Map<string, THREE.Object3D>();
@@ -124,7 +131,7 @@ export class Town {
     this.buildFences();
     this.buildBottles();
     this.buildCozy();
-    mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.bottleMeshes.values(), ...(this.plane ? [this.plane] : []), ...(this.furthest ? [this.furthest.face.mesh] : [])]);
+    mergeStatic(this.group, [...this.heads.map((h) => h.body), ...this.instruments, ...this.bottleMeshes.values(), ...(this.plane ? [this.plane] : []), ...(this.furthest ? [this.furthest.face.mesh] : [])]);
     if (map.worms) this.buildWormPatch(map.worms.x, map.worms.z);
   }
 
@@ -158,6 +165,13 @@ export class Town {
 
   private solid(x: number, z: number, r: number): void {
     this.colliders.push({ x, z, r });
+  }
+
+  /** Which of the band's instruments are being played, bit i for log i (`partBit`): each of those is off its stand, in its players' hands. */
+  setBand(mask: number): void {
+    if (mask === this.bandMask) return;
+    this.bandMask = mask;
+    this.instruments.forEach((g, i) => (g.visible = !(mask & partBit(i))));
   }
 
   /** The nearest seat within `range` metres of a spot that passes `ok`, if any. */
@@ -290,7 +304,7 @@ export class Town {
   private bench(x: number, z: number, facing: number): void {
     const b = new THREE.Group();
     const seat = rbox(1.7, 0.1, 0.45, WOOD, 0.03);
-    seat.position.y = 0.5;
+    seat.position.y = SEAT_TOP.bench - 0.05;
     const back = rbox(1.7, 0.4, 0.07, WOOD, 0.03);
     back.position.set(0, 0.8, -0.22);
     for (const sx of [-0.7, 0.7]) {
@@ -300,7 +314,7 @@ export class Town {
     }
     b.add(seat, back);
     // Room for two, side by side.
-    for (const lx of [-0.42, 0.42]) this.seats.push({ x: x + lx * Math.cos(facing), z: z - lx * Math.sin(facing), facing });
+    for (const lx of [-0.42, 0.42]) this.seats.push({ x: x + lx * Math.cos(facing), z: z - lx * Math.sin(facing), facing, top: SEAT_TOP.bench });
     this.at(b, x, z, facing, standHeight(x, z));
     this.solid(x, z, 0.8);
   }
@@ -1264,7 +1278,8 @@ export class Town {
     this.disc(cx, cz, camp.apron.r, 12, [camp.r - 0.1, camp.apron.from, camp.apron.to]);
 
     // The seat wall: an arc of stone from one end to the other, its foot well into the bank that falls away behind it.
-    const WALL = 0.4;
+    // The planks on its top are 0.06 m thick: their tops are the seat (`SEAT_TOP.wall`).
+    const WALL = SEAT_TOP.wall - 0.06;
     const { from, to } = camp.seatWall;
     const shape = new THREE.Shape();
     // Drawn in the shape's x-y plane and turned flat, so its angles are bearings less 90° too.
@@ -1330,14 +1345,23 @@ export class Town {
 
     // The log seats: round the fire they lie along its ring, on the beach as the map turns them.
     for (const l of campLogs(this.map)) {
-      const log = cyl(0.22, 0.22, 1.5, 0x7a5232, 9);
+      const log = cyl(LOG.thick, LOG.thick, LOG.len, 0x7a5232, 9);
       log.rotation.z = Math.PI / 2;
       const seat = new THREE.Group();
       seat.add(log);
-      this.at(seat, l.x, l.z, l.facing, standHeight(l.x, l.z) + 0.2);
+      this.at(seat, l.x, l.z, l.facing, standHeight(l.x, l.z) + LOG.rest);
       for (const side of LOG.solids) this.solid(l.x + side * Math.cos(l.facing), l.z - side * Math.sin(l.facing), LOG.r);
     }
     this.seats.push(...campSeats(this.map));
+    // The band's instruments (src/data/band.ts), each waiting at the end of its fire log until someone sits there
+    // (`setBand`). They are props to walk past: no collider and no light.
+    campStands(this.map).forEach((s, i) => {
+      const id = INSTRUMENTS[i]?.id;
+      if (!id) return;
+      const inst = restInstrument(id, camp.logs.stands[i]);
+      this.at(inst.group, s.x, s.z, s.facing, standHeight(s.x, s.z));
+      this.instruments.push(inst.group);
+    });
 
     // Behind the panels: the retaining wall that holds the cut bank, either side of the stall's back; the hedge
     // behind it, planted at the wall's foot and clipped a metre above its top, with a stone pier a little taller at

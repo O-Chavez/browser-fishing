@@ -6,8 +6,9 @@ import { placeOf, type Activity, type PlayerInfo } from '../net/protocol';
 import { drawAnchor } from './anchor';
 import { bubbleMs, wrapBubble } from './bubbletext';
 import { Character } from './character';
-import type { EmoteDef } from '../data/emotes';
+import { SIT, type EmoteDef } from '../data/emotes';
 import { EmotePlayer } from './emotes/player';
+import type { SeatCtx } from './emotes/types';
 import { standHeight } from './env';
 import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
 import { remoteHang, remoteScale } from './fishscale';
@@ -81,6 +82,8 @@ class Avatar {
     info: PlayerInfo,
     private scene: THREE.Scene,
     private surface: (x: number, z: number) => number,
+    /** The seat a player sitting at a spot is on: its height, and its instrument at one of the Great Fire's logs (`Game.seatAt`). */
+    private seatAt: (x: number, z: number) => SeatCtx | undefined = () => undefined,
   ) {
     const mat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
     this.char = new Character(info.look);
@@ -235,7 +238,14 @@ class Avatar {
       return;
     }
     this.emoteAt = { x: at.x, z: at.z };
-    this.emotes.start(def, dark, false);
+    // All that is known of a seated player is that they sit and where, which is enough to tell the seat: how high
+    // it is, and at one of the Great Fire's logs the instrument they hold.
+    this.emotes.start(def, dark, false, def.id === SIT.id ? this.seatAt(at.x, at.z) : undefined);
+  }
+
+  /** Test hook: how high the body's lowest point is drawn. */
+  footY(): number {
+    return this.char.footY();
   }
 
   /** The id of the emote playing on the avatar, or null. */
@@ -392,6 +402,8 @@ export class Avatars {
     private surface: (x: number, z: number) => number,
     /** Whether a player's name gets the supporter 💗. */
     private supporter: (name: string) => boolean = () => false,
+    /** The seat a player sitting at a spot is on (`Avatar`). */
+    private seatAt: (x: number, z: number) => SeatCtx | undefined = () => undefined,
   ) {
     // A hidden stand-in that never leaves the scene, so `World.prewarm` compiles the avatar shaders
     // before other players show up, and they stay compiled while nobody else is around.
@@ -445,7 +457,7 @@ export class Avatars {
       if (p.id === selfId) continue;
       let a = this.list.get(p.id);
       if (!a) {
-        a = new Avatar(p, this.scene, this.surface);
+        a = new Avatar(p, this.scene, this.surface, this.seatAt);
         this.list.set(p.id, a);
       }
       a.setLook(p.look);
@@ -475,6 +487,20 @@ export class Avatars {
   /** The id of the emote playing on player `id`'s avatar, or null. */
   emoting(id: number): string | null {
     return this.list.get(id)?.emoting ?? null;
+  }
+
+  /** Test hook: where player `id`'s avatar is drawn, or null while it's hidden. */
+  drawnAt(id: number): { x: number; y: number; z: number } | null {
+    const a = this.list.get(id);
+    if (!a?.group.visible) return null;
+    const { x, y, z } = a.group.position;
+    return { x, y, z };
+  }
+
+  /** Test hook: how high the lowest point of player `id`'s body is drawn, or null while it's hidden. */
+  footY(id: number): number | null {
+    const a = this.list.get(id);
+    return a?.group.visible ? a.footY() : null;
   }
 
   /** `viewX`/`viewZ` is the local player, for fading chat bubbles by distance. */

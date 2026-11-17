@@ -71,8 +71,12 @@ export interface Arc { r: number; from: number; to: number }
 export interface CampDef {
   /** Radius of the terrace's cobbles; a kerb of flat stones runs round them. */
   r: number;
-  /** Log seats for two round the fire, lying along a ring `r` m out: each one's bearing. */
-  logs: { r: number; at: number[] };
+  /**
+   * Log seats for two round the fire, lying along a ring `r` m out: each one's bearing. `stands` says at which end
+   * of each log its instrument waits while nobody plays it (`campStands`; the band is `src/data/band.ts`): 1 is the
+   * end on its sitters' left, -1 the one on their right.
+   */
+  logs: { r: number; at: number[]; stands: (1 | -1)[] };
   /** The low stone seat wall along the cove-side rim, from one end to the other; its plank top leaves `gap` m clear at `pier`, where the stone runs through. */
   seatWall: { from: number; to: number; pier: number; gap: number };
   /** The crown of lights: tall posts on the rim at these bearings, a run of bulbs from each to the next and over the way in by the arch's cove-side post. */
@@ -169,7 +173,10 @@ const STEP = { rise: 0.4 / 3, depth: 0.42, treads: 3 };
 const CAMP_STEPS = { ...byFire(TERRACE + 0.3, 180), facing: Math.PI, w: 2 };
 const CAMP: CampDef = {
   r: TERRACE,
-  logs: { r: 2.9, at: [20, 65, 110, 150, 215, 310] },
+  // Each instrument waits at its sitters' right-hand end, so there is one to a gap between logs and the ways in from
+  // the gate (345°) and the beach steps (180°) stay empty; the last log's right-hand end is the gate's opening, so
+  // its jug stands at the other. Play-test: which ends.
+  logs: { r: 2.9, at: [20, 65, 110, 150, 215, 310], stands: [-1, -1, -1, -1, -1, 1] },
   // The wall stops short of the arch's cove-side post, which stands on its line.
   seatWall: { from: 200, to: 328, pier: 267, gap: 0.8 },
   // None stands in a walking line or in front of a board: they flank the boards, the bays and the steps.
@@ -244,8 +251,11 @@ export function seatPlanks(camp: CampDef): { deg: number; len: number }[] {
   }
   return planks;
 }
-/** A log seat: where its two sitters rest and its two colliders stand, as metres along it from its middle, and the colliders' radius. */
-export const LOG = { seats: [-0.38, 0.38], solids: [-0.45, 0.45], r: 0.3 };
+/**
+ * A log seat: where its two sitters rest and its two colliders stand, as metres along it from its middle, and the
+ * colliders' radius; and the log itself, `len` m long and `thick` m in radius, its middle line `rest` m over the ground.
+ */
+export const LOG = { seats: [-0.38, 0.38], solids: [-0.45, 0.45], r: 0.3, len: 1.5, thick: 0.22, rest: 0.2 };
 /** The middle of every log seat at the camp, round the fire and on the beach; `facing` is the way its sitters look. */
 export function campLogs(map: MapDef): Spot[] {
   const camp = map.camp;
@@ -257,16 +267,38 @@ export function campLogs(map: MapDef): Spot[] {
   };
   return [...camp.logs.at.map((deg) => facingFire(deg, camp.logs.r)), ...camp.beachLogs];
 }
-/** Every seat at the camp: two on each log, one on each plank of the seat wall, facing the fire. */
-export function campSeats(map: MapDef): Spot[] {
+/**
+ * Where each fire log's instrument waits while nobody plays it, in the fire logs' order: the spot on the ground
+ * under the middle of the log's end (`CampDef.logs.stands` says which end), turned so that a prop's +x there points
+ * on along the log, away from it. The instruments' builders (src/game/instruments.ts) rest each one against or
+ * beside that end.
+ */
+export function campStands(map: MapDef): Spot[] {
+  const camp = map.camp;
+  if (!camp) return [];
+  return campLogs(map)
+    .slice(0, camp.logs.at.length)
+    .map((l, i) => {
+      const end = camp.logs.stands[i] ?? -1;
+      const lx = (end * LOG.len) / 2;
+      return { x: l.x + lx * Math.cos(l.facing), z: l.z - lx * Math.sin(l.facing), facing: end > 0 ? l.facing : l.facing + Math.PI };
+    });
+}
+/**
+ * How high each kind of seat's top is over the ground it stands on, where a seated body rests (the seated look,
+ * src/game/emotes/looks/sit.ts): a log seat, a plank of the campfire's seat wall, and a town bench.
+ */
+export const SEAT_TOP = { log: LOG.rest + LOG.thick, wall: 0.46, bench: 0.55 };
+/** Every seat at the camp: two on each log, one on each plank of the seat wall, facing the fire; `top` is the seat's height (`SEAT_TOP`). */
+export function campSeats(map: MapDef): (Spot & { top: number })[] {
   const camp = map.camp;
   if (!camp) return [];
   const fire = map.campfire;
   return [
-    ...campLogs(map).flatMap((l) => LOG.seats.map((lx) => ({ x: l.x + lx * Math.cos(l.facing), z: l.z - lx * Math.sin(l.facing), facing: l.facing }))),
+    ...campLogs(map).flatMap((l) => LOG.seats.map((lx) => ({ x: l.x + lx * Math.cos(l.facing), z: l.z - lx * Math.sin(l.facing), facing: l.facing, top: SEAT_TOP.log }))),
     ...seatPlanks(camp).map((p) => {
       const { x, z } = atBearing(fire, campRim(camp), p.deg);
-      return { x, z, facing: faceToward(x, z, fire.x, fire.z) };
+      return { x, z, facing: faceToward(x, z, fire.x, fire.z), top: SEAT_TOP.wall };
     }),
   ];
 }

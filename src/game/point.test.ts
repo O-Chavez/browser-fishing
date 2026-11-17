@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FISH } from '../data/content';
-import { LOG, MAPS, archPosts, atBearing, campLogs, campRim, campSeats, onCobbles, readingSpot, seatPlanks, type Spot } from '../data/maps';
-import { KETTLE_COUNTER_Z, KETTLE_KEEPER, TREAD_DEPTH, buildLanternPier } from './camp';
+import { INSTRUMENTS, bandLog, partBit, seatPrompt } from '../data/band';
+import { LOG, MAPS, SEAT_TOP, archPosts, atBearing, campLogs, campRim, campSeats, campStands, onCobbles, readingSpot, seatPlanks, type Spot } from '../data/maps';
+import { KETTLE_COUNTER_Z, KETTLE_KEEPER, TREAD_DEPTH, buildHearth, buildLanternPier } from './camp';
 import { ROCKET_JETTY, groundHeight, isWater, onLanding, setAprons, setLevels, setPad, terrainHeight } from './env';
 import type { Hub, LeaderRow } from './hub';
 import type { Circle } from './player';
@@ -129,6 +130,40 @@ describe('Ember Point', () => {
       const gap = Math.min(...ends(a).flatMap((p) => ends(b).map((q) => apart(p, q)))) - 2 * LOG.r;
       expect(gap, `at ${way}°`).toBeGreaterThan(1.7);
     }
+  });
+
+  it("offers each fire log's instrument in its seats' prompt, and plain sitting everywhere else", () => {
+    expect(camp.logs.stands).toHaveLength(INSTRUMENTS.length);
+    seats.forEach((s, i) => {
+      const log = i < fireLogs.length * LOG.seats.length ? Math.floor(i / LOG.seats.length) : -1;
+      expect(bandLog(map, s.x, s.z), `seat ${i}`).toBe(log);
+      expect(seatPrompt(map, s.x, s.z), `seat ${i}`).toBe(log < 0 ? 'Sit down' : `Sit down · play the ${INSTRUMENTS[log].name}`);
+    });
+    expect(seatPrompt(map, seats[0].x, seats[0].z)).toBe('Sit down · play the banjo');
+    expect(seatPrompt(map, seats[11].x, seats[11].z)).toBe('Sit down · play the jug');
+    // The beach's logs and bench, the cove wall and the town's benches are quiet seats; so is a map with no camp.
+    for (const b of map.town.benches) expect(seatPrompt(map, b.x, b.z)).toBe('Sit down');
+    expect(seatPrompt({ ...map, camp: undefined }, seats[0].x, seats[0].z)).toBe('Sit down');
+  });
+
+  it("stands each fire log's instrument at an end of its own log, off the ways in", () => {
+    const stands = campStands(map);
+    expect(stands).toHaveLength(fireLogs.length);
+    const bearingOf = (p: { x: number; z: number }) => ((Math.atan2(p.x - fire.x, p.z - fire.z) * 180) / Math.PI + 360) % 360;
+    const round = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
+    stands.forEach((s, i) => {
+      const l = fireLogs[i];
+      // On the log's own end: half a log from its middle, along it.
+      expect(apart(s, l)).toBeCloseTo(LOG.len / 2, 6);
+      expect(Math.abs(fromFire(s) - Math.hypot(camp.logs.r, LOG.len / 2))).toBeLessThan(1e-6);
+      // Its +x there points on along the log, away from its middle.
+      const on = { x: s.x + Math.cos(s.facing), z: s.z - Math.sin(s.facing) };
+      expect(apart(on, l)).toBeCloseTo(LOG.len / 2 + 1, 6);
+      // Not the end that borders the way in from the gate or the way to the beach steps.
+      for (const way of [345, 180]) expect(round(bearingOf(s), way), `${INSTRUMENTS[i].id} and the way at ${way}°`).toBeGreaterThan(24 - (i === 3 ? 9 : 0));
+    });
+    // The whistle is the one on the steps' side: it stands on its log, not beside it (as built, below).
+    expect(round(bearingOf(stands[3]), 180)).toBeLessThan(24);
   });
 
   it('stands the panels on the back rim facing the fire, 2.5 m or more apart, each read from the clear ring', () => {
@@ -370,6 +405,111 @@ describe('Ember Point', () => {
       const gap = 2 * south.r * Math.sin((((north.from - south.to) / 2) * Math.PI) / 180);
       expect(gap).toBeGreaterThan(3.3);
       expect(gap).toBeLessThan(3.8);
+    });
+
+    it('knows how high every seat is: the logs\' tops, the seat wall\'s planks and the benches', () => {
+      const tops = { log: 0, wall: 0, bench: 0 };
+      for (const s of town.seats) {
+        const kind = (Object.keys(SEAT_TOP) as (keyof typeof SEAT_TOP)[]).find((k) => SEAT_TOP[k] === s.top);
+        expect(kind, `seat at ${s.x.toFixed(1)}, ${s.z.toFixed(1)}`).toBeDefined();
+        tops[kind!]++;
+      }
+      // Six logs at the fire and two on the beach, twelve planks, and the town's benches.
+      expect(tops.log).toBe(16);
+      expect(tops.wall).toBe(12);
+      expect(tops.bench).toBe(map.town.benches.length * 2 + 4);
+      // A camp seat is found again from where a seated player is, to a few centimetres.
+      for (const s of seats) expect(town.seatNear(s.x + 0.03, s.z - 0.03, 0.4)?.top).toBe(s.top);
+      expect(SEAT_TOP.log).toBeCloseTo(LOG.rest + LOG.thick, 6);
+    });
+
+    describe("the band's instruments", () => {
+      /** Every vertex of a standing instrument, on the map. */
+      const points = (g: THREE.Object3D): THREE.Vector3[] => {
+        town.group.updateMatrixWorld(true);
+        const out: THREE.Vector3[] = [];
+        g.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          const pos = m.geometry.getAttribute('position');
+          for (let i = 0; i < pos.count; i++) out.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld));
+        });
+        return out;
+      };
+      const inner = Math.hypot(camp.logs.r, LOG.solids[1]) + LOG.r;
+      /** Over one of the fire's logs: within its length and its thickness. */
+      const onLog = (p: { x: number; z: number }) =>
+        fireLogs.some((l) => {
+          const [dx, dz] = [p.x - l.x, p.z - l.z];
+          return Math.abs(dx * Math.cos(l.facing) - dz * Math.sin(l.facing)) <= LOG.len / 2 && Math.abs(dx * Math.sin(l.facing) + dz * Math.cos(l.facing)) <= LOG.thick;
+        });
+
+      it('stand one by each fire log and none on the beach, as six props of their own', () => {
+        expect(town.instruments).toHaveLength(6);
+        town.instruments.forEach((g, i) => {
+          const pts = points(g);
+          expect(pts.length, INSTRUMENTS[i].id).toBeGreaterThan(50);
+          // Its own log is the nearest, and it is within a step of that log's end.
+          const mid = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(pts.length);
+          const nearest = [...campLogs(map)].sort((a, b) => apart(a, mid) - apart(b, mid))[0];
+          expect(nearest).toEqual(fireLogs[i]);
+          expect(apart(mid, campStands(map)[i])).toBeLessThan(0.45);
+          for (const l of camp.beachLogs) expect(apart(mid, l)).toBeGreaterThan(4);
+          // Kept out of the town's bake, so each can be hidden on its own.
+          expect(g.parent).toBe(town.group);
+        });
+      });
+
+      it('keep inside the band of the logs: off the clear ring behind, off the feet in front, off the seats and off the two ways in', () => {
+        const ways = [345, 180].map((deg) => atBearing(fire, camp.r, deg));
+        town.instruments.forEach((g, i) => {
+          const id = INSTRUMENTS[i].id;
+          for (const p of points(g)) {
+            const at = { x: p.x, z: p.z };
+            // Behind it the ring to walk starts where the logs' colliders end; before it are the sitters' feet.
+            expect(fromFire(at), `${id} and the clear ring`).toBeLessThanOrEqual(inner);
+            expect(fromFire(at), `${id} and the sitters' feet`).toBeGreaterThan(camp.logs.r - LOG.r);
+            // A metre either side of the gate's line and of the beach steps' line is the way through; only what stands
+            // on a log itself (the whistle) is nearer, as the log is.
+            for (const way of ways) expect(offLine(at, fire, way) > 1 || onLog(at), `${id} and a way in`).toBe(true);
+            for (const s of seats) expect(apart(at, s), `${id} and a seat`).toBeGreaterThan(0.2);
+            // On the cobbles (or the log), no higher than a sitter's shoulder.
+            expect(p.y, id).toBeGreaterThan(0.85 - 0.015);
+            expect(p.y, id).toBeLessThan(0.85 + 1.05);
+          }
+        });
+        // And off each other: no two share a gap between logs closely enough to touch.
+        const boxes = town.instruments.map((g) => new THREE.Box3().setFromPoints(points(g)).expandByScalar(0.1));
+        for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) expect(boxes[i].intersectsBox(boxes[j]), `${INSTRUMENTS[i].id} and ${INSTRUMENTS[j].id}`).toBe(false);
+      });
+
+      it('add nothing to walk into and no light', () => {
+        // Inside the logs' ring the only colliders are the hearth's and the two on each log, as before the band.
+        const near = solids.filter((c) => fromFire(c) - c.r <= inner);
+        const onLogs = near.filter((c) => fireLogs.some((l) => LOG.solids.some((side) => apart(c, { x: l.x + side * Math.cos(l.facing), z: l.z - side * Math.sin(l.facing) }) < 1e-6)));
+        expect(onLogs).toHaveLength(fireLogs.length * LOG.solids.length);
+        for (const c of onLogs) expect(c.r).toBe(LOG.r);
+        const hearth = near.filter((c) => !onLogs.includes(c));
+        expect(hearth).toHaveLength(buildHearth().solids.length);
+        for (const c of hearth) expect(fromFire(c) + c.r).toBeLessThan(camp.logs.r - LOG.r);
+        // None stands where an instrument does.
+        for (const s of campStands(map)) for (const c of near) expect(onLogs.includes(c) || apart(c, s) > c.r + 0.6).toBe(true);
+        for (const g of town.instruments) g.traverse((o) => expect((o as THREE.Light).isLight).toBeFalsy());
+      });
+
+      it('leave their stands while they are played and come back after, the same objects shown and hidden', () => {
+        const before = [...town.instruments];
+        const kids = before.map((g) => g.children.length);
+        expect(before.every((g) => g.visible)).toBe(true);
+        town.setBand(partBit(0) | partBit(4));
+        expect(town.instruments.map((g) => g.visible)).toEqual([false, true, true, true, false, true]);
+        town.setBand(partBit(4));
+        expect(town.instruments.map((g) => g.visible)).toEqual([true, true, true, true, false, true]);
+        town.setBand(0);
+        expect(town.instruments.every((g) => g.visible)).toBe(true);
+        expect(town.instruments).toEqual(before);
+        expect(town.instruments.map((g) => g.children.length)).toEqual(kids);
+      });
     });
 
     it("stands Bram Tinder behind his stall's counter, talked to across it", () => {
