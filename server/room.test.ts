@@ -937,7 +937,7 @@ describe('emotes', () => {
     s.emotes.push('twilight', 'abyss');
     buy('master');
     expect(s.emotes).toEqual(['kelp', 'twilight', 'abyss', 'master']);
-    expect(s).toMatchObject({ coins: 1e9 - 20_000_000, pearls: 1e9 - 150_000 });
+    expect(s).toMatchObject({ coins: 1e9 - 250_000_000, pearls: 1e9 - 1_000_000 });
   });
 
   it('takes bought emotes away with an account reset', () => {
