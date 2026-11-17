@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { touchLayoutWidth } from './touch';
+import { keepsNativeTouch, touchLayoutWidth } from './touch';
 
 describe('touchLayoutWidth', () => {
   it('keeps phones near 0.6x and caps at 1400', () => {
@@ -13,5 +13,19 @@ describe('touchLayoutWidth', () => {
     expect(touchLayoutWidth(320, 480)).toBe(1000);
     expect(touchLayoutWidth(1180, 820)).toBe(1400);
     expect(touchLayoutWidth(0, 0)).toBe(1400);
+  });
+});
+
+describe('keepsNativeTouch', () => {
+  const el = (inTop: boolean) => ({ closest: (sel: string) => (inTop && sel === '.t-top' ? {} : null) }) as unknown as EventTarget;
+
+  it('leaves the top buttons to the browser, since they act on the click', () => {
+    expect(keepsNativeTouch(el(true))).toBe(true);
+  });
+
+  it('cancels touches everywhere else on the controls, and on targets that are not elements', () => {
+    expect(keepsNativeTouch(el(false))).toBe(false);
+    expect(keepsNativeTouch(null)).toBe(false);
+    expect(keepsNativeTouch({} as EventTarget)).toBe(false);
   });
 });
