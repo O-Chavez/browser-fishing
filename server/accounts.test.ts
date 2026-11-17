@@ -28,6 +28,9 @@ describe('accounts', () => {
     expect(store.auth('Ann', B)).not.toHaveProperty('need');
     expect(store.auth('x', A)).toMatchObject({ ok: false });
     expect(store.auth('Ann', 'short')).toMatchObject({ ok: false, msg: 'Bad token.' });
+    // Cut to 16 characters at a space: the name keeps no space at its end, so the same browser finds it again.
+    expect(store.auth('abcdefghijklmno pq', B)).toMatchObject({ ok: true, created: true, account: { name: 'abcdefghijklmno' } });
+    expect(store.auth('abcdefghijklmno pq', B)).toMatchObject({ ok: true, created: false });
   });
 
   it('refuses to claim a rude name, but an account that already has one keeps logging in', async () => {
@@ -358,6 +361,52 @@ describe('renaming', () => {
     room.join({ send: (m) => again.push(m) }, acct);
     expect(again.find((m) => m.t === 'welcome')).toMatchObject({ name: 'Bea', renameIn: RENAME_COOLDOWN_MS });
     expect(again.find((m) => m.t === 'welcome')).toMatchObject({ players: expect.arrayContaining([expect.objectContaining({ id, name: 'Bea' })]) });
+  });
+
+  it('dev /rename changes a name for the player past the wait, and their browser follows', () => {
+    const { store, acct } = setup();
+    expect(store.rename(acct, 'Joke Name')).toBeNull();
+    expect(store.rename(acct, 'Ann')).toContain('7 days');
+    const room = new Room('r', MAPS);
+    room.devGate = new DevGate({ user: 'admin', pass: 'hunter2' });
+    const calls: string[][] = [];
+    room.devRename = (name, to) => {
+      calls.push([name, to]);
+      const a = store.named(name);
+      if (!a) return `No account named "${name}".`;
+      const old = a.name;
+      const bad = store.rename(a, to, true);
+      if (bad) return bad;
+      room.renamedAccount(a, old);
+      return `${old} is now ${a.name}.`;
+    };
+    const player: ServerMsg[] = [];
+    const pid = room.join({ send: (m) => player.push(m) }, acct);
+    const dev = store.auth('Oscar', B);
+    if (!dev.ok) throw new Error(dev.msg);
+    const log: ServerMsg[] = [];
+    const id = room.join({ send: (m) => log.push(m) }, dev.account);
+    room.handle(id, { t: 'cmd', text: '/rename joke name > Ann' });
+    expect(log.at(-1)).toMatchObject({ t: 'dev', lines: [expect.stringContaining('Unknown')] });
+    room.handle(id, { t: 'cmd', text: '/login admin hunter2' });
+    for (const text of ['/rename', '/rename Joke Name', '/rename Joke Name >', '/rename a > b > c']) {
+      room.handle(id, { t: 'cmd', text });
+      expect(log.at(-1)).toMatchObject({ t: 'dev', lines: ['Usage: /rename <name> > <new name>'] });
+    }
+    expect(calls).toEqual([]);
+    room.handle(id, { t: 'cmd', text: '/rename Nobody > Ann' });
+    expect(log.at(-1)).toMatchObject({ lines: ['No account named "Nobody".'] });
+    room.handle(id, { t: 'cmd', text: '/rename Joke Name > Oscar' });
+    expect(log.at(-1)).toMatchObject({ lines: ['The name "Oscar" is taken.'] });
+    room.handle(id, { t: 'cmd', text: '/rename joke name > Ann' });
+    expect(log.at(-1)).toMatchObject({ t: 'dev', lines: ['Joke Name is now Ann.'] });
+    expect(acct.name).toBe('Ann');
+    expect(player).toContainEqual({ t: 'named', id: pid, name: 'Ann' });
+    expect(player).toContainEqual({ t: 'sys', text: 'Joke Name is now Ann' });
+    // The wait runs again from this change, and a browser that still has the joke name saved gets the account.
+    expect(store.renameWait(acct)).toBe(RENAME_COOLDOWN_MS);
+    expect(store.auth('Joke Name', A)).toMatchObject({ ok: true, account: acct, created: false });
+    expect(store.auth('Ann', A)).toMatchObject({ ok: true, account: acct });
   });
 });
 

@@ -112,6 +112,7 @@ const browser = await puppeteer.launch({
 
 try {
   await pondChecks();
+  await joinTypingChecks();
   await casinoChecks();
   await seaChecks();
   await tripChecks();
@@ -154,6 +155,22 @@ async function noWebglChecks(): Promise<void> {
   } finally {
     await b.close();
   }
+}
+
+// ---------- join screen (touch) ----------
+
+/**
+ * Touch counts as "mouse captured" from the page load, so the game once took the keys typed on the join screen:
+ * Space jumped and never reached the name box, and players with a space in their name couldn't log in on a phone.
+ */
+async function joinTypingChecks(): Promise<void> {
+  const page = await openPage(`http://localhost:${VITE_PORT}/?touch`);
+  await page.waitForSelector('#join-name', { visible: true });
+  await page.click('#join-name', { clickCount: 3 });
+  await page.type('#join-name', 'Big Fish');
+  const typed = await page.evaluate(() => (document.getElementById('join-name') as HTMLInputElement).value);
+  check('join (touch): a space typed in the name box stays in the name', typed === 'Big Fish', `"${typed}"`);
+  await page.close();
 }
 
 // ---------- pond (offline) ----------

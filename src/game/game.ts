@@ -886,7 +886,9 @@ export class Game {
     return document.pointerLockElement === this.world.renderer.domElement;
   }
   private get active() {
-    return (this.locked || this.forceActive) && !this.menuOpen && !this.restarting && !this.devPrompt.isOpen;
+    // Never behind the join screen. With a mouse that follows from the capture, but touch counts as captured from the
+    // start, and the game then took the keys typed there: Space jumped and never reached the name box.
+    return (this.locked || this.forceActive) && !this.menuOpen && !this.restarting && !this.devPrompt.isOpen && $('join').classList.contains('hidden');
   }
 
   /** Test hook: drive the game without pointer lock. */
@@ -1228,9 +1230,15 @@ export class Game {
     if (this.locked) document.exitPointerLock();
   }
 
-  /** The panel closed (sent or cancelled): a mouse that was let go for it needs a click to come back. */
+  /**
+   * The panel closed (sent or cancelled): the mouse that was let go for it is taken back, as after closing a menu.
+   * If the browser refuses, the overlay asks for a click.
+   */
   private secretClosed(): void {
-    if (!this.touch && !this.forceActive && !this.menuOpen) this.showResume();
+    if (this.touch || this.forceActive || this.menuOpen) return;
+    this.showResume();
+    const req = this.world.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+    req?.catch?.(() => {});
   }
 
   private openChat(): void {

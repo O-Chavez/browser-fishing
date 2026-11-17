@@ -2,6 +2,19 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] 💬 Names with a space can log in on a phone again (2026-11-16, branch `dev-rename`). Players told Oscar they couldn't log in when their name has a space
+  - Cause: the touch layout counts as "mouse captured" from the page load (`forceActive`), so the game was live behind the join screen and took its keys. Space jumped and was kept from the name box, so "Big Fish" was sent as "BigFish": another account, or a new one. The password box lost spaces the same way. Since the mobile steps merged (2026-11-15)
+  - Fix: the game is never active while the join screen is up (`active`, `src/game/game.ts`), which is how it already was with a mouse
+  - Also: the server cut a long name to 16 characters after trimming, so a name cut at a space kept the space and the next login missed the account (`cleanName`, `server/accounts.ts`; only reachable from a `?name=` link, since the name boxes stop at 16)
+  - A player who joined as the spaceless name in the meantime now has a second, new account under it; nothing merges the two
+  - Checked: reproduced and fixed in headless Chrome's phone emulation (new name, and an existing name with a password, then a reload); a smoke check types a spaced name on the touch join screen (123/123); a test for the cut. Not checked on a real phone, where keyboards differ in the key events they send
+- [x] Dev login takes the mouse back (Oscar, 2026-11-16, branch `dev-rename`). After `/login` (or `/resetpass <name>`) in the starred-out panel, the game asked for a click to keep playing. Closing the panel, sent or cancelled, now captures the mouse again like closing a menu does (`secretClosed`); the overlay stays only if the browser refuses. Checked in headless Chrome with a captured mouse: log in, and Esc
+- [x] 💬 Dev console `/rename` (2026-11-16, branch `dev-rename`). A player changed their name as a joke and asked Oscar to put it back, which nothing could do inside the 7-day wait
+  - `/rename <name> > <new name>` in the dev console changes a player's name for them, online or not (`devRename`, `server/index.ts`). The `>` splits the two names, since names can hold spaces and never a `>`
+  - It is the player's own change without the wait (`AccountStore.rename` with `force`): the new name must be free, 2-16 characters and not rude; the room and the server hear "X is now Y" if the player is online; a browser that still has the old name saved follows the account; the 💗 list and the casino record board get the new name
+  - The 7-day wait starts again from this change, as after any change (kept simple, and the player's own screen already says so)
+  - No What's new entry: a dev tool
+  - Checked: build passes; tests pass (836; `reel.test.ts` "a hand's wall is a slope" and `looks.test.ts` "the kelp look" time out at 5 s when the machine is busy, on main too, and pass when it isn't) and smoke (123/123). Not tried on the live server
 - [x] 💬 Abyss markers take longer (2026-11-16, branch `abyss-marker-pace`). A player at Abyss marker 70 asked, by way of Oscar, for each marker to take 50% longer to reach. Oscar chose both changes on offer:
   - Abyss levels of the Deep Sea Rod cost half as much again: from 2,625,000 coins (was 1,750,000), still 12% dearer a level (`ROD.levelCoins`, `src/data/dive.ts`). Levels already bought are kept; only the next ones cost more
   - A charter reaches the next marker every 5 landed fish, not 3 (`MARKER.every`), so a 30-fish hold climbs 6 markers, not 10, and the strip shows five pips. Reed's line, the README and GAME_DESIGN.md (the Abyss) say so
