@@ -179,13 +179,21 @@ export class AccountStore {
     return Math.max(0, (acct.renamed ?? -Infinity) + RENAME_COOLDOWN_MS - this.now());
   }
 
-  /** Changes the account's name and frees the old one. Returns why it was refused, or null. */
-  rename(acct: Account, name: unknown): string | null {
+  /** The account with this name, whatever its capitals. */
+  named(name: string): Account | undefined {
+    return this.accounts.get(nameKey(name));
+  }
+
+  /**
+   * Changes the account's name and frees the old one. Returns why it was refused, or null. `force` (the dev
+   * console's `/rename`) skips the wait; the wait still starts again, as after any change.
+   */
+  rename(acct: Account, name: unknown, force = false): string | null {
     const clean = typeof name === 'string' ? cleanName(name) : '';
     if (clean.length < 2) return 'Name must be 2-16 letters, numbers, spaces or dashes.';
     if (clean === acct.name) return `Your name is already ${clean}.`;
     if (rudeName(name as string) || rudeName(clean)) return `The name "${clean}" isn't allowed. Please pick another.`;
-    const wait = this.renameWait(acct);
+    const wait = force ? 0 : this.renameWait(acct);
     if (wait) return `You can change your name again in ${waitText(wait)}.`;
     const key = clean.toLowerCase();
     const old = nameKey(acct.name);
@@ -381,7 +389,8 @@ const pick = (a: Pick<Account, 'pw' | 'supporter' | 'casino' | 'lake' | 'renamed
   ...(a.prev ? { prev: a.prev } : {}),
 });
 
-const cleanName = (name: string) => String(name ?? '').replace(/[^\w \-]/g, '').trim().slice(0, 16);
+// Trimmed again after the cut: a name cut at a space would keep it, and the next login (trimmed first) would miss the account.
+const cleanName = (name: string) => String(name ?? '').replace(/[^\w \-]/g, '').trim().slice(0, 16).trim();
 const nameKey = (name: string) => cleanName(name).toLowerCase();
 
 function parse(name: string, token: string): { clean: string; key: string; h: string } | { msg: string } {

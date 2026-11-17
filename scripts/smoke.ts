@@ -112,6 +112,8 @@ const browser = await puppeteer.launch({
 
 try {
   await pondChecks();
+  await joinTypingChecks();
+  await touchTapChecks();
   await casinoChecks();
   await seaChecks();
   await tripChecks();
@@ -154,6 +156,74 @@ async function noWebglChecks(): Promise<void> {
   } finally {
     await b.close();
   }
+}
+
+// ---------- join screen (touch) ----------
+
+/**
+ * Touch counts as "mouse captured" from the page load, so the game once took the keys typed on the join screen:
+ * Space jumped and never reached the name box, and players with a space in their name couldn't log in on a phone.
+ */
+async function joinTypingChecks(): Promise<void> {
+  const page = await openPage(`http://localhost:${VITE_PORT}/?touch`);
+  await page.waitForSelector('#join-name', { visible: true });
+  await page.click('#join-name', { clickCount: 3 });
+  await page.type('#join-name', 'Big Fish');
+  const typed = await page.evaluate(() => (document.getElementById('join-name') as HTMLInputElement).value);
+  check('join (touch): a space typed in the name box stays in the name', typed === 'Big Fish', `"${typed}"`);
+  await page.close();
+}
+
+// ---------- on-screen controls (touch) ----------
+
+/**
+ * iPhones took quick taps on the action button (reeling in bursts) as a double tap and zoomed the page in on it, or
+ * brought up the text magnifier. The controls cancel their touch events, which turns the browser's gestures off; the
+ * buttons still have to work, and the top ones (which act on the click) still have to get their click.
+ */
+async function touchTapChecks(): Promise<void> {
+  const page = await openPage(`http://localhost:${VITE_PORT}/?touch`);
+  // Real touches: turning touch emulation on reloads the page.
+  await page.setViewport({ width: 915, height: 412, isMobile: true, hasTouch: true });
+  await page.waitForFunction(() => window.__game && document.getElementById('join-offline'));
+  await page.tap('#join-offline');
+  await page.waitForSelector('#touch:not(.hidden)', { timeout: 10000 });
+  await page.evaluate(() => {
+    const seen: Record<string, boolean[]> = ((window as any).__touchSeen = {});
+    for (const ev of ['touchstart', 'touchend']) {
+      addEventListener(ev, (e) => {
+        const t = e.target as HTMLElement;
+        const key = t.closest('.t-top') ? 'top' : t.closest('.t-action') ? 'action' : 'other';
+        (seen[key] ??= []).push(e.defaultPrevented);
+      });
+    }
+  });
+  const centre = async (sel: string) => {
+    const r = (await (await page.$(sel))!.boundingBox())!;
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  };
+  const at = await centre('#touch .t-action');
+  // Two quick presses, as in a fight. The button redraws its label while held (a cast charging), which once left the
+  // touchend on a node out of the page.
+  const held: boolean[] = [];
+  for (let i = 0; i < 2; i++) {
+    await page.touchscreen.touchStart(at.x, at.y);
+    await sleep(60);
+    held.push(await page.evaluate(() => document.querySelector('#touch .t-action')!.classList.contains('down')));
+    await page.touchscreen.touchEnd();
+    await sleep(60);
+  }
+  const seen = await page.evaluate(() => (window as any).__touchSeen as Record<string, boolean[]>);
+  check('touch: taps on the action button are kept from the browser (no double-tap zoom on iPhones)', seen.action?.length === 4 && seen.action.every(Boolean), JSON.stringify(seen));
+  check('touch: the action button still works with its touches cancelled', held.every(Boolean) && !(await page.evaluate(() => document.querySelector('#touch .t-action')!.classList.contains('down'))), JSON.stringify(held));
+  // Back to idle before the bag: a menu opens only over a quiet line.
+  await page.waitForFunction(() => window.__game.state().phase === 'idle', { timeout: 20000 }).catch(() => null);
+  const bag = await centre('#touch [data-t="bag"]');
+  await page.touchscreen.tap(bag.x, bag.y);
+  await sleep(300);
+  const top = await page.evaluate(() => ({ seen: ((window as any).__touchSeen as Record<string, boolean[]>).top, menu: !document.getElementById('menu')!.classList.contains('hidden') }));
+  check('touch: the top buttons keep their click (🎒 opens the bag)', top.menu && top.seen?.length === 2 && !top.seen.some(Boolean), JSON.stringify(top));
+  await page.close();
 }
 
 // ---------- pond (offline) ----------

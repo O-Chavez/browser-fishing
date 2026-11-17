@@ -1,7 +1,7 @@
 import { atMaxRank } from '../data/ranks';
 import { anchorHtml } from './anchor';
 import { coinText, escapeHtml as esc } from './format';
-import { BOTTOM, keyFace, keyId, keyOf, pressKey, REPEAT_DELAY_MS, REPEAT_MS, ROWS, startKeys, type Key, type KeyState } from './softkeys';
+import { BOTTOM, keyFace, keyId, keyOf, keysLiftPx, pressKey, REPEAT_DELAY_MS, REPEAT_MS, ROWS, startKeys, type Key, type KeyState } from './softkeys';
 
 /** Lines leave the window this long after they arrive. */
 export const CHAT_TTL_MS = 5 * 60_000;
@@ -223,6 +223,8 @@ export class ChatBox {
     if (this.opts.soft?.()) {
       this.keys = startKeys();
       this.root.classList.add('soft');
+      // The keys sit clear of the phone's home bar, measured in real screen points (`keysLiftPx`).
+      this.root.style.setProperty('--kb-lift', `${keysLiftPx(innerWidth, Math.max(screen.width, screen.height))}px`);
       this.input.readOnly = true;
       addEventListener('keydown', this.hardKey, true);
       addEventListener('keyup', this.hardKeyUp, true);

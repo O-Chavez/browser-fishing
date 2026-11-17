@@ -75,6 +75,23 @@ function setSupporter(name: string, on: boolean): string {
   rooms.forEach((r) => r.supportersChanged(acct, on, names));
   return on ? `💗 ${acct.name} is a supporter.` : `${acct.name} is no longer shown as a supporter.`;
 }
+/** A changed name reaches the lists that hold names: the 💗 list and the casino record board. */
+function nameLists(acct: Account): void {
+  if (acct.supporter) rooms.forEach((o) => o.broadcast({ t: 'supporters', names: accounts.supporters() }));
+  const rec = accounts.records();
+  if (rec.win?.name === acct.name || rec.loss?.name === acct.name) rooms.forEach((o) => o.broadcast({ t: 'records', records: rec }));
+}
+/** Dev console `/rename`: changes a player's name for them, past the 7-day wait, online or not. Returns a line for the console. */
+function devRename(name: string, to: string): string {
+  const acct = accounts.named(name);
+  if (!acct) return `No account named "${name}".`;
+  const old = acct.name;
+  const bad = accounts.rename(acct, to, true);
+  if (bad) return bad.replace(/^Your name is/, `${old} is`);
+  rooms.forEach((r) => r.renamedAccount(acct, old));
+  nameLists(acct);
+  return `${old} is now ${acct.name}.`;
+}
 /** Dev console `/backpay`: previews or pays the old level cap's back pay, then tells online players. */
 function backPay(apply: boolean): string[] {
   const res = accounts.backPay(apply);
@@ -144,6 +161,7 @@ function room(name: string): Room {
     r.recordGamble = (acct, win, g) => accounts.gambled(acct, win, g);
     r.records = () => accounts.records();
     r.setSupporter = setSupporter;
+    r.devRename = devRename;
     r.renameWait = (a) => accounts.renameWait(a);
     r.backPay = backPay;
     r.smokeStats = smokeStats;
@@ -323,11 +341,7 @@ wss.on('connection', (ws, req) => {
         const bad = accounts.rename(acct, msg.name);
         if (bad) return send({ t: 'account', hasPass: !!acct.pw, msg: bad });
         r.renamed(id, old);
-        // The 💗 lists hold names, so a supporter's new name has to reach everyone.
-        if (acct.supporter) rooms.forEach((o) => o.broadcast({ t: 'supporters', names: accounts.supporters() }));
-        // So does the casino record board, if they hold a record.
-        const rec = accounts.records();
-        if (rec.win?.name === acct.name || rec.loss?.name === acct.name) rooms.forEach((o) => o.broadcast({ t: 'records', records: rec }));
+        nameLists(acct);
         return;
       }
       const who = `#${id} ${acct.name}`;

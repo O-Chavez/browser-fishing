@@ -87,6 +87,22 @@ export const keyOf = (id: string): Key | null => {
   return act ? { act } : null;
 };
 
+/**
+ * How far the bottom row of keys stays from the foot of the screen, in real screen points. An iPhone's home bar owns
+ * the bottom 21 points in landscape: a tap there is read as the start of a swipe to another app, and two as "Type to
+ * Siri", and a web page can't turn either off. Keys this far up are clear of it. A play-test default.
+ */
+export const KEYS_CLEAR_PT = 32;
+
+/**
+ * `KEYS_CLEAR_PT` in the touch layout's pixels (the keyboard's `--kb-lift`): the layout is `layoutWidth` wide on a
+ * screen whose long side is `screenLong` points. Never under the 26px the keyboard has always had below its keys.
+ */
+export function keysLiftPx(layoutWidth: number, screenLong: number): number {
+  if (!(layoutWidth > 0) || !(screenLong > 0)) return 54;
+  return Math.max(26, Math.ceil((KEYS_CLEAR_PT * layoutWidth) / screenLong));
+}
+
 /** ⌫ held down repeats after this long, this often. */
 export const REPEAT_DELAY_MS = 420;
 export const REPEAT_MS = 70;

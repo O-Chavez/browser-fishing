@@ -797,6 +797,9 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .t-stick.on { display: block; }
 .t-knob { position: absolute; left: 58px; top: 58px; width: 84px; height: 84px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 .t-action { position: absolute; right: 70px; bottom: 44px; width: 156px; height: 156px; border: 0; border-radius: 50%; display: grid; place-content: center; justify-items: center; gap: 2px; font: 900 19px Nunito, ui-rounded, system-ui, sans-serif; letter-spacing: .06em; color: var(--gold-ink); background: var(--gold); box-shadow: 0 8px 0 var(--gold-dark), 0 14px 28px rgba(0,0,0,.35); }
+/* The icon and label are redrawn under the finger (setAction); a touch that began on one would end on a node no longer
+   in the page, and its touchend would never reach the controls. The button itself takes the touch. */
+.t-action > * { pointer-events: none; }
 .t-action .ic { font-size: 52px; line-height: 1; }
 .t-action.down { transform: translateY(5px); box-shadow: 0 3px 0 var(--gold-dark), 0 8px 18px rgba(0,0,0,.35); }
 .t-action.quiet { background: var(--hud-bg); color: var(--cream-muted); box-shadow: 0 0 0 4px var(--wood-600), 0 10px 22px rgba(0,0,0,.3); }
@@ -855,8 +858,10 @@ body.touch.shopping #tip.bar { bottom: 150px; }
    While typing, chat fills the screen over a light dim: the log at the left, the field and Send above our own
    keyboard (about 40% of the screen), ✕ and the world filter where the 💬 and 🎒 buttons sit. The world shows through
    and still takes drags to look. With 🌐 (the phone's keyboard) the field moves to the top, clear of that keyboard.
-   Key height, keyboard height and the dim are play-test defaults. */
-body.touch #chat.typing { --kb-h: 40vh; position: fixed; inset: 0 !important; width: auto; z-index: 6; padding: 0; gap: 10px; justify-content: flex-end; font-size: 22px; background: linear-gradient(rgba(16, 10, 5, .1), rgba(16, 10, 5, .45)); pointer-events: none; }
+   Under the keys the panel runs on to the foot of the screen as an empty lip (--kb-lift, set by ChatBox from
+   keysLiftPx: about 54px on a phone), so no key sits in the strip an iPhone's home bar takes taps from.
+   Key height, keyboard height, the lip and the dim are play-test defaults. */
+body.touch #chat.typing { --kb-h: calc(40vh - 26px); --kb-lift: 54px; position: fixed; inset: 0 !important; width: auto; z-index: 6; padding: 0; gap: 10px; justify-content: flex-end; font-size: 22px; background: linear-gradient(rgba(16, 10, 5, .1), rgba(16, 10, 5, .45)); pointer-events: none; }
 body.touch #chat.typing .chat-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 12px; pointer-events: auto; }
 body.touch #chat.typing .chat-top button { height: 76px; min-width: 76px; padding: 0 20px; border: 0; border-radius: 20px; font: 900 26px Nunito, ui-rounded, system-ui, sans-serif; color: var(--cream); background: var(--hud-bg); box-shadow: var(--hud-edge); }
 body.touch #chat.typing .chat-x { font-size: 34px; }
@@ -872,7 +877,7 @@ body.touch #chat.soft .chat-field .ph { color: var(--ink-muted); }
 body.touch #chat.soft .chat-field .caret { flex: none; width: 3px; height: 1.1em; margin: 0 1px; background: #2a7bf6; animation: caret 1s steps(1) infinite; }
 @keyframes caret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { body.touch #chat.soft .chat-field .caret { animation: none; } }
-body.touch #chat.soft .chat-keys { display: grid; grid-auto-rows: 1fr; gap: 8px; height: var(--kb-h); padding: 12px 80px 26px; box-sizing: border-box; background: rgba(42, 27, 15, .94); box-shadow: 0 -4px 0 var(--wood-600); pointer-events: auto; touch-action: none; }
+body.touch #chat.soft .chat-keys { display: grid; grid-auto-rows: 1fr; gap: 8px; height: calc(var(--kb-h) + var(--kb-lift)); padding: 12px 80px var(--kb-lift); box-sizing: border-box; background: rgba(42, 27, 15, .94); box-shadow: 0 -4px 0 var(--wood-600); pointer-events: auto; touch-action: none; }
 .chat-keys .row { display: flex; gap: 8px; justify-content: center; min-height: 0; }
 .chat-keys .k { flex: 0 0 calc((100% - 72px) / 10); min-width: 0; border: 0; border-radius: 12px; font: 800 30px Nunito, ui-rounded, system-ui, sans-serif; color: var(--ink); background: var(--paper-3); box-shadow: 0 4px 0 #b99f74; }
 .chat-keys .k.fn { font-size: 26px; background: var(--paper-2); }

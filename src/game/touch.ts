@@ -12,6 +12,14 @@ export function touchLayoutWidth(w: number, h: number): number {
   return Math.round(Math.min(1400, Math.max(1000, long / 0.6)));
 }
 
+/**
+ * Whether a touch on this part of the on-screen controls keeps the browser's own handling. Only the top buttons (💬,
+ * 🎒) do: they act on the click, which a cancelled touch never sends, and iOS opens the keyboard only from a click.
+ */
+export function keepsNativeTouch(target: EventTarget | null): boolean {
+  return !!(target as Partial<Element> | null)?.closest?.('.t-top');
+}
+
 /** What the on-screen controls ask the game to do. */
 export interface TouchHandlers {
   /** Stick position: x strafes right, y walks forward, both -1..1; sprint when pushed past the rim. */
@@ -131,6 +139,15 @@ export class TouchControls {
       else if (t === 'chat') this.h.chat();
     });
     this.root.addEventListener('contextmenu', (e) => e.preventDefault());
+    // iPhones read quick taps on one spot (reeling in bursts) as their own gestures: two taps zoom the page in on the
+    // button, and a second tap held brings up the text magnifier. `touch-action` and `user-select` (body.touch) don't
+    // stop either on every iOS version, and `preventDefault` on a pointer event never does; cancelling the touch
+    // events does. The controls work on pointer events, which still fire.
+    for (const ev of ['touchstart', 'touchend'] as const) {
+      this.root.addEventListener(ev, (e) => {
+        if (e.cancelable && !keepsNativeTouch(e.target)) e.preventDefault();
+      }, { passive: false });
+    }
   }
 
   setVisible(on: boolean): void {

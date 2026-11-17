@@ -85,6 +85,7 @@ export const HELP = [
   '/dish <dish> [N] · /smokestats (Smokehouse play test)',
   '/lakestats (chips per lake hour, Shiny Lures and charters, per player)',
   '/resetpass <name> <new password>',
+  '/rename <name> > <new name> (changes a player\'s name for them, past the 7-day wait)',
   '/supporter <name> [off] (Ko-fi 💗) · /backpay [apply] · /logout',
 ];
 
