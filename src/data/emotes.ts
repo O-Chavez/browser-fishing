@@ -35,6 +35,8 @@ export interface EmoteDef {
    * scene. The design's own `cameraDistance`.
    */
   cameraDistance?: number;
+  /** Radians round the player, from behind them, where the camera starts (a drag still turns it): sitting is seen from the front. */
+  cameraTurn?: number;
   /** Bought emotes: what it takes to buy, the price (coins and Black Pearls, both), and who sells it. */
   gate?: EmoteGate;
   price?: EmotePrice;
@@ -124,10 +126,17 @@ export const EMOTES: EmoteDef[] = [
   deep('master', 'Master of the Deep', '🔱', 10.5, EMOTE_PRICES.master, { pieces: [], emotes: ['kelp', 'twilight', 'abyss'], text: 'Own the other three deep sea emotes' }, 6.5),
 ];
 
+/**
+ * Sitting down on a seat (a bench, the campfire's seat wall or its log: `Town.seats`). It plays through the emote
+ * system, so the player's own view pulls back, everyone else sees it, and a step ends it, but it is no emote of the
+ * wheel: it has no length (it lasts until the player gets up) and every account has it.
+ */
+export const SIT: EmoteDef = { id: 'sit', name: 'Sit', icon: '🪑', tier: 'base', seconds: Infinity, camera: 'behind', cameraDistance: 3.4, cameraTurn: 2.55 };
+
 /** Emotes started closer together than this are dropped, here and by the server: one can be cut short and another started, but not spammed. */
 export const EMOTE_GAP_MS = 1000;
 
-export const emoteById = (id: unknown): EmoteDef | undefined => (typeof id === 'string' ? EMOTES.find((e) => e.id === id) : undefined);
+export const emoteById = (id: unknown): EmoteDef | undefined => (typeof id !== 'string' ? undefined : id === SIT.id ? SIT : EMOTES.find((e) => e.id === id));
 
 /** How many emotes the wheel shows at once. */
 export const WHEEL_SLOTS = 8;

@@ -36,7 +36,7 @@ Grab a rod and head down to the pier. In this cozy multiplayer fishing game, eve
 
 **🔥 Smoke your catch.** From level 3, Mags Cinder's Smokehouse across the path from Marlow's stall smokes your spare fish in seconds (and keeps smoking while you're offline). Sell small fry smoked for more, eat one as a snack for ⭐ more XP or 💰 more coins on every catch, or cook smoked fish into dishes that give several buffs at once, up to ✨ more shinies.
 
-**👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, wave, clap or nod from the emote wheel, and race for a spot on the **Top Anglers** leaderboard.
+**👋 Fish together.** See other players walking the docks and reeling in catches in real time. Chat with the whole server, watch speech bubbles pop up over players' heads, wave, clap or nod from the emote wheel, sit down together by the campfire, and race for a spot on the **Lake Legends** and **Deep Sea** boards.
 
 ![Two players in hats chatting on the end of the pier at sunset, one with a speech bubble above their head](docs/images/dock.jpg)
 

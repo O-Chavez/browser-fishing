@@ -95,8 +95,10 @@ export interface SaveData {
   emotes: string[];
   /** Tackle locker: rods and bait you own but are not carrying in the hotbar. */
   locker: { rods: string[]; bait: Record<string, number> };
-  /** Most valuable fish ever caught, for the leaderboard. */
+  /** Most valuable lake fish ever caught, for the Lake Legends board. */
   best: BestCatch | null;
+  /** Most valuable fish ever caught on a charter, for the Deep Sea board. */
+  bestSea: BestCatch | null;
   /** Ids of the town's message-in-a-bottle collectibles already found. */
   bottles: string[];
   /** Casino currency, earned by turning fish in at the prize shop. */
@@ -177,6 +179,7 @@ export const newSave = (): SaveData => ({
   emotes: [],
   locker: { rods: [], bait: {} },
   best: null,
+  bestSea: null,
   bottles: [],
   chips: 0,
   pearls: 0,
@@ -414,6 +417,8 @@ export function migrate(raw: object): SaveData {
     : { xp: 0, paid: true };
   for (const e of Object.values(out.dex)) if (e && e.shiny !== undefined) e.shiny = count(e.shiny);
   if (data.seaV !== SEA_VERSION) resetSea(out);
+  // A sea reset leaves no sea record to keep.
+  splitBest(out, data.seaV === SEA_VERSION ? data.bestSea : null);
   // Accounts from before faces get a random one.
   if (!isFace((out.look as Partial<Look> | undefined)?.face)) out.look = { ...out.look, face: randomFace() };
   out.look = cleanLook(out.look, out.owned);
@@ -428,16 +433,36 @@ export function migrate(raw: object): SaveData {
  * sale value.
  */
 function resetSea(out: SaveData): void {
-  Object.assign(out, { rodStep: 0, abyssLevels: 0, holdLevel: 0, boatParts: 0, abyssRecord: 0, pearls: 0, seaV: SEA_VERSION });
+  Object.assign(out, { rodStep: 0, abyssLevels: 0, holdLevel: 0, boatParts: 0, abyssRecord: 0, pearls: 0, seaV: SEA_VERSION, bestSea: null });
   for (const f of FISH) if (f.sea) delete out.dex[f.id];
   if (!out.best || !FISH.find((f) => f.id === out.best!.fishId)?.sea) return;
-  out.best = null;
-  for (const [fishId, e] of Object.entries(out.dex)) {
+  out.best = lakeBestFromDex(out.dex);
+}
+
+/** The best lake catch the Fishdex still knows of: its most valuable size record, at the fish's plain sale value. */
+function lakeBestFromDex(dex: SaveData['dex']): BestCatch | null {
+  let best: BestCatch | null = null;
+  for (const [fishId, e] of Object.entries(dex)) {
     const f = FISH.find((x) => x.id === fishId);
-    if (!f || !e || !Number.isFinite(e.best)) continue;
+    if (!f || f.sea || !e || !Number.isFinite(e.best)) continue;
     const value = sellValue(f, e.best);
-    if (!out.best || value > out.best.value) out.best = { fishId, size: e.best, value };
+    if (!best || value > best.value) best = { fishId, size: e.best, value };
   }
+  return best;
+}
+
+/**
+ * Keeps a best catch for each water (`best` the lake's, `bestSea` the charters'), for the two boards at the campfire.
+ * Saves from when one record covered both may hold a sea fish as `best`: it moves to `bestSea`, and the lake's record
+ * becomes the best the Fishdex still knows of, so the player stays on the lake board.
+ */
+function splitBest(out: SaveData, saved: unknown): void {
+  const sea = (b: BestCatch | null | undefined): boolean => !!b && !!FISH.find((f) => f.id === b.fishId)?.sea;
+  const s = saved as BestCatch | null | undefined;
+  out.bestSea = s && sea(s) && Number.isFinite(s.size) && Number.isFinite(s.value) ? { fishId: s.fishId, size: s.size, value: s.value, ...(s.shiny ? { shiny: true } : {}) } : null;
+  if (!sea(out.best)) return;
+  if (!out.bestSea || out.best!.value > out.bestSea.value) out.bestSea = out.best;
+  out.best = lakeBestFromDex(out.dex);
 }
 
 export function load(): SaveData {

@@ -20,7 +20,8 @@ describe('best catch', () => {
   it('keeps only the most valuable fish caught', () => {
     const s = newSave();
     const cheap = FISH[0];
-    const dear = FISH[FISH.length - 1];
+    // The dearest lake fish: a sea fish would be the charters' record (`bestSea`), not this one.
+    const dear = FISH.filter((f) => !f.sea).at(-1)!;
     eco.applyCatch(s, dear, dear.maxSize);
     const top = s.best!.value;
     s.slots = [null, null, null, null, null];
@@ -1302,6 +1303,36 @@ describe('the sea in old saves', () => {
     expect(migrate(unreset({ dex: { marlin: { count: 1, best: 300 } }, best: { fishId: 'marlin', size: 300, value: 9 } })).best).toBeNull();
     const pond = { fishId: 'perch', size: 20, value: 5 };
     expect(migrate(unreset({ dex, best: pond })).best).toEqual(pond);
+  });
+
+  it('keeps a best catch for each water: a sea fish saved as the one best catch moves to the sea board', () => {
+    // A save from when one record covered both, made since the sea reset: the marlin is the best catch.
+    const dex = { marlin: { count: 1, best: 300 }, perch: { count: 4, best: 20 }, pike: { count: 2, best: 90 } };
+    const marlin = { fishId: 'marlin', size: 300, value: 99999, shiny: true };
+    const m = migrate({ ...newSave(), dex, best: marlin, bestSea: undefined } as unknown as SaveData);
+    const pike = FISH.find((f) => f.id === 'pike')!;
+    expect(m.bestSea).toEqual(marlin);
+    expect(m.best).toEqual({ fishId: 'pike', size: 90, value: sellValue(pike, 90) });
+    // Both records are kept as they are once split, and a lake fish is never taken for a sea record.
+    const again = migrate(JSON.parse(JSON.stringify(m)));
+    expect(again.best).toEqual(m.best);
+    expect(again.bestSea).toEqual(marlin);
+    expect(migrate({ ...newSave(), bestSea: { fishId: 'pike', size: 90, value: 5 } } as SaveData).bestSea).toBeNull();
+    // The sea reset clears the sea record with the rest of the sea.
+    expect(migrate(unreset({ dex, best: marlin, bestSea: marlin })).bestSea).toBeNull();
+  });
+
+  it('records a catch as the best of its own water', () => {
+    const s = newSave();
+    const pike = FISH.find((f) => f.id === 'pike')!;
+    const marlin = FISH.find((f) => f.id === 'marlin')!;
+    eco.applyCatch(s, pike, 90);
+    expect(s.best?.fishId).toBe('pike');
+    expect(s.bestSea).toBeNull();
+    eco.applyCatch(s, marlin, 300, false, false, true);
+    expect(s.best?.fishId).toBe('pike');
+    expect(s.bestSea).toMatchObject({ fishId: 'marlin', size: 300 });
+    expect(s.bestSea!.value).toBeGreaterThan(s.best!.value);
   });
 
   it('resets once: sea progress earned after it stays, as the server and the client migrate again', () => {

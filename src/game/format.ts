@@ -6,6 +6,13 @@ export function shortCoins(n: number): string {
   return r < 1000 ? String(r) : r < 1e6 ? f(r / 1e3, 'k') : f(r / 1e6, 'M');
 }
 
+/** A catch's coins as the boards at the campfire show them: in full up to 999,999, then three figures of millions or billions (2.45M, 18.4M, 2.45B). */
+export function boardSum(n: number): string {
+  if (n < 1e6) return n.toLocaleString('en-US');
+  const f = (v: number, unit: string) => `${v >= 100 ? Math.floor(v) : v >= 10 ? Math.floor(v * 10) / 10 : Math.floor(v * 100) / 100}${unit}`;
+  return n < 1e9 ? f(n / 1e6, 'M') : f(n / 1e9, 'B');
+}
+
 export const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** The HUD's gold coin, sized to sit on a line of text. Prices use it instead of the 🪙 emoji, which looks different on every platform. */

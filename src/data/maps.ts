@@ -43,14 +43,17 @@ export const HARBOUR = {
 HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.stand.x - HARBOUR.diveStart.x), -(HARBOUR.stand.z - HARBOUR.diveStart.z));
 
 /**
- * The campfire on the east headland, the town's meeting place: a round cobbled floor, level, dug into the foot of the
- * hill and built out toward the water, with the fire in its middle (`RING`). A low stone seat wall holds the hill back
- * round its hill side; Top Anglers and Thanks stand just behind the wall as a pair, the same distance from the fire
- * and either side of the line from the pier's end through the fire, so the fire lights them at night and the cove
- * sees them from the pier and the east jetty. The campfire lane from the quay's east corner and the lane from the village ring meet up the slope
- * and come in between two lantern posts on the quay side. The water side stays open. Play-test: the spots and sizes.
+ * The community zone on the east headland, the town's meeting place (layout "the green", Oscar, 2026-11-16). At the
+ * water, the campfire: a round cobbled floor, level, dug into the foot of the ridge and built out toward the water,
+ * with the fire in its middle (`RING`). A low stone seat wall runs round its hill side in two arcs, and between
+ * them a way leads east through the ridge onto the green, a lawn levelled across the ridge's top (`GREEN`), and on
+ * down to a landing on the pond in the hollow behind (`POND`). The two catch boards stand behind the wall's arcs,
+ * either side of the way through, turned a little toward the water so the fire lights them and the pier sees them:
+ * Lake Legends on the quay side, by the way in, and Deep Sea on the lake side. Thanks stands on the green. The
+ * campfire lane from the quay's east corner and the lane from the village ring meet up the slope and come in between
+ * two lantern posts on the quay side. The water side stays open. Play-test: the spots and sizes.
  */
-const CAMPFIRE = { x: 18.7, z: 3.3 };
+const CAMPFIRE = { x: 19.8, z: 3.3 };
 /** A spot `r` m from the fire, `deg` degrees round from +z (90 is straight up the hill), facing it. */
 const byFire = (r: number, deg: number): Spot => {
   const x = CAMPFIRE.x + r * Math.sin((deg * Math.PI) / 180);
@@ -61,19 +64,50 @@ const byFire = (r: number, deg: number): Spot => {
 export interface RingDef {
   /** Radius of the cobbles; a kerb of flat stones runs round them. */
   r: number;
-  /** The seat wall's two ends: a string-light post stands at each. */
-  wall: [number, number];
-  /** Where the lane comes in: the gate's other post stands this far round, on the open side of the wall's first end. */
+  /** The seat wall's arcs, each from one end to the other, in order round the ring: a string-light post stands at every end, and the gaps between arcs are ways through. */
+  walls: [number, number][];
+  /** Where the lane comes in: the gate's other post stands this far round, on the open side of the first arc's first end. */
   gate: number;
-  /** A log seat on the rim past the wall's far end. */
-  log: number;
+  /** Log seats on the rim past the last arc's far end. */
+  logs: number[];
 }
-const RING: RingDef = { r: 2.75, wall: [11, 117], gate: -35, log: 165 };
+const RING: RingDef = { r: 4.4, walls: [[11, 60], [120, 172]], gate: -35, logs: [198, 226] };
 /** Where the lanes meet above the ring, on the line through the middle of the gate, and where that line ends inside the cobbles. */
-const CAMP_GATE = (RING.wall[0] + RING.gate) / 2;
-const CAMP_JUNCTION = byFire(6.2, CAMP_GATE);
-const CAMP_ENTRY = byFire(2.4, CAMP_GATE);
-const CAMP_CAUSEWAY = byFire(5.3, CAMP_GATE);
+const CAMP_GATE = (RING.walls[0][0] + RING.gate) / 2;
+const CAMP_JUNCTION = byFire(7.6, CAMP_GATE);
+const CAMP_ENTRY = byFire(4, CAMP_GATE);
+const CAMP_CAUSEWAY = byFire(6.6, CAMP_GATE);
+/** A catch board behind the seat wall, `deg` round from +z, turned to a spot on the water side of the fire. */
+const catchBoard = (deg: number): Spot => {
+  const { x, z } = byFire(RING.r + 1.1, deg);
+  return { x, z, facing: faceToward(x, z, CAMPFIRE.x - 1.6, CAMPFIRE.z) };
+};
+/**
+ * The green: a lawn levelled across the ridge behind the fire, up to a metre into its top, in two parts at one
+ * height. The long lawn runs behind the ring from the quay side north to the headland's open-lake shore, where a
+ * round lookout faces the lake; the wing runs east from it along the pond's north side. The way through the seat
+ * wall crosses the long lawn as a cobbled path and goes down its far bank to a landing at the pond's edge, and a
+ * second path leaves it for the lookout. Sized up on 2026-11-16 (Oscar: a notable area players want to hang out in).
+ */
+const GREEN = {
+  h: 1.1,
+  lawn: { x: 27.6, z: -1.25, hw: 3, hd: 10.75 },
+  wing: { x: 33.9, z: -4.95, hw: 3.3, hd: 2.55 },
+};
+/** The pond in the hollow behind the ridge (`Pond` in env.ts), and the cobbled landing on its near shore. */
+const POND = { x: 34.2, z: 2.9, rx: 3.5, rz: 4.8, depth: 1.3 };
+const POND_LANDING = { x: 29.6, z: 2.9, r: 1.2 };
+/** The lookout at the long lawn's lake end. */
+const LOOKOUT = { x: 27.6, z: -10.3, r: 1.6 };
+/** Where the lookout's path leaves the way to the pond. */
+const GREEN_FORK: [number, number] = [27.3, 3.05];
+/** What dresses the green: strings of bulbs, each from one post to another, lamp posts (`lit` ones cast light), picnic blankets and flower pots. */
+export interface GreenDef {
+  strings: { from: [number, number]; to: [number, number] }[];
+  lamps: { x: number; z: number; lit: boolean }[];
+  blankets: Spot[];
+  pots: [number, number][];
+}
 
 export interface HouseDef extends Spot {
   /** Wall and roof colours. */
@@ -160,8 +194,10 @@ export interface MapDef {
   pad: { x: number; z: number; r: number; h: number };
   vendor: { name: string; shop: Spot; npc: Spot; face?: FaceId };
   gate: Spot;
-  /** Live "Top Anglers" board; E opens the player list. */
+  /** The Lake Legends board: every account's best lake catch; E opens the player list. */
   leaderboard: Spot;
+  /** The Deep Sea board: every account's best charter catch. */
+  seaboard?: Spot;
   /** The smaller Thanks board listing supporters. */
   thanks: Spot;
   campfire: Spot;
@@ -177,9 +213,13 @@ export interface MapDef {
   /** Flat sand banks (`Apron` in env.ts) the quay's rear and ends stand on, so the deck meets the ground flush. */
   aprons?: { x0: number; x1: number; z0: number; z1: number; h: number }[];
   /** Level floors cut into a slope and built out from it (`Level` in env.ts): the campfire's ring. */
-  levels?: { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number }[];
+  levels?: { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number; blend?: number; grass?: boolean }[];
+  /** Ponds dug into the ground away from the lake (`Pond` in env.ts). */
+  ponds?: { x: number; z: number; rx: number; rz: number; depth: number }[];
   /** The campfire's ring (`RING`): its seat wall, gate and string lights. */
   ring?: RingDef;
+  /** The green behind the campfire: its string lights and flower pots. */
+  green?: GreenDef;
   /** A rock islet with a tree and a lantern out in the lake: its centre and the radius casts stop short of. */
   islet?: { x: number; z: number; r: number };
   town: TownDef;
@@ -218,10 +258,12 @@ export const MAPS: MapDef[] = [
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
     gateArrival: { x: 0, z: 50.5, yaw: 0 },
-    // Top Anglers and Thanks stand behind the ring's seat wall (`RING`), 24 degrees either side of the line from the
-    // pier's end through the fire: Top Anglers faces the pier and the jetty bench, and clears the headland pine.
-    leaderboard: byFire(3.6, 88),
-    thanks: byFire(3.6, 40),
+    // The catch boards stand behind the middle of each arc of the ring's seat wall (`RING`), either side of the way
+    // through to the green: Lake Legends on the quay side, facing the pier and the jetty bench, Deep Sea on the lake
+    // side. Thanks stands on the green's quay side, facing across the lawn. Play-test: which board stands where.
+    leaderboard: catchBoard(35.5),
+    seaboard: catchBoard(146),
+    thanks: { x: 27.6, z: 8.6, facing: Math.PI },
     // The campfire on the east headland, seen across the water from the jetty bench.
     campfire: { ...CAMPFIRE, facing: 0 },
     // Beside the top of Reed's lane.
@@ -248,12 +290,43 @@ export const MAPS: MapDef[] = [
     // close to where it was, and dug into the hill behind the seat wall and the boards. A causeway at the same height
     // carries the lane from where the lanes meet in through the gate, across the dip between the floor's bank and the
     // foot of the hill; its bank is steeper still, so the reeds below keep their ground.
-    // Play-test: the height and the shore.
+    // The green comes first, so the ring's floor and the landing cut into it: from the ring the ground rises gently
+    // onto the lawn through the gap in the wall, and the lawn's far bank dips to the landing at the pond's edge.
+    // Play-test: the heights and the shore.
     levels: [
-      { x: CAMPFIRE.x, z: CAMPFIRE.z, h: 0.85, hw: 3.15, cut: 1, bank: 0.75 },
+      { ...GREEN.lawn, h: GREEN.h, cut: 1, bank: 1, blend: 2.5, grass: true },
+      { ...GREEN.wing, h: GREEN.h, cut: 1, bank: 1, blend: 2.5, grass: true },
+      { x: CAMPFIRE.x, z: CAMPFIRE.z, h: 0.85, hw: RING.r + 0.4, cut: 1, bank: 0.75 },
       { x: CAMP_CAUSEWAY.x, z: CAMP_CAUSEWAY.z, h: 0.85, hw: 1.15, hd: 2.4, rot: (CAMP_GATE * Math.PI) / 180, cut: 0.4, bank: 1 },
+      // A long blend, so the way down from the lawn to the landing is a gentle dip and not a step.
+      { x: POND_LANDING.x, z: POND_LANDING.z, h: 0.4, hw: POND_LANDING.r + 0.1, cut: 0.2, bank: 1, blend: 2.4 },
     ],
+    ponds: [POND],
     ring: RING,
+    // Strings of bulbs across the long lawn and along the wing (none at the lookout, whose view of the lake stays
+    // clear); a lamp either side of the way in from the fire, one at the lookout and one at the wing's far end (the
+    // first and the lookout's cast light); two picnic blankets; pots by Thanks, the lookout and the wing.
+    // Play-test: all of it.
+    green: {
+      strings: [
+        { from: [25.2, 7.3], to: [30.2, 7.3] },
+        { from: [25.2, -2.4], to: [30.2, -2.4] },
+        { from: [25.2, -6.2], to: [30.2, -6.2] },
+        { from: [31.4, -7], to: [36.8, -7] },
+      ],
+      lamps: [
+        { x: 26.4, z: 1.4, lit: true },
+        { x: 26.4, z: 5, lit: false },
+        // East of the lookout, out of its view of the lake.
+        { x: 29.3, z: -11.1, lit: true },
+        { x: 37, z: -4.4, lit: false },
+      ],
+      blankets: [
+        { x: 25.8, z: -4.3, facing: 0.4 },
+        { x: 29.3, z: -8, facing: -0.3 },
+      ],
+      pots: [[26.4, 9], [28.8, 9], [30.3, -10.4], [31.2, -3.9]],
+    },
     // The eye's target from the pier: 30 m past the T end and a few metres left of the pier's line, so it sits in
     // the first look without standing in front of the cast. Play-test: the spot.
     islet: { x: -4.5, z: -39, r: 6.2 },
@@ -262,6 +335,12 @@ export const MAPS: MapDef[] = [
       { x: -19.5, z: 4, r: 7 },
       { x: -15, z: 11, r: 3.5 },
       { x: 18, z: 2, r: 5 },
+      // The green and the pond's hollow. Sized to stop short of the trees that stood round them already.
+      { x: 27.6, z: 4.4, r: 6.2 },
+      { x: 27.6, z: -7.2, r: 5.2 },
+      { x: 26, z: -10.8, r: 3.4 },
+      { x: 34, z: -4.8, r: 4.7 },
+      { x: POND.x, z: POND.z, r: 5.3 },
       { x: -16.5, z: 18, r: 6 },
       { x: 18, z: 20, r: 6 },
       // The headland tips stay bare behind their four pines, so the pines stand against the sky. Play-test: the radius.
@@ -429,9 +508,13 @@ export const MAPS: MapDef[] = [
         { from: [15.5, 31], to: [18.5, 24], w: 1.6 },
         { from: [18.5, 24], to: [18.5, 16], w: 1.6 },
         { from: [18.5, 16], to: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], w: 1.6 },
+        // From the fire through the gap in the seat wall, across the green and down to the pond's landing...
+        { from: [CAMPFIRE.x + RING.r - 0.3, CAMPFIRE.z], to: [POND_LANDING.x, POND_LANDING.z], w: 1.6 },
+        // ...and from that path north along the long lawn to the lookout on the open lake.
+        { from: GREEN_FORK, to: [LOOKOUT.x, LOOKOUT.z], w: 1.4 },
       ],
-      // The campfire's ring, and a round of cobbles where the three lanes meet above it. Play-test: the radius.
-      circles: [{ ...CAMPFIRE, r: RING.r }, { x: CAMP_JUNCTION.x, z: CAMP_JUNCTION.z, r: 1.2 }],
+      // The campfire's ring, a round of cobbles where the three lanes meet above it, the pond's landing and the lookout. Play-test: the radius.
+      circles: [{ ...CAMPFIRE, r: RING.r }, { x: CAMP_JUNCTION.x, z: CAMP_JUNCTION.z, r: 1.2 }, POND_LANDING, LOOKOUT],
       benches: [
         // Along the east jetty's edge, looking across the water to the campfire headland.
         { x: 6.9, z: 7.2, facing: Math.PI / 2 },
@@ -440,6 +523,16 @@ export const MAPS: MapDef[] = [
         { x: 11.2, z: 13.3, facing: Math.PI },
         // The rest stop on the walk up, beside the main street in front of the Fishmonger.
         { x: -4.6, z: 24.5, facing: Math.PI / 2 },
+        // On the green: one either side of the path down to the pond, turned to the water; two on the wing looking
+        // across the pond from its north side; one each side of the lookout, turned to the open lake; and one on the
+        // long lawn's west edge looking across it.
+        { x: 28.6, z: -1, facing: faceToward(28.6, -1, POND.x, POND.z) },
+        { x: 28.4, z: 6.8, facing: faceToward(28.4, 6.8, POND.x, POND.z) },
+        { x: 33, z: -4.7, facing: 0 },
+        { x: 35.6, z: -4.7, facing: 0 },
+        { x: 25.7, z: -9.2, facing: faceToward(25.7, -9.2, 20, -24) },
+        { x: 29.5, z: -9.6, facing: faceToward(29.5, -9.6, 24, -26) },
+        { x: 25.5, z: -7.4, facing: Math.PI / 2 },
       ],
       trees: [
         // Leafy ones by the Fishmonger's garden, behind the Net Mender, and one up each side of the upper street.

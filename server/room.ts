@@ -113,8 +113,10 @@ export class Room {
   private lastStats = '';
   private lastHall = '';
   private lastHallRows: HallRow[] | null = null;
-  /** Supplies the all-accounts leaderboard (set by the server). */
+  private lastHallSeaRows: HallRow[] | null = null;
+  /** Supplies the all-accounts leaderboards (set by the server): the lake's best catches and the charters'. */
   hall: () => HallRow[] = () => NO_HALL;
+  hallSea: () => HallRow[] = () => NO_HALL;
   /** Tells the server's hall cache that an online player's level or best catch changed. */
   hallStale: () => void = () => {};
   private lastSea = '';
@@ -229,7 +231,7 @@ export class Room {
       ...(run ? { dive: diveView(run) } : {}),
     });
     conn.send({ t: 'drops', list: this.drops.all() });
-    conn.send({ t: 'hall', rows: this.hall() });
+    conn.send({ t: 'hall', rows: this.hall(), sea: this.hallSea() });
     conn.send({ t: 'furthest', rows: this.furthest() });
     conn.send({ t: 'supporters', names: this.supporters() });
     conn.send({ t: 'records', records: this.records() });
@@ -1095,7 +1097,8 @@ export class Room {
     this.boardAt = this.now();
     const coins = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, m.acct.save.coins]));
     const stats = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, { level: m.acct.save.level, best: m.acct.save.best ?? null }]));
-    const sk = JSON.stringify(stats);
+    // The charters' best catches re-rank the hall of fame too, though the player list doesn't carry them.
+    const sk = JSON.stringify(stats) + JSON.stringify([...this.members.values()].map((m) => m.acct.save.bestSea?.value ?? 0));
     // Offline accounts can't change, so the hall of fame only moves when an online player's stats do.
     if (sk !== this.lastStats) {
       this.lastStats = sk;
@@ -1110,13 +1113,15 @@ export class Room {
     }
     this.furthestBoard();
     const rows = this.hall();
-    // The server hands back the same cached array until something changed.
-    if (rows === this.lastHallRows) return;
+    const sea = this.hallSea();
+    // The server hands back the same cached arrays until something changed.
+    if (rows === this.lastHallRows && sea === this.lastHallSeaRows) return;
     this.lastHallRows = rows;
-    const hk = JSON.stringify(rows);
+    this.lastHallSeaRows = sea;
+    const hk = JSON.stringify([rows, sea]);
     if (hk !== this.lastHall) {
       this.lastHall = hk;
-      this.broadcast({ t: 'hall', rows });
+      this.broadcast({ t: 'hall', rows, sea });
     }
   }
 

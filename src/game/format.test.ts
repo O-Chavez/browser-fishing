@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COIN, coinText, shortCoins } from './format';
+import { COIN, boardSum, coinText, shortCoins } from './format';
 
 describe('shortCoins', () => {
   it('keeps small amounts whole and shortens big ones without rounding up', () => {
@@ -19,5 +19,17 @@ describe('shortCoins', () => {
 describe('coinText', () => {
   it('escapes the text and swaps every coin emoji for the gold coin', () => {
     expect(coinText('Sold <Koi> for 40 🪙 (+5 🪙)')).toBe(`Sold &lt;Koi&gt; for 40 ${COIN} (+5 ${COIN})`);
+  });
+});
+
+describe('boardSum', () => {
+  it('shows a catch in full up to 999,999, then three figures of millions or billions, never rounded up', () => {
+    expect(boardSum(181)).toBe('181');
+    expect(boardSum(20500)).toBe('20,500');
+    expect(boardSum(999999)).toBe('999,999');
+    expect(boardSum(2_459_999)).toBe('2.45M');
+    expect(boardSum(18_400_000)).toBe('18.4M');
+    expect(boardSum(245_900_000)).toBe('245M');
+    expect(boardSum(2_450_000_000)).toBe('2.45B');
   });
 });

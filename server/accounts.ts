@@ -83,6 +83,7 @@ export class AccountStore {
   private accounts = new Map<string, Account>();
   private dirty = false;
   private hallRows: HallRow[] | null = null;
+  private hallSeaRows: HallRow[] | null = null;
   private furthestRows: FurthestRow[] | null = null;
   private supporterNames: string[] | null = null;
   private recordRows: CasinoRecords | null = null;
@@ -160,6 +161,7 @@ export class AccountStore {
     else {
       this.accounts.delete(nameKey(acct.name));
       this.hallRows = null;
+      this.hallSeaRows = null;
       this.furthestRows = null;
       this.supporterNames = null;
       this.recordRows = null;
@@ -195,6 +197,7 @@ export class AccountStore {
     acct.renamed = this.now();
     this.accounts.set(key, acct);
     this.hallRows = null;
+    this.hallSeaRows = null;
     this.furthestRows = null;
     this.supporterNames = null;
     this.recordRows = null;
@@ -216,13 +219,22 @@ export class AccountStore {
     return `New password set for ${acct.name}. They can log in with it on any device.`;
   }
 
-  /** The most valuable catches across every account, online or not. Cached until `hallStale`. */
+  /** The most valuable lake catches across every account, online or not. Cached until `hallStale`. */
   hall(): HallRow[] {
-    return (this.hallRows ??= [...this.accounts.values()]
-      .filter((a) => a.save.best)
-      .map((a) => ({ name: a.name, level: a.save.level, best: a.save.best!, ...(a.save.title ? { title: a.save.title } : {}) }))
+    return (this.hallRows ??= this.rank('best'));
+  }
+
+  /** The same for charter catches: the Deep Sea board. */
+  hallSea(): HallRow[] {
+    return (this.hallSeaRows ??= this.rank('bestSea'));
+  }
+
+  private rank(key: 'best' | 'bestSea'): HallRow[] {
+    return [...this.accounts.values()]
+      .filter((a) => a.save[key])
+      .map((a) => ({ name: a.name, level: a.save.level, best: a.save[key]!, ...(a.save.title ? { title: a.save.title } : {}) }))
       .sort((a, b) => b.best.value - a.best.value || a.name.localeCompare(b.name))
-      .slice(0, 8));
+      .slice(0, 8);
   }
 
   /**
@@ -265,6 +277,7 @@ export class AccountStore {
     if (!apply) return { lines: [...rows, `${due.length} account${due.length === 1 ? '' : 's'} owed. /backpay apply pays them all.`], paid: [] };
     const paid = due.map((acct) => ({ acct, levels: payBack(acct.save).levels }));
     this.hallRows = null;
+    this.hallSeaRows = null;
     this.furthestRows = null;
     this.touch();
     return { lines: [...rows, `Paid ${due.length} account${due.length === 1 ? '' : 's'}.`], paid };
@@ -324,6 +337,7 @@ export class AccountStore {
   /** Call when a player's level or best catch may have changed, so the next `hall` re-ranks. */
   hallStale(): void {
     this.hallRows = null;
+    this.hallSeaRows = null;
   }
 
   touch(): void {

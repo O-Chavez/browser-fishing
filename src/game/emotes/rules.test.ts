@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMOTES, emoteById } from '../../data/emotes';
+import { EMOTES, SIT, WHEEL_ORDER, emoteById } from '../../data/emotes';
 import * as eco from '../economy';
 import { newSave } from '../state';
 
@@ -36,6 +36,16 @@ describe("what Captain Reed's tiles say about an emote", () => {
     expect(s.pearls).toBe(4_000);
     expect(eco.emotePriceText(kelp)).toBe('300,000 coins and 1,000 Black Pearls');
     expect(eco.emotePriceText(emoteById('wave')!)).toBe('');
+  });
+});
+
+describe('sitting', () => {
+  it('is every account\'s, lasts until the player gets up, and is no emote of the wheel', () => {
+    expect(emoteById('sit')).toBe(SIT);
+    expect(eco.ownsEmote(newSave(), 'sit')).toBe(true);
+    expect(SIT.seconds).toBe(Infinity);
+    expect(EMOTES).not.toContain(SIT);
+    expect(WHEEL_ORDER).not.toContain('sit');
   });
 });
 

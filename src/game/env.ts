@@ -40,13 +40,15 @@ const apronHeight = (x: number, z: number): number => {
  * and `hd` deep turned `rot` radians. Inside it the ground is `h`. Where the ground was lower it is built up, and
  * falls away beyond the edge at `bank` per metre (`LEVEL_BANK` if left out) like an apron's bank; where the hill was
  * higher it is dug down, level for `cut` metres past the edge and from there eased back up into the hill over
- * `LEVEL_BLEND` metres, with no crease at its foot. `cut` carries the flat past whatever stands at the edge (the
+ * `blend` metres (`LEVEL_BLEND` if left out; more for a gentler bank), with no crease at its foot. `cut` carries the flat past whatever stands at the edge (the
  * wall that holds the hill back): the terrain's mesh has a vertex every 0.8-1 m here, so it can't turn a corner
- * any tighter, and would otherwise lean on the wall's foot and lie over the cobbles.
+ * any tighter, and would otherwise lean on the wall's foot and lie over the cobbles. A `grass` level is a lawn: green
+ * whatever its height (the ground below the grass line is sand otherwise), fading out over `LAWN_FADE` metres.
  */
-export interface Level { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number }
+export interface Level { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number; blend?: number; grass?: boolean }
 const LEVEL_BANK = 0.5;
 const LEVEL_BLEND = 1.5;
+const LAWN_FADE = 2;
 let levels: Level[] = [];
 export const setLevels = (l: Level[]): void => {
   levels = l;
@@ -59,6 +61,20 @@ const outside = (l: Level, x: number, z: number): number => {
   const sin = Math.sin(l.rot ?? 0);
   const cos = Math.cos(l.rot ?? 0);
   return Math.hypot(Math.max(0, Math.abs(dx * cos - dz * sin) - l.hw), Math.max(0, Math.abs(dx * sin + dz * cos) - l.hd));
+};
+
+/**
+ * A pond dug into the ground away from the lake: an ellipse `rx` by `rz` metres, `depth` below the water in its
+ * middle. Its edge is a level rim `POND_RIM` above the water, and the bowl falls from there, so the shore is a clean
+ * oval about 0.85 of the way out whatever the ground was. Beyond the rim the ground eases back into what was there
+ * (levels included) by `POND_BLEND` times the radius.
+ */
+export interface Pond { x: number; z: number; rx: number; rz: number; depth: number }
+const POND_RIM = 0.25;
+const POND_BLEND = 1.3;
+let ponds: Pond[] = [];
+export const setPonds = (p: Pond[]): void => {
+  ponds = p;
 };
 
 /**
@@ -88,7 +104,13 @@ export function dirtWeight(x: number, z: number): number {
 }
 /** 0..1, how grassy the ground is at height `y`: above the sand line or on a town's pad, less where it is worn to dirt. */
 export const grassWeight = (x: number, z: number, y: number): number =>
-  Math.max(smooth(0.3, 1.6, y), worn ? padWeight(x, z) : 0) * (1 - 0.85 * dirtWeight(x, z));
+  Math.max(smooth(0.3, 1.6, y), worn ? padWeight(x, z) : 0, lawnWeight(x, z)) * (1 - 0.85 * dirtWeight(x, z));
+/** 0..1, how much of a lawn (a `grass` level) a spot is: 1 on it, fading out past its edge. */
+function lawnWeight(x: number, z: number): number {
+  let w = 0;
+  for (const l of levels) if (l.grass) w = Math.max(w, 1 - smooth(0, LAWN_FADE, outside(l, x, z)));
+  return w;
+}
 
 /** A rock islet out in the lake: casts stop short of it. */
 let islet: { x: number; z: number; r: number } | null = null;
@@ -164,7 +186,13 @@ export function groundHeight(x: number, z: number): number {
   for (const l of levels) {
     const d = outside(l, x, z);
     g = Math.max(g, l.h - d * (l.bank ?? LEVEL_BANK));
-    if (g > l.h) g = l.h + (g - l.h) * smooth(0, LEVEL_BLEND, d - l.cut);
+    if (g > l.h) g = l.h + (g - l.h) * smooth(0, l.blend ?? LEVEL_BLEND, d - l.cut);
+  }
+  for (const p of ponds) {
+    const d = Math.hypot((x - p.x) / p.rx, (z - p.z) / p.rz);
+    if (d >= POND_BLEND) continue;
+    const bowl = POND_RIM - (POND_RIM + p.depth) * (1 - smooth(0.4, 1, d));
+    g = bowl + (g - bowl) * smooth(1, POND_BLEND, d);
   }
   return Math.min(g, deckBed(x, z));
 }

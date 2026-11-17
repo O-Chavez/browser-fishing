@@ -4,6 +4,7 @@ import { kelp } from './looks/kelp';
 import { master } from './looks/master';
 import { nice } from './looks/nice';
 import { no } from './looks/no';
+import { sit } from './looks/sit';
 import { twilight } from './looks/twilight';
 import { wave } from './looks/wave';
 import { yes } from './looks/yes';
@@ -27,6 +28,8 @@ export const EMOTE_LOOKS: Record<string, EmoteLook> = {
   twilight,
   abyss,
   master,
+  // Sitting on a seat (`SIT`): not on the wheel.
+  sit,
 };
 
 /** An emote with no look of its own (one added to the catalog before its look; none today): a slow, gentle bob and nothing else. */

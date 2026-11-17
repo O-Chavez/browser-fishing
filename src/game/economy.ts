@@ -925,7 +925,9 @@ export function applyCatch(s: SaveData, fish: Fish, size: number, shiny = false,
   if (sell) s.coins += sold;
   else s.slots[slot] = item;
   const value = Math.round(sellValue(fish, size, shiny) * mult);
-  if (!s.best || value > s.best.value) s.best = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
+  // A record for its own water: the lake's best and the charters' best are kept apart, one for each board.
+  const water = fish.sea ? 'bestSea' : 'best';
+  if (!s[water] || value > s[water]!.value) s[water] = { fishId: fish.id, size, value, ...(shiny ? { shiny: true } : {}) };
   const before = s.level;
   const ranks = gainXp(s, gained);
   const stages = openStages(s).ids;

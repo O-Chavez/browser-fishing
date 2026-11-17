@@ -6,6 +6,7 @@ import { DOCK_TOP, groundHeight, standHeight } from './env';
 import { mergeStatic } from './merge';
 import { glowTag } from './nightglow';
 import { buildFish } from './fishmodel';
+import { boardSum } from './format';
 import type { Circle } from './player';
 import { ColliderList } from './colliderlist';
 import casinoPreview from '../assets/images/casino-preview.jpg';
@@ -135,7 +136,15 @@ export interface LeaderRow {
   color: string;
   shiny?: boolean;
   title?: string | null;
+  /** A charter catch: shown by name alone, since every sea fish is tier 5. */
+  sea?: boolean;
 }
+
+/** A catch board's words and colours: Lake Legends keeps Top Anglers' navy and gold, Deep Sea is darker with a pale aqua trim. */
+interface BoardLook { title: string; sub: string; empty: string; roof: number; bg: string; trim: string; head: string; soft: string; first: string }
+const LAKE_BOARD: BoardLook = { title: 'LAKE LEGENDS', sub: 'most valuable lake catch', empty: 'No anglers yet', roof: 0x2f6f9f, bg: '#1f3d5a', trim: '#d4af37', head: '#ffe9b8', soft: '#9fc2de', first: '#ffd23a' };
+const SEA_BOARD: BoardLook = { title: 'DEEP SEA', sub: 'most valuable charter catch', empty: 'No charter catches yet', roof: 0x1d3557, bg: '#14243f', trim: '#8fd8e6', head: '#dff7ff', soft: '#8fb3cf', first: '#9fe8f5' };
+interface BoardFace { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture }
 
 /** The town hub: vendor stall with its keeper and the gate to the next map. */
 export class Hub {
@@ -146,9 +155,11 @@ export class Hub {
   /** The casino poster beside the pond gate (unset on maps without one). */
   readonly peekSpot: THREE.Vector3 | null = null;
   readonly leaderSpot = new THREE.Vector3();
+  /** In front of the Deep Sea board (unset on maps without one). */
+  readonly seaSpot: THREE.Vector3 | null = null;
   readonly campSpot = new THREE.Vector3();
-  private leaderCtx!: CanvasRenderingContext2D;
-  private leaderTex!: THREE.CanvasTexture;
+  private lakeFace!: BoardFace;
+  private seaFace: BoardFace | null = null;
   private thanksCtx!: CanvasRenderingContext2D;
   private thanksTex!: THREE.CanvasTexture;
   private flames: THREE.Mesh[] = [];
@@ -176,10 +187,15 @@ export class Hub {
     this.buildGate(map.gate);
     if (map.next?.id === 'casino') (this as { peekSpot: THREE.Vector3 | null }).peekSpot = this.buildPoster(map.gate, POSTERS.casino);
     this.buildProps();
-    this.buildLeaderboard(map.leaderboard);
+    this.lakeFace = this.buildCatchBoard(map.leaderboard, LAKE_BOARD, this.leaderSpot);
+    if (map.seaboard) {
+      const spot = new THREE.Vector3();
+      this.seaFace = this.buildCatchBoard(map.seaboard, SEA_BOARD, spot);
+      (this as { seaSpot: THREE.Vector3 | null }).seaSpot = spot;
+    }
     this.buildThanks(map.thanks);
     this.buildCampfire(map.campfire);
-    this.setLeaders([]);
+    this.setLeaders([], []);
     this.setSupporters([]);
     this.setGate(false);
     // The shopkeeper and the hanging fish animate; everything else static is baked together.
@@ -379,7 +395,8 @@ export class Hub {
     }
   }
 
-  private buildLeaderboard(spot: Spot): void {
+  /** A catch board on two posts under a little roof; `reader` is set to where a player stands to read it. */
+  private buildCatchBoard(spot: Spot, look: BoardLook, reader: THREE.Vector3): BoardFace {
     const g = new THREE.Group();
     // Posts behind the frame, like the posters' (`BEHIND`), so they don't come through the board's face.
     for (const lx of [-1.0, 1.0]) {
@@ -391,19 +408,19 @@ export class Hub {
     frame.position.set(0, 1.9, 0);
     const face = textPlane(2.3, 1.8, 512);
     face.mesh.position.set(0, 1.9, 0.07);
-    const roof = rbox(2.9, 0.12, 0.7, 0x2f6f9f, 0.05);
+    const roof = rbox(2.9, 0.12, 0.7, look.roof, 0.05);
     roof.position.set(0, 3.0, 0);
     roof.rotation.x = 0.15;
     g.add(frame, face.mesh, roof);
-    this.leaderCtx = face.ctx;
-    this.leaderTex = face.tex;
     this.place(g, spot, 0, 0, this.footing(spot, 1.0));
     for (const lx of [-1.0, 1.0]) {
       const c = this.world(spot, lx, 0);
       this.fixed.push({ x: c.x, z: c.z, r: 0.3 });
     }
-    // Close enough that a reader in front stands clear of the fire the board faces.
-    this.world(spot, 0, 1.8, this.leaderSpot);
+    // Far enough in front that a reader stands back from the seat wall the board is behind (right at the wall, its
+    // seats are offered instead), and close enough to stand clear of the fire the board faces.
+    this.world(spot, 0, 2.4, reader);
+    return { ctx: face.ctx, tex: face.tex };
   }
 
   /** Height to stand a two-post board on: the lower post's ground, so on a slope the other post sinks in rather than one floating. */
@@ -411,59 +428,66 @@ export class Hub {
     return Math.min(this.world(spot, -postX, 0).y, this.world(spot, postX, 0).y);
   }
 
-  /** Redraws the "Top Anglers" board, ranked by the most valuable fish each player has caught. */
-  setLeaders(rows: LeaderRow[]): void {
-    const ctx = this.leaderCtx;
+  /** Redraws the two catch boards, each ranked by the most valuable fish every player has caught in that water. */
+  setLeaders(lake: LeaderRow[], sea: LeaderRow[]): void {
+    this.drawBoard(this.lakeFace, LAKE_BOARD, lake);
+    if (this.seaFace) this.drawBoard(this.seaFace, SEA_BOARD, sea);
+  }
+
+  private drawBoard(face: BoardFace, look: BoardLook, rows: LeaderRow[]): void {
+    const ctx = face.ctx;
     const { width: w, height: h } = ctx.canvas;
-    ctx.fillStyle = '#1f3d5a';
+    ctx.fillStyle = look.bg;
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#d4af37';
+    ctx.strokeStyle = look.trim;
     ctx.lineWidth = 10;
     ctx.strokeRect(6, 6, w - 12, h - 12);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffe9b8';
-    ctx.font = '800 44px system-ui, sans-serif';
-    ctx.fillText('TOP ANGLERS', w / 2, 66);
-    ctx.font = '600 22px system-ui, sans-serif';
-    ctx.fillStyle = '#9fc2de';
-    ctx.fillText('most valuable catch', w / 2, 94);
+    ctx.fillStyle = look.head;
+    ctx.font = '800 42px system-ui, sans-serif';
+    ctx.fillText(look.title, w / 2, 60);
+    ctx.font = '600 20px system-ui, sans-serif';
+    ctx.fillStyle = look.soft;
+    ctx.fillText(look.sub, w / 2, 85);
+    // Five rows fit the face (the canvas is 512 by about 400). A long name beside a sum in the millions would run
+    // into it, so those are shortened (`boardSum`).
     rows.slice(0, 5).forEach((r, i) => {
-      const y = 148 + i * 72;
+      const y = 128 + i * 56;
       ctx.textAlign = 'left';
-      ctx.font = '700 32px system-ui, sans-serif';
-      ctx.fillStyle = i === 0 ? '#ffd23a' : '#ffffff';
+      ctx.font = '700 30px system-ui, sans-serif';
+      ctx.fillStyle = i === 0 ? look.first : '#ffffff';
       ctx.fillText(`${i + 1}. ${r.name.slice(0, 9)}`, 34, y);
       const nameW = ctx.measureText(`${i + 1}. ${r.name.slice(0, 9)}`).width;
-      ctx.font = '600 22px system-ui, sans-serif';
-      ctx.fillStyle = '#9fc2de';
-      ctx.fillText(`Lv ${r.level}`, 34 + nameW + 10, y);
+      ctx.font = '600 20px system-ui, sans-serif';
+      ctx.fillStyle = look.soft;
+      ctx.fillText(`Lv ${r.level}`, 34 + nameW + 9, y);
       ctx.textAlign = 'right';
-      ctx.font = '800 32px system-ui, sans-serif';
+      ctx.font = '800 30px system-ui, sans-serif';
       ctx.fillStyle = r.value ? '#ffd23a' : '#6f8aa3';
-      if (r.value) fillCoinAmount(ctx, r.value.toLocaleString(), w - 34, y, 32);
+      if (r.value) fillCoinAmount(ctx, boardSum(r.value), w - 34, y, 30);
       else ctx.fillText('—', w - 34, y);
       if (r.value) {
         ctx.textAlign = 'left';
-        ctx.font = '600 24px system-ui, sans-serif';
+        ctx.font = '600 21px system-ui, sans-serif';
         ctx.fillStyle = r.color;
-        ctx.fillText(`${r.shiny ? '✨ ' : ''}T${r.tier} ${r.fish}`, 52, y + 28);
+        ctx.fillText(`${r.shiny ? '✨ ' : ''}${r.sea ? '' : `T${r.tier} `}${r.fish}`, 52, y + 24);
       } else {
         ctx.textAlign = 'left';
-        ctx.font = '600 22px system-ui, sans-serif';
+        ctx.font = '600 20px system-ui, sans-serif';
         ctx.fillStyle = '#6f8aa3';
-        ctx.fillText('no catch yet', 52, y + 28);
+        ctx.fillText('no catch yet', 52, y + 24);
       }
     });
     if (!rows.length) {
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#9fc2de';
-      ctx.font = '700 32px system-ui, sans-serif';
-      ctx.fillText('No anglers yet', w / 2, 200);
+      ctx.fillStyle = look.soft;
+      ctx.font = '700 30px system-ui, sans-serif';
+      ctx.fillText(look.empty, w / 2, 200);
     }
-    this.leaderTex.needsUpdate = true;
+    face.tex.needsUpdate = true;
   }
 
-  /** A small "thank you" board beside Top Anglers, listing the players who tipped on Ko-fi. */
+  /** A small "thank you" board on the green, listing the players who tipped on Ko-fi. */
   private buildThanks(spot: Spot): void {
     const g = new THREE.Group();
     for (const lx of [-0.6, 0.6]) {

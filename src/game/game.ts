@@ -91,7 +91,9 @@ import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type Sa
 import { ABYSSAL, BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
 import { Character, CharacterPreview } from './character';
-import { EMOTES, EMOTE_GAP_MS, WHEEL_SLOTS, emoteById, type EmoteDef } from '../data/emotes';
+import { EMOTES, EMOTE_GAP_MS, SIT, WHEEL_SLOTS, emoteById, type EmoteDef } from '../data/emotes';
+import type { Circle } from './player';
+import type { Seat } from './town';
 import { EmotePlayer } from './emotes/player';
 import { LookWarmer } from './emotes/warm';
 import { ThirdPerson, type CamEnv } from './emotes/thirdperson';
@@ -137,6 +139,11 @@ const CAST_OFF_LINES = [
 ];
 const HEADING_IN_LINES = ['Lines in, angler. Taking her home.', 'Good sailing. The harbour light is in sight.'];
 
+/** How close a seat must be for its "Sit down" prompt. A play-test default. */
+const SEAT_RANGE = 1.5;
+const NO_COLLIDERS: Circle[] = [];
+/** Colliders this close to a seated player are their own seat, and don't block their camera. */
+const SEAT_CLEAR = 1.3;
 const CAMP_TIPS = [
   'Tip: hold the cast longer for a farther throw.',
   'Tip: when a fish surges, keep the gauge green: ease off before the red, tighten before it takes your line.',
@@ -391,6 +398,8 @@ export class Game {
   private bodyEmotes = new EmotePlayer(this.body);
   private tp = new ThirdPerson();
   private emote: EmoteDef | null = null;
+  /** Seated (`SIT`): where the player stood before sitting down, to stand them back there when they get up. */
+  private seat: { x: number; z: number } | null = null;
   /** When the last emote began, to keep them `EMOTE_GAP_MS` apart like the server does. */
   private emoteAt = -Infinity;
   private lookWarm!: LookWarmer;
@@ -470,7 +479,7 @@ export class Game {
         this.dropsView.sync(list, this.map.id);
       },
       onBoard: () => {
-        this.world.hub?.setLeaders(this.anglers());
+        this.world.hub?.setLeaders(this.anglers(), this.anglers(true));
         if (this.menuOpen && this.tab === 'players') this.renderMenu();
       },
       onSupporters: () => {
@@ -492,7 +501,7 @@ export class Game {
         }
       },
       onPlayers: () => {
-        this.world.hub?.setLeaders(this.anglers());
+        this.world.hub?.setLeaders(this.anglers(), this.anglers(true));
         if (this.menuOpen && (this.tab === 'players' || this.tab === 'inventory')) this.renderMenu();
         this.avatars.sync(this.net.players, this.net.id, this.here());
         this.refreshHud();
@@ -755,7 +764,7 @@ export class Game {
     ($('join-pass') as HTMLInputElement).value = '';
     $('join-pass-row').classList.add('hidden');
     $('join-switch').classList.add('hidden');
-    this.world.hub?.setLeaders(this.anglers());
+    this.world.hub?.setLeaders(this.anglers(), this.anglers(true));
     // Returning players join by themselves within moments of the page loading, often before the map's shaders
     // (`World.prewarm`, and the map the save is on, built right after this) and the legend pieces' stand-ins
     // (`Avatars.warmLegends`) are done. The card stays up meanwhile ("Loading…", the world not drawn behind it while
@@ -1888,12 +1897,15 @@ export class Game {
     return rows.sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
   }
 
-  /** Online players ranked by their most valuable catch, for the physical board. */
-  private anglers(): LeaderRow[] {
+  /** Every account ranked by its most valuable catch, from the lake or (`sea`) from the charters, for the two boards at the campfire. */
+  private anglers(sea = false): LeaderRow[] {
     type Row = { name: string; level: number; best: SaveData['best']; coins: number; title: string | null };
     let all: Row[];
     if (this.net.connected) {
-      all = this.net.hall.map((h) => ({ name: h.name, level: h.level, best: h.best, coins: 0, title: titleName(h.title) }));
+      all = (sea ? this.net.hallSea : this.net.hall).map((h) => ({ name: h.name, level: h.level, best: h.best, coins: 0, title: titleName(h.title) }));
+    } else if (sea) {
+      // Offline, the Deep Sea board lists you only once you have a charter catch.
+      all = this.s.bestSea ? [{ name: this.net.name, level: this.s.level, best: this.s.bestSea, coins: this.s.coins, title: titleName(this.s.title) }] : [];
     } else {
       all = [{ name: this.net.name, level: this.s.level, best: this.s.best, coins: this.s.coins, title: titleName(this.s.title) }];
     }
@@ -1907,9 +1919,11 @@ export class Game {
           value: f ? p.best!.value : 0,
           fish: f?.name ?? '',
           tier: f?.tier ?? 0,
-          color: this.tierColor(f?.tier ?? 0),
+          // Every sea fish is tier 5, so the sea board keeps gold for the zones' legends.
+          color: f?.sea && !f.legend ? '#9fd8e8' : this.tierColor(f?.tier ?? 0),
           shiny: p.best?.shiny,
           title: p.title,
+          ...(f?.sea ? { sea: true } : {}),
         };
       });
   }
@@ -2097,7 +2111,7 @@ export class Game {
     this.near = null;
     this.avatars.sync(this.net.players, this.net.id, this.here());
     // A new hub starts with an empty board, and the server only resends it when someone's stats change.
-    this.world.hub?.setLeaders(this.anglers());
+    this.world.hub?.setLeaders(this.anglers(), this.anglers(true));
     this.world.hub?.setSupporters(this.net.supporters);
     this.world.hall?.records.set(this.net.records);
     this.world.town?.setFurthest(this.net.furthest);
@@ -2628,6 +2642,8 @@ export class Game {
   private startEmote(id: string): boolean {
     const def = emoteById(id);
     if (!def || !this.canEmote()) return false;
+    // An emote from a seat is played standing, back where the player sat down from.
+    if (def !== SIT) this.leaveSeat();
     if (!eco.ownsEmote(this.s, def.id)) {
       const hint = eco.emoteHint(this.s, def);
       this.toast(`🔒 ${eco.emoteGateMet(this.s, def) ? `${def.name} · ${hint}` : hint}`, 4);
@@ -2640,16 +2656,42 @@ export class Game {
     this.emote = def;
     this.body.set(this.s.look);
     this.bodyEmotes.start(def, this.world.night, true);
-    this.tp.start(def.camera, def.seconds, def.cameraDistance);
+    this.tp.start(def.camera, def.seconds, def.cameraDistance, def.cameraTurn);
     // Where the player stands goes first (position updates are throttled), so the others' copies start on the right spot.
     this.net.send({ t: 'pos', x: this.player.x, z: this.player.z, yaw: this.world.yaw });
     this.net.send({ t: 'emote', id: def.id });
     return true;
   }
 
+  /**
+   * Sits the player down on a seat (`Town.seats`): they are stood on the seat's spot facing its way, and the seated
+   * pose plays as an emote with no end, so everyone sees it and a step, a jump or a cast gets them up again.
+   */
+  private sit(seat: Seat): void {
+    if (!this.canEmote() || this.emote) return;
+    const from = { x: this.player.x, z: this.player.z };
+    const yaw = this.world.yaw;
+    this.player.teleport(seat.x, seat.z);
+    // The model's front is +z and yaw 0 looks along -z.
+    this.world.yaw = seat.facing + Math.PI;
+    if (this.startEmote(SIT.id)) this.seat = from;
+    else {
+      this.player.teleport(from.x, from.z);
+      this.world.yaw = yaw;
+    }
+  }
+
+  /** Stands a seated player back where they sat down from (the seat's own spot is inside the bench or the wall). */
+  private leaveSeat(): void {
+    if (!this.seat) return;
+    this.player.teleport(this.seat.x, this.seat.z);
+    this.seat = null;
+  }
+
   /** Ends the emote playing and sends the camera home. `early`: it was cut short (a step, a jump, a cast), so the others are told. */
   private endEmote(early: boolean): void {
     if (!this.emote) return;
+    this.leaveSeat();
     this.emote = null;
     this.bodyEmotes.stop();
     this.tp.end();
@@ -2661,6 +2703,7 @@ export class Game {
     this.closeWheel(false);
     if (this.emote) this.net.send({ t: 'emote', id: null });
     this.emote = null;
+    this.seat = null;
     this.bodyEmotes.clear();
     this.tp.reset();
     this.world.view = null;
@@ -2680,9 +2723,13 @@ export class Game {
     // On the boat only the wheelhouse stands in the camera's way: the boxes, the barrel and the net drum that block
     // a walk are low enough to look over.
     const [hx0, hx1, hz0, hz1] = WHEELHOUSE;
+    // A seated player rests inside their seat, so what stands within a step of them (the bench, that stretch of the
+    // seat wall) doesn't count, or the camera could never leave their head.
+    const { x: px, z: pz } = this.player;
+    const own = (c: Circle) => !!this.seat && (c.x - px) ** 2 + (c.z - pz) ** 2 < SEAT_CLEAR * SEAT_CLEAR;
     const blocked = this.map.sea
       ? (x: number, z: number) => x > hx0 && x < hx1 && z > hz0 && z < hz1
-      : (x: number, z: number) => w.colliders.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
+      : (x: number, z: number) => w.colliders.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r && !own(c));
     return { blocked, floor: (x, z) => Math.max(standHeight(x, z), w.surface(x, z)), ceiling: w.ceiling };
   }
 
@@ -2725,7 +2772,8 @@ export class Game {
     const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || this.touchMove.sprint;
     // A step ends an emote.
     if (fwd || strafe) this.endEmote(true);
-    this.player.update(dt, fwd, strafe, sprint, w.yaw, w.colliders);
+    // A seated player rests inside the seat's own collider, which mustn't push them off it.
+    this.player.update(dt, fwd, strafe, sprint, w.yaw, this.seat ? NO_COLLIDERS : w.colliders);
     w.eye.set(this.player.x, this.player.eyeY, this.player.z);
     w.walkBob = this.player.bob;
 
@@ -2759,6 +2807,10 @@ export class Game {
           act: reed ? () => this.openReed(town.nextLine(npc, w.night > 0.5)) : () => this.toast(town.talk(npc, w.night > 0.5), 6),
         });
       }
+      // A seat within reach. Walking right up to one is asking to sit, so it comes before whatever else is near (the
+      // board behind the seat wall is read from a step back).
+      const seat = town.seatNear(x, z, SEAT_RANGE);
+      if (seat) spots.push({ d: Math.hypot(seat.x - x, seat.z - z) - 1, label: 'Sit down', act: () => this.sit(seat) });
       for (const b of town.bottles) {
         if (this.s.bottles.includes(b.id)) continue;
         const db = Math.hypot(b.pos.x - x, b.pos.z - z);
@@ -2812,7 +2864,8 @@ export class Game {
       }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
-        { d: near(hub.leaderSpot), label: 'Top Anglers · see everyone online', act: () => this.openMenu('players') },
+        { d: near(hub.leaderSpot), label: 'Lake Legends · see everyone online', act: () => this.openMenu('players') },
+        ...(hub.seaSpot ? [{ d: near(hub.seaSpot), label: 'Deep Sea · the best charter catches', act: () => this.openAnglersAt('top-sea') }] : []),
         { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
         ...(hub.peekSpot ? [{ d: near(hub.peekSpot), label: 'Casino Cove poster · take a look inside', act: () => this.openMenu('peek') }] : []),
         {
@@ -3164,7 +3217,7 @@ export class Game {
     this.stagesWaiting.push(...stages);
     if (gift) this.toast(smoke.giftText(gift), 3.5);
     this.caughtTier = fish.tier;
-    this.world.hub?.setLeaders(this.anglers());
+    this.world.hub?.setLeaders(this.anglers(), this.anglers(true));
     const sc = this.heldScale();
     this.hangPoint(this.bob, 0, 0).y -= 0.5 * sc;
     this.bobVel.set(0.5, 0, -0.2).multiplyScalar(Math.min(1, 1.6 / sc));
@@ -4994,6 +5047,12 @@ export class Game {
     return `${anchorHtml(atMaxRank(level))}${this.net.isSupporter(name) ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}`;
   }
 
+  /** Opens the Anglers menu scrolled to one of its lists (the Deep Sea board opens it on the charter catches). */
+  private openAnglersAt(id: string): void {
+    this.openMenu('players');
+    requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
+  }
+
   private playersHtml(): string {
     const rows = this.leaders()
       .map(
@@ -5002,19 +5061,23 @@ export class Game {
       )
       .join('');
     const head = this.net.connected ? `<b>${this.net.players.size + 1}</b> online now` : 'Playing offline - join a server to fish with others.';
-    // All-time ranking by most valuable single catch, the same list as the Top Anglers board by the campfire.
-    const top = this.anglers()
-      .filter((a) => a.value > 0)
-      .slice(0, 10)
-      .map((a, i) => {
-        const f = FISH.find((x) => x.name === a.fish);
-        const me = a.name === this.net.name;
-        return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}${this.marks(a.name, a.level)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span>${a.title ? `<span class="ttl">${a.title}</span>` : ''}</div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
-      })
-      .join('');
+    // All-time rankings by most valuable single catch, the same lists as the two boards by the campfire.
+    const top = (sea: boolean) =>
+      this.anglers(sea)
+        .filter((a) => a.value > 0)
+        .slice(0, 10)
+        .map((a, i) => {
+          const f = FISH.find((x) => x.name === a.fish);
+          const me = a.name === this.net.name;
+          return `<div class="angler top${me ? ' me' : ''}"><span class="rank">${i === 0 ? '🏆' : i + 1}</span><span class="tfish" style="--c:var(--t${a.sea ? (f?.legend ? 5 : 3) : Math.max(1, a.tier)})">${f ? fishIcon(f.id, { shiny: a.shiny }) : ''}</span><div class="who2"><b>${escapeHtml(a.name)}${this.marks(a.name, a.level)}</b><span>${a.shiny ? '✨ ' : ''}${a.fish} · Lv ${a.level}</span>${a.title ? `<span class="ttl">${a.title}</span>` : ''}</div><span class="lv val"><span class="coin xs"></span>${a.value.toLocaleString()}</span></div>`;
+        })
+        .join('');
+    const lake = top(false);
+    const sea = top(true);
     return `<div class="cols anglers-cols">
       <div><h4>Online now</h4><p class="list-head">${head}</p><div class="anglers">${rows}</div></div>
-      <div><h4>Top anglers · best single catch</h4><div class="anglers">${top || '<p class="empty">No catches yet - be the first on the board.</p>'}</div></div>
+      <div><h4>Lake Legends · best lake catch</h4><div class="anglers">${lake || '<p class="empty">No catches yet - be the first on the board.</p>'}</div>
+        <h4 id="top-sea" class="top-sea">Deep Sea · best charter catch</h4><div class="anglers">${sea || '<p class="empty">No charter catches yet. Captain Reed sails from his wharf.</p>'}</div></div>
     </div>`;
   }
 

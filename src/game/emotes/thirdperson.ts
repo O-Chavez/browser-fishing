@@ -103,10 +103,13 @@ export class ThirdPerson {
     return this.dist >= CAM.showAt;
   }
 
-  /** Pulls the camera back for an emote `secs` long, `dist` metres back (the emote's `cameraDistance`) or the usual `CAM` distance. */
-  start(mode: EmoteCamera, secs: number, dist?: number): void {
+  /**
+   * Pulls the camera back for an emote `secs` long, `dist` metres back (the emote's `cameraDistance`) or the usual
+   * `CAM` distance, starting `turn` radians round the player from behind them (the emote's `cameraTurn`).
+   */
+  start(mode: EmoteCamera, secs: number, dist?: number, turn = 0): void {
     // A camera still coming home from the last emote goes back out from where it is.
-    this.dragYaw = this.active ? this.turn() : 0;
+    this.dragYaw = this.active ? this.turn() : turn;
     this.dragPitch = 0;
     this.mode = mode;
     this.far = dist ?? CAM[mode].dist;

@@ -52,6 +52,7 @@ const yawTo = (x: number, z: number, tx: number, tz: number) => Math.atan2(-(tx 
 const at = (x: number, z: number, tx: number, tz: number, note: string, times?: Record<string, number>): View => ({ x, z, yaw: yawTo(x, z, tx, tz), note, times });
 /** Standing `d` m in front of a board (`leaderboard`, `thanks` in maps.ts) and reading it, looking up a little, as the boards stand up the slope. */
 const { leaderboard: TOP, thanks: THANKS, campfire: FIRE } = MAPS[0];
+const SEA = MAPS[0].seaboard!;
 const before = (b: { x: number; z: number; facing: number }, d: number, note: string, times?: Record<string, number>): View =>
   ({ ...at(b.x + Math.sin(b.facing) * d, b.z + Math.cos(b.facing) * d, b.x, b.z, note, times), pitch: 0.12 });
 const DUSK_NIGHT = { dusk: 0.53, night: 0.72 };
@@ -102,6 +103,20 @@ export const WALK: Record<string, View> = {
   e12_water: at(FIRE.x - 2.4, FIRE.z - 1.5, FIRE.x + 2, FIRE.z + 1.3, 'from the open water side, on the line from the pier end: the fire, the wall and the pair of boards'),
   e13_wall: at(FIRE.x + 1.6, FIRE.z + 0.9, 0, 0, 'sitting on the seat wall: across the fire to the cove and the pier'),
   e11_boards_back: at(TOP.x + 3, TOP.z + 1.5, FIRE.x, FIRE.z, 'from up the hill behind the boards, looking down over the circle to the cove'),
+  g01_gap: at(FIRE.x - 2.6, FIRE.z, 30, 3, 'from the fire\'s water side: the two catch boards and the way through to the green between them'),
+  g02_green: at(25.2, 3.3, 34.2, 2.9, 'stepping onto the green: the way down to the pond, benches either side'),
+  g03_landing: at(28.9, 2.9, 34.2, 2.9, 'on the pond\'s landing'),
+  g04_back: at(29.4, 2.9, FIRE.x, FIRE.z, 'from the landing back across the green to the fire and the cove'),
+  g05_thanks: before(THANKS, 2.6, 'reading Thanks on the green'),
+  g06_sea: before(SEA, 2.3, 'reading Deep Sea over the seat wall'),
+  g07_north: at(27.4, 2, 27.6, -10, 'from the fork north along the long lawn to the lookout'),
+  g08_lookout: at(27.6, -9.8, 18, -34, 'at the lookout: the open lake and the islet'),
+  g09_lookback: at(27.6, -10.6, 27.4, 3, 'from the lookout back down the long lawn'),
+  g10_wing: at(34.3, -5.8, 34.2, 2.9, 'from behind the wing\'s benches across the pond'),
+  g11_pondback: at(36.6, -3.6, 24, 2, 'from the wing\'s far end back over the pond to the fire'),
+  ng1_gap: at(FIRE.x - 2.6, FIRE.z, 30, 3, 'the way through to the green at night', { night: 0.72 }),
+  ng2_green: at(25.2, 3.3, 34.2, 2.9, 'the green at night', { night: 0.72 }),
+  ng3_lawn: at(27.4, 2, 27.6, -10, 'the long lawn at night', { night: 0.72 }),
   e05_ring_e1: at(18.5, 16, 18.5, 24, 'the east ring lane going up behind the Net Mender'),
   e06_ring_e2: at(18.5, 24, 15.5, 31, 'the east ring lane toward the blue house'),
   e07_ring_e3: at(15.5, 31, 2, 32, 'arriving at the square from the east lane'),

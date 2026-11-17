@@ -824,6 +824,18 @@ describe('emotes', () => {
     expect(a.c.log.filter((m) => m.t === 'state')).toHaveLength(0);
   });
 
+  it('shows a player sitting down to the others, and getting up again however long they sat', () => {
+    const t = three();
+    const { room, a, b } = t;
+    room.place(a.id, 20, 1);
+    room.handle(a.id, { t: 'emote', id: 'sit' });
+    expect(emotes(b.c)).toEqual([{ t: 'emote', id: a.id, emote: 'sit', x: 20, z: 1 }]);
+    // Sitting has no length, so the end is passed on whenever it comes.
+    t.advance(30 * 60_000);
+    room.handle(a.id, { t: 'emote', id: null });
+    expect(emotes(b.c).at(-1)).toEqual({ t: 'emote', id: a.id, emote: null });
+  });
+
   it("never shows an emote the player doesn't own, or one that doesn't exist", () => {
     const { room, a, b, advance } = three();
     for (const id of ['kelp', 'twilight', 'abyss', 'master', 'nope', 'constructor', '', 7, {}, undefined, ['wave']]) {
@@ -1094,6 +1106,22 @@ describe('scaling', () => {
     t.advance(BOARD_MS);
     t.room.snapshot();
     expect(last(a.c, 'hall').rows.map((r) => r.name)).toEqual(['Ann']);
+  });
+
+  it('sends the charters\' best catches as their own list, re-ranked when an online player sets a new one', () => {
+    const t = setup();
+    t.room.hall = () => t.store.hall();
+    t.room.hallSea = () => t.store.hallSea();
+    t.room.hallStale = () => t.store.hallStale();
+    const a = t.join('Ann');
+    t.room.snapshot();
+    expect(last(a.c, 'hall').sea).toEqual([]);
+    a.acct.save.bestSea = { fishId: 'marlin', size: 300, value: 9000 };
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    const hall = last(a.c, 'hall');
+    expect(hall.sea?.map((r) => [r.name, r.best.fishId])).toEqual([['Ann', 'marlin']]);
+    expect(hall.rows).toEqual([]);
   });
 });
 

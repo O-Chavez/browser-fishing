@@ -273,6 +273,11 @@ describe('renaming', () => {
     expect(acct.name).toBe('Bea');
     expect(store.names()).toEqual(['Bea']);
     expect(store.hall()[0].name).toBe('Bea');
+    expect(store.hallSea()).toEqual([]);
+    acct.save.bestSea = { fishId: 'marlin', size: 300, value: 5000 };
+    store.hallStale();
+    expect(store.hallSea()).toEqual([{ name: 'Bea', level: acct.save.level, best: acct.save.bestSea }]);
+    expect(store.hall()[0].best.fishId).toBe('trout');
     expect(store.supporters()).toEqual(['Bea']);
     expect(store.records().win?.name).toBe('Bea');
     expect(store.auth('Bea', A)).toMatchObject({ ok: true, account: acct });

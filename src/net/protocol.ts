@@ -241,7 +241,7 @@ export type ServerMsg =
   /** Coins per player id, for the leaderboard. */
   | { t: 'board'; coins: Record<number, number>; stats: Record<number, { level: number; best: BestCatch | null }> }
   /** Hall of fame: best catches of every account, including players who are offline. */
-  | { t: 'hall'; rows: HallRow[] }
+  | { t: 'hall'; rows: HallRow[]; /** The same for charter catches (missing from older servers). */ sea?: HallRow[] }
   /** The Furthest Out board at the harbour: how far out every account's charters reach, including offline players. */
   | { t: 'furthest'; rows: FurthestRow[] }
   /** Every Ko-fi supporter's name, newest first, for the 💗 by their names and the thank-you board. */

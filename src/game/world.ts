@@ -18,6 +18,7 @@ import {
   padWeight,
   setAprons,
   setLevels,
+  setPonds,
   setIslet,
   setWorn,
   dirtWeight,
@@ -654,6 +655,7 @@ export class World {
     setPad(map.pad);
     setAprons(map.aprons ?? []);
     setLevels(map.levels ?? []);
+    setPonds(map.ponds ?? []);
     setIslet(map.islet ?? null);
     this.islet = map.islet ?? null;
     // The town's ground is worn to dirt along its paths, round the square and in front of the two stalls.
@@ -862,7 +864,8 @@ export class World {
     let leafy = 0;
     // The headland pines first (docs/map-rework/harbour.json): the headland tips are too low for the
     // forest's 0.8 m line, and these four make the cove's silhouette. [x, z, scale]
-    const headland: [number, number, number][] = [[19.5, -3.5, 1.25], [22, -0.5, 1.1], [-22.5, -5, 1.3], [-23.5, 1, 1.05]];
+    // The east headland's second pine stands back from the campfire ring, clear of the Lake Legends board.
+    const headland: [number, number, number][] = [[19.5, -3.5, 1.25], [22.4, -6.6, 1.1], [-22.5, -5, 1.3], [-23.5, 1, 1.05]];
     for (let tries = 0; n < N && tries < 6000; tries++) {
       const fixed = headland[n];
       const th = (rnd() * 2 - 1) * Math.PI;

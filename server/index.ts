@@ -131,6 +131,7 @@ function room(name: string): Room {
   if (!r) {
     r = new Room(name, MAPS, persist);
     r.hall = () => accounts.hall();
+    r.hallSea = () => accounts.hallSea();
     r.hallStale = () => accounts.hallStale();
     r.furthest = () => accounts.furthest();
     r.furthestStale = () => accounts.furthestStale();

@@ -61,9 +61,14 @@ export interface TownBottle {
 }
 
 /** Cottages, cobbled streets, townsfolk and hidden bottles around the shop. */
+/** A place to sit: where the sitter's body rests and the way they face (0 = toward +z). */
+export interface Seat { x: number; z: number; facing: number }
+
 export class Town {
   readonly group = new THREE.Group();
   readonly colliders: Circle[] = [];
+  /** Places to sit: two on every bench, one on each plank of the campfire's seat wall and one on its log. */
+  readonly seats: Seat[] = [];
   readonly npcs: TownNpc[] = [];
   readonly bottles: TownBottle[] = [];
   private bottleMeshes = new Map<string, THREE.Object3D>();
@@ -142,6 +147,17 @@ export class Town {
 
   private solid(x: number, z: number, r: number): void {
     this.colliders.push({ x, z, r });
+  }
+
+  /** The nearest seat within `range` metres of a spot, if any. */
+  seatNear(x: number, z: number, range: number): Seat | null {
+    let best: Seat | null = null;
+    let bd = range;
+    for (const s of this.seats) {
+      const d = Math.hypot(s.x - x, s.z - z);
+      if (d < bd) [best, bd] = [s, d];
+    }
+    return best;
   }
 
   /** Flat cobbled strip between two points, laid just above the ground; `buildStreets` rounds the lanes' ends. */
@@ -267,6 +283,8 @@ export class Town {
       b.add(leg);
     }
     b.add(seat, back);
+    // Room for two, side by side.
+    for (const lx of [-0.42, 0.42]) this.seats.push({ x: x + lx * Math.cos(facing), z: z - lx * Math.sin(facing), facing });
     this.at(b, x, z, facing, standHeight(x, z));
     this.solid(x, z, 0.8);
   }
@@ -1119,15 +1137,22 @@ export class Town {
     this.stringLights(-4, 32, 4, 32, 3.3);
     this.stringLights(-3.4, 54.5, 3.4, 54.5, 3.1);
     if (this.map.ring) this.buildRing(this.map.ring);
+    // The green behind the fire: its strings of bulbs on their own posts, its lamps, picnic blankets and pots.
+    const green = this.map.green;
+    for (const s of green?.strings ?? []) this.stringLights(...s.from, ...s.to, 3.3);
+    for (const l of green?.lamps ?? []) this.lampPost(l.x, l.z, l.lit);
+    for (const b of green?.blankets ?? []) this.blanket(b.x, b.z, b.facing);
+    for (const [x, z] of green?.pots ?? []) this.pot(x, z);
     this.woodpile(-18.5, 31, 1.57);
   }
 
   /**
    * The campfire's ring (`RingDef` in maps.ts) on its level floor: a kerb of flat stones round the cobbles; a low
-   * stone seat wall with a plank top round the hill side, which holds the hill back; a tall post at each end of the
-   * wall and a third across the way in, the two by the gate each with a lantern; string lights from the gate's far
-   * post over the way in and on round above the wall; and a log seat on the rim past the wall. The boards stand
-   * just behind the wall (hub.ts) and the water side stays open. No point lights: the fire lights the ring.
+   * stone seat wall with a plank top round the hill side in arcs, with a way through between them; a tall post at
+   * each end of every arc and one more across the way in, the two by the gate each with a lantern; string lights
+   * from the gate's far post over the way in and on round above the wall, across the ways through; and a log seat
+   * on the rim past the wall. The catch boards stand just behind the arcs (hub.ts) and the water side stays open.
+   * No point lights: the fire lights the ring.
    */
   private buildRing(ring: RingDef): void {
     const { x: cx, z: cz } = this.map.campfire;
@@ -1135,7 +1160,7 @@ export class Town {
     const rad = (deg: number) => (deg * Math.PI) / 180;
     const spot = (deg: number, r: number): [number, number] => [cx + r * Math.sin(rad(deg)), cz + r * Math.cos(rad(deg))];
     const stone = this.painted(0xb4ada2, stoneTexture());
-    const [from, to] = ring.wall;
+    const from = ring.walls[0][0];
     /** The wall's middle line; its posts and the log stand on it too. */
     const mid = ring.r + 0.25;
 
@@ -1156,40 +1181,45 @@ export class Town {
     faceMesh.receiveShadow = true;
     this.at(faceMesh, cx, cz, 0, y - 0.1);
 
-    // The seat wall: an arc of stone from just inside one post to just inside the other, its foot a little in the ground.
+    // The seat wall: each arc of stone runs from just inside one post to just inside the other, its foot a little in the ground.
     const WALL = 0.4;
-    const a0 = rad(from + 3) - Math.PI / 2;
-    const a1 = rad(to - 3) - Math.PI / 2;
-    const shape = new THREE.Shape();
-    // Drawn in the shape's x-y plane and turned flat: a bearing of θ round from +z is the angle θ - 90° there.
-    shape.absarc(0, 0, mid + 0.22, a0, a1, false);
-    shape.absarc(0, 0, mid - 0.22, a1, a0, true);
-    shape.closePath();
-    const wall = new THREE.Mesh(boxUV(new THREE.ExtrudeGeometry(shape, { depth: WALL + 0.1, bevelEnabled: false, curveSegments: 24 }).rotateX(-Math.PI / 2), 1.6), stone);
-    wall.castShadow = wall.receiveShadow = true;
-    this.at(wall, cx, cz, 0, y - 0.1);
-    // Its seat: planks laid end to end along the top.
-    const span = to - from - 6;
-    const planks = Math.round((rad(span) * mid) / 0.95);
-    for (let i = 0; i < planks; i++) {
-      const deg = from + 3 + (span * (i + 0.5)) / planks;
-      const plank = rbox(2 * mid * Math.sin(rad(span / planks) / 2) - 0.03, 0.06, 0.5, WOOD, 0.02);
-      const [px, pz] = spot(deg, mid);
-      this.at(plank, px, pz, rad(deg), y + WALL + 0.03);
+    for (const [w0, w1] of ring.walls) {
+      const a0 = rad(w0 + 3) - Math.PI / 2;
+      const a1 = rad(w1 - 3) - Math.PI / 2;
+      const shape = new THREE.Shape();
+      // Drawn in the shape's x-y plane and turned flat: a bearing of θ round from +z is the angle θ - 90° there.
+      shape.absarc(0, 0, mid + 0.22, a0, a1, false);
+      shape.absarc(0, 0, mid - 0.22, a1, a0, true);
+      shape.closePath();
+      const wall = new THREE.Mesh(boxUV(new THREE.ExtrudeGeometry(shape, { depth: WALL + 0.1, bevelEnabled: false, curveSegments: 24 }).rotateX(-Math.PI / 2), 1.6), stone);
+      wall.castShadow = wall.receiveShadow = true;
+      this.at(wall, cx, cz, 0, y - 0.1);
+      // Its seat: planks laid end to end along the top.
+      const span = w1 - w0 - 6;
+      const planks = Math.round((rad(span) * mid) / 0.95);
+      for (let i = 0; i < planks; i++) {
+        const deg = w0 + 3 + (span * (i + 0.5)) / planks;
+        const plank = rbox(2 * mid * Math.sin(rad(span / planks) / 2) - 0.03, 0.06, 0.5, WOOD, 0.02);
+        const [px, pz] = spot(deg, mid);
+        this.at(plank, px, pz, rad(deg), y + WALL + 0.03);
+        // A seat on every plank, facing the fire.
+        this.seats.push({ x: px, z: pz, facing: Math.atan2(cx - px, cz - pz) });
+      }
+      // Solid from end to end: a row of circles along it, the first and last just inside its ends.
+      for (let i = 0, n = Math.ceil((rad(w1 - w0 - 10) * mid) / 0.45); i <= n; i++) this.solid(...spot(w0 + 5 + ((w1 - w0 - 10) * i) / n, mid), 0.27);
     }
-    // Solid from end to end: a row of circles along it, the first and last just inside its ends.
-    for (let i = 0, n = Math.ceil((rad(to - from - 10) * mid) / 0.45); i <= n; i++) this.solid(...spot(from + 5 + ((to - from - 10) * i) / n, mid), 0.27);
 
     // The posts, as tall as the string lights hang. The two by the gate carry a lantern on an arm, turned to each other.
     const H = 3.3;
     const [ex, ez] = spot((from + ring.gate) / 2, mid);
-    for (const deg of [ring.gate, from, to]) {
+    const ends = ring.walls.flat();
+    for (const deg of [ring.gate, ...ends]) {
       const [px, pz] = spot(deg, mid);
       const g = new THREE.Group();
       const post = cyl(0.05, 0.06, H, DARK, 6);
       post.position.y = H / 2;
       g.add(post);
-      if (deg !== to) {
+      if (deg === ring.gate || deg === from) {
         // Hung high, above the boards' roofs as the pier and the jetty bench see them past the gate.
         const arm = rbox(0.44, 0.05, 0.05, DARK, 0.01);
         arm.position.set(0.2, 2.95, 0);
@@ -1206,17 +1236,22 @@ export class Town {
       this.at(g, px, pz, Math.atan2(-(ez - pz), ex - px), y);
       this.solid(px, pz, 0.15);
     }
-    this.stringLights(...spot(ring.gate, mid), ...spot(from, mid), H, undefined, false);
-    this.stringLights(...spot(from, mid), ...spot(to, mid), H, undefined, false);
+    // One run of bulbs from post to post: over the way in, along each arc and across the ways through between them.
+    [ring.gate, ...ends].forEach((deg, i, all) => {
+      if (i) this.stringLights(...spot(all[i - 1], mid), ...spot(deg, mid), H, undefined, false);
+    });
 
-    // The log seat, lying along the rim.
-    const log = cyl(0.22, 0.22, 1.5, 0x7a5232, 9);
-    log.rotation.z = Math.PI / 2;
-    const seat = new THREE.Group();
-    seat.add(log);
-    const [lx, lz] = spot(ring.log, mid - 0.05);
-    this.at(seat, lx, lz, rad(ring.log), y + 0.2);
-    for (const side of [-0.45, 0.45]) this.solid(lx + side * Math.cos(rad(ring.log)), lz - side * Math.sin(rad(ring.log)), 0.3);
+    // The log seats, lying along the rim.
+    for (const deg of ring.logs) {
+      const log = cyl(0.22, 0.22, 1.5, 0x7a5232, 9);
+      log.rotation.z = Math.PI / 2;
+      const seat = new THREE.Group();
+      seat.add(log);
+      const [lx, lz] = spot(deg, mid - 0.05);
+      this.at(seat, lx, lz, rad(deg), y + 0.2);
+      this.seats.push({ x: lx, z: lz, facing: Math.atan2(cx - lx, cz - lz) });
+      for (const side of [-0.45, 0.45]) this.solid(lx + side * Math.cos(rad(deg)), lz - side * Math.sin(rad(deg)), 0.3);
+    }
   }
 
   private buildBottles(): void {

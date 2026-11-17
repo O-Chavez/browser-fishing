@@ -69,6 +69,8 @@ export class NetClient {
   /** Everyone's coins by player id (self included), for the leaderboard. */
   coins = new Map<number, number>();
   hall: HallRow[] = [];
+  /** The same for charter catches: the Deep Sea board. */
+  hallSea: HallRow[] = [];
   /** The Furthest Out board: everyone's furthest marker headed home from. */
   furthest: FurthestRow[] = [];
   /** Supporter names, newest first; `isSupporter` checks a name. */
@@ -335,6 +337,7 @@ export class NetClient {
       }
       case 'hall':
         this.hall = m.rows;
+        this.hallSea = m.sea ?? [];
         this.events.onBoard();
         break;
       case 'supporters':
