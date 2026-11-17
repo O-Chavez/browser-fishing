@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoCap, BOTTOM, keyFace, keyId, keyOf, pressKey, ROWS, startKeys, type Key, type KeyState } from './softkeys';
+import { autoCap, BOTTOM, keyFace, keyId, keyOf, keysLiftPx, pressKey, ROWS, startKeys, type Key, type KeyState } from './softkeys';
 
 const type = (s: KeyState, text: string, max = 120): KeyState =>
   [...text].reduce((st, ch) => pressKey(st, ch === ' ' ? { act: 'space' } : { ch }, max), s);
@@ -61,5 +61,23 @@ describe('soft keyboard', () => {
 
   it('rows fit ten keys', () => {
     for (const rows of Object.values(ROWS)) for (const r of rows) expect(r.length).toBeLessThanOrEqual(10);
+  });
+});
+
+describe('the lip under the keys', () => {
+  it('clears the home bar on a phone, measured in real points', () => {
+    // A 844-point phone shows the 1400px layout at about 0.6x: 54px there is 32 points, past the bar's 21.
+    expect(keysLiftPx(1400, 844)).toBe(54);
+    expect((keysLiftPx(1400, 844) * 844) / 1400).toBeGreaterThan(30);
+    expect((keysLiftPx(1112, 667) * 667) / 1112).toBeGreaterThan(30);
+  });
+
+  it('is smaller in the layout on a tablet, which shows it larger', () => {
+    expect(keysLiftPx(1400, 1180)).toBe(38);
+  });
+
+  it('never goes under the old 26px, and has a default without a screen size', () => {
+    expect(keysLiftPx(1400, 2000)).toBe(26);
+    expect(keysLiftPx(1400, 0)).toBe(54);
   });
 });
