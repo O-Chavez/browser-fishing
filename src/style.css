@@ -796,6 +796,9 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .t-stick.on { display: block; }
 .t-knob { position: absolute; left: 58px; top: 58px; width: 84px; height: 84px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 .t-action { position: absolute; right: 70px; bottom: 44px; width: 156px; height: 156px; border: 0; border-radius: 50%; display: grid; place-content: center; justify-items: center; gap: 2px; font: 900 19px Nunito, ui-rounded, system-ui, sans-serif; letter-spacing: .06em; color: var(--gold-ink); background: var(--gold); box-shadow: 0 8px 0 var(--gold-dark), 0 14px 28px rgba(0,0,0,.35); }
+/* The icon and label are redrawn under the finger (setAction); a touch that began on one would end on a node no longer
+   in the page, and its touchend would never reach the controls. The button itself takes the touch. */
+.t-action > * { pointer-events: none; }
 .t-action .ic { font-size: 52px; line-height: 1; }
 .t-action.down { transform: translateY(5px); box-shadow: 0 3px 0 var(--gold-dark), 0 8px 18px rgba(0,0,0,.35); }
 .t-action.quiet { background: var(--hud-bg); color: var(--cream-muted); box-shadow: 0 0 0 4px var(--wood-600), 0 10px 22px rgba(0,0,0,.3); }
