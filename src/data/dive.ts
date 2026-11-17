@@ -82,8 +82,16 @@ export const ROD = {
    * to revisit after a play test (`scripts/seaeconomy.ts`).
    */
   stepCoins: [50_000, 110_000, 200_000, 500_000, 1_400_000, 4_000_000, 4_200_000, 8_400_000],
-  /** Abyss level n costs `levelCoins × levelGrow^(n−1)` coins, to the nearest `levelRound`. */
-  levelCoins: 1_750_000,
+  /**
+   * Abyss level n costs `levelCoins × levelGrow^(n−1)` coins, to the nearest `levelRound`. These prices set how fast a
+   * player's furthest marker moves: a marker is `SEA_TIERS.marker` harder and a level `level` stronger, and a marker's
+   * pay and a level's price grow alike, so each level takes the same time to earn wherever the player is. Half as much
+   * again as the 1,750,000 before (a player at marker 70 by way of Oscar, 2026-11-16: each marker should take half as
+   * long again). In the sim that alone took a marker from about 16 minutes to about 24, and from 10 to 14 with Shiny
+   * Lures; with `MARKER.every` at 5 as well it is about 23 and 13, since a hold then sits nearer the furthest marker
+   * and pays more (2,800,000 would make it 24 and 13).
+   */
+  levelCoins: 2_625_000,
   levelGrow: 1.12,
   levelRound: 1000,
   /**
@@ -127,9 +135,11 @@ export const PEARLS = {
 
 /**
  * The Abyss's markers: every `every` fish landed the charter reaches the next marker, and each marker past the first
- * makes its fish `SEA_TIERS.marker` harder and their pearls and coins `grow` times more, compounding.
+ * makes its fish `SEA_TIERS.marker` harder and their pearls and coins `grow` times more, compounding. Five fish, up
+ * from three (Oscar, 2026-11-16, from the same player's note as `ROD.levelCoins`), so a 30-fish hold climbs 6 markers,
+ * not 10. That slows a charter's climb, not the furthest marker over hours, which the rod's Abyss levels set.
  */
-export const MARKER = { every: 3, grow: 1.12 };
+export const MARKER = { every: 5, grow: 1.12 };
 
 /**
  * The boat parts that open zones, fitted by Captain Reed for Black Pearls: zone z needs z of them, in this order.

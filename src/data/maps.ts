@@ -364,7 +364,7 @@ export const MAPS: MapDef[] = [
             'A charter lasts till my hold is full. A fish that gets away takes no room. The Shelf is free.',
             'Further out, fish pay more and fight harder. Coins buy a bigger hold and a better rod.',
             'Black Pearls buy the boat part that opens the next zone.',
-            'The Abyss has no end. Every third fish takes us a marker further.',
+            'The Abyss has no end. Every fifth fish takes us a marker further.',
           ],
         },
       ],

@@ -78,14 +78,16 @@ const deep = (id: string, name: string, icon: string, seconds: number, price: Em
  *   the 5 million pets) and 40,000 pearls (about three hours of first-marker pearls, under one past marker 10).
  * - Master of the Deep: priced for a player who uses Shiny Lures and levels the rod (Oscar, 2026-11-16: "the cost
  *   should be significant for players using lures; non lure players should know to use them"). Abyss pay compounds:
- *   a marker pays 12% more and a rod level costs 12% more, so a lured charter always buys about three levels and pay
+ *   a marker pays 12% more and a rod level costs 12% more, so a lured charter always buys about the same number of
+ *   levels (three when this was priced, between two and three since Abyss levels went up by half, 2026-11-16) and pay
  *   climbs by about a third a charter. The Abyss journey sim (`npx tsx scripts/abyssjourney.ts`) has that player own
  *   the three sets about 6 hours into the Abyss with a charter paying 7 to 26 million, where the first price
  *   (20,000,000 coins and 150,000 pearls) was a charter or two; a play tester at marker 67 made 2 billion a charter
  *   and proposed 250 million and a million pearls. At 250,000,000 coins and 1,000,000 pearls it comes 3 to 5 lured
  *   hours after the sets, near rod Abyss level 25, where a charter pays about 100 million; coins and pearls run out
  *   at about the same time. Each doubling adds only about an hour. Plain casts take 7 to 10 hours with the rod
- *   levelled, and about 46 with no Abyss levels at all.
+ *   levelled, and about 46 with no Abyss levels at all. Since 2026-11-16 (Abyss levels half as dear again, five fish
+ *   a marker) the same sim gives 4 to 6 lured hours near level 22, and 9 to 13 plain.
  */
 export const EMOTE_PRICES = {
   kelp: { coins: 300_000, pearls: 1_000 },
