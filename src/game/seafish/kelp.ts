@@ -99,7 +99,11 @@ const geoCache = new Map<string, THREE.BufferGeometry>();
 /** Builds a species' merged part once, keyed by fish id and part. */
 function cached(key: string, build: () => THREE.BufferGeometry[]): THREE.BufferGeometry {
   let g = geoCache.get(key);
-  if (!g) geoCache.set(key, (g = mergeGeometries(build())!));
+  if (!g) {
+    geoCache.set(key, (g = mergeGeometries(build())!));
+    // Held here for every model of the kind: `disposeFish` leaves it.
+    g.userData.shared = true;
+  }
   return g;
 }
 

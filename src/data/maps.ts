@@ -11,6 +11,11 @@ export interface Spot {
 
 /** Facing that points an object at a world position. */
 export const faceToward = (x: number, z: number, tx: number, tz: number): number => Math.atan2(tx - x, tz - z);
+/** The point `r` m from `c` at a bearing of `deg` degrees round from +z toward +x. */
+export const atBearing = (c: { x: number; z: number }, r: number, deg: number): { x: number; z: number } => ({
+  x: c.x + r * Math.sin((deg * Math.PI) / 180),
+  z: c.z + r * Math.cos((deg * Math.PI) / 180),
+});
 
 /**
  * Mags's smoke shack on the quay's east side behind the deck, turned toward the pier root (docs/map-rework/harbour.json);
@@ -43,71 +48,230 @@ export const HARBOUR = {
 HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.stand.x - HARBOUR.diveStart.x), -(HARBOUR.stand.z - HARBOUR.diveStart.z));
 
 /**
- * The community zone on the east headland, the town's meeting place (layout "the green", Oscar, 2026-11-16). At the
- * water, the campfire: a round cobbled floor, level, dug into the foot of the ridge and built out toward the water,
- * with the fire in its middle (`RING`). A low stone seat wall runs round its hill side in two arcs, and between
- * them a way leads east through the ridge onto the green, a lawn levelled across the ridge's top (`GREEN`), and on
- * down to a landing on the pond in the hollow behind (`POND`). The two catch boards stand behind the wall's arcs,
- * either side of the way through, turned a little toward the water so the fire lights them and the pier sees them:
- * Lake Legends on the quay side, by the way in, and Deep Sea on the lake side. Thanks stands on the green. The
- * campfire lane from the quay's east corner and the lane from the village ring meet up the slope and come in between
- * two lantern posts on the quay side. The water side stays open. Play-test: the spots and sizes.
+ * Ember Point, the town's meeting place on the east headland (docs/community-zone/a-ember-point.md): a small open-air
+ * theatre facing the cove. One round cobbled terrace, level, holds the fire and its seats: six logs round the fire, a
+ * clear ring to walk behind them, and a low stone seat wall along the cove-side rim. Its back is a wall of panels on
+ * the rim, each facing the fire: Thank You, Lake Legends, the stall's bay, Deep Sea and the Derby stand's bay. The
+ * ridge behind is cut away to the retaining wall's line, with a bank behind it for the hedge and the picket fence.
+ * A crown of lights runs round the rim on tall posts. The campfire lane from the quay's east corner and the lane
+ * from the village ring meet up the slope and come in under the gate arch on the quay side. Steps on the lake side
+ * go down to Skipper's Beach, a shelf of sand with the rocket jetty off it (`ROCKET_JETTY` in env.ts).
+ * `CAMP` holds where everything stands; town.ts builds it (`Town.buildCamp`) with the props of camp.ts, and hub.ts
+ * the fire and the boards. Play-test: all of it.
  */
-const CAMPFIRE = { x: 19.8, z: 3.3 };
-/** A spot `r` m from the fire, `deg` degrees round from +z (90 is straight up the hill), facing it. */
+const CAMPFIRE = { x: 20.5, z: 2.7 };
+/** A spot `r` m from the fire, `deg` degrees round from +z toward +x (0 is toward town, 90 the hill, 180 the lake, 270 the cove), facing it. */
 const byFire = (r: number, deg: number): Spot => {
-  const x = CAMPFIRE.x + r * Math.sin((deg * Math.PI) / 180);
-  const z = CAMPFIRE.z + r * Math.cos((deg * Math.PI) / 180);
+  const { x, z } = atBearing(CAMPFIRE, r, deg);
   return { x, z, facing: faceToward(x, z, CAMPFIRE.x, CAMPFIRE.z) };
 };
-/** The campfire's ring, built round `campfire` by town.ts; angles are degrees round from +z, like `byFire`. */
-export interface RingDef {
-  /** Radius of the cobbles; a kerb of flat stones runs round them. */
+/** A stretch of a circle round the fire: `r` m out, from one bearing to another (degrees, like `byFire`). */
+export interface Arc { r: number; from: number; to: number }
+/** The campfire's terrace (town.ts builds the first five) and where the camp's props stand; bearings are degrees round the fire, like `byFire`. */
+export interface CampDef {
+  /** Radius of the terrace's cobbles; a kerb of flat stones runs round them. */
   r: number;
-  /** The seat wall's arcs, each from one end to the other, in order round the ring: a string-light post stands at every end, and the gaps between arcs are ways through. */
-  walls: [number, number][];
-  /** Where the lane comes in: the gate's other post stands this far round, on the open side of the first arc's first end. */
-  gate: number;
-  /** Log seats on the rim past the last arc's far end. */
-  logs: number[];
+  /** Log seats for two round the fire, lying along a ring `r` m out: each one's bearing. */
+  logs: { r: number; at: number[] };
+  /** The low stone seat wall along the cove-side rim, from one end to the other; its plank top leaves `gap` m clear at `pier`, where the stone runs through. */
+  seatWall: { from: number; to: number; pier: number; gap: number };
+  /** The crown of lights: tall posts on the rim at these bearings, a run of bulbs from each to the next and over the way in by the arch's cove-side post. */
+  crown: number[];
+  /** The stall's bay: the kerb gives way to cobbles out to `r` between these bearings. */
+  apron: Arc;
+  /** Log seats on the beach; `facing` is the way their sitters look. */
+  beachLogs: Spot[];
+  /** The middle of the gate arch across the lane, its front up the lane; its posts stand `w` apart. */
+  arch: Spot & { w: number };
+  /** The stall's middle, its counter toward the fire. */
+  stall: Spot;
+  /** The Derby stand's bay on the rim, between Deep Sea and the beach steps. */
+  derby: Spot;
+  /** The retaining wall that holds the cut bank, in two arcs with the stall's back between them; the hedge behind its top and the picket fence behind that. */
+  wall: Arc[];
+  hedge: Arc;
+  /** The stone gate piers the hedge ends on, each square to the hedge's end. */
+  piers: Spot[];
+  /** The fence's arc and its runs on from it: to the gate arch's outer post, and down the beach's east end (behind the beach wall as far as its last `via`) into the shallows, past where anyone can wade. */
+  fence: { arc: Arc; runs: { from: [number, number]; via?: [number, number][]; to: [number, number] }[] };
+  /** The cove side of the rim, between two bearings: the seat wall's footing, a battered face of stone that runs `w` m out and down to the water's edge. */
+  rimFace: { from: number; to: number; w: number };
+  /** The lantern's stone pier in the seat wall. */
+  pier: Spot;
+  /** The top of the steps down to the beach, facing down them; `w` wide, `treads` steps of `rise` each. */
+  steps: Spot & { w: number; rise: number; treads: number };
+  /**
+   * The turf behind the panels, between two bearings, and `lip` m on past the last, level, to the low stone wall that
+   * holds it above the beach. `beachWall` is that wall, in two runs: along the beach's back from beside the kerb to
+   * the hedge's pier, and from the pier along the foot of the bank at the beach's east end to the fence.
+   */
+  turf: { from: number; to: number; lip: number };
+  beachWall: [number, number][][];
+  /** The beach's sand, between two bearings, out to `r` in the water or, short of that, to the fence down its east end. */
+  sand: { from: number; to: number; r: number };
+  /** The Legends' Totem on the beach's west tip, the stone pile and the skip sign at its east end. */
+  totem: Spot;
+  stones: { x: number; z: number };
+  skipSign: Spot;
+  /** The rocket rack at the jetty's end, its rockets leaning out over the lake, and the lantern on a pile off the end's corner. */
+  rack: Spot;
+  jettyLantern: { x: number; z: number };
+  /** A short stone pier with a lantern by the foot of the beach steps: the beach's light. */
+  beachLantern: Spot;
+  /** The signpost where the lanes meet, its front to the lanes; each finger points to the post's right, swung `yaw` radians round toward its back. */
+  signpost: Spot & { fingers: { text: string; yaw: number }[] };
+  /** The flower bed behind Thank You, `w` deep. */
+  flowers: Arc & { w: number };
 }
-const RING: RingDef = { r: 4.4, walls: [[11, 60], [120, 172]], gate: -35, logs: [198, 226] };
-/** Where the lanes meet above the ring, on the line through the middle of the gate, and where that line ends inside the cobbles. */
-const CAMP_GATE = (RING.walls[0][0] + RING.gate) / 2;
-const CAMP_JUNCTION = byFire(7.6, CAMP_GATE);
-const CAMP_ENTRY = byFire(4, CAMP_GATE);
-const CAMP_CAUSEWAY = byFire(6.6, CAMP_GATE);
-/** A catch board behind the seat wall, `deg` round from +z, turned to a spot on the water side of the fire. */
-const catchBoard = (deg: number): Spot => {
-  const { x, z } = byFire(RING.r + 1.1, deg);
-  return { x, z, facing: faceToward(x, z, CAMPFIRE.x - 1.6, CAMPFIRE.z) };
+/** The terrace's radius, and the line the boards stand on at its rim. */
+const TERRACE = 5.5;
+const PANELS = TERRACE + 0.1;
+/** The middle line of the seat wall on the terrace's rim; the crown's posts stand on it too. */
+export const campRim = (camp: CampDef): number => camp.r + 0.25;
+/** Where the lanes meet above the terrace, and where the lane from there ends inside the cobbles. */
+const CAMP_JUNCTION = { x: 17.4, z: 9.4 };
+const CAMP_ENTRY = byFire(TERRACE - 0.3, 345);
+/** The lane's direction from the junction down to the terrace, as a bearing in radians. */
+const CAMP_LANE = Math.atan2(CAMP_ENTRY.x - CAMP_JUNCTION.x, CAMP_ENTRY.z - CAMP_JUNCTION.z);
+/** A gate arch's two posts, the one nearer `near` first. */
+export const archPosts = (arch: Spot & { w: number }, near: { x: number; z: number }): { x: number; z: number }[] =>
+  [-1, 1]
+    .map((side) => ({ x: arch.x + (side * arch.w * Math.cos(arch.facing)) / 2, z: arch.z - (side * arch.w * Math.sin(arch.facing)) / 2 }))
+    .sort((a, b) => Math.hypot(a.x - near.x, a.z - near.z) - Math.hypot(b.x - near.x, b.z - near.z));
+const CAMP_ARCH = { x: 18.3, z: 8.55, facing: CAMP_LANE + Math.PI, w: 2.4 };
+/** The retaining wall's line behind the terrace, and the bearings its cut bank runs between; the wall, the hedge and the fence run its whole length. */
+const CAMP_WALL = 8.55;
+const CAMP_BANK: [number, number] = [14, 140];
+/** A point `r` m from the fire at a bearing and `off` m on round from it (toward greater bearings), square to that line. */
+const beside = (deg: number, r: number, off: number): [number, number] => {
+  const p = byFire(r, deg);
+  const turn = (deg * Math.PI) / 180;
+  return [p.x + off * Math.cos(turn), p.z - off * Math.sin(turn)];
 };
-/**
- * The green: a lawn levelled across the ridge behind the fire, up to a metre into its top, in two parts at one
- * height. The long lawn runs behind the ring from the quay side north to the headland's open-lake shore, where a
- * round lookout faces the lake; the wing runs east from it along the pond's north side. The way through the seat
- * wall crosses the long lawn as a cobbled path and goes down its far bank to a landing at the pond's edge, and a
- * second path leaves it for the lookout. Sized up on 2026-11-16 (Oscar: a notable area players want to hang out in).
- */
-const GREEN = {
-  h: 1.1,
-  lawn: { x: 27.6, z: -1.25, hw: 3, hd: 10.75 },
-  wing: { x: 33.9, z: -4.95, hw: 3.3, hd: 2.55 },
+/** How far past the bank's lake end the turf runs on, level, to the wall at the bank's foot on the beach. */
+const TURF_LIP = 0.8;
+/** The hedge's line, and its piers (`PIER` m square): one before its first bearing and one past its last. */
+const CAMP_HEDGE = 9.1;
+const PIER = 0.75;
+const hedgePier = (deg: number, side: number): Spot => {
+  const [x, z] = beside(deg, CAMP_HEDGE, (side * PIER) / 2);
+  return { x, z, facing: (deg * Math.PI) / 180 };
 };
-/** The pond in the hollow behind the ridge (`Pond` in env.ts), and the cobbled landing on its near shore. */
-const POND = { x: 34.2, z: 2.9, rx: 3.5, rz: 4.8, depth: 1.3 };
-const POND_LANDING = { x: 29.6, z: 2.9, r: 1.2 };
-/** The lookout at the long lawn's lake end. */
-const LOOKOUT = { x: 27.6, z: -10.3, r: 1.6 };
-/** Where the lookout's path leaves the way to the pond. */
-const GREEN_FORK: [number, number] = [27.3, 3.05];
-/** What dresses the green: strings of bulbs, each from one post to another, lamp posts (`lit` ones cast light), picnic blankets and flower pots. */
-export interface GreenDef {
-  strings: { from: [number, number]; to: [number, number] }[];
-  lamps: { x: number; z: number; lit: boolean }[];
-  blankets: Spot[];
-  pots: [number, number][];
+/** The picket fence's line behind the hedge, where its arc ends above the beach, and the arch's outer post, which it runs to from the hedge's pier. */
+const CAMP_FENCE = 9.6;
+const FENCE_END = byFire(CAMP_FENCE, CAMP_BANK[1]);
+const GATE_POST = archPosts(CAMP_ARCH, CAMPFIRE)[1];
+/** The stall stands back from the rim, its back in the line of the retaining wall, which stops either side of it. */
+const CAMP_STALL = byFire(7.3, 90);
+const STALL_GAP = 12;
+/** The beach steps: each tread's rise and depth (`TREAD_DEPTH` in camp.ts), three treads from the terrace down to the sand. */
+const STEP = { rise: 0.4 / 3, depth: 0.42, treads: 3 };
+const CAMP_STEPS = { ...byFire(TERRACE + 0.3, 180), facing: Math.PI, w: 2 };
+const CAMP: CampDef = {
+  r: TERRACE,
+  logs: { r: 2.9, at: [20, 65, 110, 150, 215, 310] },
+  // The wall stops short of the arch's cove-side post, which stands on its line.
+  seatWall: { from: 200, to: 328, pier: 267, gap: 0.8 },
+  // None stands in a walking line or in front of a board: they flank the boards, the bays and the steps.
+  crown: [9, 36, 69, 111, 144, 170, 191, 229, 267, 301],
+  apron: { r: 6.4, from: 74, to: 106 },
+  // East of the clear way from the steps to the jetty, turned to the water.
+  beachLogs: [
+    { x: 21.95, z: -5, facing: (150 * Math.PI) / 180 },
+    { x: 21.7, z: -7.1, facing: (190 * Math.PI) / 180 },
+  ],
+  arch: CAMP_ARCH,
+  stall: CAMP_STALL,
+  derby: byFire(PANELS, 159),
+  wall: [
+    { r: CAMP_WALL, from: CAMP_BANK[0], to: 90 - STALL_GAP },
+    { r: CAMP_WALL, from: 90 + STALL_GAP, to: CAMP_BANK[1] },
+  ],
+  hedge: { r: CAMP_HEDGE, from: CAMP_BANK[0], to: CAMP_BANK[1] },
+  piers: [hedgePier(CAMP_BANK[0], -1), hedgePier(CAMP_BANK[1], 1)],
+  fence: {
+    arc: { r: CAMP_FENCE, from: CAMP_BANK[0], to: CAMP_BANK[1] },
+    runs: [
+      { from: beside(CAMP_BANK[0], CAMP_HEDGE, -PIER), to: [GATE_POST.x, GATE_POST.z] },
+      { from: [FENCE_END.x, FENCE_END.z], via: [[26.2, -6], [26, -7.6], [25.2, -9.6]], to: [22.2, -12.05] },
+    ],
+  },
+  rimFace: { from: 197, to: 325, w: 1.3 },
+  pier: byFire(TERRACE + 0.25, 267),
+  steps: { ...CAMP_STEPS, rise: STEP.rise, treads: STEP.treads },
+  // The turf starts where the lane's cobbles meet the kerb. Its wall stands on the beach's sand: from beside the kerb
+  // to the pier at the hedge's end, and from the pier's far side round the stones and the skip sign to the fence.
+  turf: { from: -5, to: CAMP_BANK[1], lip: TURF_LIP },
+  beachWall: [
+    [beside(CAMP_BANK[1], TERRACE + 0.5, TURF_LIP), beside(CAMP_BANK[1], CAMP_HEDGE - 0.35, TURF_LIP)],
+    [beside(CAMP_BANK[1], CAMP_HEDGE, PIER), [25.55, -6], [25.55, -7.6], [25.3, -9.3]],
+  ],
+  sand: { from: CAMP_BANK[1], to: 222, r: 14.5 },
+  // Its faces turned to whoever comes down the beach steps; the pier sees it side on against the open water.
+  totem: { x: 17.75, z: -4.6, facing: faceToward(17.75, -4.6, CAMPFIRE.x, -3.6) },
+  stones: { x: 24.7, z: -6.4 },
+  skipSign: { x: 24.9, z: -5, facing: faceToward(24.9, -5, 21.5, -5.6) },
+  // The rack and its crate fill the jetty's end from edge to edge.
+  rack: { x: 18.89, z: -11.7, facing: Math.PI },
+  jettyLantern: { x: 17.15, z: -12.15 },
+  // West of the steps' foot, off the way to the jetty, where it lights the sand, the logs and the Totem's faces.
+  beachLantern: { x: 18.95, z: -4.05, facing: faceToward(18.95, -4.05, 20.6, -5.6) },
+  // On the cove side of the round where the lanes meet, off the cobbles, turned to both lanes: its fingers point
+  // on through the arch, high enough to walk under.
+  signpost: {
+    x: 16.15, z: 8.75, facing: faceToward(16.15, 8.75, 17, 10.6),
+    fingers: [{ text: 'Fire', yaw: 0.12 }, { text: 'Stones', yaw: 0.3 }, { text: 'Rockets', yaw: 0.5 }],
+  },
+  flowers: { r: 6.9, from: -4, to: 30, w: 0.9 },
+};
+/** Bram Tinder's spot behind his stall's counter (`KETTLE_KEEPER` in camp.ts: 0.1 m in front of the stall's middle). */
+const BRAM = byFire(7.2, 90);
+/** The seat wall's planks, each one's middle bearing and length: laid end to end between the wall's ends, the crown's posts that rise through it and the pier's gap, about `SEAT` m each. One seat on every plank. */
+const SEAT = 1.05;
+export function seatPlanks(camp: CampDef): { deg: number; len: number }[] {
+  const mid = campRim(camp);
+  const { from, to, pier, gap } = camp.seatWall;
+  const half = ((gap / 2 / mid) * 180) / Math.PI;
+  const breaks = [from, ...camp.crown.filter((d) => d > from && d < to && d !== pier), pier - half, pier + half, to].sort((a, b) => a - b);
+  const planks: { deg: number; len: number }[] = [];
+  for (let i = 1; i < breaks.length; i++) {
+    const [a, b] = [breaks[i - 1], breaks[i]];
+    // The stretch between the pier's two edges is its gap.
+    if (a === pier - half) continue;
+    const run = (((b - a) * Math.PI) / 180) * mid;
+    const n = Math.max(1, Math.round(run / SEAT));
+    for (let k = 0; k < n; k++) planks.push({ deg: a + ((b - a) * (k + 0.5)) / n, len: run / n });
+  }
+  return planks;
 }
+/** A log seat: where its two sitters rest and its two colliders stand, as metres along it from its middle, and the colliders' radius. */
+export const LOG = { seats: [-0.38, 0.38], solids: [-0.45, 0.45], r: 0.3 };
+/** The middle of every log seat at the camp, round the fire and on the beach; `facing` is the way its sitters look. */
+export function campLogs(map: MapDef): Spot[] {
+  const camp = map.camp;
+  if (!camp) return [];
+  const fire = map.campfire;
+  const facingFire = (deg: number, r: number): Spot => {
+    const { x, z } = atBearing(fire, r, deg);
+    return { x, z, facing: faceToward(x, z, fire.x, fire.z) };
+  };
+  return [...camp.logs.at.map((deg) => facingFire(deg, camp.logs.r)), ...camp.beachLogs];
+}
+/** Every seat at the camp: two on each log, one on each plank of the seat wall, facing the fire. */
+export function campSeats(map: MapDef): Spot[] {
+  const camp = map.camp;
+  if (!camp) return [];
+  const fire = map.campfire;
+  return [
+    ...campLogs(map).flatMap((l) => LOG.seats.map((lx) => ({ x: l.x + lx * Math.cos(l.facing), z: l.z - lx * Math.sin(l.facing), facing: l.facing }))),
+    ...seatPlanks(camp).map((p) => {
+      const { x, z } = atBearing(fire, campRim(camp), p.deg);
+      return { x, z, facing: faceToward(x, z, fire.x, fire.z) };
+    }),
+  ];
+}
+/** Where a player stands to read a board: `d` m in front of its face. */
+export const readingSpot = (board: Spot, d = 1.5): { x: number; z: number } => ({ x: board.x + d * Math.sin(board.facing), z: board.z + d * Math.cos(board.facing) });
 
 export interface HouseDef extends Spot {
   /** Wall and roof colours. */
@@ -133,6 +297,8 @@ export interface NpcDef extends Spot {
   scarf?: number;
   /** A work apron over the coat. */
   apron?: number;
+  /** A keeper behind a counter: the way the counter faces. They are talked to from its front, by a player looking at it. */
+  front?: number;
   /** A loop they stroll around; without one they stand still. */
   walk?: NpcWalk;
 }
@@ -172,7 +338,7 @@ export interface TownDef {
   flowers: { x: number; z: number; w: number; d: number }[];
   /** Cobbled paths: the main street and the lanes, each a straight strip `w` wide. */
   paths: { from: [number, number]; to: [number, number]; w: number }[];
-  /** Round cobbled patches besides the square (the campfire's circle), laid on the ground like the paths. */
+  /** Round cobbled patches besides the square (the campfire's terrace), laid on the ground like the paths. */
   circles?: { x: number; z: number; r: number }[];
   /** Benches besides the square's own pair; on a dock they stand on the deck. */
   benches: Spot[];
@@ -212,14 +378,10 @@ export interface MapDef {
   clearings?: { x: number; z: number; r: number }[];
   /** Flat sand banks (`Apron` in env.ts) the quay's rear and ends stand on, so the deck meets the ground flush. */
   aprons?: { x0: number; x1: number; z0: number; z1: number; h: number }[];
-  /** Level floors cut into a slope and built out from it (`Level` in env.ts): the campfire's ring. */
-  levels?: { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number; blend?: number; grass?: boolean }[];
-  /** Ponds dug into the ground away from the lake (`Pond` in env.ts). */
-  ponds?: { x: number; z: number; rx: number; rz: number; depth: number }[];
-  /** The campfire's ring (`RING`): its seat wall, gate and string lights. */
-  ring?: RingDef;
-  /** The green behind the campfire: its string lights and flower pots. */
-  green?: GreenDef;
+  /** Level floors cut into a slope and built out from it (`Level` in env.ts): the campfire's terrace and its beach. */
+  levels?: { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; arc?: [number, number]; cut: number; bank?: number; blend?: number; grass?: boolean }[];
+  /** The campfire's terrace and the camp round it (`CAMP`). */
+  camp?: CampDef;
   /** A rock islet with a tree and a lantern out in the lake: its centre and the radius casts stop short of. */
   islet?: { x: number; z: number; r: number };
   town: TownDef;
@@ -258,12 +420,11 @@ export const MAPS: MapDef[] = [
     gate: { x: 0, z: 56, facing: Math.PI },
     // Just inside the arch, facing into town, and outside the gate's own "Travel" prompt.
     gateArrival: { x: 0, z: 50.5, yaw: 0 },
-    // The catch boards stand behind the middle of each arc of the ring's seat wall (`RING`), either side of the way
-    // through to the green: Lake Legends on the quay side, facing the pier and the jetty bench, Deep Sea on the lake
-    // side. Thanks stands on the green's quay side, facing across the lawn. Play-test: which board stands where.
-    leaderboard: catchBoard(35.5),
-    seaboard: catchBoard(146),
-    thanks: { x: 27.6, z: 8.6, facing: Math.PI },
+    // The wall of panels on the terrace's back rim (`CAMP`), each facing the fire and read from the clear ring behind
+    // the logs: Thank You, Lake Legends, then past the stall's bay Deep Sea.
+    leaderboard: byFire(PANELS, 52),
+    seaboard: byFire(PANELS, 128),
+    thanks: byFire(PANELS, 21),
     // The campfire on the east headland, seen across the water from the jetty bench.
     campfire: { ...CAMPFIRE, facing: 0 },
     // Beside the top of Reed's lane.
@@ -286,47 +447,28 @@ export const MAPS: MapDef[] = [
       // a dip to cross where the bank's edge met the foot of the hill.
       { x0: 15.5, x1: 17.2, z0: 9.6, z1: 12, h: 0.72 },
     ],
-    // The campfire's floor: built up on its water side, where its bank is steeper than the quay's so the shore keeps
-    // close to where it was, and dug into the hill behind the seat wall and the boards. A causeway at the same height
-    // carries the lane from where the lanes meet in through the gate, across the dip between the floor's bank and the
-    // foot of the hill; its bank is steeper still, so the reeds below keep their ground.
-    // The green comes first, so the ring's floor and the landing cut into it: from the ring the ground rises gently
-    // onto the lawn through the gap in the wall, and the lawn's far bank dips to the landing at the pond's edge.
+    // The camp's ground, laid in this order. The bank behind the retaining wall: the ridge's top, levelled and carried
+    // on round the terrace's back where the ground falls away behind it. The beach: a shelf of sand on the point's
+    // lake side, cut into the foot of that bank at its east end, and a round of it under the Totem on its west tip.
+    // The terrace's back: turf, flat from its rim to a step past the wall's line, so the wall holds the bank and the
+    // bank's foot stays behind it. The terrace itself, built up on its water side, where its bank is steeper than the
+    // quay's so the shore keeps close to where it was. The round where the lanes meet and a causeway from it, at the
+    // same height, that carries the lane in under the arch; their banks are steeper still, so the reeds below keep
+    // their ground. The sand at the jetty's root, up to its boards. And the ramp of sand under the beach steps, which
+    // falls a tread's rise in a tread's depth.
     // Play-test: the heights and the shore.
     levels: [
-      { ...GREEN.lawn, h: GREEN.h, cut: 1, bank: 1, blend: 2.5, grass: true },
-      { ...GREEN.wing, h: GREEN.h, cut: 1, bank: 1, blend: 2.5, grass: true },
-      { x: CAMPFIRE.x, z: CAMPFIRE.z, h: 0.85, hw: RING.r + 0.4, cut: 1, bank: 0.75 },
-      { x: CAMP_CAUSEWAY.x, z: CAMP_CAUSEWAY.z, h: 0.85, hw: 1.15, hd: 2.4, rot: (CAMP_GATE * Math.PI) / 180, cut: 0.4, bank: 1 },
-      // A long blend, so the way down from the lawn to the landing is a gentle dip and not a step.
-      { x: POND_LANDING.x, z: POND_LANDING.z, h: 0.4, hw: POND_LANDING.r + 0.1, cut: 0.2, bank: 1, blend: 2.4 },
+      { ...CAMPFIRE, h: 1.7, hw: 11.2, arc: [CAMP_BANK[0] - 4, CAMP_BANK[1]], cut: 0, bank: 1, blend: 1 },
+      { x: 21.15, z: -5.4, h: 0.45, hw: 3.75, hd: 2.55, cut: 0.7, bank: 0.75, blend: 1 },
+      { ...CAMP.totem, h: 0.45, hw: 1.2, cut: 0, bank: 0.75 },
+      { ...CAMPFIRE, h: 0.85, hw: CAMP_WALL + 0.85, arc: [CAMP_BANK[0] - 6, CAMP_BANK[1]], cut: 0, bank: 0.75, blend: 1, grass: true },
+      { ...CAMPFIRE, h: 0.85, hw: TERRACE + 0.4, cut: 1, bank: 0.75 },
+      { ...CAMP_JUNCTION, h: 0.85, hw: 1.3, cut: 0.4, bank: 1 },
+      { x: CAMP_JUNCTION.x + 1.2 * Math.sin(CAMP_LANE), z: CAMP_JUNCTION.z + 1.2 * Math.cos(CAMP_LANE), h: 0.85, hw: 1.4, hd: 1.2, rot: CAMP_LANE, cut: 0.4, bank: 1 },
+      { x: 18.5, z: -7.2, h: 0.6, hw: 0.9, hd: 0.3, cut: 0, bank: 2 },
+      { x: CAMP_STEPS.x, z: CAMP_STEPS.z, h: 0.85, hw: CAMP_STEPS.w / 2, hd: 0, cut: 0, bank: STEP.rise / STEP.depth },
     ],
-    ponds: [POND],
-    ring: RING,
-    // Strings of bulbs across the long lawn and along the wing (none at the lookout, whose view of the lake stays
-    // clear); a lamp either side of the way in from the fire, one at the lookout and one at the wing's far end (the
-    // first and the lookout's cast light); two picnic blankets; pots by Thanks, the lookout and the wing.
-    // Play-test: all of it.
-    green: {
-      strings: [
-        { from: [25.2, 7.3], to: [30.2, 7.3] },
-        { from: [25.2, -2.4], to: [30.2, -2.4] },
-        { from: [25.2, -6.2], to: [30.2, -6.2] },
-        { from: [31.4, -7], to: [36.8, -7] },
-      ],
-      lamps: [
-        { x: 26.4, z: 1.4, lit: true },
-        { x: 26.4, z: 5, lit: false },
-        // East of the lookout, out of its view of the lake.
-        { x: 29.3, z: -11.1, lit: true },
-        { x: 37, z: -4.4, lit: false },
-      ],
-      blankets: [
-        { x: 25.8, z: -4.3, facing: 0.4 },
-        { x: 29.3, z: -8, facing: -0.3 },
-      ],
-      pots: [[26.4, 9], [28.8, 9], [30.3, -10.4], [31.2, -3.9]],
-    },
+    camp: CAMP,
     // The eye's target from the pier: 30 m past the T end and a few metres left of the pier's line, so it sits in
     // the first look without standing in front of the cast. Play-test: the spot.
     islet: { x: -4.5, z: -39, r: 6.2 },
@@ -335,12 +477,9 @@ export const MAPS: MapDef[] = [
       { x: -19.5, z: 4, r: 7 },
       { x: -15, z: 11, r: 3.5 },
       { x: 18, z: 2, r: 5 },
-      // The green and the pond's hollow. Sized to stop short of the trees that stood round them already.
-      { x: 27.6, z: 4.4, r: 6.2 },
-      { x: 27.6, z: -7.2, r: 5.2 },
-      { x: 26, z: -10.8, r: 3.4 },
-      { x: 34, z: -4.8, r: 4.7 },
-      { x: POND.x, z: POND.z, r: 5.3 },
+      // The terrace's back and the bank behind it, where the ground was too low for trees before it was built up.
+      // Sized to stop short of the trees that stand round it.
+      { x: 25.5, z: 4.5, r: 6 },
       { x: -16.5, z: 18, r: 6 },
       { x: 18, z: 20, r: 6 },
       // The headland tips stay bare behind their four pines, so the pines stand against the sky. Play-test: the radius.
@@ -446,6 +585,17 @@ export const MAPS: MapDef[] = [
             'The Abyss has no end. Every fifth fish takes us a marker further.',
           ],
         },
+        {
+          // The fire keeper, behind the counter of his stall at the campfire (`CAMP.stall`). He sells nothing yet.
+          name: 'Bram Tinder', face: 'joy', ...BRAM, front: CAMP_STALL.facing, coat: 0xc98a2b, hat: 0x7a2f2a, apron: 0x3d4450,
+          lines: [
+            "Welcome to Anglers' Rest. Pull up a log. The kettle's always on.",
+            "Lake Legends and Deep Sea, behind you. That fish over each board is the one to beat, and that's its angler's name under it.",
+            "Walk up to any seat and take it. The wall's the best spot to watch the cove.",
+            "Skipper's Beach is down the steps, and the jetty's past it.",
+          ],
+          nightLines: ["Fire's best after dark. So is the company."],
+        },
       ],
       bottles: [
         { id: 'b1', x: 7.0, z: 7.2, note: 'Day 3. Caught nothing. Again. The pier is where I should have been.' },
@@ -453,7 +603,9 @@ export const MAPS: MapDef[] = [
         { id: 'b3', x: -19.5, z: 38, note: 'The Net Mender swears he mended a net that caught a ghost.' },
         { id: 'b4', x: 12.5, z: 58, note: 'Smoked fish keeps the winter at bay. Share the first of the season.' },
         { id: 'b5', x: -14.5, z: 51, note: 'A gate at the edge of town leads somewhere wonderful. Keep fishing.' },
-        { id: 'b6', x: 20, z: -2, note: 'Warm hands by the fire, cold water at my feet. Perfect.' },
+        // On the beach below the fire, at the water's edge west of the jetty's root: out of reach of the beach's seats,
+        // so walking up to one offers the seat.
+        { id: 'b6', x: 17.3, z: -6.4, note: 'Warm hands by the fire, cold water at my feet. Perfect.' },
         { id: 'b7', x: -4.4, z: -8.3, note: 'You found the secret at the end of the pier. Well fished, friend.' },
       ],
       racks: [
@@ -493,11 +645,11 @@ export const MAPS: MapDef[] = [
         { from: [-14.8, 12.6], to: [-17.2, 8.6], w: 2.2 },
         { from: [-17.2, 8.6], to: [-17.2, 4.45], w: 2.2 },
         // The campfire lane: its east arm, round the deck's other corner and along the foot of the hill to where the
-        // lanes meet, and from there, narrower, down through the gate into the ring (`circles`).
+        // lanes meet, and from there down under the arch onto the terrace (`circles`).
         { from: [11.6, 15.6], to: [13.7, 14.5], w: 2.2 },
         { from: [13.7, 14.5], to: [14.6, 12.2], w: 2.2 },
         { from: [14.6, 12.2], to: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], w: 2.2 },
-        { from: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], to: [CAMP_ENTRY.x, CAMP_ENTRY.z], w: 1.6 },
+        { from: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], to: [CAMP_ENTRY.x, CAMP_ENTRY.z], w: 2.2 },
         // The village ring: west from the square between Wren's and the Fishmonger's garden, down past the worm patch into Reed's lane...
         { from: [-4.5, 30.5], to: [-12.5, 28.6], w: 1.6 },
         { from: [-12.5, 28.6], to: [-16.5, 22], w: 1.6 },
@@ -508,13 +660,9 @@ export const MAPS: MapDef[] = [
         { from: [15.5, 31], to: [18.5, 24], w: 1.6 },
         { from: [18.5, 24], to: [18.5, 16], w: 1.6 },
         { from: [18.5, 16], to: [CAMP_JUNCTION.x, CAMP_JUNCTION.z], w: 1.6 },
-        // From the fire through the gap in the seat wall, across the green and down to the pond's landing...
-        { from: [CAMPFIRE.x + RING.r - 0.3, CAMPFIRE.z], to: [POND_LANDING.x, POND_LANDING.z], w: 1.6 },
-        // ...and from that path north along the long lawn to the lookout on the open lake.
-        { from: GREEN_FORK, to: [LOOKOUT.x, LOOKOUT.z], w: 1.4 },
       ],
-      // The campfire's ring, a round of cobbles where the three lanes meet above it, the pond's landing and the lookout. Play-test: the radius.
-      circles: [{ ...CAMPFIRE, r: RING.r }, { x: CAMP_JUNCTION.x, z: CAMP_JUNCTION.z, r: 1.2 }, POND_LANDING, LOOKOUT],
+      // The campfire's terrace, and a round of cobbles where the three lanes meet above it.
+      circles: [{ ...CAMPFIRE, r: TERRACE }, { ...CAMP_JUNCTION, r: 1.2 }],
       benches: [
         // Along the east jetty's edge, looking across the water to the campfire headland.
         { x: 6.9, z: 7.2, facing: Math.PI / 2 },
@@ -523,16 +671,8 @@ export const MAPS: MapDef[] = [
         { x: 11.2, z: 13.3, facing: Math.PI },
         // The rest stop on the walk up, beside the main street in front of the Fishmonger.
         { x: -4.6, z: 24.5, facing: Math.PI / 2 },
-        // On the green: one either side of the path down to the pond, turned to the water; two on the wing looking
-        // across the pond from its north side; one each side of the lookout, turned to the open lake; and one on the
-        // long lawn's west edge looking across it.
-        { x: 28.6, z: -1, facing: faceToward(28.6, -1, POND.x, POND.z) },
-        { x: 28.4, z: 6.8, facing: faceToward(28.4, 6.8, POND.x, POND.z) },
-        { x: 33, z: -4.7, facing: 0 },
-        { x: 35.6, z: -4.7, facing: 0 },
-        { x: 25.7, z: -9.2, facing: faceToward(25.7, -9.2, 20, -24) },
-        { x: 29.5, z: -9.6, facing: faceToward(29.5, -9.6, 24, -26) },
-        { x: 25.5, z: -7.4, facing: Math.PI / 2 },
+        // On Skipper's Beach below the terrace, its back to the Derby stand, looking out over the open lake.
+        { x: 22.6, z: -3.7, facing: Math.PI },
       ],
       trees: [
         // Leafy ones by the Fishmonger's garden, behind the Net Mender, and one up each side of the upper street.
@@ -588,7 +728,7 @@ MAPS.push({
   clearings: undefined,
   aprons: undefined,
   levels: undefined,
-  ring: undefined,
+  camp: undefined,
   islet: undefined,
   casino: {
     hall: { x: 0, z: 43, w: 34, d: 34 },
@@ -659,7 +799,7 @@ MAPS.push({
   clearings: undefined,
   aprons: undefined,
   levels: undefined,
-  ring: undefined,
+  camp: undefined,
   islet: undefined,
   town: { square: { x: 0, z: 0, r: 0 }, houses: [], npcs: [], bottles: [], racks: [], boats: [], flowers: [], paths: [], benches: [], trees: [] },
 });

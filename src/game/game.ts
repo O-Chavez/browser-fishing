@@ -141,6 +141,12 @@ const HEADING_IN_LINES = ['Lines in, angler. Taking her home.', 'Good sailing. T
 
 /** How close a seat must be for its "Sit down" prompt. A play-test default. */
 const SEAT_RANGE = 1.5;
+/** A seat with another player on the map this close to its spot is taken (someone sits there), and isn't offered. */
+const SEAT_TAKEN = 0.4;
+/** How far from a catch board's reading spot its prompt reaches: short of the next panel's reading spot along the campfire's rim. */
+const BOARD_RANGE = 2;
+/** How far from the campfire's middle its prompt reaches: anywhere round the hearth, inside the ring of log seats. */
+const FIRE_RANGE = 2.6;
 const NO_COLLIDERS: Circle[] = [];
 /** Colliders this close to a seated player are their own seat, and don't block their camera. */
 const SEAT_CLEAR = 1.3;
@@ -1203,8 +1209,11 @@ export class Game {
 
   /** Jumps, and lets the other players on the map see it. */
   private jump(): void {
-    if (!this.player.jump()) return;
+    if (this.player.airborne) return;
+    // The emote ends first: from a seat that stands the player back where they sat down from (a teleport, which would
+    // cancel a jump already begun), and the jump goes up from there.
     this.endEmote(true);
+    this.player.jump();
     this.net.send({ t: 'jump' });
   }
 
@@ -1924,6 +1933,7 @@ export class Game {
           shiny: p.best?.shiny,
           title: p.title,
           ...(f?.sea ? { sea: true } : {}),
+          ...(f ? { fishId: f.id } : {}),
         };
       });
   }
@@ -2642,8 +2652,6 @@ export class Game {
   private startEmote(id: string): boolean {
     const def = emoteById(id);
     if (!def || !this.canEmote()) return false;
-    // An emote from a seat is played standing, back where the player sat down from.
-    if (def !== SIT) this.leaveSeat();
     if (!eco.ownsEmote(this.s, def.id)) {
       const hint = eco.emoteHint(this.s, def);
       this.toast(`🔒 ${eco.emoteGateMet(this.s, def) ? `${def.name} · ${hint}` : hint}`, 4);
@@ -2653,6 +2661,9 @@ export class Game {
     const move = this.moveInput();
     if (now - this.emoteAt < EMOTE_GAP_MS || move.fwd || move.strafe) return false;
     this.emoteAt = now;
+    // An emote from a seat is played standing, back where the player sat down from; only now that it is sure to
+    // start, or a refused one would leave the seated pose playing off the seat.
+    if (def !== SIT) this.leaveSeat();
     this.emote = def;
     this.body.set(this.s.look);
     this.bodyEmotes.start(def, this.world.night, true);
@@ -2782,6 +2793,7 @@ export class Game {
     // Lower d wins: selling, then picking up, then everything else by distance. A spot with `face` only counts while
     // the view looks that way (within FACE_CONE), so it can't be hit by accident while walking away from it.
     const spots: { d: number; label: string; act: () => void; face?: number }[] = [];
+    const looking = (face?: number) => face === undefined || Math.abs(Math.atan2(Math.sin(w.yaw - face), Math.cos(w.yaw - face))) <= FACE_CONE;
 
     for (const d of this.curDrops()) {
       const dist = d.map === this.map.id ? Math.hypot(d.x - x, d.z - z) : Infinity;
@@ -2805,12 +2817,16 @@ export class Game {
           d: Math.hypot(npc.pos.x - x, npc.pos.z - z) - 0.5,
           label: reed ? `Talk to ${npc.def.name} · charters` : `Talk to ${npc.def.name}`,
           act: reed ? () => this.openReed(town.nextLine(npc, w.night > 0.5)) : () => this.toast(town.talk(npc, w.night > 0.5), 6),
+          // A keeper behind a counter is talked to across it, like a board is read from its front.
+          face: npc.def.front,
         });
       }
-      // A seat within reach. Walking right up to one is asking to sit, so it comes before whatever else is near (the
-      // board behind the seat wall is read from a step back).
-      const seat = town.seatNear(x, z, SEAT_RANGE);
-      if (seat) spots.push({ d: Math.hypot(seat.x - x, seat.z - z) - 1, label: 'Sit down', act: () => this.sit(seat) });
+      // The nearest seat within reach that the view looks toward: in the ring behind the campfire's logs, facing a
+      // log offers its seat and facing a board offers the board. A seat someone else sits on isn't offered, so two
+      // players never share one.
+      const taken = (s: Seat) => w.others.some((o) => (o.x - s.x) ** 2 + (o.z - s.z) ** 2 < SEAT_TAKEN * SEAT_TAKEN);
+      const seat = town.seatNear(x, z, SEAT_RANGE, (s) => looking(Math.atan2(x - s.x, z - s.z)) && !taken(s));
+      if (seat) spots.push({ d: Math.hypot(seat.x - x, seat.z - z), label: 'Sit down', act: () => this.sit(seat) });
       for (const b of town.bottles) {
         if (this.s.bottles.includes(b.id)) continue;
         const db = Math.hypot(b.pos.x - x, b.pos.z - z);
@@ -2864,9 +2880,10 @@ export class Game {
       }
       const near = (v: THREE.Vector3) => Math.hypot(v.x - x, v.z - z);
       spots.push(
-        { d: near(hub.leaderSpot), label: 'Lake Legends · see everyone online', act: () => this.openMenu('players') },
-        ...(hub.seaSpot ? [{ d: near(hub.seaSpot), label: 'Deep Sea · the best charter catches', act: () => this.openAnglersAt('top-sea') }] : []),
-        { d: near(hub.campSpot), label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) },
+        // The two catch boards are read from the front, from within `BOARD_RANGE` of the spot before them.
+        ...(near(hub.leaderSpot) < BOARD_RANGE ? [{ d: near(hub.leaderSpot), label: 'Lake Legends · see everyone online', act: () => this.openMenu('players'), face: this.map.leaderboard.facing }] : []),
+        ...(hub.seaSpot && this.map.seaboard && near(hub.seaSpot) < BOARD_RANGE ? [{ d: near(hub.seaSpot), label: 'Deep Sea · the best charter catches', act: () => this.openAnglersAt('top-sea'), face: this.map.seaboard.facing }] : []),
+        ...(near(hub.campSpot) < FIRE_RANGE ? [{ d: near(hub.campSpot) - 1, label: 'Warm up by the campfire', act: () => this.toast(CAMP_TIPS[Math.floor(Math.random() * CAMP_TIPS.length)]) }] : []),
         ...(hub.peekSpot ? [{ d: near(hub.peekSpot), label: 'Casino Cove poster · take a look inside', act: () => this.openMenu('peek') }] : []),
         {
           d: Math.hypot(hub.gateSpot.x - x, hub.gateSpot.z - z),
@@ -2877,7 +2894,6 @@ export class Game {
         },
       );
     }
-    const looking = (face?: number) => face === undefined || Math.abs(Math.atan2(Math.sin(w.yaw - face), Math.cos(w.yaw - face))) <= FACE_CONE;
     // No prompt while an emote plays: it would sit on the player's own model, and a step away brings it back.
     const best = walking && !this.emote ? spots.filter((sp) => sp.d < 3 && looking(sp.face)).sort((a, b) => a.d - b.d)[0] : undefined;
     this.near = best ?? null;

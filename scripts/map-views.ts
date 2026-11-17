@@ -11,7 +11,7 @@ import puppeteer, { type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
 import { TIP_IDS } from '../src/game/tips';
 import { newSave } from '../src/game/state';
-import { MAPS } from '../src/data/maps';
+import { MAPS, readingSpot } from '../src/data/maps';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 // MAP_PORT picks another port, so two checkouts can stage views at once.
@@ -44,17 +44,23 @@ export const VIEWS: Record<string, View> = {
   smokehouse: { x: 0, z: 8.5, yaw: -2.55, note: 'pier root looking at the Smokehouse: the smoker beside it on the street side' },
   jetty: { x: 7.5, z: 9.6, yaw: 0.15, note: 'east jetty from its root: the bench along the edge, the lamp at the end' },
   bench: { x: 7.5, z: 6, yaw: -1.34, note: 'jetty bench across the water to the campfire headland at dusk' },
-  piercamp: { x: 1, z: 1, yaw: -1.4, note: 'from the pier across the cove to the campfire circle, its string lights and the two boards behind the fire' },
+  piercamp: { x: 1, z: 1, yaw: -1.4, note: 'from the pier across the cove to the campfire: its terrace and seat wall, the crown of lights, the panels behind the fire' },
   night: { x: 0, z: -7.5, yaw: Math.PI, note: 'T end at night: pier, three reflections, string lights, gate glow', times: { night: 0.72 } },
 };
 /** Camera yaw that looks from (x, z) toward (tx, tz). */
 const yawTo = (x: number, z: number, tx: number, tz: number) => Math.atan2(-(tx - x), -(tz - z));
 const at = (x: number, z: number, tx: number, tz: number, note: string, times?: Record<string, number>): View => ({ x, z, yaw: yawTo(x, z, tx, tz), note, times });
-/** Standing `d` m in front of a board (`leaderboard`, `thanks` in maps.ts) and reading it, looking up a little, as the boards stand up the slope. */
 const { leaderboard: TOP, thanks: THANKS, campfire: FIRE } = MAPS[0];
 const SEA = MAPS[0].seaboard!;
-const before = (b: { x: number; z: number; facing: number }, d: number, note: string, times?: Record<string, number>): View =>
-  ({ ...at(b.x + Math.sin(b.facing) * d, b.z + Math.cos(b.facing) * d, b.x, b.z, note, times), pitch: 0.12 });
+const CAMP = MAPS[0].camp!;
+/** Where the lanes meet above the campfire: the far end of the lane onto its terrace. */
+const [JX, JZ] = MAPS[0].town.paths.find((p) => Math.hypot(p.to[0] - FIRE.x, p.to[1] - FIRE.z) < MAPS[0].camp!.r)!.from;
+const JUNCTION = { x: JX, z: JZ };
+/** Standing at a board's reading spot (`readingSpot` in maps.ts) and reading it, looking up a little. */
+const reading = (b: { x: number; z: number; facing: number }, note: string, times?: Record<string, number>): View => {
+  const p = readingSpot(b);
+  return { ...at(p.x, p.z, b.x, b.z, note, times), pitch: 0.12 };
+};
 const DUSK_NIGHT = { dusk: 0.53, night: 0.72 };
 /**
  * `--walk`: instead of the hero views, the waypoints of the routes players walk, each looking the way they would:
@@ -92,31 +98,35 @@ export const WALK: Record<string, View> = {
   r08_ring_w2: at(-16.5, 22, -12.5, 28.6, "the west ring lane toward Wren's"),
   r09_ring_w3: at(-12.5, 28.6, -2, 32, 'arriving at the square from the west lane'),
   e01_quay_e: at(11, 12, 16.5, 5.5, 'quay east end, heading down the campfire lane'),
-  e02_ramp: at(16, 10.8, FIRE.x, FIRE.z, 'on the campfire lane along the foot of the hill: the ring ahead, the boards behind its wall'),
-  e02_gate: at(17.35, 9, FIRE.x, FIRE.z, 'where the lanes meet: down through the gate posts to the fire'),
-  e02_lane: at(17.9, 13, 17.4, 9.4, 'coming down the lane from the village ring: the junction, the gate, the ring'),
-  e03_camp: at(FIRE.x - 1.8, FIRE.z, TOP.x, TOP.z, 'warming up at the campfire, from the water side: the boards across the fire'),
+  e02_ramp: at(16, 10.8, FIRE.x, FIRE.z, 'on the campfire lane along the foot of the hill: the terrace ahead'),
+  e02_lane: at(17.9, 13, JUNCTION.x, JUNCTION.z, 'coming down the lane from the village ring: the junction and the way in'),
+  e03_camp: at(FIRE.x - 1.8, FIRE.z, TOP.x, TOP.z, 'warming up at the campfire, from the cove side: Lake Legends across the fire'),
   e04_camp_view: at(FIRE.x + 1.5, FIRE.z, -7.5, 7, 'from the campfire looking back across the cove to the west jetty'),
-  e08_top: before(TOP, 2.3, 'reading Top Anglers over the seat wall'),
-  e09_thanks: before(THANKS, 2.3, 'reading Thanks over the seat wall'),
-  e10_boards_side: at(FIRE.x - 1.6, FIRE.z - 2.6, TOP.x, TOP.z - 1, "from the ring's lake side: the wall, the two boards and Top Anglers' end clear of the headland pine"),
-  e12_water: at(FIRE.x - 2.4, FIRE.z - 1.5, FIRE.x + 2, FIRE.z + 1.3, 'from the open water side, on the line from the pier end: the fire, the wall and the pair of boards'),
-  e13_wall: at(FIRE.x + 1.6, FIRE.z + 0.9, 0, 0, 'sitting on the seat wall: across the fire to the cove and the pier'),
-  e11_boards_back: at(TOP.x + 3, TOP.z + 1.5, FIRE.x, FIRE.z, 'from up the hill behind the boards, looking down over the circle to the cove'),
-  g01_gap: at(FIRE.x - 2.6, FIRE.z, 30, 3, 'from the fire\'s water side: the two catch boards and the way through to the green between them'),
-  g02_green: at(25.2, 3.3, 34.2, 2.9, 'stepping onto the green: the way down to the pond, benches either side'),
-  g03_landing: at(28.9, 2.9, 34.2, 2.9, 'on the pond\'s landing'),
-  g04_back: at(29.4, 2.9, FIRE.x, FIRE.z, 'from the landing back across the green to the fire and the cove'),
-  g05_thanks: before(THANKS, 2.6, 'reading Thanks on the green'),
-  g06_sea: before(SEA, 2.3, 'reading Deep Sea over the seat wall'),
-  g07_north: at(27.4, 2, 27.6, -10, 'from the fork north along the long lawn to the lookout'),
-  g08_lookout: at(27.6, -9.8, 18, -34, 'at the lookout: the open lake and the islet'),
-  g09_lookback: at(27.6, -10.6, 27.4, 3, 'from the lookout back down the long lawn'),
-  g10_wing: at(34.3, -5.8, 34.2, 2.9, 'from behind the wing\'s benches across the pond'),
-  g11_pondback: at(36.6, -3.6, 24, 2, 'from the wing\'s far end back over the pond to the fire'),
-  ng1_gap: at(FIRE.x - 2.6, FIRE.z, 30, 3, 'the way through to the green at night', { night: 0.72 }),
-  ng2_green: at(25.2, 3.3, 34.2, 2.9, 'the green at night', { night: 0.72 }),
-  ng3_lawn: at(27.4, 2, 27.6, -10, 'the long lawn at night', { night: 0.72 }),
+  p01_gate: at(JUNCTION.x - 0.6, JUNCTION.z + 0.6, FIRE.x, FIRE.z, 'where the lanes meet: down the lane, through where the arch goes, onto the terrace'),
+  p02_panels: at(FIRE.x - 3.9, FIRE.z, FIRE.x + 6, FIRE.z, "from the fire's cove side: the logs, the clear ring and the wall of panels on the back rim"),
+  p03_thanks: reading(THANKS, 'in the ring, reading Thank You'),
+  p04_lake: reading(TOP, 'in the ring, reading Lake Legends'),
+  p05_sea: reading(SEA, 'in the ring, reading Deep Sea'),
+  p06_bay: at(FIRE.x + 2, FIRE.z, FIRE.x + 8, FIRE.z, "toward the stall's bay: its apron of cobbles and the cut bank behind"),
+  p07_cove: at(FIRE.x + 3.9, FIRE.z, FIRE.x - 6, FIRE.z, 'from the back rim across the fire: the seat wall, the cove and the pier'),
+  p08_steps: at(FIRE.x, FIRE.z - 3.9, FIRE.x - 1.2, FIRE.z - 11, 'at the top of the beach steps: the beach, the way to the jetty'),
+  p09_beach: at(19.4, -4.2, 24.6, -6, "on Skipper's Beach: the logs, the bench and the east end"),
+  p10_beach_back: at(23.6, -6.6, FIRE.x, FIRE.z, 'from the east end of the beach back up to the terrace'),
+  p11_jetty: at(18.5, -6.4, 18.5, -12.4, 'stepping onto the rocket jetty'),
+  p12_jetty_back: at(18.5, -11.6, FIRE.x, FIRE.z, "from the jetty's end back to the beach and the fire"),
+  p13_stall: at(FIRE.x + 3.4, FIRE.z + 0.9, CAMP.stall.x, CAMP.stall.z, "in the ring before Bram's Kettle: the counter, Bram behind it, the lantern under the awning"),
+  p14_totem: at(21.2, -5.6, CAMP.totem.x, CAMP.totem.z, "from the beach: the Legends' Totem on the west tip against the cove"),
+  p15_trophy_lake: { ...at(FIRE.x - 0.2, FIRE.z - 2.2, TOP.x, TOP.z, 'from the logs across the fire: the record fish and its plaque over Lake Legends'), pitch: 0.22 },
+  p16_trophy_sea: { ...at(FIRE.x - 0.2, FIRE.z + 2.2, SEA.x, SEA.z, 'from the logs across the fire: the record fish and its plaque over Deep Sea'), pitch: 0.22 },
+  p17_arch: at(15.4, 11.4, CAMP.arch.x, CAMP.arch.z, "coming along the campfire lane: the signpost, the ANGLERS' REST arch and its lanterns"),
+  p18_rim: at(14.4, 9.4, FIRE.x, FIRE.z - 1, 'from the shore by the lane: the stone ledge and seat wall on the cove side of the rim'),
+  p19_back: at(FIRE.x + 5, FIRE.z - 4.6, FIRE.x + 7.6, FIRE.z + 1.5, 'behind the panels: the turf, the retaining wall, the hedge and the side of the stall'),
+  p21_wall: at(22.6, -5.4, 25.6, -2.6, 'from the beach: the low wall that holds the turf, the Derby stand and the hedge\'s end'),
+  p20_beach_east: at(22.4, -7.2, 25.2, -6, "the east end of the beach: the stone pile, the skip sign and the fence down to the water"),
+  pn1_gate: at(JUNCTION.x - 0.6, JUNCTION.z + 0.6, FIRE.x, FIRE.z, 'the way in at night: the crown of lights and the fire', { night: 0.72 }),
+  pn3_stall: at(FIRE.x + 3.4, FIRE.z + 0.9, CAMP.stall.x, CAMP.stall.z, "Bram's Kettle at night, lit by its lantern", { night: 0.72 }),
+  pn4_beach: at(FIRE.x, FIRE.z - 3.9, FIRE.x - 1.2, FIRE.z - 11, 'the beach and the jetty at night, from the top of the steps', { night: 0.72 }),
+  pn2_panels: at(FIRE.x - 3.9, FIRE.z, FIRE.x + 6, FIRE.z, 'the wall of panels at night, by firelight', { night: 0.72 }),
   e05_ring_e1: at(18.5, 16, 18.5, 24, 'the east ring lane going up behind the Net Mender'),
   e06_ring_e2: at(18.5, 24, 15.5, 31, 'the east ring lane toward the blue house'),
   e07_ring_e3: at(15.5, 31, 2, 32, 'arriving at the square from the east lane'),
@@ -126,10 +136,8 @@ export const WALK: Record<string, View> = {
   n02_square: { x: 0, z: 27, yaw: Math.PI, note: 'arriving at the square at night', times: { night: 0.72 } },
   n03_lane: at(-15, 11, -19.2, 8.2, "Reed's lane at night", { night: 0.72 }),
   n04_ramp: at(16, 10.8, FIRE.x, FIRE.z, 'the campfire lane at night', { night: 0.72 }),
-  n04_gate: at(17.35, 9, FIRE.x, FIRE.z, 'the gate at night: its two lanterns and the string lights', { night: 0.72 }),
-  n09_camp: at(FIRE.x - 1.8, FIRE.z, TOP.x, TOP.z, 'at the campfire at night: the boards read by firelight', { night: 0.72 }),
-  n10_top: before(TOP, 2.3, 'reading Top Anglers at night by firelight', { night: 0.72 }),
-  n12_water: at(FIRE.x - 2.4, FIRE.z - 1.5, FIRE.x + 2, FIRE.z + 1.3, 'from the open water side at night', { night: 0.72 }),
+  n09_camp: at(FIRE.x - 1.8, FIRE.z, TOP.x, TOP.z, 'at the campfire at night: Lake Legends read by firelight', { night: 0.72 }),
+  n10_top: reading(TOP, 'reading Lake Legends at night by firelight', { night: 0.72 }),
   n11_jetty_camp: at(7.5, 6, FIRE.x, FIRE.z, 'from the east jetty bench across the water to the campfire', DUSK_NIGHT),
   n06_street: { x: 0, z: 17, yaw: Math.PI, note: 'the main street at night from the quay road: far lamps light the cobbles', times: { night: 0.72 } },
   n08_pier: { x: 0, z: 6, yaw: Math.PI, note: 'from the pier at night: the street lamp is far enough to be a light pool, which must lie on the cobbles', times: { night: 0.72 } },

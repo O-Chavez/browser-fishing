@@ -1,14 +1,19 @@
 import * as THREE from 'three';
-import type { MapDef, NpcDef, RingDef, Spot } from '../data/maps';
-import { DOCK_TOP, REED_WHARF, groundHeight, onDock, standHeight, terrainHeight, waveHeight } from './env';
+import { LOG, archPosts, atBearing, campLogs, campRim, campSeats, seatPlanks, type Arc, type CampDef, type MapDef, type NpcDef, type Spot } from '../data/maps';
+import { DOCK_TOP, REED_WHARF, groundHeight, onDock, smooth, standHeight, terrainHeight, waveHeight } from './env';
+import { LOCATIONS } from '../data/content';
 import { DARK, WOOD, ball, cyl, limb, mat, rbox, textPlane, woodSign } from './hub';
 import { mergeStatic } from './merge';
 import { NpcWalker, type Bystander } from './npcwalk';
 import { glowTag } from './nightglow';
 import { BOARD_POSTS, FurthestBoard } from './furthestboard';
-import { boxUV, shingleTexture, sidingTexture, stoneTexture } from './textures';
+import { boxUV, groundTexture, shingleTexture, sidingTexture, stoneTexture } from './textures';
 import { faceHead } from './faces';
 import { LIGHTS_MAST } from './baitshop';
+import {
+  buildCrownPost, buildDerbyStand, buildGatePier, buildHedgeArc, buildKettleStall, buildLanternPier, buildPicketRun, buildRocketRack, buildSignpost,
+  buildSkipSign, buildSteps, buildStoneArc, buildStonePile, buildStoneRun, buildTotem, TREAD_DEPTH as STEP_DEPTH, writePlaque,
+} from './camp';
 import type { Circle } from './player';
 import type { FurthestRow } from '../net/protocol';
 
@@ -20,6 +25,12 @@ const rnd = (seed: number) => () => {
 /** Seamless-ish cobblestone texture, drawn once. */
 /** How far the cobbles lie above the ground. */
 const COBBLE_LIFT = 0.04;
+/** How far relaid ground (`Town.relay`) lies above the terrain, enough that the terrain's creases stay under it. */
+const GROUND_LIFT = 0.05;
+/** The string lights' four bulb colours, in turn along a string. */
+const BULBS = [0xffd27a, 0xff9a6a, 0xfff0b0, 0xffb84a];
+/** How high an arch's beam is above the lane it spans (`Town.arch`). */
+const ARCH_H = 3;
 /** How far a cottage's chimney top stands above its eaves; the ridge is 1.5 above them. Play-test: the height. */
 const CHIMNEY_TOP = 2.9;
 
@@ -67,7 +78,7 @@ export interface Seat { x: number; z: number; facing: number }
 export class Town {
   readonly group = new THREE.Group();
   readonly colliders: Circle[] = [];
-  /** Places to sit: two on every bench, one on each plank of the campfire's seat wall and one on its log. */
+  /** Places to sit: two on every bench and every log seat, one on each plank of the campfire's seat wall. */
   readonly seats: Seat[] = [];
   readonly npcs: TownNpc[] = [];
   readonly bottles: TownBottle[] = [];
@@ -149,13 +160,13 @@ export class Town {
     this.colliders.push({ x, z, r });
   }
 
-  /** The nearest seat within `range` metres of a spot, if any. */
-  seatNear(x: number, z: number, range: number): Seat | null {
+  /** The nearest seat within `range` metres of a spot that passes `ok`, if any. */
+  seatNear(x: number, z: number, range: number, ok: (s: Seat) => boolean = () => true): Seat | null {
     let best: Seat | null = null;
     let bd = range;
     for (const s of this.seats) {
       const d = Math.hypot(s.x - x, s.z - z);
-      if (d < bd) [best, bd] = [s, d];
+      if (d < bd && ok(s)) [best, bd] = [s, d];
     }
     return best;
   }
@@ -209,10 +220,15 @@ export class Town {
     for (const c of this.map.town.circles ?? []) this.disc(c.x, c.z, c.r);
   }
 
-  /** Round cobbled patch, laid on the ground like `path`: the square, and the campfire's circle on its slope. */
-  private disc(cx: number, cz: number, r: number, around = 40): void {
-    // Rings every half metre, so the patch follows the ground under it instead of lying flat across a slope.
-    const geo = new THREE.RingGeometry(0, r, around, Math.max(1, Math.ceil(r / 0.5))).rotateX(-Math.PI / 2);
+  /**
+   * Round cobbled patch, laid on the ground like `path`: the square, and the campfire's terrace. Given `part` (an
+   * inner radius and two bearings in degrees), only that stretch of its outer band is laid.
+   */
+  private disc(cx: number, cz: number, r: number, around = 40, part?: [number, number, number]): void {
+    const [r0, from, to] = part ?? [0, 0, 360];
+    // Rings every half metre, so the patch follows the ground under it instead of lying flat across a slope. A ring's
+    // angle is its bearing less 90°.
+    const geo = new THREE.RingGeometry(r0, r, around, Math.max(1, Math.ceil((r - r0) / 0.5)), ((from - 90) * Math.PI) / 180, ((to - from) * Math.PI) / 180).rotateX(-Math.PI / 2);
     const uv = geo.getAttribute('uv');
     const pos = geo.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
@@ -427,6 +443,7 @@ export class Town {
     }
   }
   private lamps: THREE.MeshLambertMaterial[] = [];
+  private bulbMats = new Map<number, THREE.MeshLambertMaterial>();
   private lights: THREE.PointLight[] = [];
   private fires: { light: THREE.PointLight; flames: THREE.Object3D[]; ph: number }[] = [];
 
@@ -661,46 +678,61 @@ export class Town {
   }
 
   /**
-   * The CHARTERS arch over the head of Reed's wharf: a post either side of the lane's last cobbles, a beam across
-   * them with the sign hung under it, a lantern on top lit at night, and a lifebuoy on the beach-side post.
-   * Players walk under it, so the sign hangs clear of their heads and only the posts are solid.
+   * A timber arch across a lane: a post either side (`post` builds one, with its foot at y = 0), `half` m from the
+   * middle, a beam across them 3 m up and a sign hung under it, `w` m wide and lettered on both faces. Players walk
+   * under it, so the sign hangs clear of their heads and only the posts are solid. Hands back the arch for what else
+   * hangs on it, in its own frame: x across the lane, its front toward +z.
    */
-  private buildCharterArch(s: Spot): void {
-    const HALF = 1.08;
-    const H = 3;
+  private arch(s: Spot, text: string, half: number, w: number, post: () => THREE.Object3D): THREE.Group {
     const g = new THREE.Group();
-    for (const sx of [-HALF, HALF]) {
-      const post = cyl(0.07, 0.09, H, DARK, 8);
-      post.position.set(sx, H / 2, 0);
-      g.add(post);
+    for (const sx of [-half, half]) {
+      const p = post();
+      p.position.x = sx;
+      g.add(p);
     }
-    const beam = rbox(HALF * 2 + 0.5, 0.14, 0.18, DARK, 0.03);
-    beam.position.y = H - 0.12;
+    const beam = rbox(half * 2 + 0.5, 0.14, 0.18, DARK, 0.03);
+    beam.position.y = ARCH_H - 0.12;
     g.add(beam);
-    const sign = textPlane(1.8, 0.46, 512);
-    woodSign(sign.ctx, 'CHARTERS');
+    const sign = textPlane(w, 0.46, 512);
+    woodSign(sign.ctx, text, undefined, sign.ctx.canvas.width - 56);
     sign.tex.needsUpdate = true;
-    const SIGN_Y = H - 0.45;
+    const SIGN_Y = ARCH_H - 0.45;
     for (const [ry, oz] of [[0, 0.09], [Math.PI, -0.09]]) {
       const face = sign.mesh.clone();
       face.rotation.y = ry;
       face.position.set(0, SIGN_Y, oz);
       g.add(face);
     }
-    const board = rbox(1.86, 0.52, 0.16, DARK, 0.03);
+    const board = rbox(w + 0.06, 0.52, 0.16, DARK, 0.03);
     board.position.y = SIGN_Y;
     g.add(board);
+    this.at(g, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.05);
+    for (const sx of [-half, half]) this.solid(s.x + sx * Math.cos(s.facing), s.z - sx * Math.sin(s.facing), 0.15);
+    return g;
+  }
+
+  /**
+   * The CHARTERS arch over the head of Reed's wharf (`arch`), a post either side of the lane's last cobbles, with a
+   * lantern on top lit at night and a lifebuoy on the beach-side post.
+   */
+  private buildCharterArch(s: Spot): void {
+    const HALF = 1.08;
+    const g = this.arch(s, 'CHARTERS', HALF, 1.8, () => {
+      const post = cyl(0.07, 0.09, ARCH_H, DARK, 8);
+      post.geometry.translate(0, ARCH_H / 2, 0);
+      return post;
+    });
     const lamp = ball(0.11, 0xffd27a);
     (lamp.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
-    lamp.position.y = H + 0.06;
+    lamp.position.y = ARCH_H + 0.06;
     glowTag(lamp, 0.7);
     this.lamps.push(lamp.material as THREE.MeshLambertMaterial);
     const cap = cyl(0.14, 0.1, 0.06, DARK, 8);
-    cap.position.y = H + 0.2;
+    cap.position.y = ARCH_H + 0.2;
     // The lantern casts real light at night: it hangs in front of Reed and above him, so it lights his face for
     // whoever comes down the lane, and the head of the wharf with him.
     const glow = new THREE.PointLight(0xffc266, 0, 11, 1.6);
-    glow.position.y = H - 0.15;
+    glow.position.y = ARCH_H - 0.15;
     this.lights.push(glow);
     g.add(lamp, cap, glow);
     // A lifebuoy (a cream ring with red bands) hung on the beach-side post's outer side, clear of the way through,
@@ -716,8 +748,6 @@ export class Town {
       band.rotation.z = -a;
       g.add(band);
     }
-    this.at(g, s.x, s.z, s.facing, groundHeight(s.x, s.z) - 0.05);
-    for (const sx of [-HALF, HALF]) this.solid(s.x + sx * Math.cos(s.facing), s.z - sx * Math.sin(s.facing), 0.15);
   }
 
   /**
@@ -975,23 +1005,33 @@ export class Town {
     this.at(g, x, z, facing);
   }
 
+  /**
+   * A lantern on an arm, as on the town's lamp posts: the arm runs out along x (`dir` 1 or -1) from a post at `x`,
+   * `h` up, and the lantern hangs from its end. Lit at night.
+   */
+  private armLantern(g: THREE.Group, x: number, h: number, dir: number): THREE.Mesh {
+    const arm = rbox(0.5, 0.05, 0.05, DARK, 0.01);
+    arm.position.set(x + dir * 0.22, h, 0);
+    const lantern = rbox(0.24, 0.3, 0.24, 0xffd27a, 0.05);
+    (lantern.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
+    this.lamps.push(lantern.material as THREE.MeshLambertMaterial);
+    lantern.position.set(x + dir * 0.45, h - 0.2, 0);
+    glowTag(lantern, 0.75);
+    const cap = cyl(0.01, 0.16, 0.12, DARK, 6);
+    cap.position.set(x + dir * 0.45, h + 0.02, 0);
+    g.add(arm, lantern, cap);
+    return lantern;
+  }
+
   private lampPost(x: number, z: number, light: boolean): void {
     const g = new THREE.Group();
     const pole = cyl(0.045, 0.065, 2.3, DARK, 8);
     pole.position.y = 1.15;
-    const arm = rbox(0.5, 0.05, 0.05, DARK, 0.01);
-    arm.position.set(0.22, 2.3, 0);
-    const lantern = rbox(0.24, 0.3, 0.24, 0xffd27a, 0.05);
-    (lantern.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
-    this.lamps.push(lantern.material as THREE.MeshLambertMaterial);
-    lantern.position.set(0.45, 2.1, 0);
-    glowTag(lantern, 0.75);
-    const cap = cyl(0.01, 0.16, 0.12, DARK, 6);
-    cap.position.set(0.45, 2.32, 0);
-    g.add(pole, arm, lantern, cap);
+    g.add(pole);
+    const lantern = this.armLantern(g, 0, 2.3, 1);
     if (light) {
       const l = new THREE.PointLight(0xffc266, 0, 12, 1.6);
-      l.position.set(0.45, 2.1, 0);
+      l.position.copy(lantern.position);
       g.add(l);
       this.lights.push(l);
     }
@@ -1071,7 +1111,7 @@ export class Town {
    * A string of bulbs from (ax, az) to (bx, bz), `h` above the ground at each end. It hangs between two posts of
    * its own, or, given `masts` (the height above the ground where each one starts), from thin masts on top of
    * something that stands there already, which leaves nothing new to walk round. With `posts` off it hangs from
-   * posts built elsewhere (the campfire ring's).
+   * posts built elsewhere (the campfire's crown).
    */
   private stringLights(ax: number, az: number, bx: number, bz: number, h: number, masts?: [number, number], posts = true): void {
     // A bulb about every half metre, with the sag of a short string.
@@ -1085,19 +1125,30 @@ export class Town {
     // Straight from one post top to the other, so a string across a slope hangs like one.
     const ya = groundHeight(ax, az) + h;
     const yb = groundHeight(bx, bz) + h;
-    const colors = [0xffd27a, 0xff9a6a, 0xfff0b0, 0xffb84a];
     for (let i = 0; i <= n; i++) {
       const k = i / n;
       const x = ax + (bx - ax) * k;
       const z = az + (bz - az) * k;
       const y = ya + (yb - ya) * k - Math.sin(k * Math.PI) * 0.45;
-      const b = ball(0.07, colors[i % 4]);
-      const m = b.material as THREE.MeshLambertMaterial;
-      m.emissive.set(colors[i % 4]);
-      this.lamps.push(m);
-      glowTag(b, 0.3, 0.7);
+      const b = ball(0.07, BULBS[i % 4]);
+      (b.material as THREE.Material).dispose();
+      b.material = this.bulb(BULBS[i % 4]);
       this.at(b, x, z, 0, y);
+      // The bulb is baked into its string's mesh, so a bare marker carries its halo.
+      const halo = new THREE.Object3D();
+      glowTag(halo, 0.3, 0.7, false, b.material as THREE.MeshLambertMaterial);
+      this.at(halo, x, z, 0, y);
     }
+  }
+
+  /** A string light's bulb material: one for each colour, lit at night, so `mergeStatic` bakes all the bulbs of a colour in a merge cell into one draw. */
+  private bulb(color: number): THREE.MeshLambertMaterial {
+    let m = this.bulbMats.get(color);
+    if (!m) {
+      this.bulbMats.set(color, (m = mat(color, { emissive: color })));
+      this.lamps.push(m);
+    }
+    return m;
   }
 
   /** Lamp posts, flower pots, benches, picnic spots and string lights that make the town feel lived in (docs/map-rework/harbour.json). */
@@ -1118,7 +1169,7 @@ export class Town {
     // A picnic blanket on the slope above Reed's lane (the campfire headland is too narrow for a second one).
     this.blanket(-15, 16.5, -0.3);
     // String lights over the mouth of the main street between the two stalls, over the square and at the gate (the
-    // campfire's hang round its ring, `buildRing`). The stalls' string hangs from a pole beside Marlow's shack, tied
+    // campfire's hang round its terrace, `buildCamp`). The stalls' string hangs from a pole beside Marlow's shack, tied
     // to its wall (`LIGHTS_MAST`, baitshop.ts), and a mast on the Smokehouse's street-side front post
     // (`buildSmokehouse`), so no post stands on the quay road.
     // Play-test: the posts and the height.
@@ -1136,121 +1187,388 @@ export class Town {
     }
     this.stringLights(-4, 32, 4, 32, 3.3);
     this.stringLights(-3.4, 54.5, 3.4, 54.5, 3.1);
-    if (this.map.ring) this.buildRing(this.map.ring);
-    // The green behind the fire: its strings of bulbs on their own posts, its lamps, picnic blankets and pots.
-    const green = this.map.green;
-    for (const s of green?.strings ?? []) this.stringLights(...s.from, ...s.to, 3.3);
-    for (const l of green?.lamps ?? []) this.lampPost(l.x, l.z, l.lit);
-    for (const b of green?.blankets ?? []) this.blanket(b.x, b.z, b.facing);
-    for (const [x, z] of green?.pots ?? []) this.pot(x, z);
+    if (this.map.camp) this.buildCamp(this.map.camp);
     this.woodpile(-18.5, 31, 1.57);
   }
 
+  /** Stands a prop (camp.ts) at a spot, turned to `facing`, with its colliders; on the ground or the deck there unless `y` is given. */
+  private prop(p: { group: THREE.Object3D; solids?: [number, number, number][] }, x: number, z: number, facing = 0, y = standHeight(x, z)): void {
+    this.at(p.group, x, z, facing, y);
+    const sin = Math.sin(facing);
+    const cos = Math.cos(facing);
+    for (const [lx, lz, r] of p.solids ?? []) this.solid(x + lx * cos + lz * sin, z - lx * sin + lz * cos, r);
+  }
+
+  /** A row of colliders along a polyline, close enough together that nobody slips between two. */
+  private solidRow(points: [number, number][], r: number): void {
+    for (let i = 0; i + 1 < points.length; i++) {
+      const [x0, z0] = points[i];
+      const [x1, z1] = points[i + 1];
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / (r * 2)));
+      for (let k = i ? 1 : 0; k <= n; k++) this.solid(x0 + ((x1 - x0) * k) / n, z0 + ((z1 - z0) * k) / n, r);
+    }
+  }
+
   /**
-   * The campfire's ring (`RingDef` in maps.ts) on its level floor: a kerb of flat stones round the cobbles; a low
-   * stone seat wall with a plank top round the hill side in arcs, with a way through between them; a tall post at
-   * each end of every arc and one more across the way in, the two by the gate each with a lantern; string lights
-   * from the gate's far post over the way in and on round above the wall, across the ways through; and a log seat
-   * on the rim past the wall. The catch boards stand just behind the arcs (hub.ts) and the water side stays open.
-   * No point lights: the fire lights the ring.
+   * Anglers' Rest (`CampDef` in maps.ts), the campfire's camp, on its level floor. The terrace: a kerb of flat stones
+   * round the cobbles, which gives way at the stall's bay to an apron of cobbles; log seats for two round the fire and
+   * on the beach; a low stone seat wall with a plank top along the cove-side rim, with the lantern's pier at its
+   * middle and a stone ledge outside it down to the water; and the crown of lights, tall posts round the rim with one
+   * run of bulbs from post to post, closed over the way in by the gate arch's post. Behind it the retaining wall, the
+   * hedge and the picket fence; the stall in its bay and the Derby stand in its own; the gate arch across the lane
+   * and the signpost where the lanes meet; and down the steps, the beach's Totem, stones and sign and the jetty's
+   * rocket rack. The boards and the fire itself are the hub's (hub.ts). Two lights that cast: the stall's lantern
+   * and the beach's.
    */
-  private buildRing(ring: RingDef): void {
-    const { x: cx, z: cz } = this.map.campfire;
+  private buildCamp(camp: CampDef): void {
+    const fire = this.map.campfire;
+    const { x: cx, z: cz } = fire;
     const y = groundHeight(cx, cz);
     const rad = (deg: number) => (deg * Math.PI) / 180;
-    const spot = (deg: number, r: number): [number, number] => [cx + r * Math.sin(rad(deg)), cz + r * Math.cos(rad(deg))];
+    const spot = (deg: number, r: number): [number, number] => {
+      const p = atBearing(fire, r, deg);
+      return [p.x, p.z];
+    };
+    /** The lower of the ground and the mesh that draws it, so nothing set on a bank floats: in the map's frame, and in the fire's for the props built round it. */
+    const lie = (x: number, z: number) => Math.min(groundHeight(x, z), terrainHeight(x, z));
+    const round = (x: number, z: number) => lie(cx + x, cz + z);
+    /** Stands a prop built round the fire (an arc, in bearings) where it belongs. */
+    const ring = (p: { group: THREE.Object3D; solids: [number, number, number][] }) => this.prop(p, cx, cz, 0, 0);
     const stone = this.painted(0xb4ada2, stoneTexture());
-    const from = ring.walls[0][0];
-    /** The wall's middle line; its posts and the log stand on it too. */
-    const mid = ring.r + 0.25;
+    /** The wall's middle line; the crown's posts stand on it too. */
+    const mid = campRim(camp);
 
-    // The kerb: one course of flat stones laid round the cobbles, the stone texture wrapped round it.
-    const kerb = new THREE.RingGeometry(ring.r, ring.r + 0.3, 64, 1).rotateX(-Math.PI / 2);
+    // The kerb: one course of flat stones laid round the cobbles, the stone texture wrapped round it, from one side of
+    // the stall's bay round to the other. A ring's angle is its bearing less 90°.
+    const turn = rad(360 - (camp.apron.to - camp.apron.from));
+    const kerb = new THREE.RingGeometry(camp.r, camp.r + 0.3, 64, 1, rad(camp.apron.to - 90), turn).rotateX(-Math.PI / 2);
     const ku = kerb.getAttribute('uv');
-    const reps = Math.round((2 * Math.PI * (ring.r + 0.15)) / 1.4);
+    const reps = Math.round((turn * (camp.r + 0.15)) / 1.4);
     // 65 vertices round the inner edge, then 65 round the outer: one row of the texture's stones across the band.
     for (let i = 0; i < ku.count; i++) ku.setXY(i, ((i % 65) / 64) * reps, i < 65 ? 0 : 0.25);
     const kerbMesh = new THREE.Mesh(kerb, mat(0xb4ada2, { map: stoneTexture(), polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     kerbMesh.receiveShadow = true;
     this.at(kerbMesh, cx, cz, 0, y + 0.05);
-    // Its outer face, down into the ground, so the floor has a stone edge where its bank falls away to the water.
-    const face = new THREE.CylinderGeometry(ring.r + 0.3, ring.r + 0.3, 0.3, 64, 1, true);
-    const fu = face.getAttribute('uv');
-    for (let i = 0; i < fu.count; i++) fu.setXY(i, fu.getX(i) * reps, fu.getY(i) * 0.25);
-    const faceMesh = new THREE.Mesh(face, stone);
-    faceMesh.receiveShadow = true;
-    this.at(faceMesh, cx, cz, 0, y - 0.1);
+    // Its two faces, down into the ground: the outer one, so the floor has a stone edge where its bank falls away,
+    // and the inner one, so the kerb stands on the cobbles where the ground's mesh dips under it.
+    const faces: [number, THREE.MeshLambertMaterial][] = [[camp.r + 0.3, stone], [camp.r, mat(0xb4ada2, { map: stoneTexture(), side: THREE.BackSide })]];
+    for (const [r, m] of faces) {
+      const face = new THREE.CylinderGeometry(r, r, 0.3, 64, 1, true, rad(camp.apron.to), turn);
+      const fu = face.getAttribute('uv');
+      for (let i = 0; i < fu.count; i++) fu.setXY(i, fu.getX(i) * reps, fu.getY(i) * 0.25);
+      const faceMesh = new THREE.Mesh(face, m);
+      faceMesh.receiveShadow = true;
+      this.at(faceMesh, cx, cz, 0, y - 0.1);
+    }
+    // The apron in the bay: the terrace's cobbles carried on past the kerb's line to the stall's front.
+    this.disc(cx, cz, camp.apron.r, 12, [camp.r - 0.1, camp.apron.from, camp.apron.to]);
 
-    // The seat wall: each arc of stone runs from just inside one post to just inside the other, its foot a little in the ground.
+    // The seat wall: an arc of stone from one end to the other, its foot well into the bank that falls away behind it.
     const WALL = 0.4;
-    for (const [w0, w1] of ring.walls) {
-      const a0 = rad(w0 + 3) - Math.PI / 2;
-      const a1 = rad(w1 - 3) - Math.PI / 2;
-      const shape = new THREE.Shape();
-      // Drawn in the shape's x-y plane and turned flat: a bearing of θ round from +z is the angle θ - 90° there.
-      shape.absarc(0, 0, mid + 0.22, a0, a1, false);
-      shape.absarc(0, 0, mid - 0.22, a1, a0, true);
-      shape.closePath();
-      const wall = new THREE.Mesh(boxUV(new THREE.ExtrudeGeometry(shape, { depth: WALL + 0.1, bevelEnabled: false, curveSegments: 24 }).rotateX(-Math.PI / 2), 1.6), stone);
-      wall.castShadow = wall.receiveShadow = true;
-      this.at(wall, cx, cz, 0, y - 0.1);
-      // Its seat: planks laid end to end along the top.
-      const span = w1 - w0 - 6;
-      const planks = Math.round((rad(span) * mid) / 0.95);
-      for (let i = 0; i < planks; i++) {
-        const deg = w0 + 3 + (span * (i + 0.5)) / planks;
-        const plank = rbox(2 * mid * Math.sin(rad(span / planks) / 2) - 0.03, 0.06, 0.5, WOOD, 0.02);
-        const [px, pz] = spot(deg, mid);
-        this.at(plank, px, pz, rad(deg), y + WALL + 0.03);
-        // A seat on every plank, facing the fire.
-        this.seats.push({ x: px, z: pz, facing: Math.atan2(cx - px, cz - pz) });
-      }
-      // Solid from end to end: a row of circles along it, the first and last just inside its ends.
-      for (let i = 0, n = Math.ceil((rad(w1 - w0 - 10) * mid) / 0.45); i <= n; i++) this.solid(...spot(w0 + 5 + ((w1 - w0 - 10) * i) / n, mid), 0.27);
+    const { from, to } = camp.seatWall;
+    const shape = new THREE.Shape();
+    // Drawn in the shape's x-y plane and turned flat, so its angles are bearings less 90° too.
+    shape.absarc(0, 0, mid + 0.22, rad(from - 90), rad(to - 90), false);
+    shape.absarc(0, 0, mid - 0.22, rad(to - 90), rad(from - 90), true);
+    shape.closePath();
+    const FOOT = 0.35;
+    const wall = new THREE.Mesh(boxUV(new THREE.ExtrudeGeometry(shape, { depth: WALL + FOOT, bevelEnabled: false, curveSegments: 48 }).rotateX(-Math.PI / 2), 1.6), stone);
+    wall.castShadow = wall.receiveShadow = true;
+    this.at(wall, cx, cz, 0, y - FOOT);
+    // Its seat: planks laid end to end along the top (`seatPlanks`), one sitter to a plank.
+    for (const p of seatPlanks(camp)) {
+      const plank = rbox(2 * mid * Math.sin(p.len / mid / 2) - 0.03, 0.06, 0.5, WOOD, 0.02);
+      this.at(plank, ...spot(p.deg, mid), rad(p.deg), y + WALL + 0.03);
     }
+    // Solid from end to end: a row of circles along it, the first and last just inside its ends.
+    for (let i = 0, n = Math.ceil((rad(to - from - 4) * mid) / 0.45); i <= n; i++) this.solid(...spot(from + 2 + ((to - from - 4) * i) / n, mid), 0.27);
+    // The lantern's pier, where the planks leave the wall's stone bare: the lantern at the front of its cap, toward
+    // the fire, and the crown's post there at the back of it.
+    const PIER_POST = 0.17;
+    const pier = buildLanternPier(PIER_POST);
+    this.lamps.push(...pier.lamps);
+    this.prop(pier, camp.pier.x, camp.pier.z, camp.pier.facing, y);
+    // The wall's footing: a battered face of stone laid on the rim's bank, from the wall's foot out and down to the
+    // water's edge, in the wall's courses. From the pier the terrace is a plinth with the fire on it.
+    const { rimFace } = camp;
+    const [fTop, fFoot] = [y + 0.08, -0.1];
+    const span = rad(rimFace.to - rimFace.from);
+    const footing = new THREE.CylinderGeometry(mid + 0.2, mid + 0.2 + rimFace.w, fTop - fFoot, 48, 1, true, rad(rimFace.from), span);
+    const fuv = footing.getAttribute('uv');
+    const along = Math.round((span * (mid + 0.2 + rimFace.w / 2)) / 1.4);
+    const courses = Math.hypot(rimFace.w, fTop - fFoot) / 1.2;
+    for (let i = 0; i < fuv.count; i++) fuv.setXY(i, fuv.getX(i) * along, fuv.getY(i) * courses);
+    const footingMesh = new THREE.Mesh(footing, stone);
+    footingMesh.receiveShadow = true;
+    this.at(footingMesh, cx, cz, 0, (fTop + fFoot) / 2);
+    // It is solid, and so are the shallows at its foot, which are too narrow to wade: out to where the water is over
+    // a player's ankles.
+    const arcRow = (r: number, a: number, b: number): [number, number][] => {
+      const n = Math.ceil((rad(b - a) * r) / 0.8);
+      return Array.from({ length: n + 1 }, (_, i) => spot(a + ((b - a) * i) / n, r));
+    };
+    this.solidRow(arcRow(mid + 0.65, rimFace.from + 2, rimFace.to - 2), 0.45);
+    this.solidRow(arcRow(mid + 1.3, rimFace.from + 10, rimFace.to - 20), 0.45);
 
-    // The posts, as tall as the string lights hang. The two by the gate carry a lantern on an arm, turned to each other.
-    const H = 3.3;
-    const [ex, ez] = spot((from + ring.gate) / 2, mid);
-    const ends = ring.walls.flat();
-    for (const deg of [ring.gate, ...ends]) {
-      const [px, pz] = spot(deg, mid);
-      const g = new THREE.Group();
-      const post = cyl(0.05, 0.06, H, DARK, 6);
-      post.position.y = H / 2;
-      g.add(post);
-      if (deg === ring.gate || deg === from) {
-        // Hung high, above the boards' roofs as the pier and the jetty bench see them past the gate.
-        const arm = rbox(0.44, 0.05, 0.05, DARK, 0.01);
-        arm.position.set(0.2, 2.95, 0);
-        const lantern = rbox(0.22, 0.28, 0.22, 0xffd27a, 0.05);
-        (lantern.material as THREE.MeshLambertMaterial).emissive.set(0xffb84a);
-        this.lamps.push(lantern.material as THREE.MeshLambertMaterial);
-        lantern.position.set(0.38, 2.76, 0);
-        glowTag(lantern, 0.75);
-        const cap = cyl(0.01, 0.15, 0.1, DARK, 6);
-        cap.position.set(0.38, 2.96, 0);
-        g.add(arm, lantern, cap);
-      }
-      // The arm (local +x) points at the middle of the gate.
-      this.at(g, px, pz, Math.atan2(-(ez - pz), ex - px), y);
-      this.solid(px, pz, 0.15);
-    }
-    // One run of bulbs from post to post: over the way in, along each arc and across the ways through between them.
-    [ring.gate, ...ends].forEach((deg, i, all) => {
-      if (i) this.stringLights(...spot(all[i - 1], mid), ...spot(deg, mid), H, undefined, false);
+    // The crown: posts as tall as the bulbs hang, on the wall's line, and the gate arch's post nearer the fire; then
+    // one run of bulbs from each post to the next, all the way round. Tall enough that the bulbs clear the catch
+    // boards' roofs, which stand under them.
+    const H = 3.9;
+    const { arch } = camp;
+    const [gate] = archPosts(arch, fire);
+    const bearing = (p: { x: number; z: number }) => ((Math.atan2(p.x - cx, p.z - cz) * 180) / Math.PI + 360) % 360;
+    const crown = camp.crown.map((deg) => ({ deg, ...atBearing(fire, deg === camp.seatWall.pier ? mid + PIER_POST : mid, deg) }));
+    for (const p of crown) this.prop(buildCrownPost(H), p.x, p.z, 0, y);
+    const posts = [...crown, { deg: bearing(gate), ...gate }].sort((a, b) => a.deg - b.deg);
+    posts.forEach((p, i) => {
+      const next = posts[(i + 1) % posts.length];
+      this.stringLights(p.x, p.z, next.x, next.z, H, undefined, false);
     });
+    // The gate arch, ANGLERS' REST, across the lane: its posts are the crown's, with a lantern on an arm outside each.
+    const gateArch = this.arch(arch, "ANGLERS' REST", arch.w / 2, 2.1, () => buildCrownPost(H).group);
+    for (const side of [-1, 1]) this.armLantern(gateArch, (side * arch.w) / 2, 2.45, side);
 
-    // The log seats, lying along the rim.
-    for (const deg of ring.logs) {
+    // The log seats: round the fire they lie along its ring, on the beach as the map turns them.
+    for (const l of campLogs(this.map)) {
       const log = cyl(0.22, 0.22, 1.5, 0x7a5232, 9);
       log.rotation.z = Math.PI / 2;
       const seat = new THREE.Group();
       seat.add(log);
-      const [lx, lz] = spot(deg, mid - 0.05);
-      this.at(seat, lx, lz, rad(deg), y + 0.2);
-      this.seats.push({ x: lx, z: lz, facing: Math.atan2(cx - lx, cz - lz) });
-      for (const side of [-0.45, 0.45]) this.solid(lx + side * Math.cos(rad(deg)), lz - side * Math.sin(rad(deg)), 0.3);
+      this.at(seat, l.x, l.z, l.facing, standHeight(l.x, l.z) + 0.2);
+      for (const side of LOG.solids) this.solid(l.x + side * Math.cos(l.facing), l.z - side * Math.sin(l.facing), LOG.r);
+    }
+    this.seats.push(...campSeats(this.map));
+
+    // Behind the panels: the retaining wall that holds the cut bank, either side of the stall's back; the hedge
+    // behind it, planted at the wall's foot and clipped a metre above its top, with a stone pier a little taller at
+    // each of its ends; and the picket fence behind that, on the bank, which runs on from one pier to the gate's
+    // outer post and from the other down the beach's east end into the shallows.
+    const WALL_H = 0.9;
+    for (const w of camp.wall) ring(buildStoneArc(w.r, w.from, w.to, WALL_H, 0.6, round));
+    ring(buildHedgeArc(camp.hedge.r, camp.hedge.from, camp.hedge.to, WALL_H + 1, 0.7, round));
+    // Each pier is as wide as the hedge and a hand taller, its foot on the lowest ground under it.
+    for (const p of camp.piers) {
+      const base = Math.min(...[-0.3, 0.3].flatMap((dx) => [-0.3, 0.3].map((dz) => lie(p.x + dx, p.z + dz))));
+      this.prop(buildGatePier(0.75, y + WALL_H + 1.1 - base), p.x, p.z, p.facing, base);
+    }
+    const { arc, runs } = camp.fence;
+    const steps = Math.ceil((rad(arc.to - arc.from) * arc.r) / 0.8);
+    const fence: [number, number][][] = [
+      Array.from({ length: steps + 1 }, (_, i) => spot(arc.from + ((arc.to - arc.from) * i) / steps, arc.r)),
+      ...runs.map((r) => [r.from, ...(r.via ?? []), r.to]),
+    ];
+    fence.forEach((line, i) => {
+      this.group.add(buildPicketRun(line, terrainHeight).group);
+      // The runs are thin, so the one that ends at the arch's post leaves the lane its width.
+      this.solidRow(line, i ? 0.18 : 0.3);
+    });
+    // The low wall the beach's sand ends at, its foot on the beach's level: along the beach's back it holds the turf
+    // behind the panels, a step high on the turf's side, and round the east end the bank under the fence.
+    const [bx, bz] = spot(180, camp.r + 2.5);
+    const beach = groundHeight(bx, bz);
+    for (const run of camp.beachWall) this.prop(buildStoneRun(run, y + 0.3 - beach, 0.35, () => beach), 0, 0, 0, 0);
+    this.flowerBed(camp.flowers);
+    this.relayCamp(camp);
+
+    // The stall in its bay, Bram's Kettle; its lantern under the awning casts light.
+    const stall = buildKettleStall();
+    writePlaque(stall.ctx, stall.tex, 'Rockets soon');
+    this.lamps.push(...stall.lamps);
+    const light = new THREE.PointLight(0xffc266, 0, 11, 1.6);
+    stall.lantern.add(light);
+    this.lights.push(light);
+    this.prop(stall, camp.stall.x, camp.stall.z, camp.stall.facing, y);
+    // The Derby stand in its bay, on the lower of its two posts' ground.
+    const { derby } = camp;
+    const foot = Math.min(...[-0.6, 0.6].map((lx) => lie(derby.x + lx * Math.cos(derby.facing), derby.z - lx * Math.sin(derby.facing))));
+    this.prop(buildDerbyStand(), derby.x, derby.z, derby.facing, foot);
+
+    // The beach's lantern on its short stone pier by the foot of the steps, which casts the beach's light.
+    const bl = camp.beachLantern;
+    const beachLantern = buildLanternPier();
+    this.lamps.push(...beachLantern.lamps);
+    const beachLight = new THREE.PointLight(0xffc266, 0, 10, 1.6);
+    beachLight.position.y = 0.9;
+    beachLantern.group.add(beachLight);
+    this.lights.push(beachLight);
+    this.prop(beachLantern, bl.x, bl.z, bl.facing, lie(bl.x, bl.z) - 0.03);
+    // The steps down to the beach, their top tread level with the kerb; the Totem on the beach's west tip, the
+    // skipping stones and their sign at its east end; the rocket rack at the jetty's end.
+    const st = camp.steps;
+    this.prop(buildSteps(st.w, st.rise, st.treads), st.x, st.z, st.facing, y + 0.05);
+    this.prop(buildTotem(), camp.totem.x, camp.totem.z, camp.totem.facing, lie(camp.totem.x, camp.totem.z) - 0.03);
+    this.prop(buildStonePile(), camp.stones.x, camp.stones.z, 0, lie(camp.stones.x, camp.stones.z));
+    this.prop(buildSkipSign(), camp.skipSign.x, camp.skipSign.z, camp.skipSign.facing, lie(camp.skipSign.x, camp.skipSign.z) - 0.05);
+    this.prop(buildRocketRack(), camp.rack.x, camp.rack.z, camp.rack.facing);
+    // The signpost where the lanes meet, tall enough to walk under its fingers.
+    const sp = camp.signpost;
+    this.prop(buildSignpost(sp.fingers.map((f) => f.text), sp.fingers.map((f) => f.yaw), 3), sp.x, sp.z, sp.facing, lie(sp.x, sp.z) - 0.1);
+  }
+
+  /**
+   * The camp's turf and its beach's sand, relaid over the terrain (`relay`) so each keeps its edge: the turf from the
+   * kerb out to the retaining wall's foot or, by the lane, to the fence's run to the gate; the sand from the kerb out
+   * into the water or, at the beach's east end, to the fence.
+   */
+  private relayCamp(camp: CampDef): void {
+    const fire = this.map.campfire;
+    const at = (r: number, deg: number): [number, number] => {
+      const p = atBearing(fire, r, deg);
+      return [p.x, p.z];
+    };
+    /** How far out from the fire, at a bearing, a polyline is crossed; `far` if it isn't. */
+    const reach = (line: [number, number][], deg: number, far: number): number => {
+      const [dx, dz] = [Math.sin((deg * Math.PI) / 180), Math.cos((deg * Math.PI) / 180)];
+      let best = far;
+      for (let i = 0; i + 1 < line.length; i++) {
+        const [ax, az] = [line[i][0] - fire.x, line[i][1] - fire.z];
+        const [ex, ez] = [line[i + 1][0] - line[i][0], line[i + 1][1] - line[i][1]];
+        const det = ex * dz - ez * dx;
+        if (Math.abs(det) < 1e-9) continue;
+        // fire + r·d = a + t·e
+        const r = (ex * az - ez * ax) / det;
+        const t = (dx * az - dz * ax) / det;
+        if (r > 0 && t >= 0 && t <= 1) best = Math.min(best, r);
+      }
+      return best;
+    };
+    // Each stretch stops a finger short of the stone that edges it (the kerb, the walls), so it can't show through
+    // the stone's foot.
+    const kerb = camp.r + 0.32;
+    const sweep = (from: number, to: number, step: number, far: (deg: number) => number, near: (deg: number) => number = () => kerb): [[number, number], [number, number]][] =>
+      Array.from({ length: Math.ceil((to - from) / step) + 1 }, (_, i) => {
+        const deg = Math.min(to, from + i * step);
+        const start = Math.max(kerb, near(deg));
+        return [at(start, deg), at(Math.max(start, far(deg)), deg)];
+      });
+    const [toGate, down] = camp.fence.runs.map((r) => [r.from, ...(r.via ?? []), r.to] as [number, number][]);
+    const foot = camp.wall[0].r - 0.32;
+    // The beach steps are stone: no sand is laid over them, across their width and down to their foot.
+    const st = camp.steps;
+    const onSteps = (x: number, z: number): boolean => {
+      const across = (x - st.x) * Math.cos(st.facing) - (z - st.z) * Math.sin(st.facing);
+      const down = (x - st.x) * Math.sin(st.facing) + (z - st.z) * Math.cos(st.facing);
+      return Math.abs(across) < st.w / 2 + 0.05 && down > -1 && down < (st.treads - 0.5) * STEP_DEPTH + 0.03;
+    };
+    const { turf } = camp;
+    const [back, east] = camp.beachWall;
+    /** A point `r` m out at the turf's last bearing and `off` m past it, toward the beach. */
+    const past = (r: number, off: number): [number, number] => {
+      const [x, z] = at(r, turf.to);
+      return [x + off * Math.cos((turf.to * Math.PI) / 180), z - off * Math.sin((turf.to * Math.PI) / 180)];
+    };
+    const fromFire = ([x, z]: [number, number]) => Math.hypot(x - fire.x, z - fire.z);
+    const bearingOf = ([x, z]: [number, number]) => (Math.atan2(x - fire.x, z - fire.z) * 180) / Math.PI;
+    // The turf's lip: from its last bearing on to the back wall's inner face, level with the terrace, over the bank
+    // that falls to the beach there.
+    const lipEnd = fromFire(back[1]) - 0.1;
+    const lip: [[number, number], [number, number]][] = Array.from({ length: Math.ceil((lipEnd - kerb) / 0.5) + 1 }, (_, i) => {
+      const r = Math.min(lipEnd, kerb + i * 0.5);
+      return [at(r, turf.to), past(r, turf.lip - 0.2)];
+    });
+    // The bank between the east wall and the fence behind it: the wall's points and the fence's, pair by pair.
+    const bank: [[number, number], [number, number]][] = [];
+    for (let i = 0; i + 1 < east.length; i++) {
+      const n = Math.ceil(Math.hypot(east[i + 1][0] - east[i][0], east[i + 1][1] - east[i][1]) / 0.5);
+      for (let k = i ? 1 : 0; k <= n; k++) {
+        const mix = (p: [number, number], q: [number, number]): [number, number] => [p[0] + ((q[0] - p[0]) * k) / n, p[1] + ((q[1] - p[1]) * k) / n];
+        bank.push([mix(east[i], east[i + 1]), mix(down[i], down[i + 1])]);
+      }
+    }
+    // The sand starts at the back wall's beach face, where a line out from the fire crosses it, and ends at the east
+    // wall, the fence past the wall's end, or out in the water.
+    const face: [number, number][] = [past(kerb - 0.6, turf.lip + 0.2), past(lipEnd + 0.15, turf.lip + 0.2)];
+    const edge: [number, number][] = [...east, ...down.slice(-2)];
+    this.relay([
+      // The turf's first row runs along the lane's cobbles, from the kerb to the gate's outer post. By the lane it
+      // runs out to the fence, and from the retaining wall's start to the wall's foot.
+      { turf: true, rows: [[at(kerb, turf.from), toGate[toGate.length - 1]], ...sweep(turf.from, turf.to, 3, (deg) => (deg < camp.wall[0].from ? reach(toGate, deg, foot) : foot))] },
+      { turf: true, rows: lip, level: groundHeight(fire.x, fire.z) + GROUND_LIFT },
+      { turf: true, rows: bank },
+      { turf: false, rows: sweep(bearingOf(face[1]), camp.sand.to, 1, (deg) => reach(edge, deg, camp.sand.r) - 0.1, (deg) => reach(face, deg, kerb)), hole: onSteps },
+    ]);
+  }
+
+  /**
+   * Relays stretches of the ground on a fine grid over the terrain's mesh, in the terrain's own colours and texture
+   * (`buildTerrain` in world.ts): turf as grass whatever its height, or bare sand. The terrain's colours fade across
+   * a whole cell of its mesh, a metre and more, which draws a sawtooth where turf meets sand; relaid, each keeps a
+   * clean edge. A stretch is laid from one row to the next, each row a line from one point to another; it leaves out
+   * whatever touches its `hole`. Given a `level`, each row climbs from the ground at its first point to that height
+   * at its last, which bridges a bank.
+   */
+  private relay(stretches: { turf: boolean; rows: [[number, number], [number, number]][]; hole?: (x: number, z: number) => boolean; level?: number }[]): void {
+    const loc = LOCATIONS.find((l) => l.id === this.map.locationId)!;
+    const grass = new THREE.Color(loc.grass);
+    const sand = new THREE.Color(loc.sand);
+    const c = new THREE.Color();
+    const pos: number[] = [];
+    const col: number[] = [];
+    const uv: number[] = [];
+    const idx: number[] = [];
+    for (const s of stretches) {
+      const across = Math.max(1, Math.ceil(Math.max(...s.rows.map(([a, b]) => Math.hypot(b[0] - a[0], b[1] - a[1]))) / 0.5));
+      const base = pos.length / 3;
+      for (const [a, b] of s.rows) {
+        const start = terrainHeight(a[0], a[1]) + GROUND_LIFT;
+        for (let k = 0; k <= across; k++) {
+          const x = a[0] + ((b[0] - a[0]) * k) / across;
+          const z = a[1] + ((b[1] - a[1]) * k) / across;
+          const y = s.level === undefined ? terrainHeight(x, z) : start + ((s.level - start) * k) / across - GROUND_LIFT;
+          pos.push(x, y + GROUND_LIFT, z);
+          if (s.turf) c.copy(grass).multiplyScalar(0.88 + 0.24 * (Math.sin(x * 0.4) * Math.cos(z * 0.37) * 0.5 + 0.5));
+          else c.copy(sand).multiplyScalar(0.65 + 0.35 * smooth(-1.2, 0.4, y));
+          col.push(c.r, c.g, c.b);
+          uv.push(x / 3.2, z / 3.2);
+        }
+      }
+      for (let i = 0; i + 1 < s.rows.length; i++) {
+        for (let k = 0; k < across; k++) {
+          const p = base + i * (across + 1) + k;
+          const q = p + across + 1;
+          if (s.hole && [p, p + 1, q, q + 1].some((v) => s.hole!(pos[v * 3], pos[v * 3 + 2]))) continue;
+          idx.push(p, p + 1, q, p + 1, q + 1, q);
+        }
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat(0xffffff, { vertexColors: true, map: groundTexture(), flatShading: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+    m.receiveShadow = true;
+    this.group.add(m);
+  }
+
+  /** A curved flower bed (an arc round the campfire, `w` deep): a low border of soil, planted like the town's beds. */
+  private flowerBed(bed: Arc & { w: number }): void {
+    const fire = this.map.campfire;
+    const rad = (deg: number) => (deg * Math.PI) / 180;
+    const shape = new THREE.Shape();
+    shape.absarc(0, 0, bed.r + bed.w / 2, rad(bed.from - 90), rad(bed.to - 90), false);
+    shape.absarc(0, 0, bed.r - bed.w / 2, rad(bed.to - 90), rad(bed.from - 90), true);
+    shape.closePath();
+    const soil = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false, curveSegments: 12 }).rotateX(-Math.PI / 2), mat(0x6b4a2b));
+    soil.castShadow = soil.receiveShadow = true;
+    const mid = atBearing(fire, bed.r, (bed.from + bed.to) / 2);
+    const top = Math.max(groundHeight(mid.x, mid.z), terrainHeight(mid.x, mid.z)) + 0.16;
+    this.at(soil, fire.x, fire.z, 0, top - 0.3);
+    const r = rnd(Math.floor(bed.r * 31 + bed.from * 7 + 100));
+    const cols = [0xff6f91, 0xffd23a, 0xffffff, 0xc77dff, 0xff9a3c];
+    const length = rad(bed.to - bed.from) * bed.r;
+    for (let i = 0, n = Math.round(length * bed.w * 9); i < n; i++) {
+      const p = atBearing(fire, bed.r + (r() - 0.5) * (bed.w - 0.2), bed.from + (bed.to - bed.from) * (0.03 + 0.94 * r()));
+      const stem = cyl(0.015, 0.015, 0.3, 0x3f8f43, 4);
+      this.at(stem, p.x, p.z, 0, top + 0.1);
+      const bloom = ball(0.07, cols[Math.floor(r() * cols.length)]);
+      bloom.position.y = 0.17;
+      stem.add(bloom);
+    }
+    for (let i = 0, n = Math.ceil(length / 0.7); i <= n; i++) {
+      const p = atBearing(fire, bed.r, bed.from + ((bed.to - bed.from) * i) / n);
+      this.solid(p.x, p.z, bed.w / 2);
     }
   }
 

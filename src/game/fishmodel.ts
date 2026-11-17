@@ -31,15 +31,34 @@ const bodyCache = new Map<Shape, THREE.BufferGeometry>();
 /** Body mesh geometry: a sphere stretched along Z (nose at -Z) and reshaped by the silhouette. Shared per shape. */
 function bodyGeometry(shape: Shape): THREE.BufferGeometry {
   let g = bodyCache.get(shape);
-  if (!g) bodyCache.set(shape, (g = makeBody(shape)));
+  if (!g) bodyCache.set(shape, (g = keepGeo(makeBody(shape))));
   return g;
+}
+
+/** Marks a geometry as held by a cache and shared between models, so `disposeFish` leaves it. */
+function keepGeo<T extends THREE.BufferGeometry>(g: T): T {
+  g.userData.shared = true;
+  return g;
+}
+
+/**
+ * Frees what `buildFish` made for one model that is done with: its materials, and the geometries built for it
+ * alone (its fins, a special fish's parts). Geometries a cache holds for every model of the kind (here and in
+ * seafish/) and the skin textures stay.
+ */
+export function disposeFish(model: FishModel): void {
+  model.group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && !m.geometry.userData.shared) m.geometry.dispose();
+  });
+  for (const m of model.materials) m.dispose();
 }
 
 /** Small shared geometries (sparkles, eyes, gems), keyed by their parameters. */
 const geoCache = new Map<string, THREE.BufferGeometry>();
 function shared<T extends THREE.BufferGeometry>(key: string, make: () => T): T {
   let g = geoCache.get(key);
-  if (!g) geoCache.set(key, (g = make()));
+  if (!g) geoCache.set(key, (g = keepGeo(make())));
   return g as T;
 }
 const sphereGeo = (r: number, w = 6, h = 5) => shared(`s${r}|${w}|${h}`, () => new THREE.SphereGeometry(r, w, h));

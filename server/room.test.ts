@@ -836,6 +836,56 @@ describe('emotes', () => {
     expect(emotes(b.c).at(-1)).toEqual({ t: 'emote', id: a.id, emote: null });
   });
 
+  it('shows a player who joins the emotes still playing on their map, after the welcome that brings the avatars', () => {
+    const t = three();
+    const { room, a, b } = t;
+    room.place(a.id, 20, 1);
+    room.handle(a.id, { t: 'emote', id: 'sit' });
+    t.advance(30 * 60_000);
+    room.place(b.id, 5, 5);
+    room.handle(b.id, { t: 'emote', id: 'wave' });
+    const d = t.join('Dan');
+    expect(emotes(d.c)).toEqual([
+      { t: 'emote', id: a.id, emote: 'sit', x: 20, z: 1 },
+      { t: 'emote', id: b.id, emote: 'wave', x: 5, z: 5 },
+    ]);
+    expect(d.c.log.findIndex((m) => m.t === 'welcome')).toBeLessThan(d.c.log.findIndex((m) => m.t === 'emote'));
+    // One that ran its length, or was ended, isn't.
+    t.advance(5000);
+    room.handle(a.id, { t: 'emote', id: null });
+    const e = t.join('Eve');
+    expect(emotes(e.c)).toHaveLength(0);
+  });
+
+  it("shows a player arriving on a map the emotes still playing there, and only there's", () => {
+    const t = three();
+    const { room, a, b } = t;
+    room.place(a.id, 20, 1);
+    room.handle(a.id, { t: 'emote', id: 'sit' });
+    // Bob goes over to the casino: nobody sits there.
+    const before = emotes(b.c).length;
+    b.acct.save.level = 99;
+    room.place(b.id, MAPS[0].gate.x, MAPS[0].gate.z, 0);
+    room.handle(b.id, { t: 'travel', to: 'casino' });
+    expect(last(b.c, 'moved')).toMatchObject({ id: b.id, map: 'casino' });
+    expect(emotes(b.c)).toHaveLength(before);
+    t.advance(5000);
+    // And back to the pond, where Ann still sits: it comes after the snap with her where she is.
+    const casino = MAPS.find((m) => m.id === 'casino')!;
+    room.place(b.id, casino.gate.x, casino.gate.z, 0);
+    room.handle(b.id, { t: 'travel', to: 'pond' });
+    expect(emotes(b.c).slice(before)).toEqual([{ t: 'emote', id: a.id, emote: 'sit', x: 20, z: 1 }]);
+    expect(b.c.log.findLastIndex((m) => m.t === 'snap')).toBeLessThan(b.c.log.findLastIndex((m) => m.t === 'emote'));
+    // Once she stands up, arriving shows nothing.
+    room.handle(a.id, { t: 'emote', id: null });
+    room.place(b.id, MAPS[0].gate.x, MAPS[0].gate.z, 0);
+    room.handle(b.id, { t: 'travel', to: 'casino' });
+    t.advance(5000);
+    room.place(b.id, casino.gate.x, casino.gate.z, 0);
+    room.handle(b.id, { t: 'travel', to: 'pond' });
+    expect(emotes(b.c).slice(before)).toHaveLength(2);
+  });
+
   it("never shows an emote the player doesn't own, or one that doesn't exist", () => {
     const { room, a, b, advance } = three();
     for (const id of ['kelp', 'twilight', 'abyss', 'master', 'nope', 'constructor', '', 7, {}, undefined, ['wave']]) {
@@ -1122,6 +1172,27 @@ describe('scaling', () => {
     const hall = last(a.c, 'hall');
     expect(hall.sea?.map((r) => [r.name, r.best.fishId])).toEqual([['Ann', 'marlin']]);
     expect(hall.rows).toEqual([]);
+  });
+
+  it("doesn't resend an unchanged board for a charter record, which only the hall of fame shows", () => {
+    const t = setup();
+    t.room.hall = () => t.store.hall();
+    t.room.hallSea = () => t.store.hallSea();
+    t.room.hallStale = () => t.store.hallStale();
+    const a = t.join('Ann');
+    const boards = () => a.c.log.filter((m) => m.t === 'board').length;
+    t.room.snapshot();
+    expect(boards()).toBe(1);
+    a.acct.save.bestSea = { fishId: 'marlin', size: 300, value: 9000 };
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    expect(last(a.c, 'hall').sea?.map((r) => r.name)).toEqual(['Ann']);
+    expect(boards()).toBe(1);
+    // A level still does.
+    a.acct.save.level = 2;
+    t.advance(BOARD_MS);
+    t.room.snapshot();
+    expect(boards()).toBe(2);
   });
 });
 

@@ -18,7 +18,6 @@ import {
   padWeight,
   setAprons,
   setLevels,
-  setPonds,
   setIslet,
   setWorn,
   dirtWeight,
@@ -655,7 +654,6 @@ export class World {
     setPad(map.pad);
     setAprons(map.aprons ?? []);
     setLevels(map.levels ?? []);
-    setPonds(map.ponds ?? []);
     setIslet(map.islet ?? null);
     this.islet = map.islet ?? null;
     // The town's ground is worn to dirt along its paths, round the square and in front of the two stalls.
@@ -753,6 +751,7 @@ export class World {
     this.buildFireflies();
     this.buildMountains();
     this.hub = new Hub(map);
+    this.hub.warm = (o) => this.warm(o);
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);
@@ -864,8 +863,8 @@ export class World {
     let leafy = 0;
     // The headland pines first (docs/map-rework/harbour.json): the headland tips are too low for the
     // forest's 0.8 m line, and these four make the cove's silhouette. [x, z, scale]
-    // The east headland's second pine stands back from the campfire ring, clear of the Lake Legends board.
-    const headland: [number, number, number][] = [[19.5, -3.5, 1.25], [22.4, -6.6, 1.1], [-22.5, -5, 1.3], [-23.5, 1, 1.05]];
+    // The east headland's two stand on the bank behind the campfire, outside its fence.
+    const headland: [number, number, number][] = [[29.2, -3.8, 1.25], [28, -6.6, 1.1], [-22.5, -5, 1.3], [-23.5, 1, 1.05]];
     for (let tries = 0; n < N && tries < 6000; tries++) {
       const fixed = headland[n];
       const th = (rnd() * 2 - 1) * Math.PI;
@@ -985,8 +984,9 @@ export class World {
     const islet: [number, number, number, number][] = ic
       ? [[ic.x, ic.z, 4.2, 0.5], [ic.x + 3.7, ic.z - 1.2, 2.2, 0.75], [ic.x - 3.3, ic.z - 1.6, 1.9, 0.85], [ic.x + 1.2, ic.z + 3.2, 1.4, 0.8]]
       : [];
-    // One rock on each headland tip, past the pines. [x, z, radius]
-    const tips: [number, number, number][] = [[17.5, -6, 0.9], [-19, -7, 1.1]];
+    // One rock on each headland tip: the east one in the shallows west of the root of the campfire's jetty, a metre
+    // and more off the way onto it. [x, z, radius]
+    const tips: [number, number, number][] = [[15.9, -8.3, 1], [-19, -7, 1.1]];
     const RK = 46 + islet.length + tips.length;
     // Lighter tops, darker undersides
     const rockGeo = new THREE.DodecahedronGeometry(1);

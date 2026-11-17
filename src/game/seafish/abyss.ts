@@ -56,7 +56,11 @@ function surfNormal(shape: Shape, p: AbyssParts, t: number, phi: number): V3 {
 const geoCache = new Map<string, THREE.BufferGeometry>();
 function shared<T extends THREE.BufferGeometry>(key: string, make: () => T): T {
   let g = geoCache.get(key);
-  if (!g) geoCache.set(key, (g = make()));
+  if (!g) {
+    geoCache.set(key, (g = make()));
+    // Held here for every model of the kind: `disposeFish` leaves it.
+    g.userData.shared = true;
+  }
   return g as T;
 }
 const matCache = new Map<string, THREE.Material>();
@@ -213,9 +217,13 @@ function tentacleGeos(id: string, shape: Shape, p: AbyssParts): { arms: THREE.Bu
   }
   sucker.dispose();
   const a = merge(armGeos);
+  a.userData.shared = true;
   geoCache.set(key, a);
   const sk = suckerGeos.length ? merge(suckerGeos) : null;
-  if (sk) geoCache.set(`${key}|s`, sk);
+  if (sk) {
+    sk.userData.shared = true;
+    geoCache.set(`${key}|s`, sk);
+  }
   return { arms: a, suckers: sk };
 }
 

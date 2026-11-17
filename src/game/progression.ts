@@ -37,7 +37,7 @@ export const SPOTS: Record<SpotId, SpotRule> = {
 export const PRIME_Z = 5.4;
 
 export function fishingSpot(x: number, z: number): SpotId {
-  // Reed's wharf is a landing: fishing from it is fishing from the shore, as on the beach it stands on.
+  // Reed's wharf and the rocket jetty are landings: fishing from one is fishing from the shore, as on the beach it stands on.
   if (!onDock(x, z) || onLanding(x, z)) return 'shore';
   return z <= PRIME_Z ? 'prime' : 'pier';
 }

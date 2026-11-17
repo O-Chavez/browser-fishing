@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { FISH } from '../data/content';
-import type { MapDef, Spot } from '../data/maps';
+import { readingSpot, type MapDef, type Spot } from '../data/maps';
 import { DOCK_TOP, groundHeight, standHeight } from './env';
 import { mergeStatic } from './merge';
 import { glowTag } from './nightglow';
-import { buildFish } from './fishmodel';
+import { buildFish, disposeFish, type FishModel } from './fishmodel';
 import { boardSum } from './format';
 import type { Circle } from './player';
 import { ColliderList } from './colliderlist';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import { buildBaitShop, dressMarlow, SHOP_SOLIDS } from './baitshop';
+import { buildFishMount, buildHearth, buildPlaque, mountBoard, writePlaque } from './camp';
 
 export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) =>
   new THREE.MeshLambertMaterial({ color, ...extra });
@@ -59,6 +60,26 @@ const POSTERS = {
   casino: { side: 5.2, image: casinoPreview, title: 'CASINO COVE', ink: '#ffd76a', frame: 0xb8862f },
 } satisfies Record<string, Poster>;
 
+/**
+ * What dresses a board's back, seen from behind it: a frame of four battens and a cross brace, `w` by `h`, centred
+ * on the origin and standing out toward -z.
+ */
+export function backBrace(w: number, h: number): THREE.Group {
+  const g = new THREE.Group();
+  const T = 0.09;
+  for (const side of [-1, 1]) {
+    const rail = rbox(w, T, 0.04, WOOD, 0.015);
+    rail.position.set(0, (side * (h - T)) / 2, -0.02);
+    const stile = rbox(T, h - 2 * T, 0.04, WOOD, 0.015);
+    stile.position.set((side * (w - T)) / 2, 0, -0.02);
+    const brace = rbox(Math.hypot(w - 2 * T, h - 2 * T), T * 0.8, 0.03, WOOD, 0.012);
+    brace.position.z = -0.015;
+    brace.rotation.z = side * Math.atan2(h - 2 * T, w - 2 * T);
+    g.add(rail, stile, brace);
+  }
+  return g;
+}
+
 /** Capsule limb between two points. */
 export function limb(a: THREE.Vector3, b: THREE.Vector3, r: number, color: number): THREE.Mesh {
   const dir = b.clone().sub(a);
@@ -82,7 +103,8 @@ export function textPlane(w: number, h: number, px: number): { mesh: THREE.Mesh;
   return { mesh, ctx: canvas.getContext('2d')!, tex };
 }
 
-export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#fff3d6'): void {
+/** A wooden sign's face: `text` in `color` on a framed board. A long text is squeezed to `fit` px wide, if given. */
+export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#fff3d6', fit?: number): void {
   const { width: w, height: h } = ctx.canvas;
   ctx.fillStyle = '#6b4a2b';
   ctx.fillRect(0, 0, w, h);
@@ -93,7 +115,7 @@ export function woodSign(ctx: CanvasRenderingContext2D, text: string, color = '#
   ctx.font = `800 ${Math.round(h * 0.5)}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, w / 2, h / 2 + 3);
+  ctx.fillText(text, w / 2, h / 2 + 3, fit);
 }
 
 /** The HUD's gold coin (`.coin` in style.css) on a canvas: `size` px across, centred on (x, y). */
@@ -138,13 +160,24 @@ export interface LeaderRow {
   title?: string | null;
   /** A charter catch: shown by name alone, since every sea fish is tier 5. */
   sea?: boolean;
+  /** The catch's fish (`FISH`), for the trophy over the board. */
+  fishId?: string;
 }
 
 /** A catch board's words and colours: Lake Legends keeps Top Anglers' navy and gold, Deep Sea is darker with a pale aqua trim. */
 interface BoardLook { title: string; sub: string; empty: string; roof: number; bg: string; trim: string; head: string; soft: string; first: string }
 const LAKE_BOARD: BoardLook = { title: 'LAKE LEGENDS', sub: 'most valuable lake catch', empty: 'No anglers yet', roof: 0x2f6f9f, bg: '#1f3d5a', trim: '#d4af37', head: '#ffe9b8', soft: '#9fc2de', first: '#ffd23a' };
 const SEA_BOARD: BoardLook = { title: 'DEEP SEA', sub: 'most valuable charter catch', empty: 'No charter catches yet', roof: 0x1d3557, bg: '#14243f', trim: '#8fd8e6', head: '#dff7ff', soft: '#8fb3cf', first: '#9fe8f5' };
-interface BoardFace { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture }
+/** A canvas face and, for a catch board, the rows last drawn on it (`drawBoard`). */
+interface BoardFace { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; drawn?: string }
+/** A board's trophy: the mount over its roof, the record fish on it and the holder's plaque under it. */
+interface Trophy { anchor: THREE.Object3D; plaque: BoardFace; fish: FishModel | null; tall: THREE.Group | null; shown: string }
+/**
+ * A trophy's back board (m), and the box on it that every trophy fish is fitted to, whatever its species and size:
+ * `w` across and `h` high. A fish whose outline is taller than that for its width (the Kraken, with its arms out)
+ * may stand up to `tall` high, on a back board made taller for it.
+ */
+const TROPHY = { board: [1.6, 0.95] as [number, number], w: 1.4, h: 0.8, tall: 1.2 };
 
 /** The town hub: vendor stall with its keeper and the gate to the next map. */
 export class Hub {
@@ -157,9 +190,17 @@ export class Hub {
   readonly leaderSpot = new THREE.Vector3();
   /** In front of the Deep Sea board (unset on maps without one). */
   readonly seaSpot: THREE.Vector3 | null = null;
+  /** The middle of the campfire. */
   readonly campSpot = new THREE.Vector3();
   private lakeFace!: BoardFace;
   private seaFace: BoardFace | null = null;
+  private lakeTrophy!: Trophy;
+  private seaTrophy: Trophy | null = null;
+  /**
+   * Given each trophy fish as it is mounted (`World.warm`), so its shaders are compiled and its model drawn once
+   * before anyone looks up at it; otherwise the first look at a new record stalls.
+   */
+  warm: (o: THREE.Object3D) => void = () => {};
   private thanksCtx!: CanvasRenderingContext2D;
   private thanksTex!: THREE.CanvasTexture;
   private flames: THREE.Mesh[] = [];
@@ -187,10 +228,10 @@ export class Hub {
     this.buildGate(map.gate);
     if (map.next?.id === 'casino') (this as { peekSpot: THREE.Vector3 | null }).peekSpot = this.buildPoster(map.gate, POSTERS.casino);
     this.buildProps();
-    this.lakeFace = this.buildCatchBoard(map.leaderboard, LAKE_BOARD, this.leaderSpot);
+    [this.lakeFace, this.lakeTrophy] = this.buildCatchBoard(map.leaderboard, LAKE_BOARD, this.leaderSpot);
     if (map.seaboard) {
       const spot = new THREE.Vector3();
-      this.seaFace = this.buildCatchBoard(map.seaboard, SEA_BOARD, spot);
+      [this.seaFace, this.seaTrophy] = this.buildCatchBoard(map.seaboard, SEA_BOARD, spot);
       (this as { seaSpot: THREE.Vector3 | null }).seaSpot = spot;
     }
     this.buildThanks(map.thanks);
@@ -198,8 +239,9 @@ export class Hub {
     this.setLeaders([], []);
     this.setSupporters([]);
     this.setGate(false);
-    // The shopkeeper and the hanging fish animate; everything else static is baked together.
-    mergeStatic(this.group, [this.npc, ...this.hanging]);
+    // The shopkeeper and the hanging fish animate, and the trophy fish change with the boards; everything else
+    // static is baked together.
+    mergeStatic(this.group, [this.npc, ...this.hanging, this.lakeTrophy.anchor, ...(this.seaTrophy ? [this.seaTrophy.anchor] : [])]);
   }
 
   private readonly joined = new ColliderList();
@@ -373,6 +415,9 @@ export class Hub {
       if (!pile) this.fixed.push({ x, z, r: 0.2 });
     };
     for (const [x, z] of piles) lampPost(x, z, true, true);
+    // The rocket jetty's lantern, on a pile off its end like the docks'. It glows but casts no light.
+    const jetty = this.map.camp?.jettyLantern;
+    if (jetty) lampPost(jetty.x, jetty.z, false, true);
     for (const [x, z] of posts) lampPost(x, z, lit.has(`${x},${z}`), false);
     // Marlow's stock: two barrels and a crate on the grass at his stall's west end, behind the quay road, with a
     // lamp post beside them. Nothing stands on the quay's deck or the road but the east bench. Play-test: the spots.
@@ -395,8 +440,12 @@ export class Hub {
     }
   }
 
-  /** A catch board on two posts under a little roof; `reader` is set to where a player stands to read it. */
-  private buildCatchBoard(spot: Spot, look: BoardLook, reader: THREE.Vector3): BoardFace {
+  /**
+   * A catch board on two posts under a little roof, with its trophy over the roof: a fish mount on two legs at the
+   * roof's front edge and the holder's plaque across them (`setLeaders` fills both). `reader` is set to where a
+   * player stands to read the board.
+   */
+  private buildCatchBoard(spot: Spot, look: BoardLook, reader: THREE.Vector3): [BoardFace, Trophy] {
     const g = new THREE.Group();
     // Posts behind the frame, like the posters' (`BEHIND`), so they don't come through the board's face.
     for (const lx of [-1.0, 1.0]) {
@@ -411,16 +460,94 @@ export class Hub {
     const roof = rbox(2.9, 0.12, 0.7, look.roof, 0.05);
     roof.position.set(0, 3.0, 0);
     roof.rotation.x = 0.15;
-    g.add(frame, face.mesh, roof);
+    const back = backBrace(2.4, 1.9);
+    back.position.set(0, 1.9, -0.06);
+    g.add(frame, face.mesh, roof, back);
+    // The trophy stands at the roof's front edge, in front of the campfire's string of bulbs, which runs over the
+    // roof's middle: two legs up from the roof, the plaque across them and the mount on top.
+    const TZ = 0.26;
+    const LEGS = 0.56;
+    const top = 3.0 + 0.06 - TZ * Math.sin(0.15);
+    const mount = buildFishMount(...TROPHY.board);
+    for (const lx of mount.feet) {
+      const leg = rbox(0.1, LEGS + 0.04, 0.12, 0x6b4a2b, 0.02);
+      leg.position.set(lx, top + LEGS / 2 - 0.02, TZ);
+      g.add(leg);
+    }
+    const plaque = buildPlaque(1.1);
+    plaque.group.position.set(0, top + LEGS / 2, TZ + 0.06);
+    mount.group.position.set(0, top + LEGS - 0.2, TZ);
+    g.add(plaque.group, mount.group);
     this.place(g, spot, 0, 0, this.footing(spot, 1.0));
     for (const lx of [-1.0, 1.0]) {
       const c = this.world(spot, lx, 0);
       this.fixed.push({ x: c.x, z: c.z, r: 0.3 });
     }
-    // Far enough in front that a reader stands back from the seat wall the board is behind (right at the wall, its
-    // seats are offered instead), and close enough to stand clear of the fire the board faces.
-    this.world(spot, 0, 2.4, reader);
-    return { ctx: face.ctx, tex: face.tex };
+    // In the clear ring behind the fire's log seats, which the board faces.
+    const { x, z } = readingSpot(spot);
+    reader.set(x, standHeight(x, z), z);
+    return [{ ctx: face.ctx, tex: face.tex }, { anchor: mount.anchor, plaque: { ctx: plaque.ctx, tex: plaque.tex }, fish: null, tall: null, shown: '' }];
+  }
+
+  /**
+   * Shows a board's number one catch over it: a model of the fish on the mount, fitted to the same box whatever it
+   * is (`TROPHY`), and its angler's name on the plaque. With no catch the mount is bare and the plaque says so.
+   */
+  private setTrophy(t: Trophy, top: LeaderRow | undefined): void {
+    const f = top?.value ? FISH.find((x) => x.id === top.fishId) : undefined;
+    const shown = f && top ? `${top.name}|${f.id}|${!!top.shiny}` : '-';
+    if (shown === t.shown) return;
+    t.shown = shown;
+    if (t.fish) {
+      t.anchor.remove(t.fish.group);
+      disposeFish(t.fish);
+      t.fish = null;
+    }
+    if (t.tall) {
+      t.anchor.remove(t.tall);
+      for (const m of t.tall.children as THREE.Mesh[]) {
+        m.geometry.dispose();
+        (m.material as THREE.Material).dispose();
+      }
+      t.tall = null;
+    }
+    writePlaque(t.plaque.ctx, t.plaque.tex, f && top ? top.name : 'No catch yet');
+    if (!f || !top) return;
+    t.fish = buildFish(f.color, false, !!top.shiny, f.tier, f.id);
+    // Side on, its nose to the left; the whole fish, fins and arms and all, fills the mount's box, so a long eel, a
+    // round carp and the Kraken each read from the logs. Its glows, and the sparkles that circle a shiny or a
+    // spirit, don't count.
+    const model = t.fish;
+    model.group.rotation.y = Math.PI / 2;
+    model.group.updateMatrixWorld(true);
+    const bounds = new THREE.Box3();
+    const grow = (o: THREE.Object3D): void => {
+      if (o === model.orbit) return;
+      const mesh = o as THREE.Mesh;
+      const solid = mesh.isMesh && (mesh.material as THREE.Material).depthWrite;
+      const geo = solid ? mesh.geometry : null;
+      if (geo) {
+        if (!geo.boundingBox) geo.computeBoundingBox();
+        bounds.union(new THREE.Box3().copy(geo.boundingBox!).applyMatrix4(o.matrixWorld));
+      }
+      o.children.forEach(grow);
+    };
+    grow(model.group);
+    const size = bounds.getSize(new THREE.Vector3());
+    const middle = bounds.getCenter(new THREE.Vector3());
+    const k = Math.min(TROPHY.w / size.x, TROPHY.tall / size.y);
+    // In the box's middle; a taller one stands on the box's foot, clear of the plaque, against its own back board.
+    const up = Math.max(0, size.y * k - TROPHY.h) / 2;
+    model.group.scale.setScalar(k);
+    model.group.position.set(-middle.x * k, up - middle.y * k, 0);
+    t.anchor.add(model.group);
+    if (up) {
+      // In the plane of the mount's own board, which it covers (the anchor stands 0.1 m in front of that).
+      t.tall = mountBoard(TROPHY.board[0], size.y * k + 0.16);
+      t.tall.position.set(0, up, -0.1);
+      t.anchor.add(t.tall);
+    }
+    this.warm(model.group);
   }
 
   /** Height to stand a two-post board on: the lower post's ground, so on a slope the other post sinks in rather than one floating. */
@@ -431,10 +558,16 @@ export class Hub {
   /** Redraws the two catch boards, each ranked by the most valuable fish every player has caught in that water. */
   setLeaders(lake: LeaderRow[], sea: LeaderRow[]): void {
     this.drawBoard(this.lakeFace, LAKE_BOARD, lake);
+    this.setTrophy(this.lakeTrophy, lake[0]);
     if (this.seaFace) this.drawBoard(this.seaFace, SEA_BOARD, sea);
+    if (this.seaTrophy) this.setTrophy(this.seaTrophy, sea[0]);
   }
 
   private drawBoard(face: BoardFace, look: BoardLook, rows: LeaderRow[]): void {
+    // The boards are set again whenever anyone joins, leaves or changes their look: the same rows draw nothing.
+    const drawn = JSON.stringify(rows.slice(0, 5).map((r) => [r.name, r.level, r.value, r.fish, r.tier, r.color, !!r.shiny, !!r.sea]));
+    if (drawn === face.drawn) return;
+    face.drawn = drawn;
     const ctx = face.ctx;
     const { width: w, height: h } = ctx.canvas;
     ctx.fillStyle = look.bg;
@@ -487,7 +620,7 @@ export class Hub {
     face.tex.needsUpdate = true;
   }
 
-  /** A small "thank you" board on the green, listing the players who tipped on Ko-fi. */
+  /** A small "thank you" board on the campfire's rim, listing the players who tipped on Ko-fi. */
   private buildThanks(spot: Spot): void {
     const g = new THREE.Group();
     for (const lx of [-0.6, 0.6]) {
@@ -502,7 +635,9 @@ export class Hub {
     const roof = rbox(1.9, 0.1, 0.55, 0xb5476e, 0.04);
     roof.position.set(0, 2.36, 0);
     roof.rotation.x = 0.15;
-    g.add(frame, face.mesh, roof);
+    const back = backBrace(1.5, 1.4);
+    back.position.set(0, 1.55, -0.05);
+    g.add(frame, face.mesh, roof, back);
     this.thanksCtx = face.ctx;
     this.thanksTex = face.tex;
     this.place(g, spot, 0, 0, this.footing(spot, 0.6));
@@ -548,38 +683,20 @@ export class Hub {
     this.thanksTex.needsUpdate = true;
   }
 
+  /** The Great Fire (`buildHearth`, camp.ts) in the middle of the campfire's terrace, with the light it casts. */
   private buildCampfire(spot: Spot): void {
-    const g = new THREE.Group();
-    const stone = mat(0x77746e);
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2;
-      const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), stone);
-      s.position.set(Math.sin(a) * 0.65, 0.1, Math.cos(a) * 0.65);
-      s.scale.y = 0.7;
-      s.castShadow = true;
-      g.add(s);
+    const hearth = buildHearth();
+    this.flames.push(...hearth.flames);
+    this.lampMats.push(...hearth.lamps);
+    glowTag(this.fireLight, 2.6, 1, true);
+    hearth.fireSpot.add(this.fireLight);
+    this.place(hearth.group, spot);
+    for (const [lx, lz, r] of hearth.solids) {
+      const c = this.world(spot, lx, lz);
+      this.fixed.push({ x: c.x, z: c.z, r });
     }
-    for (let i = 0; i < 4; i++) {
-      const log = cyl(0.08, 0.09, 0.9, 0x5b3a1e, 7);
-      log.rotation.z = Math.PI / 2;
-      log.rotation.y = (i / 4) * Math.PI;
-      log.position.y = 0.16 + (i % 2) * 0.1;
-      g.add(log);
-    }
-    for (const [h, c] of [[0.9, 0xff6a1a], [0.65, 0xffa51f], [0.4, 0xffe14a]] as const) {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.28 * (h / 0.9) + 0.08, h, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.9 }));
-      f.position.y = 0.3 + h / 2;
-      this.flames.push(f);
-      g.add(f);
-    }
-    this.fireLight.position.set(0, 1.0, 0);
-    glowTag(this.fireLight, 1.6, 1, true);
-    g.add(this.fireLight);
-    this.place(g, spot);
-    this.fixed.push({ x: spot.x, z: spot.z, r: 0.8 });
-    // The seats round the fire are the ring's (`buildRing` in town.ts): its seat wall on the hill side and a log.
-    // On the open water side, away from the boards' prompt behind the fire.
-    this.campSpot.set(spot.x - 1.8, groundHeight(spot.x, spot.z), spot.z);
+    // The seats round the fire are the terrace's (`buildCamp` in town.ts): its logs and the seat wall on the cove side.
+    this.campSpot.set(spot.x, groundHeight(spot.x, spot.z), spot.z);
   }
 
   /** Opens or seals the gate for the local player; redraws only when something changed. */

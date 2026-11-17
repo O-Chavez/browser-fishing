@@ -36,19 +36,22 @@ const apronHeight = (x: number, z: number): number => {
 };
 
 /**
- * A level floor on a slope (the campfire's): a disc of radius `hw` or, given `hd`, a box of half sizes `hw` across
- * and `hd` deep turned `rot` radians. Inside it the ground is `h`. Where the ground was lower it is built up, and
- * falls away beyond the edge at `bank` per metre (`LEVEL_BANK` if left out) like an apron's bank; where the hill was
- * higher it is dug down, level for `cut` metres past the edge and from there eased back up into the hill over
- * `blend` metres (`LEVEL_BLEND` if left out; more for a gentler bank), with no crease at its foot. `cut` carries the flat past whatever stands at the edge (the
- * wall that holds the hill back): the terrain's mesh has a vertex every 0.8-1 m here, so it can't turn a corner
- * any tighter, and would otherwise lean on the wall's foot and lie over the cobbles. A `grass` level is a lawn: green
- * whatever its height (the ground below the grass line is sand otherwise), fading out over `LAWN_FADE` metres.
+ * A level floor on a slope (the campfire's terrace, its beach): a disc of radius `hw`, the part of that disc between
+ * two bearings (`arc`, degrees round from +z toward +x, less than half a turn), or, given `hd`, a box of half sizes
+ * `hw` across and `hd` deep turned `rot` radians. Inside it the ground is `h`. Where the ground was lower it is built
+ * up, and falls away beyond the edge at `bank` per metre (`LEVEL_BANK` if left out) like an apron's bank; where the
+ * hill was higher it is dug down, level for `cut` metres past the edge and from there eased back up into the hill
+ * over `blend` metres (`LEVEL_BLEND` if left out; less for a steeper bank), with no crease at its foot. `cut` carries
+ * the flat past whatever stands at the edge (the wall that holds the hill back): the terrain's mesh has a vertex
+ * every 1-1.7 m here, so it can't turn a corner any tighter, and would otherwise lean on the wall's foot and lie over
+ * the cobbles. Levels are laid in order, so a later one cuts into an earlier one or is built up on it. A `grass`
+ * level is turf: green whatever its height (the ground below the grass line is sand otherwise), fading out over
+ * `LAWN_FADE` metres.
  */
-export interface Level { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; cut: number; bank?: number; blend?: number; grass?: boolean }
+export interface Level { x: number; z: number; h: number; hw: number; hd?: number; rot?: number; arc?: [number, number]; cut: number; bank?: number; blend?: number; grass?: boolean }
 const LEVEL_BANK = 0.5;
 const LEVEL_BLEND = 1.5;
-const LAWN_FADE = 2;
+const LAWN_FADE = 1.5;
 let levels: Level[] = [];
 export const setLevels = (l: Level[]): void => {
   levels = l;
@@ -57,24 +60,21 @@ export const setLevels = (l: Level[]): void => {
 const outside = (l: Level, x: number, z: number): number => {
   const dx = x - l.x;
   const dz = z - l.z;
+  if (l.arc) {
+    // How far round the point is past the nearer of the sector's two straight edges; within them, the rim is the edge.
+    const mid = ((l.arc[0] + l.arc[1]) * Math.PI) / 360;
+    const turn = Math.atan2(dx, dz) - mid;
+    const past = Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) - ((l.arc[1] - l.arc[0]) * Math.PI) / 360;
+    const r = Math.hypot(dx, dz);
+    if (past <= 0) return Math.max(0, r - l.hw);
+    // Past an edge, the nearest point is on it: a line from the middle out to the rim.
+    const along = r * Math.cos(past);
+    return Math.hypot(along - Math.min(l.hw, Math.max(0, along)), r * Math.sin(past));
+  }
   if (l.hd === undefined) return Math.max(0, Math.hypot(dx, dz) - l.hw);
   const sin = Math.sin(l.rot ?? 0);
   const cos = Math.cos(l.rot ?? 0);
   return Math.hypot(Math.max(0, Math.abs(dx * cos - dz * sin) - l.hw), Math.max(0, Math.abs(dx * sin + dz * cos) - l.hd));
-};
-
-/**
- * A pond dug into the ground away from the lake: an ellipse `rx` by `rz` metres, `depth` below the water in its
- * middle. Its edge is a level rim `POND_RIM` above the water, and the bowl falls from there, so the shore is a clean
- * oval about 0.85 of the way out whatever the ground was. Beyond the rim the ground eases back into what was there
- * (levels included) by `POND_BLEND` times the radius.
- */
-export interface Pond { x: number; z: number; rx: number; rz: number; depth: number }
-const POND_RIM = 0.25;
-const POND_BLEND = 1.3;
-let ponds: Pond[] = [];
-export const setPonds = (p: Pond[]): void => {
-  ponds = p;
 };
 
 /**
@@ -105,7 +105,7 @@ export function dirtWeight(x: number, z: number): number {
 /** 0..1, how grassy the ground is at height `y`: above the sand line or on a town's pad, less where it is worn to dirt. */
 export const grassWeight = (x: number, z: number, y: number): number =>
   Math.max(smooth(0.3, 1.6, y), worn ? padWeight(x, z) : 0, lawnWeight(x, z)) * (1 - 0.85 * dirtWeight(x, z));
-/** 0..1, how much of a lawn (a `grass` level) a spot is: 1 on it, fading out past its edge. */
+/** 0..1, how much of a `grass` level's turf a spot is: 1 on it, fading out past its edge. */
 function lawnWeight(x: number, z: number): number {
   let w = 0;
   for (const l of levels) if (l.grass) w = Math.max(w, 1 - smooth(0, LAWN_FADE, outside(l, x, z)));
@@ -188,12 +188,6 @@ export function groundHeight(x: number, z: number): number {
     g = Math.max(g, l.h - d * (l.bank ?? LEVEL_BANK));
     if (g > l.h) g = l.h + (g - l.h) * smooth(0, l.blend ?? LEVEL_BLEND, d - l.cut);
   }
-  for (const p of ponds) {
-    const d = Math.hypot((x - p.x) / p.rx, (z - p.z) / p.rz);
-    if (d >= POND_BLEND) continue;
-    const bowl = POND_RIM - (POND_RIM + p.depth) * (1 - smooth(0.4, 1, d));
-    g = bowl + (g - bowl) * smooth(1, POND_BLEND, d);
-  }
   return Math.min(g, deckBed(x, z));
 }
 
@@ -202,12 +196,15 @@ export function groundHeight(x: number, z: number): number {
  * rising gently from its edge (`DECK_BED_SLOPE` per metre). Where a bank or an apron would stand level with the
  * planks, the coarse terrain mesh crossed them in a sawtooth of sand along the deck's rear edge and over its ends;
  * held under them, the planks show to their true edge and the sand and cobbles meet it a few centimetres down.
+ * The rise reaches a long way and caps the far hills too, so a dock over ground that is lower than its planks anyway
+ * (`DockRect.low`) is left out: it has nothing to hold down, and the hills round it keep their height.
  */
 const DECK_BED = DOCK_TOP - 0.1;
 const DECK_BED_SLOPE = 0.15;
 function deckBed(x: number, z: number): number {
   let bed = Infinity;
   for (const r of DOCK_RECTS) {
+    if (r.low) continue;
     const dx = Math.max(0, r.x0 - x, x - r.x1);
     const dz = Math.max(0, r.z0 - z, z - r.z1);
     bed = Math.min(bed, DECK_BED + Math.hypot(dx, dz) * DECK_BED_SLOPE);
@@ -266,15 +263,22 @@ function rawGroundHeight(x: number, z: number): number {
 
 /**
  * Walkable timber over the water: the pier, its T end, the quay across the back of the cove that the pier
- * runs out of, and a short jetty either side of the pier's root (docks in docs/map-rework/harbour.json).
- * A `landing` is a place to stand, not to fish: casting from it counts as the shore (`fishingSpot`).
+ * runs out of, a short jetty either side of the pier's root (docks in docs/map-rework/harbour.json), Reed's wharf
+ * and the rocket jetty.
+ * A `landing` is a place to stand, not to fish: casting from it counts as the shore (`fishingSpot`). A `low` one
+ * stands over ground that is below its planks all round (`deckBed`).
  */
-export interface DockRect { x0: number; x1: number; z0: number; z1: number; landing?: boolean }
+export interface DockRect { x0: number; x1: number; z0: number; z1: number; landing?: boolean; low?: boolean }
 /**
  * Captain Reed's wharf (`HARBOUR` in maps.ts): a timber landing along the water's edge of his beach, on the line
  * of his lane, with the seaplane moored square to its face. Play-test: the size.
  */
 export const REED_WHARF: DockRect = { x0: -18.4, x1: -16, z0: -4.6, z1: 3.2, landing: true };
+/**
+ * The rocket jetty (`CAMP` in maps.ts): from the beach on the east headland's lake side out over the open lake.
+ * A landing, like the wharf. Play-test: the size.
+ */
+export const ROCKET_JETTY: DockRect = { x0: 17.4, x1: 19.6, z0: -12.4, z1: -6.9, landing: true, low: true };
 export const DOCK_RECTS: DockRect[] = [
   { x0: -1.5, x1: 1.5, z0: -6, z1: 10 },
   { x0: -5, x1: 5, z0: -9, z1: -6 },
@@ -282,6 +286,7 @@ export const DOCK_RECTS: DockRect[] = [
   { x0: 6.25, x1: 8.75, z0: 4, z1: 10 },
   { x0: -8.75, x1: -6.25, z0: 4, z1: 10 },
   REED_WHARF,
+  ROCKET_JETTY,
 ];
 
 export const onDock = (x: number, z: number, pad = 0): boolean =>

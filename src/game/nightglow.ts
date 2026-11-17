@@ -13,11 +13,16 @@ interface GlowSpec {
   /** Brightness. */
   a: number;
   flicker?: boolean;
+  /** The material whose colour the halo takes, for a marker that isn't the lit mesh itself. */
+  of?: THREE.MeshLambertMaterial;
 }
 
-/** Marks a lamp, lantern, fire light or window for `NightGlow` to find. */
-export const glowTag = (o: THREE.Object3D, r: number, a = 1, flicker = false): void => {
-  o.userData.glow = { r, a, flicker } satisfies GlowSpec;
+/**
+ * Marks a lamp, lantern, fire light or window for `NightGlow` to find. A bare marker stands in for a mesh that is
+ * baked into a merged one (a string light's bulb, `mergeStatic`): it carries the bulb's material as `of`.
+ */
+export const glowTag = (o: THREE.Object3D, r: number, a = 1, flicker = false, of?: THREE.MeshLambertMaterial): void => {
+  o.userData.glow = { r, a, flicker, of } satisfies GlowSpec;
 };
 
 interface Source {
@@ -241,7 +246,7 @@ export class NightGlow {
   private sourceColor(s: Source, out: THREE.Color): THREE.Color {
     const o = s.obj as THREE.Mesh & THREE.PointLight;
     if (o.isPointLight) return out.copy(o.color);
-    const m = o.material as THREE.MeshLambertMaterial;
+    const m = s.spec.of ?? (o.material as THREE.MeshLambertMaterial);
     return m.emissive && m.emissive.getHex() !== 0 ? out.copy(m.emissive) : out.copy(m.color);
   }
 

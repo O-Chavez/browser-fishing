@@ -69,6 +69,8 @@ interface Member {
   /** When this player last started an emote, to rate-limit the relays, and when the one playing ends (0 once it's over). */
   emoteAt?: number;
   emoteUntil?: number;
+  /** The emote playing until `emoteUntil`, shown to a player who arrives while it still plays (`emotesHere`). */
+  emote?: string | null;
   /** When their buffs last ticked down: buffs only run while the player is online. */
   smokeAt: number;
   /** Metres the player may still move (`MAX_SPEED`, `MOVE_BUDGET`), as of `posAt`. */
@@ -239,6 +241,7 @@ export class Room {
     // Before adding the member, so everyone else on the server hears it but not the joiner.
     this.say({ t: 'sys', text: `${acct.name} has joined` });
     this.members.set(id, m);
+    this.emotesHere(m);
     if (smoked.length) conn.send({ t: 'notice', msg: `🔥 While you were away, Mags smoked your ${smokedText(smoked)}. It's in your Pantry.` });
     if (stages.ids.length) conn.send({ t: 'stages', ...stages });
     if (gift) conn.send({ t: 'notice', msg: smoke.giftText(gift) });
@@ -665,6 +668,7 @@ export class Room {
     const place = placeOf(m.info);
     const here = [...this.members.values()].filter((o) => o !== m && placeOf(o.info) === place);
     if (here.length) m.conn.send({ t: 'snap', p: here.map(snapEntry) });
+    this.emotesHere(m);
   }
 
   /**
@@ -1097,14 +1101,16 @@ export class Room {
     this.boardAt = this.now();
     const coins = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, m.acct.save.coins]));
     const stats = Object.fromEntries([...this.members.values()].map((m) => [m.info.id, { level: m.acct.save.level, best: m.acct.save.best ?? null }]));
-    // The charters' best catches re-rank the hall of fame too, though the player list doesn't carry them.
-    const sk = JSON.stringify(stats) + JSON.stringify([...this.members.values()].map((m) => m.acct.save.bestSea?.value ?? 0));
+    const statsKey = JSON.stringify(stats);
+    // The charters' best catches re-rank the hall of fame too, though the player list doesn't carry them, so they
+    // aren't part of the board's own key.
+    const sk = statsKey + JSON.stringify([...this.members.values()].map((m) => m.acct.save.bestSea?.value ?? 0));
     // Offline accounts can't change, so the hall of fame only moves when an online player's stats do.
     if (sk !== this.lastStats) {
       this.lastStats = sk;
       this.hallStale();
     }
-    const key = JSON.stringify(coins) + sk;
+    const key = JSON.stringify(coins) + statsKey;
     if (key !== this.lastBoard) {
       this.lastBoard = key;
       // Kept on the player info too, so the list sent to a new joiner isn't stale.
@@ -1183,17 +1189,31 @@ export class Room {
     if (id === null) {
       if (!m.emoteUntil || now >= m.emoteUntil) return;
       m.emoteUntil = 0;
+      m.emote = null;
     } else {
       const def = emoteById(id);
       if (!def || !eco.ownsEmote(m.acct.save, def.id) || m.pending) return;
       if (m.emoteAt !== undefined && now - m.emoteAt < EMOTE_GAP_MS) return;
       m.emoteAt = now;
       m.emoteUntil = now + def.seconds * 1000;
-      emote = def.id;
+      m.emote = emote = def.id;
     }
     const place = placeOf(m.info);
     const here = [...this.members.values()].filter((o) => o !== m && placeOf(o.info) === place);
     if (here.length) this.sendAll(here, { t: 'emote', id: m.info.id, emote, ...(emote ? { x: round(m.info.x), z: round(m.info.z) } : {}) });
+  }
+
+  /**
+   * Shows a player who just arrived (joining, or on a new map) the emotes still playing where they are: each is only
+   * sent as it starts, and sitting never ends by itself, so without this someone seated would stand inside their seat.
+   */
+  private emotesHere(m: Member): void {
+    const now = this.now();
+    const place = placeOf(m.info);
+    for (const o of this.members.values()) {
+      if (o === m || !o.emote || !o.emoteUntil || o.emoteUntil <= now || placeOf(o.info) !== place) continue;
+      m.conn.send({ t: 'emote', id: o.info.id, emote: o.emote, x: round(o.info.x), z: round(o.info.z) });
+    }
   }
 
   /** Sends the players who moved since the last tick to everyone on their map (or dive). */

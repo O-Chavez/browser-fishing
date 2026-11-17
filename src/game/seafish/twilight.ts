@@ -14,7 +14,11 @@ import type { SeaIconCtx, SeaIconLayers, SeaModelCtx } from './types';
 const geos = new Map<string, THREE.BufferGeometry>();
 function cached(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
   let g = geos.get(key);
-  if (!g) geos.set(key, (g = make()));
+  if (!g) {
+    geos.set(key, (g = make()));
+    // Held here for every model of the kind: `disposeFish` leaves it.
+    g.userData.shared = true;
+  }
   return g;
 }
 const sph = (r: number, w = 5, h = 3) => cached(`s${r}|${w}|${h}`, () => new THREE.SphereGeometry(r, w, h));
@@ -162,8 +166,10 @@ export function twilightModel(ctx: SeaModelCtx): void {
           halos.push(moved(sph(r * 2.4), p));
         }
       }
-      geos.set(key, merge(cores));
-      geos.set(`${key}:halo`, merge(halos));
+      for (const [k, g] of [[key, merge(cores)], [`${key}:halo`, merge(halos)]] as const) {
+        g.userData.shared = true;
+        geos.set(k, g);
+      }
     }
     group.add(new THREE.Mesh(geos.get(key)!, coreMat(col)));
     group.add(new THREE.Mesh(geos.get(`${key}:halo`)!, glowMat(col, 0.3)));

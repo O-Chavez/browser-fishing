@@ -71,6 +71,11 @@ class Avatar {
   private emotes: EmotePlayer;
   /** Where the avatar's player stood when its emote began. */
   private emoteAt = { x: 0, z: 0 };
+  /**
+   * An emote that came while the avatar was hidden, started when it shows: on arriving on a new map the server
+   * tells of the emotes playing there (someone seated) before the save that moves this player there.
+   */
+  private waiting: { def: EmoteDef; at: { x: number; z: number }; dark: number } | null = null;
 
   constructor(
     info: PlayerInfo,
@@ -223,7 +228,12 @@ class Avatar {
    * as it began, `dark` the night (0 to 1).
    */
   emote(def: EmoteDef | null, at: { x: number; z: number }, dark = 0): void {
+    this.waiting = null;
     if (!def) return this.emotes.stop();
+    if (!this.group.visible) {
+      this.waiting = { def, at: { x: at.x, z: at.z }, dark };
+      return;
+    }
     this.emoteAt = { x: at.x, z: at.z };
     this.emotes.start(def, dark, false);
   }
@@ -238,10 +248,14 @@ class Avatar {
   }
 
   setVisible(v: boolean): void {
+    const shown = v && !this.group.visible;
     this.group.visible = v;
     if (!v) {
       this.setAct(null);
       this.emotes.clear();
+    } else if (shown && this.waiting) {
+      const w = this.waiting;
+      this.emote(w.def, w.at, w.dark);
     }
   }
 
@@ -450,10 +464,12 @@ export class Avatars {
     if (a?.group.visible) a.say(text);
   }
 
-  /** Player `p` started an emote where they stand (or with `null` ended theirs early); `dark` is the night, 0 to 1. */
+  /**
+   * Player `p` started an emote where they stand (or with `null` ended theirs early); `dark` is the night, 0 to 1.
+   * A hidden avatar keeps it until it shows.
+   */
   emote(p: PlayerInfo, def: EmoteDef | null, dark: number): void {
-    const a = this.list.get(p.id);
-    if (a?.group.visible) a.emote(def, p, dark);
+    this.list.get(p.id)?.emote(def, p, dark);
   }
 
   /** The id of the emote playing on player `id`'s avatar, or null. */
