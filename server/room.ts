@@ -140,6 +140,8 @@ export class Room {
   supporters: () => string[] = () => [];
   /** Dev console `/supporter`; the server gives or takes the 💗 and tells every room. */
   setSupporter: (name: string, on: boolean) => string = () => 'No account store.';
+  /** Dev console `/rename`; the server changes the name past the 7-day wait and tells every room. */
+  devRename: (name: string, to: string) => string = () => 'No account store.';
   /** Dev console `/resetpass`; the server points this at the account store. */
   resetPass: (name: string, pass: string) => Promise<string> = async () => 'No account store.';
   /** Milliseconds until an account may change its name again; the server points this at the account store. */
@@ -586,6 +588,13 @@ export class Room {
     if (cmd === 'backpay') {
       console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
       return reply(this.backPay(args[0] === 'apply'));
+    }
+    if (cmd === 'rename') {
+      // Names can hold spaces but never a `>`, so it splits the old name from the new one.
+      const [who, to, ...more] = text.slice(0, 200).replace(/^\/\S*\s*/, '').split('>').map((s) => s.trim());
+      if (!who || !to || more.length) return reply(['Usage: /rename <name> > <new name>']);
+      console.log(`[dev] ${m.acct.name}: ${text.slice(0, 200)}`);
+      return reply([this.devRename(who, to)]);
     }
     if (cmd === 'resetpass') {
       // The last word is the password, so names with spaces work; it never reaches the log.
@@ -1148,6 +1157,11 @@ export class Room {
     m.info.name = m.acct.name;
     this.broadcast({ t: 'named', id, name: m.acct.name });
     this.say({ t: 'sys', text: `${old} is now ${m.acct.name}` });
+  }
+
+  /** The same for an account renamed from the dev console, if it is in this room. */
+  renamedAccount(acct: Account, old: string): void {
+    for (const [id, m] of this.members) if (m.acct === acct) this.renamed(id, old);
   }
 
   /** A player gained or lost the supporter 💗: everyone gets the new list, and the player a thank-you. */
