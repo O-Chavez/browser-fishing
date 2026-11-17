@@ -227,7 +227,7 @@ describe('Room economy', () => {
     expect(s.abyssLevels).toBe(0);
     Object.assign(s, { rodStep: 8, boatParts: 4 });
     room.handle(a.id, { t: 'abysslevel' });
-    expect(s).toMatchObject({ abyssLevels: 1, coins: 10_000_000 - 160_000 - 1_750_000 });
+    expect(s).toMatchObject({ abyssLevels: 1, coins: 10_000_000 - 160_000 - 2_625_000 });
   });
 
   it("sells the hold's levels at Captain Reed only, in order, each once its zone is open, saying why not", () => {
@@ -1746,7 +1746,7 @@ describe('charters', () => {
     expect(last(a.c, 'diveend').end.tally.shiny).toBe(0);
   });
 
-  it('in the Abyss reaches a marker every 3 fish, pays 12% more a marker, keeps the furthest, and starts up to it', () => {
+  it('in the Abyss reaches a marker every 5 fish, pays 12% more a marker, keeps the furthest, and starts up to it', () => {
     const t = setup();
     const a = diver(t);
     const s = a.acct.save;
@@ -1761,9 +1761,8 @@ describe('charters', () => {
     expect(s.coins).toBe(1_000_000 - charterFee(4));
     expect(charterFee(4)).toBe(54_000);
     expect(s.abyssRecord).toBe(1);
-    fight(t, a);
-    fight(t, a);
-    expect(lastDive(a)).toMatchObject({ marker: 1, toNext: 2, gain: 50 });
+    for (let i = 0; i < 4; i++) fight(t, a);
+    expect(lastDive(a)).toMatchObject({ marker: 1, toNext: 4, gain: 50 });
     const coins = s.coins;
     fight(t, a);
     expect(lastDive(a)).toMatchObject({ marker: 2, toNext: 0, gain: 50, rating: 'fair' });

@@ -289,8 +289,8 @@ describe('charter screens', () => {
 
     it('shows the Abyss marker with a pip for each fish toward the next', () => {
       const t = text(hudHtml(view({ zone: 4, marker: 7, toNext: 2 })));
-      expect(t).toContain('The Abyss Marker 7 ●●○');
-      expect(text(hudHtml(view({ zone: 4, marker: 7, toNext: 0 })))).toContain('○○○');
+      expect(t).toContain('The Abyss Marker 7 ●●○○○');
+      expect(text(hudHtml(view({ zone: 4, marker: 7, toNext: 0 })))).toContain('○○○○○');
       expect(t).not.toContain('Tough');
     });
 

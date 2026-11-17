@@ -1161,8 +1161,8 @@ describe('rod steps and Abyss levels', () => {
     const before = s.coins;
     expect(eco.buyAbyssLevel(s)).toBe(true);
     expect(eco.buyAbyssLevel(s)).toBe(true);
-    expect(s).toMatchObject({ abyssLevels: 2, coins: before - 1_750_000 - 1_960_000 });
-    s.coins = 2_194_999;
+    expect(s).toMatchObject({ abyssLevels: 2, coins: before - 2_625_000 - 2_940_000 });
+    s.coins = 3_292_999;
     expect(eco.buyAbyssLevel(s)).toBe(false);
     expect(s.abyssLevels).toBe(2);
   });
