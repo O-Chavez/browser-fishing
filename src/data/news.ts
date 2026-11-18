@@ -17,6 +17,7 @@
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
 import abyssGear from '../assets/images/news/abyss-gear.jpg';
+import anglersRest from '../assets/images/news/anglers-rest.jpg';
 import charterChart from '../assets/images/news/charter-chart.jpg';
 import charterHold from '../assets/images/news/charter-hold.jpg';
 import charterLures from '../assets/images/news/charter-lures.jpg';
@@ -45,6 +46,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 16,
+    date: '2026-11-18',
+    title: "Anglers' Rest",
+    image: anglersRest,
+    alt: "Night at Anglers' Rest: six anglers sit on logs round the great fire playing a washboard, whistle, squeezebox, drum, banjo and jug, under strings of lights, with Bram's Kettle behind the fire and the Deep Sea and Lake Legends boards on either side, each with its record fish mounted above it",
+    body: [
+      "The campfire on the east headland is now <b>Anglers' Rest</b>: a great fire under a crown of lights, with seats all round it. Press <kbd>E</kbd> at any log, wall seat or bench to sit down. Each log by the fire has an instrument beside it: sit there and you play it, and everyone nearby hears the band.",
+      "<b>Top Anglers</b> is now two boards by the fire: <b>Lake Legends</b> for your best lake catch and <b>Deep Sea</b> for your best charter catch. The fish to beat hangs over each, with its angler's name.",
+      "Down the steps on <b>Skipper's Beach</b>, hold <kbd>E</kbd> at the stone pile and let go on the mark to skip a stone; the day's best goes on the sign. <b>Bram Tinder</b> keeps the fire and sells rockets at <b>Bram's Kettle</b>: light one at the rack on the jetty's end and the whole lake looks up.",
+    ],
+  },
   {
     id: 15,
     date: '2026-11-16',

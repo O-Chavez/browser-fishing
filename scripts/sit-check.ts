@@ -379,11 +379,13 @@ try {
 
   // Both screens sample every frame (the game steps at most 0.05 s a frame, so a jump spans a dozen frames however
   // slow the drawing): Ann's own lift over the ground, and where Bob draws her copy and whether it still sits.
+  // Ann samples at least 40 frames and at least 3 s, since Space comes a second in: on a real GPU 40 frames are over
+  // before it does.
   const annArc = ann.evaluate(async () => {
     const g = window.__game;
     const lifts: number[] = [];
     const t0 = performance.now();
-    while (lifts.length < 40 && performance.now() - t0 < 120_000) {
+    while ((lifts.length < 40 || performance.now() - t0 < 3000) && performance.now() - t0 < 120_000) {
       await new Promise((r) => requestAnimationFrame(r));
       // The eye height follows the ground; the jump's lift rides on top of it (with the step bob, nil standing still).
       lifts.push(g.world.walkBob);

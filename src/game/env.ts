@@ -53,8 +53,16 @@ const LEVEL_BANK = 0.5;
 const LEVEL_BLEND = 1.5;
 const LAWN_FADE = 1.5;
 let levels: Level[] = [];
+/** How far each level's shape reaches from its centre: a point further off is at least that much less outside it. */
+let reach: number[] = [];
 export const setLevels = (l: Level[]): void => {
   levels = l;
+  reach = l.map((v) => (v.hd === undefined ? v.hw : Math.hypot(v.hw, v.hd)));
+};
+/** A cheap lower bound on `outside(levels[i], x, z)`, so the many ground queries far from a level skip its trig. */
+const outsideAtLeast = (i: number, x: number, z: number): number => {
+  const l = levels[i];
+  return Math.sqrt((x - l.x) ** 2 + (z - l.z) ** 2) - reach[i];
 };
 /** Metres from (x, z) to a level's edge, 0 inside it. */
 const outside = (l: Level, x: number, z: number): number => {
@@ -108,7 +116,10 @@ export const grassWeight = (x: number, z: number, y: number): number =>
 /** 0..1, how much of a `grass` level's turf a spot is: 1 on it, fading out past its edge. */
 function lawnWeight(x: number, z: number): number {
   let w = 0;
-  for (const l of levels) if (l.grass) w = Math.max(w, 1 - smooth(0, LAWN_FADE, outside(l, x, z)));
+  for (let i = 0; i < levels.length; i++) {
+    const l = levels[i];
+    if (l.grass && outsideAtLeast(i, x, z) < LAWN_FADE) w = Math.max(w, 1 - smooth(0, LAWN_FADE, outside(l, x, z)));
+  }
   return w;
 }
 
@@ -183,7 +194,11 @@ export function groundHeight(x: number, z: number): number {
   // Beyond the pad the bank slopes gently into the water instead of dropping off a cliff.
   const bank = pad.h - Math.max(0, Math.hypot(x - pad.x, z - pad.z) - pad.r) * BANK_SLOPE;
   let g = Math.max(blended, bank, apronHeight(x, z));
-  for (const l of levels) {
+  for (let i = 0; i < levels.length; i++) {
+    const l = levels[i];
+    // Far enough off that the level neither builds the ground up nor cuts it down: the same answer without the trig.
+    const far = outsideAtLeast(i, x, z);
+    if (far - l.cut >= (l.blend ?? LEVEL_BLEND) && l.h - far * (l.bank ?? LEVEL_BANK) <= g) continue;
     const d = outside(l, x, z);
     g = Math.max(g, l.h - d * (l.bank ?? LEVEL_BANK));
     if (g > l.h) g = l.h + (g - l.h) * smooth(0, l.blend ?? LEVEL_BLEND, d - l.cut);

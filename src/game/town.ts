@@ -137,17 +137,21 @@ export class Town {
 
   /** True on a cobbled path or inside anything solid: ground clutter skips these spots. */
   blocked(x: number, z: number, pad = 0.4): boolean {
+    // Squared distances: this runs thousands of times a map build, against every path and collider.
     for (const [ax, az, bx, bz, hw] of this.paths) {
       const dx = bx - ax;
       const dz = bz - az;
       const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
-      if (Math.hypot(x - ax - dx * t, z - az - dz * t) < hw + pad) return true;
+      const ex = x - ax - dx * t;
+      const ez = z - az - dz * t;
+      if (ex * ex + ez * ez < (hw + pad) ** 2) return true;
     }
     for (const s of [this.map.town.square, ...(this.map.town.circles ?? [])]) if (Math.hypot(x - s.x, z - s.z) < s.r + pad) return true;
     // Keep hidden bottles and the worm patch easy to spot
     if (this.bottles.some((b) => Math.hypot(x - b.pos.x, z - b.pos.z) < 1.5)) return true;
     if (this.wormSpot && Math.hypot(x - this.wormSpot.x, z - this.wormSpot.z) < 2) return true;
-    return this.colliders.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + pad + 0.3);
+    for (const c of this.colliders) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (c.r + pad + 0.3) ** 2) return true;
+    return false;
   }
 
   private painted(color: number, map: THREE.Texture): THREE.MeshLambertMaterial {

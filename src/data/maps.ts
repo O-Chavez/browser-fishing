@@ -187,11 +187,8 @@ const CAMP: CampDef = {
   // None stands in a walking line or in front of a board: they flank the boards, the bays and the steps.
   crown: [9, 36, 69, 111, 144, 170, 191, 229, 267, 301],
   apron: { r: 6.4, from: 74, to: 106 },
-  // East of the clear way from the steps to the jetty, turned to the water.
-  beachLogs: [
-    { x: 21.8, z: -5.5, facing: (150 * Math.PI) / 180 },
-    { x: 21.7, z: -7.1, facing: (190 * Math.PI) / 180 },
-  ],
+  // None: the two that stood east of the way to the jetty came out (Oscar, 2026-11-18), so nobody catches on them by the stones.
+  beachLogs: [],
   arch: CAMP_ARCH,
   stall: CAMP_STALL,
   bayBed: { r: TERRACE + 0.535, from: 150, to: 167.5, w: 0.43 },
@@ -227,7 +224,7 @@ const CAMP: CampDef = {
   // The rack and its crate fill the jetty's end from edge to edge.
   rack: { x: 18.89, z: -11.7, facing: Math.PI },
   jettyLantern: { x: 17.15, z: -12.15 },
-  // West of the steps' foot, off the way to the jetty, where it lights the sand, the logs and the Totem's faces.
+  // West of the steps' foot, off the way to the jetty, where it lights the sand and the Totem's faces.
   beachLantern: { x: 18.95, z: -4.05, facing: faceToward(18.95, -4.05, 20.6, -5.6) },
   // On the cove side of the round where the lanes meet, off the cobbles, turned to both lanes: its fingers point
   // on through the arch, high enough to walk under.
