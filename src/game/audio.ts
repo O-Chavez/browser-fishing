@@ -3,6 +3,8 @@ import { gloomAt, stormAt } from '../data/sea';
 import { bandMix } from '../data/band';
 import { Music } from './bandsound';
 import { chimeNow, gullCryWait, gullsAbout, rainLevel } from './seamix';
+import { ShowBus, playShowSound, type Ear } from './rocketsound';
+import type { ShowSound } from '../data/rockets';
 
 /** Background music level; kept low so it sits under the lake ambience. */
 const MUSIC_VOL = 0.17;
@@ -580,6 +582,23 @@ class AudioFX {
     // The body of the roll, in the range small speakers can still play.
     layer('bandpass', 420, 150, 0.45 + 0.25 * near, t + 0.03, dur * 0.85);
     layer('lowpass', 90, 45, 1.2, t + 0.05, dur * 0.8);
+  }
+
+  /**
+   * One of a firework show's sounds (`src/game/rocketsound.ts`), `wait` seconds from now, as heard from `ear`. It
+   * goes through the show's own gain (`ShowBus`) into the master gain, so the sound switch silences it. Returns its gain after distance.
+   */
+  rocket(s: ShowSound, ear: Ear, wait: number): number {
+    // Nothing is built into a muted master, or queued in a sleeping context to play in a clump when it wakes.
+    if (!this.ctx || !this.soundOn || this.ctx.state !== 'running') return 0;
+    this.showBus ??= new ShowBus(this.ctx, this.master!);
+    return playShowSound(this.ctx, this.showBus.node, this.noiseBuf!, s, ear, wait);
+  }
+
+  private showBus?: ShowBus;
+  /** Silences what is still sounding of a firework show: the player has left the map it is over. */
+  rocketCut(): void {
+    this.showBus?.cut();
   }
 
   jingle(rarity: Rarity): void {

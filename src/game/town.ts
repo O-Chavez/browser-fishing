@@ -1402,7 +1402,6 @@ export class Town {
 
     // The stall in its bay, Bram's Kettle; its lantern under the awning casts light.
     const stall = buildKettleStall();
-    writePlaque(stall.ctx, stall.tex, 'Rockets soon');
     this.lamps.push(...stall.lamps);
     const light = new THREE.PointLight(0xffc266, 0, 11, 1.6);
     stall.lantern.add(light);

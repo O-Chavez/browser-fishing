@@ -1079,3 +1079,10 @@ body.touch .dcard .btn kbd { display: none; }
   #devprompt .joinmsg { min-height: 0; margin: 4px 0 0; }
   #devprompt .acts button { padding: 8px; }
 }
+
+/* Fireworks: a prompt that only tells (nothing to press), Bram's counter and the rack's card. */
+#prompt.info { font-weight: 700; }
+body.touch #prompt.info { pointer-events: none; box-shadow: var(--hud-edge); }
+.reed.bram .cols { margin-top: 6px; }
+.dcard.rack .btns { flex-wrap: wrap; }
+.dcard.rack .btns .btn { min-width: 150px; }

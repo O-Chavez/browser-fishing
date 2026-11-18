@@ -337,6 +337,8 @@ export interface NpcDef extends Spot {
   apron?: number;
   /** A keeper behind a counter: the way the counter faces. They are talked to from its front, by a player looking at it. */
   front?: number;
+  /** What they sell across their counter: talking to them opens it, led by their next line (Bram Tinder's rockets, `src/data/rockets.ts`). */
+  sells?: 'rockets';
   /** A loop they stroll around; without one they stand still. */
   walk?: NpcWalk;
 }
@@ -624,10 +626,11 @@ export const MAPS: MapDef[] = [
           ],
         },
         {
-          // The fire keeper, behind the counter of his stall at the campfire (`CAMP.stall`). He sells nothing yet.
-          name: 'Bram Tinder', face: 'joy', ...BRAM, front: CAMP_STALL.facing, coat: 0xc98a2b, hat: 0x7a2f2a, apron: 0x3d4450,
+          // The fire keeper, behind the counter of his stall at the campfire (`CAMP.stall`), where he sells rockets.
+          name: 'Bram Tinder', face: 'joy', ...BRAM, front: CAMP_STALL.facing, coat: 0xc98a2b, hat: 0x7a2f2a, apron: 0x3d4450, sells: 'rockets',
           lines: [
             "Welcome to Anglers' Rest. Pull up a log. The kettle's always on.",
+            "Rockets, three sizes. Light one at the rack on the jetty's end and the whole lake looks up.",
             "Lake Legends and Deep Sea, behind you. That fish over each board is the one to beat, and that's its angler's name under it.",
             "Walk up to any seat and take it. The wall's the best spot to watch the cove.",
             "Skipper's Beach is down the steps, and the jetty's past it.",

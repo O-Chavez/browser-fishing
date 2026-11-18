@@ -2,6 +2,7 @@ import { BAITS, FISH, LINES, RODS, type BaitType } from '../data/content';
 import { VEST_SLOTS } from '../data/casino';
 import { cleanLook, defaultLook, isFace, randomFace, type Look } from '../data/cosmetics';
 import { emoteById } from '../data/emotes';
+import { cleanRockets, type RocketBag } from '../data/rockets';
 import { TITLES } from '../data/ranks';
 import { SMOKER_SPOTS, dishById, stageById, type DishId, type StageId } from '../data/smokehouse';
 import { BACKPAY_VERSION, FLAT_LEVEL, backPayXp, grantRanks, isFreshSave, sellValue, xpPastFlat, type Gifts } from './progression';
@@ -133,6 +134,8 @@ export interface SaveData {
   seaV: number;
   /** Casino perks owned (see `PERKS`). */
   perks: string[];
+  /** Firework rockets in the bag, by kind (`src/data/rockets.ts`): bought from Bram Tinder, lit at the jetty's rack. Saves from before them have none. */
+  rockets: RocketBag;
   /** Shiny Lure casts left. */
   lure: number;
   /** The player switched the Shiny Lure off to save its charges for later. */
@@ -192,6 +195,7 @@ export const newSave = (): SaveData => ({
   abyssRecord: 0,
   seaV: SEA_VERSION,
   perks: [],
+  rockets: {},
   lure: 0,
   lureOff: false,
   tips: [],
@@ -366,6 +370,7 @@ export function migrate(raw: object): SaveData {
   out.chips = Number.isFinite(out.chips) ? Math.max(0, Math.floor(out.chips)) : 0;
   out.lure = Number.isFinite(out.lure) ? Math.max(0, Math.floor(out.lure)) : 0;
   out.pearls = Number.isFinite(out.pearls) ? Math.max(0, Math.floor(out.pearls)) : 0;
+  out.rockets = cleanRockets(data.rockets);
   // The sea's progress, cleaned here and reset below for saves from before `SEA_VERSION`.
   const old = data as OldSea;
   const whole = (n: unknown, hi = Infinity): number | null => (typeof n === 'number' && Number.isFinite(n) ? Math.min(hi, Math.max(0, Math.floor(n))) : null);

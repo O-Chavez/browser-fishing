@@ -547,7 +547,8 @@ describe('Ember Point', () => {
       expect(apart(stand, bram.def) - 0.5).toBeLessThan(3);
       expect(solids.some((c) => offLine(c, stand, bram.def) < c.r)).toBe(true);
       expect(onCobbles(map, stand.x, stand.z) || fromFire(stand) < camp.apron.r).toBe(true);
-      expect(bram.def.lines).toHaveLength(4);
+      expect(bram.def.lines).toHaveLength(5);
+      expect(bram.def.sells).toBe('rockets');
       expect(bram.def.nightLines).toEqual(["Fire's best after dark. So is the company."]);
       expect(town.talk(bram, false)).toBe(`Bram Tinder: "Welcome to Anglers' Rest. Pull up a log. The kettle's always on."`);
     });

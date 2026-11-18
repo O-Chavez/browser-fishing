@@ -6,6 +6,7 @@ import type { Drop } from './drops';
 import { isRestartClose } from './restart';
 import type { StageId } from '../data/smokehouse';
 import { SKIP, type SkipBest } from '../data/skip';
+import { rocketById, type RocketUp } from '../data/rockets';
 import type { SaveData } from './state';
 
 export interface NetEvents {
@@ -48,6 +49,8 @@ export interface NetEvents {
   onStages(ids: StageId[], intro: boolean): void;
   onChat(msg: Extract<ServerMsg, { t: 'chat' }>): void;
   onSys(text: string): void;
+  /** A rocket was lit on this player's map, or is still in the sky as they arrive. */
+  onRocket(up: RocketUp): void;
   /** Slash command replies; `time` is set when a command changed the day/night override, `sent` on a feedback answer. */
   onDev(lines: string[], time: number | null | undefined, sent: boolean | undefined, depth: number | undefined): void;
   onClose(): void;
@@ -241,6 +244,11 @@ export class NetClient {
         break;
       case 'sys':
         this.events.onSys(m.text);
+        break;
+      case 'rocket':
+        // A kind this build doesn't know (a page cached from before a new rocket) is left out, not drawn wrong.
+        if (!rocketById(m.kind)) break;
+        this.events.onRocket({ kind: m.kind, seed: m.seed, at: m.at, by: m.by, name: m.name });
         break;
       case 'dev':
         this.events.onDev(m.lines, m.time, m.sent, m.depth);

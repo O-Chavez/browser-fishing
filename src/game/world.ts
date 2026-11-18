@@ -45,6 +45,7 @@ import { dayFraction, nightness, twilight } from './daynight';
 import { ColliderList } from './colliderlist';
 import { groundTexture, plankTexture, speckleTexture } from './textures';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Fireworks } from './fireworks';
 
 const NO_COLLIDERS: Circle[] = [];
 
@@ -164,6 +165,8 @@ export class World {
   view: CamView | null = null;
   hub: Hub | null = null;
   town: Town | null = null;
+  /** The fireworks over the lake, on the map with the rocket jetty (hidden, and no work, until a rocket is lit). */
+  fireworks: Fireworks | null = null;
   hall: CasinoHall | null = null;
   /** At sea: the swell, cloud and spray, and the charter boat everyone stands on. */
   sea: Sea | null = null;
@@ -662,6 +665,7 @@ export class World {
       discs: [{ ...map.town.square }, ...[map.vendor.shop, map.smokehouse].filter((s) => !!s).map((s) => ({ x: s!.x, z: s!.z, r: 2.6 }))],
     } : null);
     setAtSea(!!map.sea);
+    this.fireworks = null;
     this.sea = null;
     this.boat = null;
     this.scene.remove(this.decor);
@@ -756,6 +760,12 @@ export class World {
     this.town = new Town(map);
     this.decor.add(this.town.group);
     this.hall = null;
+    // In the scene before `prewarm` below, which compiles its shader and draws it once with the rest of the map,
+    // so the first rocket doesn't stall on either.
+    if (map.camp) {
+      this.fireworks = new Fireworks();
+      this.decor.add(this.fireworks.mesh);
+    }
     this.buildClutter(loc, map);
     this.lightPool.collect(this.decor);
     this.glow = new NightGlow(this.decor);
@@ -1422,6 +1432,7 @@ export class World {
     this.you.fishing = this.fishing;
     this.town?.update(t, dt, this.you, this.others);
     this.hall?.update(t, dt);
+    this.fireworks?.update(this.clock(), this.night);
     // After every owner has set its lights' intensity this frame: the pool fades them on top of it.
     this.lightPool.update(dt, this.eye);
     this.glow?.update(t, this.night, this.eye, this.renderer.domElement.height, this.renderer.getPixelRatio());

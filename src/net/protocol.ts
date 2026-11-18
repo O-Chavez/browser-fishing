@@ -2,6 +2,7 @@ import type { CosSlot, Look } from '../data/cosmetics';
 import type { Drop } from '../game/drops';
 import type { RouletteBet } from '../data/casino';
 import type { DishId, StageId } from '../data/smokehouse';
+import type { RocketUp } from '../data/rockets';
 import type { BlackjackView } from '../game/casino';
 import type { BestCatch, SaveData } from '../game/state';
 import type { Behaviour } from '../data/dive';
@@ -99,6 +100,10 @@ export type ClientMsg =
   | { t: 'skip'; p: number }
   /** From Captain Reed: a deep sea emote whose gate is met (`buyEmote`). */
   | { t: 'buyemote'; id: string }
+  /** At Bram's Kettle: one rocket of a kind (`ROCKETS`, src/data/rockets.ts) into the bag. */
+  | { t: 'buyrocket'; id: string }
+  /** At the jetty's rack: light a rocket of a kind from the bag. */
+  | { t: 'lightrocket'; id: string }
   | { t: 'buyrod'; id: string }
   | { t: 'buyline'; id: string }
   /**
@@ -243,6 +248,11 @@ export type ServerMsg =
   | { t: 'skip'; id: number; n: number; a: number; x: number; z: number }
   /** The day's best skip for the sign by the pile, on joining and whenever it changes (null: none yet today); `by` is the thrower in the receiver's room, whose stone is still in the air. */
   | { t: 'skipbest'; best: SkipBest | null; by?: number }
+  /**
+   * A rocket was lit at the jetty's rack (sent to everyone on the town map, the player who lit it too, and to a player
+   * who arrives there while it is still up): its bursts come from `kind` and `seed`, timed from `at` on the server's clock.
+   */
+  | ({ t: 'rocket' } & RocketUp)
   | { t: 'look'; id: number; look: Look }
   /** Player `id` (possibly the receiver) changed their name. */
   | { t: 'named'; id: number; name: string }

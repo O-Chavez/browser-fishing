@@ -23,6 +23,7 @@ import { DevGate, runDev } from './dev';
 import { diveEnd, diveView, expired, newRun, type DiveRun } from './dive';
 import { lakeOf } from './lakestats';
 import type { SmokeStats } from './smokestats';
+import { RocketSky, refused } from './rockets';
 import { FEEDBACK_KINDS, FeedbackGate, browserName, type FeedbackKind, type FeedbackReport } from './feedback';
 
 export interface Conn {
@@ -172,6 +173,8 @@ export class Room {
   skips = new SkipDay();
   /** Delivers a word to every other room on the server (set by the server; alone, a room has no others). */
   sayOthers: (msg: ServerMsg) => void = () => {};
+  /** The fireworks: Bram Tinder's rockets and the one that may be in the sky (`server/rockets.ts`). One sky a room: it assumes a single map with a camp. */
+  private sky: RocketSky;
   /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -184,6 +187,7 @@ export class Room {
   ) {
     this.drops = new Drops(now);
     this.chatGate = new ChatGate(now);
+    this.sky = new RocketSky(now, rng);
     this.feedbackGate = new FeedbackGate(now);
     // No prototype, so a client-sent id like "constructor" finds nothing instead of an Object method.
     this.maps = Object.assign(Object.create(null), Object.fromEntries(maps.map((m) => [m.id, m])));
@@ -253,6 +257,7 @@ export class Room {
     this.say({ t: 'sys', text: `${acct.name} has joined` });
     this.members.set(id, m);
     this.emotesHere(m);
+    this.rocketHere(m);
     if (smoked.length) conn.send({ t: 'notice', msg: `🔥 While you were away, Mags smoked your ${smokedText(smoked)}. It's in your Pantry.` });
     if (stages.ids.length) conn.send({ t: 'stages', ...stages });
     if (gift) conn.send({ t: 'notice', msg: smoke.giftText(gift) });
@@ -336,6 +341,12 @@ export class Room {
       // Reed's deep sea emotes: the gate (set pieces owned, other emotes owned) is checked here from the save.
       case 'buyemote':
         changed = this.atReed(m) && this.ok(m, eco.emoteBuyError(s, str(msg.id))) && eco.buyEmote(s, str(msg.id));
+        break;
+      case 'buyrocket':
+        changed = this.rocket(m, 'buy', str(msg.id));
+        break;
+      case 'lightrocket':
+        changed = this.rocket(m, 'light', str(msg.id));
         break;
       case 'buyline':
         changed = this.atVendor(m) && this.stocks(m).lines.includes(str(msg.id)) && eco.buyLine(s, str(msg.id));
@@ -689,6 +700,7 @@ export class Room {
     const here = [...this.members.values()].filter((o) => o !== m && placeOf(o.info) === place);
     if (here.length) m.conn.send({ t: 'snap', p: here.map(snapEntry) });
     this.emotesHere(m);
+    this.rocketHere(m);
   }
 
   /**
@@ -1277,6 +1289,27 @@ export class Room {
     const best = this.skips.best(now);
     this.broadcast({ t: 'skipbest', best, by: m.info.id });
     this.sayOthers({ t: 'skipbest', best });
+  }
+
+  /**
+   * Fireworks (`RocketSky`): buying a rocket from Bram Tinder, or lighting one at the jetty's rack, which everyone on
+   * the lighter's map sees and hears (the town; the casino and the charters get nothing). True when the save changed.
+   */
+  private rocket(m: Member, what: 'buy' | 'light', id: string): boolean {
+    const map = this.maps[m.info.map];
+    const who = { id: m.info.id, name: m.info.name, x: m.info.x, z: m.info.z, save: m.acct.save };
+    const res = what === 'buy' ? this.sky.buy(map, who, id) : this.sky.light(map, who, id);
+    if (refused(res)) return res.no ? this.deny(m, res.no) : false;
+    if (res === true) return true;
+    const place = placeOf(m.info);
+    this.sendAll([...this.members.values()].filter((o) => placeOf(o.info) === place), { t: 'rocket', ...res });
+    return true;
+  }
+
+  /** Shows a player who just arrived on the town map (joining, or from the casino or a charter) the rocket still in the sky. */
+  private rocketHere(m: Member): void {
+    const up = this.maps[m.info.map]?.camp ? this.sky.current() : null;
+    if (up) m.conn.send({ t: 'rocket', ...up });
   }
 
   /** Sends the players who moved since the last tick to everyone on their map (or dive). */

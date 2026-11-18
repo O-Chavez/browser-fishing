@@ -87,6 +87,9 @@ import { FIGHT_DT, GOOD_MAX, HoldLog, MAX_FIGHT_STEPS, Reel, type Gaps, type Ree
 import { CASINO_LEVEL, CASINO_RANGE, CHIP_COINS, LURE_BULK_PACKS, LURE_CHARGES, PERKS, ROULETTE_PAY, WHEEL_WEDGES, type RouletteBet } from '../data/casino';
 import { blackjackVerdict, cashOutAllChips, cashOutSlots, chipsFor, doubleCost, type BlackjackView } from './casino';
 import { RESULT_BEAT_MS, dealSteps, landedView } from './tablepace';
+import { RACK_PROMPT, buyRocket, finaleLine, rackPrompt, rocketBuyError, rocketById, skyBusy, spendRocket, type RocketUp } from '../data/rockets';
+import { BRAM_TAB, RACK_TAB, ROCKET_TABS, bagRocketDetail, bagRocketsHtml, bramHtml, rackHtml, type ShopUi } from './rocketshop';
+import { ShowSounds } from './rocketsound';
 import { BAIT_SLOT, FISH_SLOT, ROD_SLOT, load, newSave, save, slotCount, type SaveData } from './state';
 import { ABYSSAL, BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOTS, FACES, cosById, isFace, type CosShop, type CosSlot, type Cosmetic, type FaceId, type Look } from '../data/cosmetics';
 import { faceIcon } from './faces';
@@ -174,6 +177,8 @@ const GRAVITY = 9.8;
 const FACE_CONE = Math.PI / 3;
 /** Menu tabs drawn as small cards for the sea trips: Reed's panel, a marker's choice, heading home and the end card. */
 const DIVE_TABS = ['reed', 'marker', 'headhome', 'diveend'];
+/** How long after a Grand Finale is lit its line is still worth showing (ms). */
+const FINALE_LINE_MS = 4000;
 
 /** 'full' or 'lite', remembered per browser; unset means the device's default. */
 const GRAPHICS_KEY = 'fishing-graphics';
@@ -327,7 +332,7 @@ export class Game {
   private tab = 'inventory';
   private shopTab: 'cosmetics' | 'gear' | 'sea' = 'gear';
   /** The item selected in each menu's tile grid, shown in its details panel. */
-  private pick: Partial<Record<'bag' | 'gear' | 'sea' | 'cos' | 'ccos' | 'rcos' | 'perk' | 'smoke' | 'dish', string>> = {};
+  private pick: Partial<Record<'bag' | 'gear' | 'sea' | 'rocket' | 'cos' | 'ccos' | 'rcos' | 'perk' | 'smoke' | 'dish', string>> = {};
   /** Captain Reed's tab: his chart and charters, or the Wardrobe of sea legend pieces he sells. */
   private reedTab: 'charters' | 'wardrobe' = 'charters';
   /** Smokehouse tab. */
@@ -492,6 +497,7 @@ export class Game {
         if (!self && m.room === this.net.room && m.map === this.map.id && this.net.players.get(m.id)?.dive === (this.net.dive || undefined)) this.avatars.say(m.id, m.text);
       },
       onSys: (text) => this.chat.add({ name: '', map: '', text, self: false, system: true }),
+      onRocket: (up) => this.rocketLit(up),
       onDev: (lines, time, sent, depth) => {
         // The answer to a report from the feedback form goes to the form; /bug typed in chat answers in chat.
         if (sent !== undefined && this.fb.answer(sent, lines[0] ?? '')) {
@@ -1031,6 +1037,31 @@ export class Game {
       /** Where another player's avatar is drawn (by player id), or null while it's hidden. */
       avatarAt: (id: number) => this.avatars.drawnAt(id),
       netId: () => this.net.id,
+      /** Fireworks: the rocket that holds the sky as this player knows it, what is drawn of it and how many of its sounds have played (and the last one's gain after distance). */
+      rocket: () => ({
+        up: this.rocketUp && { ...this.rocketUp },
+        busy: skyBusy(this.rocketUp, this.net.now()),
+        drawn: !!this.world.fireworks?.mesh.visible,
+        particles: this.world.fireworks?.particles ?? 0,
+        t: this.world.fireworks?.elapsed ?? null,
+        seen: this.rocketsSeen,
+        sounds: this.rocketSounds?.played ?? 0,
+        gain: this.rocketSounds?.lastGain ?? 0,
+        sound: audio.sound,
+      }),
+      /** Checks only: asks the server to light (or buy) a rocket whatever this player's own prompt or counter says. */
+      rocketSend: (id: string, buy = false) => this.net.send({ t: buy ? 'buyrocket' : 'lightrocket', id }),
+      /** Staging only: a rocket of `kind` from `seed` in this player's sky alone, held `t` seconds into its show (null clears the sky). No sound, no server. */
+      rocketStage: (kind: RocketUp['kind'], seed: number, t: number | null) => {
+        const fw = this.world.fireworks;
+        if (!fw) return;
+        fw.hold = t;
+        this.rocketSounds = null;
+        // Held, it holds the sky too (the rack reads "Wait for the sky") until it is cleared.
+        this.rocketUp = t === null ? null : { kind, seed, at: this.net.now() + 3_600_000, by: 0, name: '' };
+        if (t === null) fw.stop();
+        else fw.launch({ kind, seed, at: this.net.now() });
+      },
       openMenu: (tab: string) => this.openMenu(tab),
       /** The "What's new" check that runs on joining. */
       showNews: () => this.showNews(),
@@ -1531,6 +1562,8 @@ export class Game {
       this.net.send({ t: 'forget' });
     }
     else if (act === 'buyrod' || act === 'buybait' || act === 'buyline') this.buy(act === 'buyrod' ? 'rod' : act === 'buyline' ? 'line' : 'bait', id!, Number(btn.dataset.n) || eco.BAIT_PACK);
+    else if (act === 'buyrocket') this.buyRocket(id!);
+    else if (act === 'lightrocket') return this.lightRocket(id!);
     else if (act === 'buysearod') this.buySeaRod();
     else if (act === 'rodstep' || act === 'abysslevel') this.buyRodUp();
     else if (act === 'holdlevel') this.buyHoldUp();
@@ -2194,6 +2227,7 @@ export class Game {
     if (this.nudge && left?.sea && !this.map.sea) this.nudge.armed = true;
     this.s.location = this.map.id;
     this.world.setLocation(byId(LOCATIONS, this.map.locationId), this.map);
+    this.showRocket();
     this.setGateSign();
     this.bj = null;
     this.bjShown = null;
@@ -2880,8 +2914,8 @@ export class Game {
     const { x, z } = this.player;
     // Lower d wins: selling, then picking up, then everything else by distance. A spot with `face` only counts while
     // the view looks that way (within FACE_CONE), so it can't be hit by accident while walking away from it.
-    // `hold`: the action is held and let go (the stone pile's wind-up), not pressed.
-    const spots: { d: number; label: string; act: () => void; face?: number; hold?: true }[] = [];
+    // `hold`: the action is held and let go (the stone pile's wind-up), not pressed. `info`: nothing to press, the prompt only tells.
+    const spots: { d: number; label: string; act: () => void; face?: number; hold?: true; info?: boolean }[] = [];
     const looking = (face?: number) => face === undefined || Math.abs(Math.atan2(Math.sin(w.yaw - face), Math.cos(w.yaw - face))) <= FACE_CONE;
 
     for (const d of this.curDrops()) {
@@ -2904,8 +2938,8 @@ export class Game {
         const reed = !!stand && npc.def.x === stand.x && npc.def.z === stand.z;
         spots.push({
           d: Math.hypot(npc.pos.x - x, npc.pos.z - z) - 0.5,
-          label: reed ? `Talk to ${npc.def.name} · charters` : `Talk to ${npc.def.name}`,
-          act: reed ? () => this.openReed(town.nextLine(npc, w.night > 0.5)) : () => this.toast(town.talk(npc, w.night > 0.5), 6),
+          label: reed ? `Talk to ${npc.def.name} · charters` : npc.def.sells ? `Talk to ${npc.def.name} · ${npc.def.sells}` : `Talk to ${npc.def.name}`,
+          act: reed ? () => this.openReed(town.nextLine(npc, w.night > 0.5)) : npc.def.sells ? () => this.openBram(town.nextLine(npc, w.night > 0.5)) : () => this.toast(town.talk(npc, w.night > 0.5), 6),
           // A keeper behind a counter is talked to across it, like a board is read from its front.
           face: npc.def.front,
         });
@@ -2932,6 +2966,9 @@ export class Game {
         if (dw < eco.DIG_RANGE) spots.push({ d: dw - 20, label: 'Dig for worms · free bait', act: () => this.digWorms() });
       }
     }
+
+    const rack = this.rackSpot(x, z);
+    if (rack) spots.push(rack);
 
     const sh = this.map.smokehouse;
     if (sh) {
@@ -2992,8 +3029,10 @@ export class Game {
     const prompt = $('prompt');
     // The prompt stays up through a stone's wind-up, saying how to throw it.
     const label = this.skipping.charging ? 'Let go to throw' : best?.label;
+    const info = !this.skipping.charging && !!best?.info;
     prompt.classList.toggle('hidden', !label);
-    if (label) prompt.innerHTML = `<b>E</b> ${label}`;
+    prompt.classList.toggle('info', info);
+    if (label) prompt.innerHTML = info ? label : `<b>E</b> ${label}`;
   }
 
   private curDrops(): Drop[] {
@@ -3577,6 +3616,7 @@ export class Game {
     this.screenSpray.update(dt, sea ? this.world.mood : 0, sea?.slam ?? 0, this.world.night);
     audio.seaSound(dt, sea ? { mood: this.world.mood, slam: sea.slam, rise: sea.swell > 0.05 ? Math.max(-1, Math.min(1, sea.motion.heave / sea.swell)) : 0, night: this.world.night, buoy: sea.buoyAlongside } : null);
     this.playBand();
+    this.updateRocket();
     this.drawGauge(now / 1000);
     if (this.phase !== this.shownPhase) {
       // CSS hides parts of the touch HUD by phase (e.g. the hotbar during a fight).
@@ -4207,12 +4247,12 @@ export class Game {
     document.body.classList.toggle('shopping', this.menuOpen && vendor);
     $('menu').classList.toggle('casino', this.tab === 'casino' || this.tab === 'peek');
     // Reed's Wardrobe tab is a full-height window like the stall's (at his panel's width), not a fitted card.
-    const card = DIVE_TABS.includes(this.tab) && !(this.tab === 'reed' && this.reedTab === 'wardrobe');
+    const card = (DIVE_TABS.includes(this.tab) && !(this.tab === 'reed' && this.reedTab === 'wardrobe')) || ROCKET_TABS.includes(this.tab);
     $('menu').classList.toggle('fit', this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || this.tab === 'nudge' || card);
     $('menu').classList.toggle('news', this.tab === 'news');
     $('menu').classList.toggle('nudge', this.tab === 'nudge');
     $('menu').classList.toggle('dive', card);
-    $('menu').classList.toggle('reedwin', this.tab === 'reed');
+    $('menu').classList.toggle('reedwin', this.tab === 'reed' || this.tab === BRAM_TAB);
     $('menu-who').innerHTML = this.menuWhoHtml();
     $('menu-tabs').innerHTML = this.menuTabsHtml();
     const el = $('tab');
@@ -4274,6 +4314,12 @@ export class Game {
         break;
       case 'nudge':
         el.innerHTML = nudgeHtml(escapeHtml(this.net.name));
+        break;
+      case BRAM_TAB:
+        el.innerHTML = bramHtml(this.s, this.bramSay, this.pick.rocket, this.shopUi);
+        break;
+      case RACK_TAB:
+        el.innerHTML = rackHtml(this.s);
         break;
       case 'reed':
         el.innerHTML = this.reedTab === 'wardrobe' ? this.reedWardrobeHtml() : reedHtml({ say: this.reedSay, s: this.s, pick: this.reedPick(), open: DIVES_OPEN, marker: this.reedMark() });
@@ -4431,6 +4477,8 @@ export class Game {
       const busy = this.s.smoke.spots.filter(Boolean).length;
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Mags's Smokehouse</b><span>${busy ? `${busy} fish smoking` : 'Smoker ready for fish'}</span></div>`;
     }
+    if (this.tab === BRAM_TAB) return `<img src="${faceIcon('joy')}" alt=""><div><b>Bram's Kettle</b><span><span class="coin sm"></span> ${this.s.coins.toLocaleString()} to spend</span></div>`;
+    if (this.tab === RACK_TAB) return `<span class="who-ic">🎆</span><div><b>The rocket rack</b><span>One in the sky at a time</span></div>`;
     if (this.tab === 'reed')
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>${this.reedTab === 'wardrobe' ? `<span class="nb"><span class="coin sm"></span> ${this.s.coins.toLocaleString()}</span> · <span class="nb">${PEARL} ${this.s.pearls.toLocaleString()}</span> to spend` : 'Charters'}</span></div>`;
     if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? whereText(this.diveHud.view.zone, this.diveHud.view.marker) : 'Back at the harbour'}</span></div>`;
@@ -4460,7 +4508,7 @@ export class Game {
     // Charters, and the sea legend pieces once there's a chart to show (with the Deep Sea Rod, while charters are open).
     if (this.tab === 'reed')
       return DIVES_OPEN && this.s.seaRod ? tab('charters', '⚓', 'Charters', this.reedTab === 'charters', 'data-reed') + tab('wardrobe', '🧥', 'Wardrobe', this.reedTab === 'wardrobe', 'data-reed') : '';
-    if (this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || this.tab === 'nudge' || DIVE_TABS.includes(this.tab)) return '';
+    if (this.tab === 'peek' || this.tab === 'charters' || this.tab === 'news' || this.tab === 'nudge' || DIVE_TABS.includes(this.tab) || ROCKET_TABS.includes(this.tab)) return '';
     return [
       tab('inventory', '🎒', 'Bag', this.tab === 'inventory'),
       tab('wardrobe', '👕', 'Wardrobe', this.tab === 'wardrobe'),
@@ -4520,6 +4568,94 @@ export class Game {
 
   private btn(label: string, attrs: string, kind: 'gold' | 'ok' | 'plain' | 'bad' = 'gold', disabled = false): string {
     return `<button class="btn ${kind}" ${attrs}${disabled ? ' disabled' : ''}>${label}</button>`;
+  }
+
+  // ---------- fireworks ----------
+
+  /** The tile, panel and button the fireworks' menus are drawn with (`src/game/rocketshop.ts`). */
+  private shopUi: ShopUi = { tile: (o) => this.itemTile(o), detail: (o) => this.detail(o), btn: (label, attrs, kind, disabled) => this.btn(label, attrs, kind, disabled) };
+  /** Bram Tinder's line at the top of his counter. */
+  private bramSay = '';
+  /** The rocket last lit on this map, which holds the sky until its show ends (`skyBusy`), and its sounds as they come due. */
+  private rocketUp: RocketUp | null = null;
+  private rocketSounds: ShowSounds | null = null;
+  /** How many rockets this player has been told of since the page loaded (the checks' count). */
+  private rocketsSeen = 0;
+  private playRocketSound = (snd: Parameters<typeof audio.rocket>[0], ear: Parameters<typeof audio.rocket>[1], wait: number): number => audio.rocket(snd, ear, wait);
+
+  /** Bram's counter at Bram's Kettle, led by his next line. */
+  private openBram(say: string): void {
+    this.bramSay = say;
+    this.openMenu(BRAM_TAB);
+  }
+
+  /** One rocket from Bram into the bag; the server decides it again and saves it. */
+  private buyRocket(id: string): void {
+    if (this.spin) return;
+    const why = rocketBuyError(this.s, id);
+    if (why) return this.toast(why);
+    if (!buyRocket(this.s, id)) return;
+    this.net.send({ t: 'buyrocket', id });
+    this.toast(`Bought a ${rocketById(id)!.name} · light it at the rack on the jetty`, 3.5);
+  }
+
+  /**
+   * The rack on the jetty's end, to a player within reach who looks at it: "Light a rocket" with one in the bag
+   * (straight away with one kind, from a small card with more), and a line that only tells with none, or while a
+   * rocket is still in the sky.
+   */
+  private rackSpot(x: number, z: number): { d: number; label: string; act: () => void; face: number; info?: boolean } | null {
+    const rack = this.map.camp?.rack;
+    const p = rack ? rackPrompt(rack, x, z, this.s, skyBusy(this.rocketUp, this.net.now())) : null;
+    if (!p) return null;
+    const act = p.state !== 'light' ? () => {} : () => (p.kinds.length > 1 ? this.openMenu(RACK_TAB) : this.lightRocket(p.kinds[0]));
+    return { d: p.d, label: p.label, act, face: p.face, info: p.state !== 'light' };
+  }
+
+  /** Lights a rocket from the bag: the server takes it, checks the sky and tells everyone here. Offline it goes up for this player alone. */
+  private lightRocket(id: string): void {
+    if (this.menuOpen) this.closeMenu();
+    if (skyBusy(this.rocketUp, this.net.now())) return this.toast(`${RACK_PROMPT.busy}.`);
+    if (this.net.connected) return this.net.send({ t: 'lightrocket', id });
+    const def = rocketById(id);
+    if (!def || !spendRocket(this.s, id)) return;
+    this.persist();
+    this.rocketLit({ kind: def.id, seed: Math.floor(Math.random() * 0x7fffffff), at: this.net.now(), by: 0, name: this.net.name || 'You' });
+  }
+
+  /** A rocket was lit on this map (or is still up as this player arrives): the sky, its sounds, and for a Grand Finale who lit it. */
+  private rocketLit(up: RocketUp): void {
+    this.rocketUp = up;
+    this.rocketsSeen++;
+    // The line goes to whoever saw it lit, not to someone who walks in on its last bursts.
+    if (up.kind === 'finale' && this.net.now() - up.at < FINALE_LINE_MS) {
+      const line = finaleLine(escapeHtml(up.name));
+      this.toast(line, 5);
+      this.chat.add({ name: '', map: '', text: line, self: false, system: true });
+    }
+    this.showRocket();
+  }
+
+  /** Puts the rocket that holds the sky in it, from where its show has got to: as it is lit, and when the map is built with one already up. */
+  private showRocket(): void {
+    const fw = this.world.fireworks;
+    this.rocketSounds = null;
+    // On a map without the rack (the casino, a charter) whatever of a show is still sounding stops here.
+    if (!fw) audio.rocketCut();
+    if (!fw || !this.rocketUp || !skyBusy(this.rocketUp, this.net.now())) return;
+    this.rocketSounds = new ShowSounds(fw.launch(this.rocketUp));
+  }
+
+  /** Each frame while a rocket is up: its sounds as they come due, from where the player stands. */
+  private updateRocket(): void {
+    const up = this.rocketUp;
+    if (!up) return;
+    const now = this.net.now();
+    if (!skyBusy(up, now)) {
+      this.rocketUp = null;
+      return;
+    }
+    if (this.world.fireworks) this.rocketSounds?.tick((now - up.at) / 1000, this.world.eye, this.playRocketSound);
   }
 
   // ---------- Smokehouse ----------
@@ -5027,6 +5163,7 @@ export class Game {
         <h4>Rods</h4><div class="tiles">${rods}</div>
         <h4>Line</h4><div class="tiles">${lines}</div>
         <h4>Bait</h4><div class="tiles">${baits}</div>
+        ${bagRocketsHtml(s, sel, this.shopUi)}
         ${this.seaGearRow(sel, 'bag')}
         ${this.perksHtml()}
         ${this.pantryHtml()}
@@ -5059,6 +5196,7 @@ export class Game {
     const [kind, id] = sel.split(':');
     const vendor = this.map.vendor.name;
     if (kind === 'searod') return this.seaRodDetail();
+    if (kind === 'rocket') return bagRocketDetail(s, id, this.shopUi);
     if (kind === 'line') {
       const l = byId(LINES, id);
       const cur = eco.lineOf(s);

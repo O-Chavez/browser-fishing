@@ -461,7 +461,8 @@ export function buildKettleStall(): KettleStall {
     g.add(m);
   });
   const plaque = buildPlaque(0.5);
-  plaque.group.position.set(0.55, top + 0.02, KFZ + 0.4);
+  // Its middle half its height over the counter, so the whole face stands clear of the top.
+  plaque.group.position.set(0.55, top + 0.15, KFZ + 0.4);
   plaque.group.rotation.x = -0.35;
   g.add(plaque.group);
   writePlaque(plaque.ctx, plaque.tex, 'Light it on the jetty');
