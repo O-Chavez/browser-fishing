@@ -11,6 +11,8 @@ const SPRINT = 7;
 const BODY_R = 0.35;
 const GRAVITY = 20;
 const JUMP_SPEED = 6.2;
+/** The longest step taken at once (m): well under the thinnest obstacle's reach. */
+const STEP = 0.12;
 /** How long a jump lasts, takeoff to landing. */
 export const JUMP_TIME = (2 * JUMP_SPEED) / GRAVITY;
 
@@ -28,6 +30,9 @@ export class Player {
   /** Height above the ground and vertical speed while airborne. */
   private lift = 0;
   private vy = 0;
+  /** The last spot found free to stand on (`canStand`). */
+  private px = 0;
+  private pz = 0;
 
   get airborne(): boolean {
     return this.lift > 0.001 || this.vy > 0;
@@ -67,7 +72,35 @@ export class Player {
       const dz = z - c.z;
       if (dx * dx + dz * dz < rr * rr) return false;
     }
+    this.px = x;
+    this.pz = z;
     return true;
+  }
+
+  /**
+   * Sliding off obstacles: the step to (`x`, `z`) ended inside one or more, so the body is pushed straight out of each
+   * to its edge, which leaves the part of the step that runs along the obstacle. True, with the spot in `px`/`pz`,
+   * when that spot is free to stand on; false (a corner with no way on, water, the map's edge) leaves it to the caller.
+   */
+  private pushOut(x: number, z: number, colliders: Circle[]): boolean {
+    for (let pass = 0; pass < 4; pass++) {
+      let hit = false;
+      for (const c of colliders) {
+        const rr = c.r + BODY_R;
+        const dx = x - c.x;
+        const dz = z - c.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= rr * rr) continue;
+        const d = Math.sqrt(d2);
+        if (d < 1e-6) return false;
+        const k = (rr + 1e-4) / d;
+        x = c.x + dx * k;
+        z = c.z + dz * k;
+        hit = true;
+      }
+      if (!hit) break;
+    }
+    return this.canStand(x, z, colliders);
   }
 
   update(dt: number, fwd: number, strafe: number, sprint: boolean, yaw: number, colliders: Circle[]): void {
@@ -81,11 +114,18 @@ export class Player {
       const dz = (-cos * fwd - sin * strafe) * speed * dt;
       const sx = this.x;
       const sz = this.z;
-      if (this.canStand(this.x + dx, this.z + dz, colliders)) {
-        this.x += dx;
-        this.z += dz;
-      } else if (this.canStand(this.x + dx, this.z, colliders)) this.x += dx;
-      else if (this.canStand(this.x, this.z + dz, colliders)) this.z += dz;
+      // In short steps, so a fast frame can't carry the body past the middle of a thin obstacle and out its far side.
+      const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / STEP));
+      for (let i = 0; i < n; i++) {
+        const tx = this.x + dx / n;
+        const tz = this.z + dz / n;
+        if (this.canStand(tx, tz, colliders) || this.pushOut(tx, tz, colliders)) {
+          this.x = this.px;
+          this.z = this.pz;
+        } else if (this.canStand(tx, this.z, colliders)) this.x = tx;
+        else if (this.canStand(this.x, tz, colliders)) this.z = tz;
+        else break;
+      }
       walked = Math.hypot(this.x - sx, this.z - sz) / dt;
     }
     const target = Math.min(1, walked / WALK);
