@@ -18,8 +18,25 @@ export const mat = (color: number, extra: THREE.MeshLambertMaterialParameters = 
 export const WOOD = 0x9b7248;
 export const DARK = 0x5b4128;
 
+/**
+ * Rounded boxes already worked out, by size: building one is slow (three's `getUv` per vertex) and a map is rebuilt
+ * on every visit with the same sizes (its props' random sizes are seeded), so each later box is a copy of the arrays.
+ * Kept as plain geometry, since cloning a `RoundedBoxGeometry` builds a default one first. Never drawn, so they hold
+ * no GPU memory; capped in case some caller's sizes never repeat.
+ */
+const RBOX_CACHE_MAX = 4096;
+const rboxCache = new Map<string, THREE.BufferGeometry>();
+function roundedBox(w: number, h: number, d: number, r: number): THREE.BufferGeometry {
+  const key = `${w},${h},${d},${r}`;
+  const hit = rboxCache.get(key);
+  if (hit) return hit.clone();
+  const geo = new RoundedBoxGeometry(w, h, d, 1, r);
+  if (rboxCache.size < RBOX_CACHE_MAX) rboxCache.set(key, new THREE.BufferGeometry().copy(geo));
+  return geo;
+}
+
 export const rbox = (w: number, h: number, d: number, color: number, r = 0.05): THREE.Mesh => {
-  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 1, r), mat(color));
+  const m = new THREE.Mesh(roundedBox(w, h, d, r), mat(color));
   m.castShadow = m.receiveShadow = true;
   return m;
 };
