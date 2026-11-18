@@ -7,7 +7,8 @@ import type { Location } from '../data/content';
 import { onCobbles, type MapDef } from '../data/maps';
 import {
   DOCK_RECTS,
-  type DockRect,
+  POST_TOP,
+  dockPosts,
   WATER_ORDER,
   TERRAIN,
   groundHeight,
@@ -1062,16 +1063,8 @@ export class World {
     const q = new THREE.Quaternion();
     let n = 0;
     const beamMat = lambert(0x5b4128);
-    const postGeo = new THREE.CylinderGeometry(0.1, 0.12, 3.1, 7);
-    const inside = (x: number, z: number, skip: DockRect) =>
-      DOCK_RECTS.some(
-        (r) =>
-          r !== skip &&
-          x > r.x0 - 0.05 &&
-          x < r.x1 + 0.05 &&
-          z > r.z0 - 0.05 &&
-          z < r.z1 + 0.05,
-      );
+    // One metre tall, stretched to each post's length (`dockPosts`).
+    const postGeo = new THREE.CylinderGeometry(0.1, 0.12, 1, 7);
 
     for (const r of DOCK_RECTS) {
       const w = r.x1 - r.x0;
@@ -1113,16 +1106,13 @@ export class World {
         beam.position.set(alongZ ? cx + off : cx, 0.55, alongZ ? cz : cz + off);
         beam.castShadow = true;
         dock.add(beam);
-        for (let s = 0.3; s < len; s += 2.5) {
-          const o = (alongZ ? r.z0 : r.x0) + s;
-          const px = alongZ ? cx + off * 1.1 : o;
-          const pz = alongZ ? o : cz + off * 1.1;
-          if (inside(px, pz, r)) continue;
-          const post = new THREE.Mesh(postGeo, beamMat);
-          post.position.set(px, -0.6, pz);
-          post.castShadow = true;
-          dock.add(post);
-        }
+      }
+      for (const p of dockPosts(r)) {
+        const post = new THREE.Mesh(postGeo, beamMat);
+        post.scale.y = POST_TOP - p.foot;
+        post.position.set(p.x, (POST_TOP + p.foot) / 2, p.z);
+        post.castShadow = true;
+        dock.add(post);
       }
     }
     planks.count = n;

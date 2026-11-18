@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DIVE } from '../data/dive';
 import { HARBOUR, MAPS, arrivalSpot } from '../data/maps';
-import { REED_WHARF, isWater, onDock, onLanding, setAprons, setPad } from './env';
+import { DOCK_RECTS, POST_TOP, REED_WHARF, dockPosts, groundHeight, isWater, onDock, onLanding, setAprons, setLevels, setPad } from './env';
 import { fishingSpot } from './progression';
 
 describe("Captain Reed's seaplane", () => {
@@ -67,5 +67,28 @@ describe("Captain Reed's seaplane", () => {
     const at = arrivalSpot(pond, 'sea');
     expect(at).toBe(HARBOUR.diveStart);
     expect(Math.hypot(at.x - HARBOUR.stand.x, at.z - HARBOUR.stand.z)).toBeLessThan(DIVE.standRange);
+  });
+});
+
+describe("The docks' posts", () => {
+  const pond = MAPS.find((m) => m.harbour)!;
+  setPad(pond.pad);
+  setAprons(pond.aprons ?? []);
+  setLevels(pond.levels ?? []);
+  const posts = DOCK_RECTS.flatMap((r) => dockPosts(r));
+
+  it('stand in the lake bed under every dock, out to the end of the pier where the water is deepest', () => {
+    // Posts of one length ended at -2.15, up to 3.9 m above the bed under the pier and its T end.
+    expect(posts.length).toBeGreaterThan(60);
+    for (const p of posts) expect(p.foot, `${p.x.toFixed(1)}, ${p.z.toFixed(1)}`).toBeLessThanOrEqual(groundHeight(p.x, p.z) - 0.4);
+    const deepest = Math.min(...posts.map((p) => groundHeight(p.x, p.z)));
+    expect(deepest).toBeLessThan(-5);
+  });
+
+  it('are no shorter anywhere than they were, and none stands under the boards of another dock', () => {
+    for (const p of posts) expect(POST_TOP - p.foot).toBeGreaterThanOrEqual(3.1);
+    // The pier's rows stop at the quay and the T end; the quay's own rows run under its edges.
+    expect(posts.filter((p) => Math.abs(p.x) < 1.5 && p.z > -6 && p.z < 10).length).toBe(14);
+    for (const p of posts) expect(DOCK_RECTS.filter((r) => p.x > r.x0 && p.x < r.x1 && p.z > r.z0 && p.z < r.z1).length, `${p.x.toFixed(1)}, ${p.z.toFixed(1)}`).toBe(1);
   });
 });
