@@ -14,7 +14,7 @@ import { faceHead } from './faces';
 import { LIGHTS_MAST } from './baitshop';
 import {
   buildCrownPost, buildGatePier, buildHedgeArc, buildKettleStall, buildLanternPier, buildPicketRun, buildRocketRack, buildSignpost,
-  buildSkipSign, buildSteps, buildStoneArc, buildStonePile, buildStoneRun, buildTotem, TREAD_DEPTH as STEP_DEPTH, writePlaque,
+  buildSkipSign, buildSteps, buildStoneArc, buildStonePile, buildStoneRun, buildTotem, TREAD_DEPTH as STEP_DEPTH, writePlaque, type Writable,
 } from './camp';
 import type { Circle } from './player';
 import type { FurthestRow } from '../net/protocol';
@@ -808,6 +808,9 @@ export class Town {
     this.solid(x, z, 0.3);
   }
 
+  /** The skip sign by the stone pile on Skipper's Beach, whose face `Skipping` rewrites with the day's best. */
+  skipSign: Writable | null = null;
+
   /** The Furthest Out board by the seaplane (D6); `setFurthest` redraws it from the server's rows. */
   furthest: FurthestBoard | null = null;
 
@@ -1421,7 +1424,8 @@ export class Town {
     this.prop(buildSteps(st.w, st.rise, st.treads), st.x, st.z, st.facing, y + 0.05);
     this.prop(buildTotem(), camp.totem.x, camp.totem.z, camp.totem.facing, lie(camp.totem.x, camp.totem.z) - 0.03);
     this.prop(buildStonePile(), camp.stones.x, camp.stones.z, 0, lie(camp.stones.x, camp.stones.z));
-    this.prop(buildSkipSign(), camp.skipSign.x, camp.skipSign.z, camp.skipSign.facing, lie(camp.skipSign.x, camp.skipSign.z) - 0.05);
+    this.skipSign = buildSkipSign();
+    this.prop(this.skipSign, camp.skipSign.x, camp.skipSign.z, camp.skipSign.facing, lie(camp.skipSign.x, camp.skipSign.z) - 0.05);
     this.prop(buildRocketRack(), camp.rack.x, camp.rack.z, camp.rack.facing);
     // The signpost where the lanes meet, tall enough to walk under its fingers.
     const sp = camp.signpost;

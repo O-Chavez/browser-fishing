@@ -215,6 +215,9 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #resume .switch { font-size: 14px; font-weight: 800; color: var(--cream); text-decoration: underline; text-shadow: 0 1px 4px rgba(0,0,0,.8); opacity: .85; }
 #resume .switch:hover { opacity: 1; }
 #prompt { position: absolute; left: 50%; bottom: 140px; transform: translateX(-50%); padding: 10px 18px; background: var(--hud-bg); box-shadow: var(--hud-edge); border-radius: 14px; font-size: 18px; font-weight: 800; white-space: nowrap; }
+/* skipping stones: the thrower's count, up in the sky over the lake so it never covers the stone */
+#skipcount { position: absolute; left: 50%; top: 15%; transform: translateX(-50%); min-width: 44px; padding: 4px 14px; text-align: center; background: var(--hud-bg); box-shadow: var(--hud-edge); border-radius: 14px; font-size: 30px; font-weight: 900; white-space: nowrap; pointer-events: none; }
+#skipcount.final { font-size: 24px; padding: 8px 18px; box-shadow: 0 0 0 3px var(--gold), 0 8px 18px rgba(0,0,0,.35); }
 /* casino hints sit low, above the prompt, so the table, dealer and boards stay in view */
 #tablehud { position: absolute; left: 50%; bottom: 196px; transform: translateX(-50%); padding: 8px 16px; text-align: center; line-height: 1.6; background: rgba(42, 10, 18, .88); box-shadow: 0 0 0 3px #b8862f; border-radius: 14px; font-size: 15px; font-weight: 800; white-space: nowrap; pointer-events: none; }
 #tablehud .muted { opacity: .7; font-size: 13px; }

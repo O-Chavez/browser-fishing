@@ -6,7 +6,7 @@ import { placeOf, type Activity, type PlayerInfo } from '../net/protocol';
 import { drawAnchor } from './anchor';
 import { bubbleMs, wrapBubble } from './bubbletext';
 import { Character } from './character';
-import { SIT, type EmoteDef } from '../data/emotes';
+import { SIT, SKIP_THROW, type EmoteDef } from '../data/emotes';
 import { EmotePlayer } from './emotes/player';
 import type { SeatCtx } from './emotes/types';
 import { standHeight } from './env';
@@ -234,7 +234,8 @@ class Avatar {
     this.waiting = null;
     if (!def) return this.emotes.stop();
     if (!this.group.visible) {
-      this.waiting = { def, at: { x: at.x, z: at.z }, dark };
+      // A stone's throw isn't kept for later: its stone would be long gone.
+      if (def.id !== SKIP_THROW.id) this.waiting = { def, at: { x: at.x, z: at.z }, dark };
       return;
     }
     this.emoteAt = { x: at.x, z: at.z };

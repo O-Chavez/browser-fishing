@@ -133,6 +133,12 @@ export const EMOTES: EmoteDef[] = [
  */
 export const SIT: EmoteDef = { id: 'sit', name: 'Sit', icon: '🪑', tier: 'base', seconds: Infinity, camera: 'behind', cameraDistance: 3.4, cameraTurn: 2.55 };
 
+/**
+ * Throwing a skipping stone at the pile on Skipper's Beach (`src/data/skip.ts`): what the others on the map see the
+ * thrower do. It is no emote a client can ask for (`emoteById` doesn't know it): the server's `skip` message plays it.
+ */
+export const SKIP_THROW: EmoteDef = { id: 'skip', name: 'Skip a stone', icon: '🪨', tier: 'base', seconds: 1.1, camera: 'behind' };
+
 /** Emotes started closer together than this are dropped, here and by the server: one can be cut short and another started, but not spammed. */
 export const EMOTE_GAP_MS = 1000;
 

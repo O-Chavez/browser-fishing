@@ -8,6 +8,7 @@ import type { Behaviour } from '../data/dive';
 import type { DiveState, Rating, Tally } from '../game/dive';
 import type { Gaps, LossReason, ReelTune } from '../game/reel';
 import type { FishTag } from '../game/progression';
+import type { SkipBest } from '../data/skip';
 
 export interface PlayerInfo {
   id: number;
@@ -94,6 +95,8 @@ export type ClientMsg =
    * moved, jumped or cast). Others on the map play or stop it on their avatar.
    */
   | { t: 'emote'; id: string | null }
+  /** A stone let go at the pile on Skipper's Beach, `p` (0 to 1) along the gauge (`src/data/skip.ts`); the server counts its skips. */
+  | { t: 'skip'; p: number }
   /** From Captain Reed: a deep sea emote whose gate is met (`buyEmote`). */
   | { t: 'buyemote'; id: string }
   | { t: 'buyrod'; id: string }
@@ -233,6 +236,13 @@ export type ServerMsg =
    * it early. The spot comes with it because the emote can arrive before the snap that carries the player's last step.
    */
   | { t: 'emote'; id: number; emote: string | null; x?: number; z?: number }
+  /**
+   * Player `id` (possibly the receiver), standing at (`x`, `z`), threw a stone that skips `n` times, `a` radians off
+   * the pile's bearing: everyone on the map flies the same stone (`skipPath`, `src/data/skip.ts`).
+   */
+  | { t: 'skip'; id: number; n: number; a: number; x: number; z: number }
+  /** The day's best skip for the sign by the pile, on joining and whenever it changes (null: none yet today); `by` is the thrower in the receiver's room, whose stone is still in the air. */
+  | { t: 'skipbest'; best: SkipBest | null; by?: number }
   | { t: 'look'; id: number; look: Look }
   /** Player `id` (possibly the receiver) changed their name. */
   | { t: 'named'; id: number; name: string }

@@ -1,6 +1,8 @@
 import { DEEP_SEA_ROD, FISH, byId } from '../src/data/content';
 import { ABYSS, DIVE, DIVES_OPEN, type Behaviour } from '../src/data/dive';
-import { EMOTE_GAP_MS, emoteById } from '../src/data/emotes';
+import { EMOTE_GAP_MS, SIT, emoteById } from '../src/data/emotes';
+import { SKIP, skipCount, skipFlightMs, skipSpread, validRelease } from '../src/data/skip';
+import { SkipDay } from './skipbest';
 import { arrivalSpot, type MapDef } from '../src/data/maps';
 import { Drops, PICKUP_RANGE, dropSpot } from '../src/game/drops';
 import * as eco from '../src/game/economy';
@@ -71,6 +73,8 @@ interface Member {
   emoteUntil?: number;
   /** The emote playing until `emoteUntil`, shown to a player who arrives while it still plays (`emotesHere`). */
   emote?: string | null;
+  /** Until then this player's last skipping stone is still in the air: one at a time. */
+  skipUntil?: number;
   /** When their buffs last ticked down: buffs only run while the player is online. */
   smokeAt: number;
   /** Metres the player may still move (`MAX_SPEED`, `MOVE_BUDGET`), as of `posAt`. */
@@ -164,6 +168,10 @@ export class Room {
   lakeReport: () => string[] = () => ['No lake stats on this server.'];
   /** Scripted runs (smoke, screenshots, trailer): the test hook's teleports may use `/goto` without the dev login. Never on in production. */
   testHooks = false;
+  /** The day's best skip on Skipper's Beach; the server gives every room the same one. */
+  skips = new SkipDay();
+  /** Delivers a word to every other room on the server (set by the server; alone, a room has no others). */
+  sayOthers: (msg: ServerMsg) => void = () => {};
   /** Delivers chat lines, notices and casino record updates; the server points this at every room. */
   say: (msg: ServerMsg) => void = (msg) => this.broadcast(msg);
 
@@ -239,6 +247,7 @@ export class Room {
     conn.send({ t: 'furthest', rows: this.furthest() });
     conn.send({ t: 'supporters', names: this.supporters() });
     conn.send({ t: 'records', records: this.records() });
+    conn.send({ t: 'skipbest', best: this.skips.best(this.now()) });
     this.broadcast({ t: 'joined', player: info });
     // Before adding the member, so everyone else on the server hears it but not the joiner.
     this.say({ t: 'sys', text: `${acct.name} has joined` });
@@ -278,6 +287,8 @@ export class Room {
     if (msg.t === 'jump') return this.jump(m);
     // Emotes too: they change nothing on the save.
     if (msg.t === 'emote') return this.emote(m, msg.id);
+    // And skipping stones.
+    if (msg.t === 'skip') return this.skip(m, msg.p);
     this.settle(m);
     const s = m.acct.save;
     let changed = false;
@@ -1102,6 +1113,8 @@ export class Room {
       this.clockAt = this.now();
       this.broadcast({ t: 'clock', now: this.clockAt });
     }
+    // The day's best skip clears as the day turns.
+    if (this.skips.turned(this.now())) this.say({ t: 'skipbest', best: this.skips.best(this.now()) });
     this.positions();
   }
 
@@ -1168,11 +1181,19 @@ export class Room {
     m.info.name = m.acct.name;
     this.broadcast({ t: 'named', id, name: m.acct.name });
     this.say({ t: 'sys', text: `${old} is now ${m.acct.name}` });
+    this.skipRenamed(old, m.acct.name);
   }
 
   /** The same for an account renamed from the dev console, if it is in this room. */
   renamedAccount(acct: Account, old: string): void {
     for (const [id, m] of this.members) if (m.acct === acct) this.renamed(id, old);
+    // Online or not, here or not: the day's best skip follows its holder's name.
+    this.skipRenamed(old, acct.name);
+  }
+
+  /** The skip sign's holder changed their name: every sign on the server reads the new one. */
+  private skipRenamed(old: string, name: string): void {
+    if (this.skips.rename(old, name, this.now())) this.say({ t: 'skipbest', best: this.skips.best(this.now()) });
   }
 
   /** A player gained or lost the supporter 💗: everyone gets the new list, and the player a thank-you. */
@@ -1228,6 +1249,34 @@ export class Room {
       if (o === m || !o.emote || !o.emoteUntil || o.emoteUntil <= now || placeOf(o.info) !== place) continue;
       m.conn.send({ t: 'emote', id: o.info.id, emote: o.emote, x: round(o.info.x), z: round(o.info.z) });
     }
+  }
+
+  /**
+   * A stone let go at the pile on Skipper's Beach (`src/data/skip.ts`): the server counts its skips from where on the
+   * gauge it was let go and tells everyone on the map, the thrower too, who each fly the same stone. Refused without
+   * a word unless the player stands by the pile on their feet with no fish on the line and their last stone has sunk.
+   * A count over the day's best goes on every sign on the server.
+   */
+  private skip(m: Member, p: unknown): void {
+    const now = this.now();
+    const pile = this.maps[m.info.map]?.camp?.stones;
+    // No fish on the line and no line out, as for dropping what's in hand.
+    if (!pile || m.info.dive || m.pending || (m.info.act && m.info.act.a !== 'carry') || !validRelease(p)) return;
+    if (m.skipUntil !== undefined && now < m.skipUntil) return;
+    if (m.emote === SIT.id && !!m.emoteUntil && now < m.emoteUntil) return;
+    if (Math.hypot(m.info.x - pile.x, m.info.z - pile.z) > SKIP.reach + SKIP.slack) return;
+    const n = skipCount(p, this.rng);
+    m.skipUntil = now + skipFlightMs(n);
+    // The throw takes the place of any emote still playing, so a player arriving isn't shown it again.
+    m.emote = null;
+    m.emoteUntil = 0;
+    const place = placeOf(m.info);
+    this.sendAll([...this.members.values()].filter((o) => placeOf(o.info) === place), { t: 'skip', id: m.info.id, n, a: skipSpread(this.rng), x: round(m.info.x), z: round(m.info.z) });
+    if (!this.skips.offer(m.acct.name, n, now)) return;
+    // `by` is this room's id for the thrower, so only this room hears it; the other rooms get the best alone.
+    const best = this.skips.best(now);
+    this.broadcast({ t: 'skipbest', best, by: m.info.id });
+    this.sayOthers({ t: 'skipbest', best });
   }
 
   /** Sends the players who moved since the last tick to everyone on their map (or dive). */

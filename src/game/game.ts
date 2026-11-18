@@ -92,7 +92,9 @@ import { ABYSSAL, BODY_COLORS, COSMETICS, COS_RARITY, COS_RARITY_COLOR, COS_SLOT
 import { faceIcon } from './faces';
 import { Character, CharacterPreview } from './character';
 import { INSTRUMENTS, bandLog, partBit, seatPrompt } from '../data/band';
-import { EMOTES, EMOTE_GAP_MS, SIT, WHEEL_SLOTS, emoteById, type EmoteDef } from '../data/emotes';
+import { EMOTES, EMOTE_GAP_MS, SIT, SKIP_THROW, WHEEL_SLOTS, emoteById, type EmoteDef } from '../data/emotes';
+import { SKIP } from '../data/skip';
+import { Skipping } from './skipping';
 import type { Circle } from './player';
 import type { Seat } from './town';
 import type { BandSeat, SeatCtx } from './emotes/types';
@@ -320,7 +322,7 @@ export class Game {
   /** When Esc last closed a menu; see the pointerlockchange handler. */
   private escClosedAt = -Infinity;
   private atVendor = false;
-  private near: { label: string; act: () => void } | null = null;
+  private near: { label: string; act: () => void; hold?: true } | null = null;
 
   private tab = 'inventory';
   private shopTab: 'cosmetics' | 'gear' | 'sea' = 'gear';
@@ -406,6 +408,8 @@ export class Game {
   private bodyEmotes = new EmotePlayer(this.body);
   private tp = new ThirdPerson();
   private emote: EmoteDef | null = null;
+  /** Skipping stones at the pile on Skipper's Beach: the wind-up, the stones in the air, the counter and the sign. */
+  private skipping: Skipping;
   /** Seated (`SIT`): where the player stood before sitting down, to stand them back there when they get up. */
   private seat: { x: number; z: number } | null = null;
   /** When the last emote began, to keep them `EMOTE_GAP_MS` apart like the server does. */
@@ -434,6 +438,28 @@ export class Game {
     });
     canvas.addEventListener('webglcontextrestored', () => $('offline').classList.add('hidden'));
     this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name), (x, z) => this.seatAt(x, z));
+    this.skipping = new Skipping(this.world.scene, this.world, {
+      surface: (x, z) => this.world.surface(x, z),
+      splash: (at, n, power) => this.world.fx.splash(at, n, power),
+      warm: (o) => this.world.warm(o),
+      sign: () => this.world.town?.skipSign ?? null,
+      me: () => ({ id: this.net.id, name: this.net.name || 'You', x: this.player.x, z: this.player.z }),
+      send: (power) => {
+        if (!this.net.connected) return false;
+        // Where the player stands and looks goes first (position updates are throttled), as with an emote.
+        this.net.send({ t: 'pos', x: this.player.x, z: this.player.z, yaw: this.world.yaw });
+        this.net.send({ t: 'skip', p: power });
+        return true;
+      },
+      pose: (id) => {
+        const thrower = this.net.players.get(id);
+        if (thrower) this.avatars.emote(thrower, SKIP_THROW, this.world.night);
+      },
+      whoosh: () => audio.whoosh(),
+      plip: (gain, pitch) => audio.plip(gain, pitch),
+      plop: (gain) => audio.plop(gain),
+      toast: (msg) => this.toast(msg),
+    }, $('hud'));
     // Builds the legend pieces in idle moments and compiles them, so the first one worn nearby doesn't stall.
     this.avatars.warmLegends((o) => this.world.warm(o));
     // The emotes' looks likewise, so the first one played nearby doesn't either.
@@ -521,6 +547,8 @@ export class Game {
       },
       onJump: (id) => this.avatars.jump(id),
       onEmote: (p, emote) => this.avatars.emote(p, emote === null ? null : emoteById(emote) ?? null, this.world.night),
+      onSkip: (id, n, a, at) => this.skipping.thrown(id, n, a, at),
+      onSkipBest: (best, by) => this.skipping.setBest(best, by),
       onCast: (roll) => {
         this.roll = roll;
       },
@@ -978,6 +1006,18 @@ export class Game {
         /** Seated: where the player will stand back up (null when not on a seat). */
         seat: this.seat && { ...this.seat },
       }),
+      /** Skipping stones: what is going on, letting go at `p` on the gauge (or wherever it stands), and for staging holding the gauge at `p` or the stones `t` seconds into their flight. */
+      skip: {
+        state: () => this.skipping.state(),
+        release: (p?: number) => {
+          if (p !== undefined) this.skipping.power = p;
+          this.skipping.release();
+        },
+        /** A bare release sent to the server, whatever the player is doing: what a tampered client could send. */
+        send: (p: number) => this.net.send({ t: 'skip', p }),
+        freeze: (p: number | null) => this.skipping.freeze(p),
+        hold: (t: number | null) => { this.skipping.hold = t; },
+      },
       /** The emote playing on another player's avatar (by player id), or null. */
       avatarEmote: (id: number) => this.avatars.emoting(id),
       /** The campfire band: the parts being played (bit i is `INSTRUMENTS[i]`), the fire's distance, and what the audio makes of them (the parts sounding, the bar, the band's and the town layer's levels, the music switch), and how loud the music is now. */
@@ -1175,6 +1215,8 @@ export class Game {
       this.keys.delete(e.code);
       // Letting go of F plays the emote the wheel's pointer is on.
       if (e.code === 'KeyF' && !this.touch) this.closeWheel(true);
+      // Letting go of E at the stone pile throws the stone.
+      if (e.code === 'KeyE') this.skipping.release();
     });
     const wheel = new WheelStepper();
     document.addEventListener('wheel', (e) => {
@@ -1225,7 +1267,7 @@ export class Game {
 
   /** Jumps, and lets the other players on the map see it. */
   private jump(): void {
-    if (this.player.airborne) return;
+    if (this.player.airborne || this.skipping.charging) return;
     // The emote ends first: from a seat that stands the player back where they sat down from (a teleport, which would
     // cancel a jump already begun), and the jump goes up from there.
     this.endEmote(true);
@@ -1244,7 +1286,9 @@ export class Game {
 
   /** Left mouse button or the touch action button going down: cast, hook, reel, bet. */
   private pointerDown(): void {
-    if (!this.active || this.dbgLock || this.chat.isOpen || this.wheel.isOpen) return;
+    if (!this.active || this.dbgLock || this.chat.isOpen || this.wheel.isOpen || this.skipping.charging) return;
+    // At the stone pile the touch action button winds up a throw (the mouse still casts: E is the key there).
+    if (this.touch && this.phase === 'idle' && this.near?.hold) return this.interact();
     this.holding = true;
     this.onPress();
   }
@@ -1252,6 +1296,7 @@ export class Game {
   private pointerUp(): void {
     this.holding = false;
     if (this.phase === 'charging') this.releaseCast();
+    if (this.touch) this.skipping.release();
   }
 
   /** Opens the dev login / reset password panel; the mouse is let go so its buttons work. */
@@ -1352,8 +1397,24 @@ export class Game {
     // Phones start in lite graphics unless the player picked otherwise.
     this.applyGraphics();
     $('prompt').addEventListener('click', () => {
-      if (this.active && this.phase === 'idle') this.interact();
+      if (this.active && this.phase === 'idle' && !this.near?.hold && !this.skipping.charging) this.interact();
     });
+    // A prompt that is held (the stone pile's) starts as the finger goes down on it, and lets go wherever it lifts.
+    let finger = -1;
+    $('prompt').addEventListener('pointerdown', (e) => {
+      if (!this.active || this.phase !== 'idle' || !this.near?.hold) return;
+      finger = e.pointerId;
+      // The prompt is rewritten every frame, so the finger's events are kept on the prompt itself.
+      try { $('prompt').setPointerCapture(e.pointerId); } catch { /* not a live pointer */ }
+      this.interact();
+    });
+    for (const ev of ['pointerup', 'pointercancel'] as const) {
+      document.addEventListener(ev, (e) => {
+        if (e.pointerId !== finger) return;
+        finger = -1;
+        this.skipping.release();
+      });
+    }
     $('catch').addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-rank]');
       if (btn) return this.useRankButton(btn.dataset.rank as 'title' | 'outfit');
@@ -1377,7 +1438,9 @@ export class Game {
     t.setVisible(this.active && $('join').classList.contains('hidden'));
     switch (this.phase) {
       case 'idle':
-        if (this.map.casino) t.setAction('🎰', 'PLAY', this.table ? 'gold' : 'quiet');
+        if (this.skipping.charging) t.setAction('🪨', 'RELEASE', 'gold');
+        else if (this.near?.hold) t.setAction('🪨', 'SKIP', 'gold');
+        else if (this.map.casino) t.setAction('🎰', 'PLAY', this.table ? 'gold' : 'quiet');
         else t.setAction('🎣', 'CAST', eco.canCastAt(this.s, !!this.map.sea) === 'ok' ? 'gold' : 'quiet');
         break;
       case 'charging':
@@ -2147,6 +2210,7 @@ export class Game {
     this.world.hub?.setSupporters(this.net.supporters);
     this.world.hall?.records.set(this.net.records);
     this.world.town?.setFurthest(this.net.furthest);
+    this.skipping.setMap(this.map);
   }
 
   /** Covers the trip to or from the sea until the new map's shaders are ready; `tick` takes it down. */
@@ -2643,7 +2707,7 @@ export class Game {
 
   /** Emotes play standing on the ground with nothing on the line: not mid-cast, mid-fight or with a catch held up. */
   private canEmote(): boolean {
-    return this.active && this.phase === 'idle' && !this.player.airborne && !this.chat.isOpen && this.castOffAt === null && $('join').classList.contains('hidden');
+    return this.active && this.phase === 'idle' && !this.player.airborne && !this.chat.isOpen && !this.skipping.charging && this.castOffAt === null && $('join').classList.contains('hidden');
   }
 
   /** Opens the emote wheel, held open: with F on desktop, or by a `finger` on the touch 👋 button (a quick tap there turns it into a tap menu). */
@@ -2798,7 +2862,8 @@ export class Game {
 
   private updateWalking(dt: number): void {
     const w = this.world;
-    const walking = this.active && this.phase === 'idle';
+    // Winding up a stone throw holds the player where they stand, as charging a cast does.
+    const walking = this.active && this.phase === 'idle' && !this.skipping.charging;
     const k = this.keys;
     const move = this.moveInput();
     const fwd = walking ? move.fwd : 0;
@@ -2815,7 +2880,8 @@ export class Game {
     const { x, z } = this.player;
     // Lower d wins: selling, then picking up, then everything else by distance. A spot with `face` only counts while
     // the view looks that way (within FACE_CONE), so it can't be hit by accident while walking away from it.
-    const spots: { d: number; label: string; act: () => void; face?: number }[] = [];
+    // `hold`: the action is held and let go (the stone pile's wind-up), not pressed.
+    const spots: { d: number; label: string; act: () => void; face?: number; hold?: true }[] = [];
     const looking = (face?: number) => face === undefined || Math.abs(Math.atan2(Math.sin(w.yaw - face), Math.cos(w.yaw - face))) <= FACE_CONE;
 
     for (const d of this.curDrops()) {
@@ -2850,6 +2916,9 @@ export class Game {
       const taken = (s: Seat) => w.others.some((o) => (o.x - s.x) ** 2 + (o.z - s.z) ** 2 < SEAT_TAKEN * SEAT_TAKEN);
       const seat = town.seatNear(x, z, SEAT_RANGE, (s) => looking(Math.atan2(x - s.x, z - s.z)) && !taken(s));
       if (seat) spots.push({ d: Math.hypot(seat.x - x, seat.z - z), label: seatPrompt(this.map, seat.x, seat.z), act: () => this.sit(seat) });
+      // The stone pile on Skipper's Beach, to a player on the ground who looks at it or out over the lake.
+      const pile = this.player.airborne ? null : this.skipping.offered(x, z, w.yaw, FACE_CONE);
+      if (pile !== null) spots.push({ d: pile, label: 'Skip a stone', act: () => this.skipping.begin(), hold: true });
       for (const b of town.bottles) {
         if (this.s.bottles.includes(b.id)) continue;
         const db = Math.hypot(b.pos.x - x, b.pos.z - z);
@@ -2921,8 +2990,10 @@ export class Game {
     const best = walking && !this.emote ? spots.filter((sp) => sp.d < 3 && looking(sp.face)).sort((a, b) => a.d - b.d)[0] : undefined;
     this.near = best ?? null;
     const prompt = $('prompt');
-    prompt.classList.toggle('hidden', !best);
-    if (best) prompt.innerHTML = `<b>E</b> ${best.label}`;
+    // The prompt stays up through a stone's wind-up, saying how to throw it.
+    const label = this.skipping.charging ? 'Let go to throw' : best?.label;
+    prompt.classList.toggle('hidden', !label);
+    if (label) prompt.innerHTML = `<b>E</b> ${label}`;
   }
 
   private curDrops(): Drop[] {
@@ -3673,6 +3744,7 @@ export class Game {
     if (!this.net.connected && this.localDrops.expire()) this.dropsView.sync(this.localDrops.all(), this.map.id);
     this.dropsView.update(this.world.time);
     this.tickEmote(dt);
+    this.skipping.update(dt, this.active && this.phase === 'idle' && !this.menuOpen && !this.chat.isOpen && !this.emote);
     this.updateCarry();
     this.tickCarry(this.world.time);
     const w = this.world;
@@ -4068,6 +4140,16 @@ export class Game {
       ctx.stroke();
     };
 
+    // A skipping stone's wind-up: the cast's sweep (below), with the stone's own sweet spot marked and a notch at its middle.
+    const stone = this.skipping.gauge;
+    if (stone !== null) {
+      const inZone = Math.abs(stone - SKIP.sweet) <= SKIP.band;
+      arc(66, 0, 1, 'rgba(0,0,0,0.4)', 9);
+      arc(66, 0, Math.max(0.01, stone), `hsl(${120 - stone * 120},85%,55%)`, 7);
+      arc(76, SKIP.sweet - SKIP.band, SKIP.sweet + SKIP.band, inZone ? '#ffffff' : '#ffd23f', inZone ? 8 : 5);
+      arc(76, SKIP.sweet - 0.004, SKIP.sweet + 0.004, '#b3541e', 9);
+      return;
+    }
     if (this.phase === 'charging') {
       arc(66, 0, 1, 'rgba(0,0,0,0.4)', 9);
       const hue = 120 - this.power * 120;

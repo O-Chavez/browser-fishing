@@ -310,6 +310,18 @@ class AudioFX {
     this.tone(260, 90, 0.18, 0.4);
   }
 
+  /** A skipping stone touching the water: a small bright blip, higher with `pitch`; `gain` 0 to 1 by how far off it is. */
+  plip(gain = 1, pitch = 1): void {
+    this.tone(1150 * pitch, 620 * pitch, 0.07, 0.16 * gain);
+    this.noise(0.05, 'highpass', 3200, 5200, 0.07 * gain);
+  }
+
+  /** A skipping stone going under: a low plunk with a little splash. */
+  plop(gain = 1): void {
+    this.tone(300, 95, 0.2, 0.34 * gain);
+    this.noise(0.3, 'lowpass', 2400, 500, 0.2 * gain);
+  }
+
   bite(): void {
     this.plunk();
     this.splash(0.6);

@@ -980,7 +980,7 @@ export interface Writable {
   tex: THREE.CanvasTexture;
 }
 
-/** Letters the skip sign: LONGEST SKIP over the day's best (`today`), cream on wood. */
+/** Letters the skip sign: BEST SKIP over the day's best (`today`: "today: 9 skips · Oscar", `skipSignText`), cream on wood. */
 export function writeSkipSign(ctx: CanvasRenderingContext2D, tex: THREE.CanvasTexture, today: string): void {
   const { width: w, height: h } = ctx.canvas;
   ctx.fillStyle = '#6b4a2b';
@@ -989,14 +989,14 @@ export function writeSkipSign(ctx: CanvasRenderingContext2D, tex: THREE.CanvasTe
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#fff3d6';
   ctx.font = `900 ${Math.round(h * 0.24)}px ${FONT}`;
-  ctx.fillText('LONGEST SKIP', w / 2, h * 0.36, w - 24);
+  ctx.fillText('BEST SKIP', w / 2, h * 0.36, w - 24);
   ctx.fillStyle = '#e3c26d';
   ctx.font = `700 ${Math.round(h * 0.17)}px ${FONT}`;
   ctx.fillText(today, w / 2, h * 0.68, w - 24);
   tex.needsUpdate = true;
 }
 
-/** A small sign on a post for the day's longest skip, its canvas face the caller rewrites (`writeSkipSign`). Reads "LONGEST SKIP, today: none yet" until then. */
+/** A small sign on a post for the day's best skip, its canvas face the caller rewrites (`writeSkipSign`). Reads "BEST SKIP, today: none yet" until then. */
 export function buildSkipSign(): Writable {
   const g = new THREE.Group();
   const post = cyl(0.045, 0.06, 1.15, DARK, 8);

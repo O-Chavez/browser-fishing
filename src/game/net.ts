@@ -5,6 +5,7 @@ import type { Roll } from './economy';
 import type { Drop } from './drops';
 import { isRestartClose } from './restart';
 import type { StageId } from '../data/smokehouse';
+import { SKIP, type SkipBest } from '../data/skip';
 import type { SaveData } from './state';
 
 export interface NetEvents {
@@ -25,6 +26,10 @@ export interface NetEvents {
   onJump(id: number): void;
   /** Another player started an emote, or with `null` ended theirs early. */
   onEmote(p: PlayerInfo, emote: string | null): void;
+  /** A stone was thrown at the pile on this map (by this player too): `at` is where its thrower stood. */
+  onSkip(id: number, n: number, a: number, at: { x: number; z: number }): void;
+  /** The day's best skip changed; `by` is its thrower here, whose stone may still be flying. */
+  onSkipBest(best: SkipBest | null, by?: number): void;
   onCast(roll: Roll): void;
   onCastFail(msg: string): void;
   /** The player's dive changed (or resumed on joining); comes before the save that takes them to sea. */
@@ -306,6 +311,17 @@ export class NetClient {
         this.events.onEmote(p, m.emote);
         break;
       }
+      case 'skip': {
+        // Where the thrower stood, which the next snap may not have brought yet.
+        if (!Number.isInteger(m.n) || m.n < 0 || m.n > SKIP.max || ![m.a, m.x, m.z].every(Number.isFinite)) break;
+        const p = this.players.get(m.id);
+        if (p && m.id !== this.id) Object.assign(p, { x: m.x, z: m.z });
+        this.events.onSkip(m.id, m.n, m.a, m);
+        break;
+      }
+      case 'skipbest':
+        this.events.onSkipBest(m.best, m.by);
+        break;
       case 'snap':
         for (const [id, x, z, yaw] of m.p) {
           const p = this.players.get(id);

@@ -15,6 +15,7 @@ import { CLIENT_LOG_MAX_BYTES, ClientLogGate, clientLogLine, parseClientLog } fr
 import { guarded } from './guard';
 import { createShutdown, type ShutdownConn } from './shutdown';
 import { Room } from './room';
+import { SkipDay } from './skipbest';
 import { SmokeStats } from './smokestats';
 import { lakeReport } from './lakestats';
 import { createStorage } from './storage';
@@ -28,6 +29,8 @@ const rooms = new Map<string, Room>();
 const sockets = new Map<Room, number>();
 /** Ends the live session of each logged-in account, so a newer login can take over. */
 const sessions = new Map<Account, () => void>();
+/** The day's best skip on Skipper's Beach, one for every room; in memory only. */
+const skips = new SkipDay();
 // Chat is server-wide: one set of limits, and every line goes to every room.
 const chatGate = new ChatGate();
 // Dev console credentials; with either unset the console stays off.
@@ -167,6 +170,8 @@ function room(name: string): Room {
     r.smokeStats = smokeStats;
     r.smokeReport = () => smokeStats.report([...rooms.values()].flatMap((x) => x.onlineSaves()));
     r.lakeReport = () => lakeReport(accounts.lakeRows());
+    r.skips = skips;
+    r.sayOthers = (msg) => rooms.forEach((o) => o !== r && o.broadcast(msg));
     r.say = (msg) => rooms.forEach((o) => o.broadcast(msg));
     r.testHooks = process.env.TEST_HOOKS === '1';
     rooms.set(name, r);
