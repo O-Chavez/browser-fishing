@@ -12,7 +12,7 @@ on the cove side stays clear of props.
 
 **Changed after the build (Oscar, 2026-11-17):** the Derby stand is out of this release and comes back when the Weekly
 Derby is built. Its bay holds a flower bed like the one behind Thank You. Where the text below names the Derby stand,
-read that bed.
+read that bed. The beach's two log seats came out too (Oscar, 2026-11-18): the bench is the beach's seat.
 
 **The idea.** The camp is a small open-air theatre on the east headland, facing the cove. One round terrace holds the
 fire and its seats; its back is a wall of five panels (Thank You, Lake Legends, the host's stall, Deep Sea, the Derby

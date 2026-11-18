@@ -13,7 +13,7 @@
 //   band    all six logs taken, from the cove side, from above and from the pier (day and night)
 //   extras  two on one log, bulky outfits playing, and the prompt on a phone-sized screen
 //   after   the ring once everyone has got up
-//   seats   each kind of seat (a fire log, a beach log, the cove wall, a bench) from the side, level with it: the
+//   seats   each kind of seat (a fire log, the cove wall, a bench) from the side, level with it: the
 //           player's own seated body and another player's, with the gap between the body and the seat measured;
 //           BAND_TAG=<word> puts the word before these pictures' names (a `before` run on older code)
 //
@@ -359,7 +359,6 @@ try {
     const bench = MAP.town.benches.find((b) => Math.hypot(b.x - FIRE.x, b.z - FIRE.z) < 12)!;
     const kinds: [string, { x: number; z: number; facing: number }, number][] = [
       ['firelog', SEATS[4], SEAT_TOP.log],
-      ['beachlog', SEATS[12], SEAT_TOP.log],
       ['wall', SEATS[20], SEAT_TOP.wall],
       ['bench', { x: bench.x + 0.42 * Math.cos(bench.facing), z: bench.z - 0.42 * Math.sin(bench.facing), facing: bench.facing }, SEAT_TOP.bench],
     ];

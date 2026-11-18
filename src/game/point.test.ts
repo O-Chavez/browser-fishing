@@ -72,14 +72,14 @@ describe('Ember Point', () => {
     expect(isWater(12.9, fire.z)).toBe(true);
   });
 
-  it('seats 24 round the fire and 6 on the beach', () => {
+  it('seats 24 round the fire and 2 on the beach\'s bench', () => {
     expect(fireLogs).toHaveLength(6);
     expect(seatPlanks(camp)).toHaveLength(12);
     expect(seats.filter((s) => fromFire(s) < camp.r + 1)).toHaveLength(24);
-    // Two logs and a bench on the beach.
+    // A bench on the beach; its two logs came out (Oscar, 2026-11-18).
     const bench = map.town.benches.filter((b) => fromFire(b) > camp.r && fromFire(b) < 12);
     expect(bench).toHaveLength(1);
-    expect(seats.filter((s) => fromFire(s) > camp.r + 1)).toHaveLength(4);
+    expect(seats.filter((s) => fromFire(s) > camp.r + 1)).toHaveLength(0);
     for (const s of [...seats, ...bench]) expect(isWater(s.x, s.z)).toBe(false);
   });
 
@@ -436,8 +436,8 @@ describe('Ember Point', () => {
         expect(kind, `seat at ${s.x.toFixed(1)}, ${s.z.toFixed(1)}`).toBeDefined();
         tops[kind!]++;
       }
-      // Six logs at the fire and two on the beach, twelve planks, and the town's benches.
-      expect(tops.log).toBe(16);
+      // Six logs at the fire (none on the beach), twelve planks, and the town's benches.
+      expect(tops.log).toBe(12);
       expect(tops.wall).toBe(12);
       expect(tops.bench).toBe(map.town.benches.length * 2 + 4);
       // A camp seat is found again from where a seated player is, to a few centimetres.

@@ -111,7 +111,7 @@ export const WALK: Record<string, View> = {
   p06_bay: at(FIRE.x + 2, FIRE.z, FIRE.x + 8, FIRE.z, "toward the stall's bay: its apron of cobbles and the cut bank behind"),
   p07_cove: at(FIRE.x + 3.9, FIRE.z, FIRE.x - 6, FIRE.z, 'from the back rim across the fire: the seat wall, the cove and the pier'),
   p08_steps: at(FIRE.x, FIRE.z - 3.9, FIRE.x - 1.2, FIRE.z - 11, 'at the top of the beach steps: the beach, the way to the jetty'),
-  p09_beach: at(19.4, -4.2, 24.6, -6, "on Skipper's Beach: the logs, the bench and the east end"),
+  p09_beach: at(19.4, -4.2, 24.6, -6, "on Skipper's Beach: the bench and the east end"),
   p10_beach_back: at(23.6, -6.6, FIRE.x, FIRE.z, 'from the east end of the beach back up to the terrace'),
   p11_jetty: at(18.5, -6.4, 18.5, -12.4, 'stepping onto the rocket jetty'),
   p12_jetty_back: at(18.5, -11.6, FIRE.x, FIRE.z, "from the jetty's end back to the beach and the fire"),
