@@ -70,7 +70,7 @@ try {
   const clocks = await Promise.all([ann, bob].map((p) => p.evaluate(() => (window as any).__game.world.clock() - Date.now())));
   console.log('INFO  1c. the two players\' shared clocks minus the device clock (ms):', clocks);
   const bars = await Promise.all([ann, bob].map((p) => p.evaluate(() => ({ bar: (window as any).__game.band().audio.bar, now: (window as any).__game.world.clock() }))));
-  for (const p of [ann, bob]) await until(p, '1d. the bar scheduled is the bar the clock is in or the next', () => true).then(async (b) => { const now = await p.evaluate(() => (window as any).__game.world.clock()); const d = b.audio.bar! - Math.floor(now / 2160); check('    (bars ahead of the clock)', d >= 0 && d <= 1, d); });
+  for (const p of [ann, bob]) await until(p, '1d. the bar scheduled is the bar the clock is in or the next', () => true).then(async (b) => { const now = await p.evaluate(() => (window as any).__game.world.clock()); const d = b.audio.bar! - Math.floor(now / 2160); /* up to two: a tab that was in the background looks AHEAD_MAX (4 s) ahead */ check('    (bars ahead of the clock)', d >= 0 && d <= 2, d); });
   const quiet = await level(ann);
   check('1e. the town tune is sounding at the pier', quiet > 0.001, `${db(quiet)} dB`);
   // 2. Bob sits at the banjo's log.
