@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import puppeteer, { type Page } from 'puppeteer-core';
 import { createServer } from 'vite';
+import { EMOTE_GAP_MS } from '../src/data/emotes';
 import { MAPS, campSeats } from '../src/data/maps';
 import { TIP_IDS } from '../src/game/tips';
 import { newSave } from '../src/game/state';
@@ -59,6 +60,9 @@ const sit = async (p: Page, i: number) => {
   await p.bringToFront();
   await p.evaluate((s) => { const g = (window as any).__game; g.teleport(s.x + 0.9 * Math.sin(s.facing), s.z + 0.9 * Math.cos(s.facing)); g.look(s.facing, -0.2); }, s);
   await p.waitForFunction(() => (window as any).__game.player().near?.startsWith('Sit down'), { timeout: WAIT });
+  // Sitting is an emote, refused within EMOTE_GAP_MS of the last one; on a real GPU the walk from the last seat is
+  // quicker than that.
+  await sleep(EMOTE_GAP_MS + 100);
   await p.evaluate(() => (window as any).__game.interact());
 };
 try {
