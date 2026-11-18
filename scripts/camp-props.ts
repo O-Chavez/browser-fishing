@@ -50,7 +50,6 @@ const PROPS: Record<string, Spec> = {
   signpost: { make: "C.buildSignpost(['FIRE', 'STONES', 'ROCKETS'])", ty: 1.8, over: [0, 5.5], close: [0, 2.2] },
   plaque: { lift: 0.9, make: "C.buildPlaque(1.2)", ty: 1.0, over: [0, 3], close: [0, 1.2] },
   fishmount: { make: 'C.buildFishMount()', ty: 0.5, over: [0, 5], close: [0, 2.2] },
-  derbystand: { make: 'C.buildDerbyStand()', ty: 1.55, over: [0, 6], close: [0, 2.6] },
   lanternpier: { make: 'C.buildLanternPier()', ty: 0.6, over: [0, 4.5], close: [0, 1.8] },
 };
 const names = Object.keys(PROPS);

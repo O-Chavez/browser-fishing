@@ -51,7 +51,7 @@ HARBOUR.diveStart.yaw = Math.atan2(-(HARBOUR.stand.x - HARBOUR.diveStart.x), -(H
  * Ember Point, the town's meeting place on the east headland (docs/community-zone/a-ember-point.md): a small open-air
  * theatre facing the cove. One round cobbled terrace, level, holds the fire and its seats: six logs round the fire, a
  * clear ring to walk behind them, and a low stone seat wall along the cove-side rim. Its back is a wall of panels on
- * the rim, each facing the fire: Thank You, Lake Legends, the stall's bay, Deep Sea and the Derby stand's bay. The
+ * the rim, each facing the fire: Thank You, Lake Legends, the stall's bay and Deep Sea, and a flower bed in the bay past it. The
  * ridge behind is cut away to the retaining wall's line, with a bank behind it for the hedge and the picket fence.
  * A crown of lights runs round the rim on tall posts. The campfire lane from the quay's east corner and the lane
  * from the village ring meet up the slope and come in under the gate arch on the quay side. Steps on the lake side
@@ -89,8 +89,13 @@ export interface CampDef {
   arch: Spot & { w: number };
   /** The stall's middle, its counter toward the fire. */
   stall: Spot;
-  /** The Derby stand's bay on the rim, between Deep Sea and the beach steps. */
-  derby: Spot;
+  /**
+   * The flower bed in the bay on the rim between Deep Sea and the beach steps, `w` deep, outside the kerb on the bank
+   * down to the beach, and the stone wall that holds it: the beach wall carried on from its end round the bed's
+   * outer face and back to the kerb beside the steps. The Weekly Derby's stand goes here when the Derby is built.
+   */
+  bayBed: Arc & { w: number };
+  bayWall: [number, number][];
   /** The retaining wall that holds the cut bank, in two arcs with the stall's back between them; the hedge behind its top and the picket fence behind that. */
   wall: Arc[];
   hedge: Arc;
@@ -184,12 +189,13 @@ const CAMP: CampDef = {
   apron: { r: 6.4, from: 74, to: 106 },
   // East of the clear way from the steps to the jetty, turned to the water.
   beachLogs: [
-    { x: 21.95, z: -5, facing: (150 * Math.PI) / 180 },
+    { x: 21.8, z: -5.5, facing: (150 * Math.PI) / 180 },
     { x: 21.7, z: -7.1, facing: (190 * Math.PI) / 180 },
   ],
   arch: CAMP_ARCH,
   stall: CAMP_STALL,
-  derby: byFire(PANELS, 159),
+  bayBed: { r: TERRACE + 0.535, from: 150, to: 167.5, w: 0.43 },
+  bayWall: [beside(CAMP_BANK[1], 6.33, TURF_LIP), ...[153, 158.5, 164].map((deg) => beside(deg, TERRACE + 0.875, 0)), beside(180, 6.26, -1.2), beside(180, 5.72, -1.2)],
   wall: [
     { r: CAMP_WALL, from: CAMP_BANK[0], to: 90 - STALL_GAP },
     { r: CAMP_WALL, from: 90 + STALL_GAP, to: CAMP_BANK[1] },
@@ -703,8 +709,8 @@ export const MAPS: MapDef[] = [
         { x: 11.2, z: 13.3, facing: Math.PI },
         // The rest stop on the walk up, beside the main street in front of the Fishmonger.
         { x: -4.6, z: 24.5, facing: Math.PI / 2 },
-        // On Skipper's Beach below the terrace, its back to the Derby stand, looking out over the open lake.
-        { x: 22.6, z: -3.7, facing: Math.PI },
+        // On Skipper's Beach below the terrace, its back to the wall of the bay's flower bed and 0.25 m clear of it, looking out over the open lake.
+        { x: 22.6, z: -4.25, facing: Math.PI },
       ],
       trees: [
         // Leafy ones by the Fishmonger's garden, behind the Net Mender, and one up each side of the upper street.

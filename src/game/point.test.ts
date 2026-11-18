@@ -114,7 +114,7 @@ describe('Ember Point', () => {
       campRim(camp) - 0.15,
       ...posts(map.thanks, 0.6).map((p) => fromFire(p) - 0.25),
       ...[map.leaderboard, map.seaboard!].flatMap((b) => posts(b, 1).map((p) => fromFire(p) - 0.3)),
-      fromFire(camp.derby) - 0.3,
+      camp.bayBed.r - camp.bayBed.w / 2,
     );
     for (const l of fireLogs) {
       for (const side of LOG.solids) {
@@ -168,7 +168,7 @@ describe('Ember Point', () => {
 
   it('stands the panels on the back rim facing the fire, 2.5 m or more apart, each read from the clear ring', () => {
     const bay = atBearing(fire, fromFire(map.leaderboard), (camp.apron.from + camp.apron.to) / 2);
-    const panels = [...boards, bay, camp.derby];
+    const panels = [...boards, bay];
     const before = (p: { x: number; z: number }) => ({ x: p.x + ((fire.x - p.x) * 1.5) / fromFire(p), z: p.z + ((fire.z - p.z) * 1.5) / fromFire(p) });
     for (const b of boards) {
       expect(fromFire(b)).toBeGreaterThan(camp.r);
@@ -194,9 +194,31 @@ describe('Ember Point', () => {
       const p = atBearing(fire, campRim(camp), deg);
       for (const b of [map.leaderboard, map.seaboard!]) expect(apart(p, b), `post ${deg}°`).toBeGreaterThan(1.45);
       expect(apart(p, map.thanks)).toBeGreaterThan(1);
-      expect(apart(p, camp.derby)).toBeGreaterThan(1);
       for (const [a, b] of clear) expect(((deg - a + 360) % 360) > ((b - a + 360) % 360), `post ${deg}° in ${a}..${b}`).toBe(true);
     }
+  });
+
+  it('fills the bay between Deep Sea and the beach steps with a flower bed outside the kerb', () => {
+    const { bayBed: bed, flowers } = camp;
+    const bearingOf = (p: { x: number; z: number }) => ((Math.atan2(p.x - fire.x, p.z - fire.z) * 180) / Math.PI + 360) % 360;
+    // Past Deep Sea's far post and short of the steps' side, between the two crown posts that flank the bay.
+    expect(bed.from).toBeGreaterThan(Math.max(...posts(map.seaboard!, 1).map(bearingOf)) + 5);
+    expect(bed.to).toBeLessThan(180 - 9.5);
+    expect(camp.crown.filter((deg) => deg > bed.from && deg < bed.to)).toEqual([]);
+    // Off the cobbles and their kerb (0.3 m), no deeper than the bed behind Thank You, and 1.8 m long or more.
+    expect(bed.r - bed.w / 2).toBeGreaterThanOrEqual(camp.r + 0.3);
+    expect(bed.w).toBeLessThanOrEqual(flowers.w);
+    expect(((bed.to - bed.from) * Math.PI * bed.r) / 180).toBeGreaterThanOrEqual(1.8);
+    // Its wall (0.25 m thick) starts on the beach wall's line, runs round outside the soil and comes back to the
+    // kerb clear of the steps (1 m either side of their middle).
+    const wall = camp.bayWall.map(([x, z]) => ({ x, z }));
+    expect(apart(wall[0], { x: camp.beachWall[0][0][0], z: camp.beachWall[0][0][1] })).toBeLessThan(0.5);
+    for (const p of wall.slice(1, -1)) expect(fromFire(p) - 0.125).toBeGreaterThanOrEqual(bed.r + bed.w / 2 - 0.01);
+    for (const p of wall.slice(-2)) expect(p.x - 0.125 - 0.05 - fire.x).toBeGreaterThan(1);
+    expect(fromFire(wall[wall.length - 1])).toBeLessThan(camp.r + 0.4);
+    // The beach's bench stands 0.25 m clear of the wall's coping behind its back (0.255 m behind its middle).
+    const bench = map.town.benches.find((b) => fromFire(b) > camp.r && fromFire(b) < 12)!;
+    expect(Math.min(...wall.map((p) => p.z)) - 0.175 - (bench.z + 0.255)).toBeGreaterThanOrEqual(0.25);
   });
 
   it('puts no seat within reach of a board reader in the direction of the board', () => {
@@ -328,9 +350,9 @@ describe('Ember Point', () => {
         const [near, far] = [fromFire(c) - c.r, fromFire(c) + c.r];
         expect(far <= inner + 1e-6 || near >= inner + 1.8, `collider at ${c.x.toFixed(2)}, ${c.z.toFixed(2)}, ${near.toFixed(2)} to ${far.toFixed(2)} m out`).toBe(true);
       }
-      // What the camp adds stands solid: the stall, the Derby stand, the Totem, the stones and their sign, the
+      // What the camp adds stands solid: the stall, the bay's flower bed, the Totem, the stones and their sign, the
       // rack, the signpost, the lantern's pier and both of the arch's posts.
-      const at = [camp.stall, camp.derby, camp.totem, camp.stones, camp.skipSign, camp.rack, camp.signpost, camp.pier, ...archPosts(camp.arch, fire)];
+      const at = [camp.stall, atBearing(fire, camp.bayBed.r, (camp.bayBed.from + camp.bayBed.to) / 2), camp.totem, camp.stones, camp.skipSign, camp.rack, camp.signpost, camp.pier, ...archPosts(camp.arch, fire)];
       for (const p of at) expect(solids.some((c) => apart(c, p) < c.r + 0.7), `${p.x.toFixed(1)}, ${p.z.toFixed(1)}`).toBe(true);
     });
 
@@ -557,8 +579,8 @@ describe('Ember Point', () => {
       }
       // The beach's bottle is out of reach (2.6 m) of anyone within a step of a seat.
       for (const b of map.town.bottles.filter((k) => fromFire(k) < 15)) for (const s of seats) expect(apart(b, s), `bottle ${b.id}`).toBeGreaterThan(3.6);
-      // The skip sign and the Derby stand have no prompt, and no seat or board is read from where they stand.
-      for (const p of prompts) for (const quiet of [camp.skipSign, camp.derby]) expect(apart(p, quiet)).toBeGreaterThan(2.5);
+      // The skip sign has no prompt, and no seat or board is read from where it stands.
+      for (const p of prompts) expect(apart(p, camp.skipSign)).toBeGreaterThan(2.5);
     });
 
     it('mounts each board\'s number one catch over it, filling the mount whatever the fish, and a bare mount when it has none', () => {

@@ -62,6 +62,7 @@ const reading = (b: { x: number; z: number; facing: number }, note: string, time
   return { ...at(p.x, p.z, b.x, b.z, note, times), pitch: 0.12 };
 };
 const DUSK_NIGHT = { dusk: 0.53, night: 0.72 };
+const BOTH = { day: 0.3, night: 0.72 };
 /**
  * `--walk`: instead of the hero views, the waypoints of the routes players walk, each looking the way they would:
  * the first minutes, Reed's loop and the east loop, with a few spots at night. Desktop only.
@@ -121,7 +122,12 @@ export const WALK: Record<string, View> = {
   p17_arch: at(15.4, 11.4, CAMP.arch.x, CAMP.arch.z, "coming along the campfire lane: the signpost, the ANGLERS' REST arch and its lanterns"),
   p18_rim: at(14.4, 9.4, FIRE.x, FIRE.z - 1, 'from the shore by the lane: the stone ledge and seat wall on the cove side of the rim'),
   p19_back: at(FIRE.x + 5, FIRE.z - 4.6, FIRE.x + 7.6, FIRE.z + 1.5, 'behind the panels: the turf, the retaining wall, the hedge and the side of the stall'),
-  p21_wall: at(22.6, -5.4, 25.6, -2.6, 'from the beach: the low wall that holds the turf, the Derby stand and the hedge\'s end'),
+  p21_wall: at(22.6, -5.4, 25.6, -2.6, 'from the beach: the low wall that holds the turf, the bay\'s flower bed and the hedge\'s end'),
+  // The bay between Deep Sea and the beach steps, by day and at night: from the clear ring facing it, from the fire, the whole back wall from the cove side, and the bay from the beach.
+  d1_bay_ring: at(FIRE.x + 3.3 * Math.sin(2.775), FIRE.z + 3.3 * Math.cos(2.775), FIRE.x + 6 * Math.sin(2.775), FIRE.z + 6 * Math.cos(2.775), "in the clear ring facing the bay beside Deep Sea: its flower bed, the turf and the hedge's end", BOTH),
+  d2_bay_fire: at(FIRE.x - 1.2, FIRE.z - 1.2, FIRE.x + 6 * Math.sin(2.775), FIRE.z + 6 * Math.cos(2.775), 'from beside the fire to the bay beside Deep Sea', BOTH),
+  d3_back_wall: at(FIRE.x - 5, FIRE.z, FIRE.x + 6, FIRE.z, 'from the seat wall on the cove side: the whole back wall, Thank You and its flower bed on the left round to the bay and its bed on the right', BOTH),
+  d4_bay_beach: at(23.6, -6.6, FIRE.x, FIRE.z, "from the east end of the beach: the bench in front of the bay bed's wall, between the beach wall and the steps", BOTH),
   p20_beach_east: at(22.4, -7.2, 25.2, -6, "the east end of the beach: the stone pile, the skip sign and the fence down to the water"),
   pn1_gate: at(JUNCTION.x - 0.6, JUNCTION.z + 0.6, FIRE.x, FIRE.z, 'the way in at night: the crown of lights and the fire', { night: 0.72 }),
   pn3_stall: at(FIRE.x + 3.4, FIRE.z + 0.9, CAMP.stall.x, CAMP.stall.z, "Bram's Kettle at night, lit by its lantern", { night: 0.72 }),

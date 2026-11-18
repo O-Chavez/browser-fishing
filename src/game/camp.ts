@@ -972,7 +972,7 @@ export function buildStonePile(): { group: THREE.Group; solids: Solid[] } {
 
 // ---------- 10. the skip sign ----------
 
-/** A board whose canvas the caller writes on: what `buildSkipSign` and `buildDerbyStand` return. */
+/** A board whose canvas the caller writes on: what `buildSkipSign` returns. */
 export interface Writable {
   group: THREE.Group;
   solids: Solid[];
@@ -1198,50 +1198,7 @@ export function mountBoard(w: number, h: number): THREE.Group {
   return g;
 }
 
-// ---------- 14. the derby stand ----------
-
-/**
- * The Weekly Derby's stand: two posts and a framed slate under a small teal roof, the size of the Thank You board
- * (`buildThanks`). The slate face reads "WEEKLY DERBY, coming soon" until the caller redraws it.
- */
-export function buildDerbyStand(): Writable {
-  const g = new THREE.Group();
-  for (const lx of [-0.6, 0.6]) {
-    const post = cyl(0.06, 0.08, 2.2, DARK, 8);
-    post.position.set(lx, 1.1, -BEHIND);
-    g.add(post);
-  }
-  const frame = rbox(1.6, 1.5, 0.1, FRAME, 0.04);
-  frame.position.set(0, 1.55, 0);
-  const face = textPlane(1.45, 1.35, 384);
-  face.mesh.position.set(0, 1.55, 0.06);
-  const roof = rbox(1.9, 0.1, 0.55, 0x3f8f8a, 0.04);
-  roof.position.set(0, 2.36, 0);
-  roof.rotation.x = 0.15;
-  const back = backBrace(1.5, 1.4);
-  back.position.set(0, 1.55, -0.05);
-  g.add(frame, face.mesh, roof, back);
-  const c = face.ctx;
-  const { width: w, height: h } = c.canvas;
-  c.fillStyle = '#2f3b36';
-  c.fillRect(0, 0, w, h);
-  c.strokeStyle = '#8fd1c7';
-  c.lineWidth = 8;
-  c.strokeRect(5, 5, w - 10, h - 10);
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillStyle = '#f4efe2';
-  c.font = `900 56px ${FONT}`;
-  c.fillText('WEEKLY', w / 2, h * 0.3, w - 40);
-  c.fillText('DERBY', w / 2, h * 0.47, w - 40);
-  c.fillStyle = '#8fd1c7';
-  c.font = `700 34px ${FONT}`;
-  c.fillText('coming soon', w / 2, h * 0.7, w - 40);
-  face.tex.needsUpdate = true;
-  return { group: g, solids: [[-0.6, 0, 0.25], [0.6, 0, 0.25]], ctx: c, tex: face.tex };
-}
-
-// ---------- 15. the lantern pier ----------
+// ---------- 14. the lantern pier ----------
 
 /**
  * A squat stone pier, 0.55 m tall, with a lantern on top (its glass is the lamp handed back). The lantern stands

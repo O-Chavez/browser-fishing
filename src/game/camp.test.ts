@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { FISH } from '../data/content';
 import {
-  KETTLE_COUNTER_Z, KETTLE_KEEPER, buildCrownPost, buildDerbyStand, buildFishMount, buildHearth, buildHedgeArc, buildHedgeRun,
+  KETTLE_COUNTER_Z, KETTLE_KEEPER, buildCrownPost, buildFishMount, buildHearth, buildHedgeArc, buildHedgeRun,
   buildKettleStall, buildLanternPier, buildPicketRun, buildPlaque, buildRocketRack, buildSignpost, buildSkipSign, buildSteps,
   buildGatePier, buildStoneArc, buildStonePile, buildStoneRun, buildTotem, mountBoard, writeSkipSign,
 } from './camp';
@@ -363,17 +363,6 @@ describe('the small props', () => {
     expect(new THREE.Box3().setFromObject(pale(big.group)[0]).getSize(new THREE.Vector3()).x).toBeCloseTo(1.48, 2);
     expect(big.feet).toEqual([-0.65, 0.65]);
     expect(pale(mountBoard(1.6, 1.3))).toHaveLength(1);
-  });
-  it('has a derby stand the size of the Thank You board', () => {
-    const d = buildDerbyStand();
-    const bb = sane(d.group);
-    expect(bb.max.x - bb.min.x).toBeGreaterThan(1.8);
-    expect(bb.max.x - bb.min.x).toBeLessThan(2.0);
-    expect(bb.max.y).toBeGreaterThan(2.3);
-    expect(bb.max.y).toBeLessThan(2.6);
-    expect(d.solids.length).toBe(2);
-    inside(d.solids, bb);
-    expect(d.tex).toBeInstanceOf(THREE.CanvasTexture);
   });
   it('has a lantern pier no taller than 0.6 m under its lantern, which glows', () => {
     const p = buildLanternPier();

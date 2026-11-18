@@ -13,7 +13,7 @@ import { boxUV, groundTexture, shingleTexture, sidingTexture, stoneTexture } fro
 import { faceHead } from './faces';
 import { LIGHTS_MAST } from './baitshop';
 import {
-  buildCrownPost, buildDerbyStand, buildGatePier, buildHedgeArc, buildKettleStall, buildLanternPier, buildPicketRun, buildRocketRack, buildSignpost,
+  buildCrownPost, buildGatePier, buildHedgeArc, buildKettleStall, buildLanternPier, buildPicketRun, buildRocketRack, buildSignpost,
   buildSkipSign, buildSteps, buildStoneArc, buildStonePile, buildStoneRun, buildTotem, TREAD_DEPTH as STEP_DEPTH, writePlaque,
 } from './camp';
 import type { Circle } from './player';
@@ -1229,7 +1229,7 @@ export class Town {
    * on the beach; a low stone seat wall with a plank top along the cove-side rim, with the lantern's pier at its
    * middle and a stone ledge outside it down to the water; and the crown of lights, tall posts round the rim with one
    * run of bulbs from post to post, closed over the way in by the gate arch's post. Behind it the retaining wall, the
-   * hedge and the picket fence; the stall in its bay and the Derby stand in its own; the gate arch across the lane
+   * hedge and the picket fence; the stall in its bay, a flower bed behind Thank You and one in the bay past Deep Sea; the gate arch across the lane
    * and the signpost where the lanes meet; and down the steps, the beach's Totem, stones and sign and the jetty's
    * rocket rack. The boards and the fire itself are the hub's (hub.ts). Two lights that cast: the stall's lantern
    * and the beach's.
@@ -1392,6 +1392,9 @@ export class Town {
     const beach = groundHeight(bx, bz);
     for (const run of camp.beachWall) this.prop(buildStoneRun(run, y + 0.3 - beach, 0.35, () => beach), 0, 0, 0, 0);
     this.flowerBed(camp.flowers);
+    this.flowerBed(camp.bayBed);
+    // The bay bed's wall, thinner than the beach wall it runs on from, with the same top.
+    this.prop(buildStoneRun(camp.bayWall, y + 0.3 - beach, 0.25, () => beach), 0, 0, 0, 0);
     this.relayCamp(camp);
 
     // The stall in its bay, Bram's Kettle; its lantern under the awning casts light.
@@ -1402,10 +1405,6 @@ export class Town {
     stall.lantern.add(light);
     this.lights.push(light);
     this.prop(stall, camp.stall.x, camp.stall.z, camp.stall.facing, y);
-    // The Derby stand in its bay, on the lower of its two posts' ground.
-    const { derby } = camp;
-    const foot = Math.min(...[-0.6, 0.6].map((lx) => lie(derby.x + lx * Math.cos(derby.facing), derby.z - lx * Math.sin(derby.facing))));
-    this.prop(buildDerbyStand(), derby.x, derby.z, derby.facing, foot);
 
     // The beach's lantern on its short stone pier by the foot of the steps, which casts the beach's light.
     const bl = camp.beachLantern;
@@ -1566,7 +1565,11 @@ export class Town {
     this.group.add(m);
   }
 
-  /** A curved flower bed (an arc round the campfire, `w` deep): a low border of soil, planted like the town's beds. */
+  /**
+   * A curved flower bed (an arc round the campfire, `w` deep): a low border of soil, planted like the town's beds.
+   * Its top stands a hand above the ground at its fire-side edge, and its soil runs down to the ground at its outer
+   * edge, so a bed on a bank stands level.
+   */
   private flowerBed(bed: Arc & { w: number }): void {
     const fire = this.map.campfire;
     const rad = (deg: number) => (deg * Math.PI) / 180;
@@ -1574,11 +1577,17 @@ export class Town {
     shape.absarc(0, 0, bed.r + bed.w / 2, rad(bed.from - 90), rad(bed.to - 90), false);
     shape.absarc(0, 0, bed.r - bed.w / 2, rad(bed.to - 90), rad(bed.from - 90), true);
     shape.closePath();
-    const soil = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false, curveSegments: 12 }).rotateX(-Math.PI / 2), mat(0x6b4a2b));
-    soil.castShadow = soil.receiveShadow = true;
-    const mid = atBearing(fire, bed.r, (bed.from + bed.to) / 2);
+    const mid = atBearing(fire, bed.r - bed.w / 2, (bed.from + bed.to) / 2);
     const top = Math.max(groundHeight(mid.x, mid.z), terrainHeight(mid.x, mid.z)) + 0.16;
-    this.at(soil, fire.x, fire.z, 0, top - 0.3);
+    let foot = top - 0.16;
+    for (let i = 0; i <= 8; i++) {
+      const p = atBearing(fire, bed.r + bed.w / 2, bed.from + ((bed.to - bed.from) * i) / 8);
+      foot = Math.min(foot, groundHeight(p.x, p.z), terrainHeight(p.x, p.z));
+    }
+    const depth = top - foot + 0.14;
+    const soil = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 12 }).rotateX(-Math.PI / 2), mat(0x6b4a2b));
+    soil.castShadow = soil.receiveShadow = true;
+    this.at(soil, fire.x, fire.z, 0, top - depth);
     const r = rnd(Math.floor(bed.r * 31 + bed.from * 7 + 100));
     const cols = [0xff6f91, 0xffd23a, 0xffffff, 0xc77dff, 0xff9a3c];
     const length = rad(bed.to - bed.from) * bed.r;

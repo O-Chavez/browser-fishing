@@ -10,6 +10,10 @@ beach's logs east of it and the Totem on the tip west of it; the crown hangs fro
 flower bed fills the wedge behind Thank You; a plaque at Bram's counter says "Light it on the jetty"; the open floor
 on the cove side stays clear of props.
 
+**Changed after the build (Oscar, 2026-11-17):** the Derby stand is out of this release and comes back when the Weekly
+Derby is built. Its bay holds a flower bed like the one behind Thank You. Where the text below names the Derby stand,
+read that bed.
+
 **The idea.** The camp is a small open-air theatre on the east headland, facing the cove. One round terrace holds the
 fire and its seats; its back is a wall of five panels (Thank You, Lake Legends, the host's stall, Deep Sea, the Derby
 stand); the cove side is a stone-faced rim. It is the cove's beacon: every player on the pier, the jetties, the quay
