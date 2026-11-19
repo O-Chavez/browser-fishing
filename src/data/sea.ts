@@ -204,6 +204,103 @@ export function deepLookAt(mood: number): DeepLook {
 }
 
 /**
+ * The Abyss's look (Oscar's picks, 2026-11-19: the violet band, the whitecaps back): a standing night, the way the
+ * Twilight is a standing dusk. It is laid over `DEEP_LOOKS.abyss` by `abyssAt`, so `amount` 0 is the old plum storm and
+ * 1 the look below; one block to tune live, read every frame.
+ *
+ * The sky is near black whatever the clock says (`sky` overhead, `fog` at the horizon and in the fog), with a `band` of
+ * dim storm-light on the horizon between the sea and the cloud base: `bandHeight` tall (the share of the way up the sky
+ * at which it has faded to about a third), strongest out to sea and broken along the horizon by `bandBreak` (0 an even
+ * ring). The far cloud is haze in front of it and lets `cloudBand` of it through, so the deck's skirts read as darker
+ * shapes in the band. The clock still passes: the band, the foam and the light on the water keep `night` of their
+ * brightness at full night. `cloud` is the deck's lit tops and shaded undersides, and `hemi` scales the sky light on the
+ * deck and players (1 leaves it alone).
+ *
+ * The water is black and glassy (`water` near the boat, `deep` far off), and the swell reads at all times by the band's
+ * light. It mirrors the band at glancing angles, so crests get a rim of light: `rim` is how strong that rim is on top of
+ * the plain reflection, `rimWidth` how far up the mirrored sky the band reaches (wider lights more of each face), and
+ * `rimBreak` how much it comes and goes along a crest with the chop (0 an even line on every crest, 1 thinning to
+ * nothing in places). `crest` is how much of the band's light the top of each swell catches, and `face` the faint sheen
+ * a face leaning toward the boat keeps, stepping in value from facet to facet, so a wall of water beside the boat
+ * still has a surface (keep it below the rim).
+ *
+ * `foam` is the whitecaps: its `color`, and how much is left (0..1) of the storm's own foam (the `chop`'s, the foam down
+ * the swell's `face`s, the wind `streak`s and the `caps` along the swell's crests; all gone); `hull` is how wide the
+ * foam lapping the hull is (1 as in the other zones). In their place the Abyss has `lines`: a thin torn line of dim
+ * foam lying along a breaking ridge just over its top (0 none; how far it goes toward the foam's colour, so under 1 it
+ * stays a dim violet-grey). `lineWidth` is how far down the ridge's leading face a line reaches (as a slope, so a
+ * sharper ridge carries a thinner line; never more than a metre or so of water or a few pixels), `lineHeight` how high
+ * up the chop a ridge must stand to carry one, and `lineBare` about the share of ridges with none. None lie within
+ * about 10 m of the boat, where the chop is cut down to humps. `spindrift`, `rain` and `screenSpray` are how bright
+ * those stay against the black (1 is the white of the other zones), and `bowSpray` is the bow spray's colour in the
+ * lamps.
+ *
+ * The boat is the only warm light. `pool` is the lamps' light on the water hugging the hull: its `color`, how strong
+ * the soft glow is (`glow`; it tints the black water, so keep it low), full within `core` metres of the hull and gone by
+ * `reach` (through the air, so a swell towering beside the boat is lit only at its foot), with a few thin glints along
+ * the hull `glints` times as bright as the glow; `foam` is how much brighter the foam in it shows, and `rain` how many
+ * times brighter than elsewhere the lamps catch the rain.
+ *
+ * Lightning silhouettes the world: `flash` lights the sky and the far haze from behind while the fog, the water and the
+ * nearer cloud stay dark. `sky` is how bright the sky goes toward the bolt and `wide` the share of that on the far side
+ * of the sky; `haze` is how much of it shows through the far cloud, `edge` how brightly the nearer cloud's rims catch
+ * it; `glint` is the narrow hard light the water throws back and `crests` the light along the very edge of its crests;
+ * `rain` is how much the rain catches, and `rim` the cold light (`rimColor`) on the boat, deck and players (the other
+ * zones wash everything with 2.5 of near white), leaning `lean` of the way toward the bolt. `sheet` is sheet
+ * lightning, a flicker inside the cloud with no bolt and no thunder: one every `every` seconds (where bolts are rarest,
+ * and where they are most frequent), each `length` seconds long at `strength` of its brightness, lighting a patch of
+ * cloud `size` wide (1 a tight patch, 0.2 a third of the sky): `cloud` is how brightly the cloud bodies glow there and
+ * `sky` the gaps and the horizon near it.
+ */
+export const ABYSS = {
+  amount: 1,
+  band: 0x524478,
+  bandHeight: 0.17,
+  bandBreak: 0.35,
+  cloudBand: 0.55,
+  night: 0.72,
+  sky: 0x050409,
+  fog: 0x0d0a14,
+  cloud: [0x17131f, 0x09070d] as [top: number, bottom: number],
+  hemi: 1,
+  water: 0x0a0c14,
+  deep: 0x030407,
+  rim: 1,
+  rimWidth: 0.14,
+  rimBreak: 0.55,
+  crest: 0.17,
+  face: 0.4,
+  foam: { color: 0x6c6884, chop: 0, face: 0, streak: 0, caps: 0, hull: 0.4, lines: 0.8, lineWidth: 0.3, lineHeight: 0.45, lineBare: 0.1 },
+  spindrift: 0.08,
+  bowSpray: 0x8a6a48,
+  rain: 0.2,
+  screenSpray: 0.3,
+  pool: { color: 0xffad59, glow: 0.05, core: 1.2, reach: 4.2, glints: 6, foam: 1.5, rain: 2.4 },
+  flash: { color: 0xd9d6ff, sky: 1.3, wide: 0.12, haze: 0.7, edge: 1.2, glint: 1.2, crests: 0.3, rain: 0.35, rim: 0.4, rimColor: 0x8ea2e8, lean: 0.8 },
+  sheet: { color: 0xb8a8f0, every: [5, 1.6] as [rare: number, often: number], length: [0.35, 0.9] as [number, number], strength: [0.35, 1] as [number, number], size: 0.45, cloud: 0.5, sky: 0.1 },
+};
+
+/**
+ * How far the Abyss's own look is in (0..1): nothing through the Twilight, easing in over the same markers as its
+ * colours (`DEEP_LOOK_STOPS`, 86 to 97), times `ABYSS.amount`.
+ */
+export function abyssAt(mood: number): number {
+  const s = DEEP_LOOK_STOPS;
+  const m0 = seaMood(s[s.length - 2][0]), m1 = seaMood(s[s.length - 1][0]);
+  return ABYSS.amount * Math.min(1, Math.max(0, (mood - m0) / (m1 - m0)));
+}
+
+/**
+ * How brightly a flicker of sheet lightning lights the cloud (0..1), `age` seconds into one `length` seconds long: it
+ * swells and dies away, fluttering as it goes; `k` (0..1) gives each flicker its own flutter.
+ */
+export function sheetGlow(age: number, length: number, k = 0): number {
+  if (age <= 0 || age >= length) return 0;
+  const swell = Math.sin((Math.PI * age) / length) ** 0.6;
+  return Math.min(1, swell * (0.6 + 0.4 * Math.sin(age * 41 + k * 6.283) * Math.sin(age * 17 + k * 11)));
+}
+
+/**
  * How dark the sky gets at night out at sea (Oscar, 2026-10-31: much darker the further out). One knob
  * block to tweak: `points` are [league, darkness 0..1] (eased between), and `floor` is the share of the
  * sky's light that is left at the darkest (full night, darkness 1): 0 is pitch black, 0.05 a faint
@@ -559,3 +656,114 @@ export function boatMotion(t: number, mood: number, out: BoatMotion = { heave: 0
   out.roll = clamp(-Math.atan2(north - south, 2 * side) * follow);
   return out;
 }
+
+/**
+ * What lurks in the Abyss (Oscar, 2026-11-19): the zone's three legends glimpsed from the deck, so what a player sees
+ * out there is what they might hook. Atmosphere only: nothing here touches a fight, a hold or the network, and each
+ * player sees their own. Most of the time nothing is there.
+ *
+ * They come in over the markers drawn between the depths in `from`, and `level` (0..1) climbs from the first marker to
+ * `deep`: at level 1 sightings come `busy` times as often, and reach all the way in from the far end of their `range`
+ * (metres from the boat, far end first) to the near one; at level 0 they stop `closer` of the way short of it. Each
+ * `every` is the mean seconds between sightings of that kind at level 0; far sightings (the Leviathan's and the
+ * Kraken's) never overlap, and at least `rest` seconds of nothing follow each.
+ *
+ * Far things are silhouettes: near black, lit `light` of their colour by day and at night and `flashLit` more in a
+ * lightning flash, their wet hide catching a pale `sheen` (most on its upper faces), and taking up to `haze` of the
+ * fog's colour with distance (the fog's colour without the lightning in it, so they stand stark against a lit sky).
+ * Their lowest `murk` metres are lost in the fog as the far water is, so they stand in the sea and not over it.
+ *
+ * `leviathan`: a plated serpent `length` m long and `girth` m thick, arching through the swell in `humps` humps that
+ * stand `hump` m out of the water, bone spines `spine` m tall down its back, the ember seams between its plates
+ * glowing `seams` at night (0 off; less by day and in a flash). A `pass` surfaces head first over `rise` s and swims
+ * across at `speed` m/s for that many seconds, its head carried `headUp` of the way to a breach's height ahead of
+ * the humps, then sinks. A `flash` sighting stands there for one lightning flash (`flashReared` of them with the
+ * neck up), the bolt held until the swell leaves the view to it clear, with sky behind it. A `breach` rears the head
+ * and `neck` m of neck `height` m up over `up` s, eyes lit, hangs for `hang` s and crashes back in `down` s.
+ *
+ * `kraken`: one arm `girth` m thick at the root rising `height` m out of a crest over `rise` s, hanging `hang` s with
+ * a slow `curl` (radians at the tip, more on some arms) and sliding back under in `sink` s; or `flashArms` of them
+ * at once, shown by one flash.
+ *
+ * `eyes` (the Drowned Dreamer's): `count` eyes of radius `size` m open just under the surface `range` m from the
+ * hull, off to the side of where the player is looking, the big one first and the rest about `open` s apart; their
+ * pupils wander, then find the player about `notice` s on and follow them. They stay `stay` s, blinking, and shut
+ * (`shut` s) at a lightning strike or when looked at within `shyAngle` radians for `shyAfter` s (`shy` off: they
+ * bear being looked at), then open somewhere else `away` s later, up to `moves` times. `color` is the iris (the
+ * Dreamer's mint; Oscar's pick, 2026-11-19) and `pupil` its dark, `glow` the light round each on the water; seen low
+ * across the water an eye is drawn up to `stretch` times as long toward the viewer, so it stays an eye and not a line.
+ * Lite graphics drops the glow and opens `liteCount` at most.
+ */
+export const LURK = {
+  from: [94, 106] as [number, number],
+  deep: 160,
+  busy: 1.8,
+  closer: 0.35,
+  rest: 30,
+  light: [0.5, 0.16] as [number, number],
+  flashLit: 0.6,
+  sheen: 0.06,
+  haze: 0.55,
+  murk: 7,
+  leviathan: {
+    every: { pass: 360, flash: 240, breach: 1500 },
+    range: [180, 90] as [number, number],
+    length: 100,
+    girth: 3.4,
+    humps: 4.5,
+    hump: 9,
+    spine: 2.2,
+    seams: 0.22,
+    speed: 5,
+    headUp: 0.4,
+    pass: [12, 20] as [number, number],
+    rise: 3.5,
+    flashReared: 0.3,
+    breach: { height: 24, neck: 30, up: 2.4, hang: 2.6, down: 1.3 },
+    body: 0x2c2c42,
+    belly: 0x4c3c44,
+    bone: 0xf4e8cc,
+    ember: 0xff7a2a,
+  },
+  kraken: {
+    every: { arm: 300, flash: 720 },
+    range: [150, 60] as [number, number],
+    height: [22, 36] as [number, number],
+    girth: 3,
+    curl: 2.6,
+    rise: 5,
+    hang: [5, 9] as [number, number],
+    sink: 4,
+    flashArms: [3, 5] as [number, number],
+    body: 0x6a1a36,
+    belly: 0xe07a96,
+    sucker: 0xffc8d6,
+  },
+  eyes: {
+    every: 110,
+    range: [5, 25] as [number, number],
+    count: [3, 9] as [number, number],
+    size: [0.25, 0.65] as [number, number],
+    color: 0x9affd0,
+    pupil: 0x03100c,
+    glow: 1,
+    stretch: 2.5,
+    open: 0.5,
+    notice: 1.6,
+    stay: [14, 26] as [number, number],
+    shut: 0.25,
+    shy: true,
+    shyAngle: 0.13,
+    shyAfter: 0.5,
+    away: [6, 14] as [number, number],
+    moves: 2,
+    liteCount: 5,
+  },
+};
+
+/** How much of the Abyss's lurkers shows (0..1): nothing before the zone, easing in over its first markers (`LURK.from`). */
+export const lurkAt = (mood: number): number => smooth(seaMood(LURK.from[0]), seaMood(LURK.from[1]), mood);
+
+/** How far into the Abyss the sea is drawn (0..1), for the lurkers' pacing: 0 at its first marker, 1 by `LURK.deep`. */
+export const lurkLevel = (mood: number): number =>
+  Math.min(1, Math.max(0, (mood - seaMood(SEA_LOOK_DEPTH.abyss.from)) / (seaMood(LURK.deep) - seaMood(SEA_LOOK_DEPTH.abyss.from))));

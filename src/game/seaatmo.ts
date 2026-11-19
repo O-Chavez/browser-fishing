@@ -15,7 +15,7 @@ import type { SkyUniforms } from './sea';
  */
 export class Rain {
   readonly mesh: THREE.Mesh;
-  private u: SkyUniforms & { uTime: { value: number }; uAmount: { value: number }; uVel: { value: THREE.Vector3 }; uLamps: { value: number }; uLit: { value: number } };
+  private u: SkyUniforms & { uTime: { value: number }; uAmount: { value: number }; uVel: { value: THREE.Vector3 }; uLamps: { value: number }; uLit: { value: number }; uStand: { value: number }; uFlash: { value: number } };
 
   constructor(sky: SkyUniforms) {
     const n = RAIN.streaks;
@@ -37,7 +37,7 @@ export class Rain {
     g.setAttribute('seed', new THREE.BufferAttribute(seed, 4));
     g.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
     g.setIndex(idx);
-    this.u = { ...sky, uTime: { value: 0 }, uAmount: { value: 0 }, uVel: { value: new THREE.Vector3(0, -1, 0) }, uLamps: { value: 0 }, uLit: { value: 1 } };
+    this.u = { ...sky, uTime: { value: 0 }, uAmount: { value: 0 }, uVel: { value: new THREE.Vector3(0, -1, 0) }, uLamps: { value: 0 }, uLit: { value: 1 }, uStand: { value: 1 }, uFlash: { value: 0 } };
     const [bx, by, bz] = RAIN.box;
     const mat = new THREE.ShaderMaterial({
       uniforms: this.u as unknown as Record<string, THREE.IUniform>,
@@ -64,10 +64,11 @@ export class Rain {
           vWorld = p;
           gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
         }`,
-      fragmentShader: `uniform vec3 uFogColor; uniform float uLamps, uLit; varying float vA; varying vec3 vWorld;
+      fragmentShader: `uniform vec3 uFogColor, uFlashCol; uniform float uLamps, uLit, uStand, uFlash; varying float vA; varying vec3 vWorld;
         void main(){
-          // Rain takes the sky's light, so it dims with the night (uLit dims its white too); near the boat the lamps catch it.
-          vec3 col = mix(uFogColor, vec3(uLit), 0.5) + vec3(1.0, 0.8, 0.55) * uLamps * 0.45 * exp(-length(vWorld.xz) * 0.22);
+          // Rain takes the sky's light, so it dims with the night (uLit dims its white too); near the boat the lamps catch
+          // it. In the Abyss it stands out less from the black (uStand), and a bolt's flash catches it.
+          vec3 col = mix(uFogColor, vec3(uLit), 0.5 * uStand) + vec3(1.0, 0.8, 0.55) * uLamps * 0.45 * exp(-length(vWorld.xz) * 0.22) + uFlashCol * uFlash;
           gl_FragColor = vec4(col, vA * ${RAIN.opacity.toFixed(2)});
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -83,11 +84,17 @@ export class Rain {
     this.mesh.geometry.setDrawRange(0, (on ? RAIN.streaks / 2 : RAIN.streaks) * 6);
   }
 
+  /** How much of a bolt's flash the rain catches (the Abyss). */
+  flash(k: number): void {
+    this.u.uFlash.value = k;
+  }
+
   /**
-   * `amount`: how hard it rains (0..1); `storm`: how hard the wind blows it (0..1); `wind`: the way it blows; `lit`: how
-   * white the streaks are (1 half white).
+   * `amount`: how hard it rains (0..1); `storm`: how hard the wind blows it (0..1); `wind`: the way it blows; `lamps`: how
+   * brightly the boat's lamps catch it; `lit`: how white the streaks are (1 half white; a look with its own night dims
+   * them); `stand`: how far they stand out from the fog (1, less against the Abyss's black).
    */
-  update(t: number, amount: number, storm: number, wind: THREE.Vector2, lamps: number, lit = 1): void {
+  update(t: number, amount: number, storm: number, wind: THREE.Vector2, lamps: number, lit = 1, stand = 1): void {
     this.mesh.visible = amount > 0;
     if (!amount) return;
     const blow = RAIN.blow[0] + (RAIN.blow[1] - RAIN.blow[0]) * storm;
@@ -96,6 +103,7 @@ export class Rain {
     this.u.uVel.value.set(wind.x * blow, -RAIN.fall, wind.y * blow);
     this.u.uLamps.value = lamps;
     this.u.uLit.value = lit;
+    this.u.uStand.value = stand;
   }
 }
 

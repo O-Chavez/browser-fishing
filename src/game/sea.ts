@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BOAT, CHINE, KEEL, KELP, SHELF_FAR, DEEP_LOOKS, boatMotion, hullHalfWidth, lightningAt, kelpAt, nightRamp, rainAt, seaHeight, stormAt, type BoatMotion, type DeepLook } from '../data/sea';
+import { ABYSS, BOAT, CHINE, KEEL, KELP, SHELF_FAR, DEEP_LOOKS, abyssAt, boatMotion, hullHalfWidth, lightningAt, kelpAt, nightRamp, rainAt, seaHeight, sheetGlow, stormAt, type BoatMotion, type DeepLook } from '../data/sea';
+import { AbyssLurk } from './abysslurk';
 import { mulberry } from './env';
 import { Jellies } from './jellies';
 import { Gulls, MarkerBuoy, Rain } from './seaatmo';
@@ -29,16 +30,78 @@ export interface SkyUniforms {
   uMoonCol: { value: THREE.Color };
   /** At sea: the hidden sun's glow (zero ashore). */
   uGlow: { value: THREE.Color };
+  /** How far the Abyss's look is in (`abyssAt`); at 0 the shaders skip everything below. */
+  uAbyss: { value: number };
+  /** The Abyss's light in the sky (`ABYSS`): the band on the horizon (its colour; how tall and how broken)... */
+  uBand: { value: THREE.Color };
+  uBandShape: { value: THREE.Vector2 };
+  /** ...a bolt's flash behind the cloud (the way to the bolt, its light now, and the share of it on the far side of the sky)... */
+  uFlashDir: { value: THREE.Vector3 };
+  uFlashCol: { value: THREE.Color };
+  uFlashWide: { value: number };
+  /** ...and sheet lightning inside the cloud (the way to it, its light on the cloud and on the sky, and how tight the patch is). */
+  uSheetDir: { value: THREE.Vector3 };
+  uSheetCol: { value: THREE.Color };
+  uSheetSky: { value: number };
+  uSheetSize: { value: number };
+  /** Up in the sea's frame, which the horizon and its band heave with. */
+  uSeaUp: { value: THREE.Vector3 };
 }
 
+/** The Abyss's uniforms at rest: not in, so every other sky is drawn as it always was. */
+export const abyssSkyUniforms = () => ({
+  uAbyss: { value: 0 },
+  uBand: { value: new THREE.Color(0) },
+  uBandShape: { value: new THREE.Vector2(0.1, 0) },
+  uFlashDir: { value: new THREE.Vector3(0, 0.3, -1).normalize() },
+  uFlashCol: { value: new THREE.Color(0) },
+  uFlashWide: { value: 0.2 },
+  uSheetDir: { value: new THREE.Vector3(0, 0.3, -1).normalize() },
+  uSheetCol: { value: new THREE.Color(0) },
+  uSheetSky: { value: 0.5 },
+  uSheetSize: { value: 0.5 },
+  uSeaUp: { value: new THREE.Vector3(0, 1, 0) },
+});
+
+/**
+ * GLSL shared by the sky and the water that mirrors it: the Abyss's light along `d` (a unit direction, y up the sky).
+ * `abyssBand` is the storm-light on the horizon, fading by `tall` up the sky, strongest out to sea (-z) and broken along
+ * the horizon; `abyssFlash` is a bolt lighting the sky from behind, brightest toward the bolt, plus sheet lightning's patch.
+ */
+export const ABYSS_SKY_GLSL = `
+uniform vec3 uBand, uFlashDir, uFlashCol, uSheetDir, uSheetCol; uniform vec2 uBandShape; uniform float uAbyss, uFlashWide, uSheetSky, uSheetSize;
+vec3 abyssBand(vec3 d, float tall){
+  vec2 a = d.xz / max(length(d.xz), 0.0001);
+  float gap = 0.6 * (0.5 + 0.5 * a.y) + 0.4 * (0.5 + 0.5 * (a.x * (16.0 * a.x * a.x * a.x * a.x - 20.0 * a.x * a.x + 5.0)));
+  return uBand * exp(-pow(max(d.y, 0.0) / tall, 1.5)) * (1.0 - uBandShape.y * gap);
+}
+vec3 abyssFlash(vec3 d){
+  float f = max(dot(d, uFlashDir), 0.0);
+  float s = max(dot(d, uSheetDir), 0.0);
+  return uFlashCol * (uFlashWide + (1.0 - uFlashWide) * f * f * f) * mix(1.0, 0.5, max(d.y, 0.0))
+    + uSheetCol * uSheetSky * pow(s, 2.0 + 14.0 * uSheetSize);
+}`;
+
+/**
+ * The water's shaders. With `ABYSS` defined they carry the Abyss's own shading (`ABYSS` in data/sea.ts) as well; the sea
+ * draws that build only where the Abyss's look is in, so the other zones run the shader they always did.
+ */
 const seaVert = `
 ${WAVE_GLSL}
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
+#ifdef ABYSS
+uniform vec2 uWind;
+varying float vRidge;
+#endif
 void main(){
   vec3 d, n; float hc, hs, att;
   seaWaves(position.xz, d, n, hc, hs, att);
   vec3 p = position + d;
   vHc = hc; vHs = hs; vAtt = att;
+#ifdef ABYSS
+  // The water's slope along the wind, in the sea's own frame: nothing at the top of a ridge, above it down its leading face.
+  vRidge = dot(n.xz, uWind) / max(n.y, 0.05);
+#endif
   vec4 w = modelMatrix * vec4(p, 1.0);
   vWorld = w.xyz;
   vN = mat3(modelMatrix) * n;
@@ -50,6 +113,15 @@ uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFog
 uniform vec3 uKelpCol, uKelpCol2, uShallow, uDeep, uFar, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol, uGlow;
 uniform vec2 uWind;
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
+#ifdef ABYSS
+uniform vec3 uSeaUp, uCrestLit, uFaceLit, uRim, uPoolCol; uniform vec4 uFoamKeep, uLines; uniform vec2 uPool, uGlint; uniform float uPoolFoam, uPoolGlint, uHullFoam;
+${ABYSS_SKY_GLSL}
+varying float vRidge;
+// How much of one kind of the storm's foam the Abyss keeps (uFoamKeep).
+#define KEEP(k) * uFoamKeep.k
+#else
+#define KEEP(k)
+#endif
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
@@ -87,7 +159,36 @@ void main(){
   // Far off, the waves' faces mirror the sky higher up, not the pale haze at the horizon.
   sky = mix(sky, uSkyT, farOut * 0.85);
   float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
+#ifdef ABYSS
+  // How high up the chop this point is where the chop is cut down (near the boat and far off): for the Abyss's lines of foam.
+  float crestN = clamp(vHc / max(uAmpChop * vAtt, 0.01) * 0.5 + 0.5, 0.0, 1.0);
+  vec3 rimLight;
+  {
+    // The Abyss: the top of each swell catches a little of the horizon's storm-light, so the black water still reads,
+    // and a face leaning toward the boat keeps a very faint sheen, stepping in value from facet to facet and stronger
+    // toward its top, so a wall of water beside the boat has a surface instead of being a black panel.
+    vec3 facet = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+    facet *= sign(facet.y);
+    float lean = dot(facet.xz, -normalize(vWorld.xz + 0.0001));
+    base += uCrestLit * (0.6 * smoothstep(0.45, 1.0, swellCrest) + 0.4 * lit)
+      + uFaceLit * (0.3 + 0.7 * swellCrest) * smoothstep(0.08, 0.75, lean) * (1.0 - smoothstep(25.0, 80.0, dist));
+    // The water mirrors the band on the horizon, in the sea's own frame (the horizon heaves with it). Seen edge-on
+    // that is a rim of light along a crest, and it comes and goes along the crest with the chop and a slow drift of
+    // the water (uRim.z): wide and bright where it catches, thinning to nothing between.
+    float catchK = smoothstep(0.36, 0.6, noise(vWorld.xz * 0.06 + vec2(uTime * 0.03, 0.0)) * 0.5 + noise(vWorld.xz * 0.23 + 7.0) * 0.22 + crest * 0.28);
+    float rimK = mix(1.0, catchK, uRim.z);
+    vec3 Rs = vec3(R.x, dot(R, uSeaUp), R.z);
+    vec3 bandR = abyssBand(Rs, uRim.y * mix(1.0, 0.3 + 1.1 * catchK, uRim.z)) * rimK;
+    sky += bandR;
+    // Lightning lights only the very edge of a crest and throws narrow glints back at the bolt, so the faces stay black
+    // under a bright sky.
+    float edge = fres * fres;
+    rimLight = bandR * uRim.x * edge + abyssFlash(Rs) * uGlint.y * edge * edge * rimK + uFlashCol * uGlint.x * pow(max(dot(R, uFlashDir), 0.0), 400.0);
+  }
+  vec3 col = mix(base, sky, clamp(fres * 0.6 + 0.03, 0.0, 1.0)) + rimLight;
+#else
   vec3 col = mix(base, sky, clamp(fres * 0.6 + 0.03, 0.0, 1.0));
+#endif
   float sp = max(dot(R, uSunDir), 0.0);
   col += uSunCol * uSunVis * (pow(sp, 350.0) * 4.0 + pow(sp, 30.0) * 0.15);
   col += uSunCol * (1.0 - uSunVis) * pow(sp, 8.0) * 0.08;
@@ -113,41 +214,110 @@ void main(){
     kc = mix(kc, uKelpCol * 1.7, bulb);
     col = mix(col, kc * (0.85 + 0.35 * crest), kelpMat * 0.96);
   }
+  // How much foam is on the water here (the Abyss's lamps light it).
+  float foamy = 0.0;
   if (uFoam > 0.0) {
     vec2 fp = vWorld.xz;
-    vec2 s2 = vec2(fp.x * 0.35, fp.y * 1.3);
-    float nz = noise(s2 + vec2(uTime * 0.15, 0.0)) * 0.6 + noise(s2 * 3.1 - vec2(0.0, uTime * 0.3)) * 0.4;
-    float th = 1.0 - uFoam * 0.3 + 0.1 * uStorm;
-    float f = smoothstep(th, th + 0.07, crest + (nz - 0.5) * 0.5) * smoothstep(0.3, 0.6, noise(vec2(fp.x * 1.2, fp.y * 4.0) + 7.0));
-    // In the deep zones' big seas the foam is torn lace, not a sheet: flat pale panels on the swells stood
-    // out against the dark water (worst in the Abyss). Only the whitecaps along the swell's crests stay solid.
-    float lace = smoothstep(0.5, 0.66, noise(fp * 1.9 + vec2(uTime * 0.22, 0.0)) * 0.55 + noise(fp * 5.3 - vec2(0.0, uTime * 0.3)) * 0.45);
-    f *= mix(1.0, lace * 0.75, uStorm);
-    if (uStorm > 0.0) {
-      // The storm: whitecaps breaking along the swell's crests, foam down its steep faces, and long
-      // wind-blown streaks across the water.
-      float slope = 1.0 - normalize(vN).y;
-      float broken = smoothstep(0.42, 0.72, noise(fp * 0.45 + vec2(uTime * 0.2, 0.0)));
-      float cap = smoothstep(0.9 - 0.12 * uStorm, 0.99, swellCrest + (nz - 0.5) * 0.3) * broken;
-      // Along the swell's crest the foam sits on the chop's own crests, with thin lace between them: the top of
-      // a 130 m swell is tens of metres wide, and solid foam across it was the biggest pale panel of all.
-      cap *= mix(0.25 * lace, 1.0, smoothstep(0.55, 0.9, crest)) * (0.35 + 0.65 * lace);
-      float face = smoothstep(0.5 - 0.08 * uStorm, 0.7, slope + (nz - 0.5) * 0.2) * broken;
-      vec2 along = vec2(dot(fp, uWind), dot(fp, vec2(-uWind.y, uWind.x)));
-      float streak = smoothstep(0.62, 0.82, noise(along * vec2(0.05, 0.7) - vec2(uTime * 0.3, 0.0))) * smoothstep(0.35, 0.7, noise(fp * 0.12 + 3.0));
-      f = max(f, uStorm * max(max(cap, face * lace * 0.5), streak * lace * 0.4));
+    float f = 0.0;
+#ifdef ABYSS
+    // The Abyss's black water keeps little of the storm's own foam (uFoamKeep: the chop's, the faces', the streaks, the
+    // whitecaps), and in the Abyss proper none, so none of it is worked out there.
+    if (uFoamKeep.x + uFoamKeep.y + uFoamKeep.z + uFoamKeep.w > 0.0) {
+#else
+    {
+#endif
+      vec2 s2 = vec2(fp.x * 0.35, fp.y * 1.3);
+      float nz = noise(s2 + vec2(uTime * 0.15, 0.0)) * 0.6 + noise(s2 * 3.1 - vec2(0.0, uTime * 0.3)) * 0.4;
+      float th = 1.0 - uFoam * 0.3 + 0.1 * uStorm;
+      f = smoothstep(th, th + 0.07, crest + (nz - 0.5) * 0.5) * smoothstep(0.3, 0.6, noise(vec2(fp.x * 1.2, fp.y * 4.0) + 7.0));
+      // In the deep zones' big seas the foam is torn lace, not a sheet: flat pale panels on the swells stood
+      // out against the dark water (worst in the Abyss). Only the whitecaps along the swell's crests stay solid.
+      float lace = smoothstep(0.5, 0.66, noise(fp * 1.9 + vec2(uTime * 0.22, 0.0)) * 0.55 + noise(fp * 5.3 - vec2(0.0, uTime * 0.3)) * 0.45);
+      f *= mix(1.0, lace * 0.75, uStorm) KEEP(x);
+      if (uStorm > 0.0) {
+        // The storm: whitecaps breaking along the swell's crests, foam down its steep faces, and long
+        // wind-blown streaks across the water.
+        float slope = 1.0 - normalize(vN).y;
+        float broken = smoothstep(0.42, 0.72, noise(fp * 0.45 + vec2(uTime * 0.2, 0.0)));
+        float cap = smoothstep(0.9 - 0.12 * uStorm, 0.99, swellCrest + (nz - 0.5) * 0.3) * broken;
+        // Along the swell's crest the foam sits on the chop's own crests, with thin lace between them: the top of
+        // a 130 m swell is tens of metres wide, and solid foam across it was the biggest pale panel of all.
+        cap *= mix(0.25 * lace, 1.0, smoothstep(0.55, 0.9, crest)) * (0.35 + 0.65 * lace);
+        float face = smoothstep(0.5 - 0.08 * uStorm, 0.7, slope + (nz - 0.5) * 0.2) * broken;
+        vec2 along = vec2(dot(fp, uWind), dot(fp, vec2(-uWind.y, uWind.x)));
+        float streak = smoothstep(0.62, 0.82, noise(along * vec2(0.05, 0.7) - vec2(uTime * 0.3, 0.0))) * smoothstep(0.35, 0.7, noise(fp * 0.12 + 3.0));
+        f = max(f, uStorm * max(max(cap KEEP(w), face * lace * 0.5 KEEP(y)), streak * lace * 0.4 KEEP(z)));
+      }
     }
-    col = mix(col, uFoamCol, f * mix(vAtt, 1.0, uStorm) * 0.92 * (1.0 - kelpMat));
+#ifdef ABYSS
+    // The Abyss's own whitecaps (uLines: how strong, how wide, how high up the chop, how many ridges bare): a thin
+    // line of foam lying along a ridge, from just behind its top a little way down its leading face (vRidge), on
+    // the ridges that stand high on the chop. Patches of sea break and patches don't, and each line is torn into
+    // lengths that swell and thin; both drift downwind with the waves. A line is never wider than a metre or so
+    // on the water nor than a few pixels on the screen, and one thinner than a pixel fades instead of sparkling.
+    // None lie close round the boat, where the chop is cut down to gentle humps (a line there is a long drawn
+    // curve).
+    if (uStorm > 0.0 && uLines.x > 0.0) {
+      // How sharply the ridge rounds over (slope per metre): a gentle hump carries no line.
+      vec2 perM = abs(vec2(dFdx(vRidge), dFdy(vRidge))) / max(vec2(length(dFdx(vWorld)), length(dFdy(vWorld))), 0.0001);
+      float sharp = max(perM.x, perM.y);
+      float px = fwidth(vRidge) + 0.0001, lwMost = min(min(uLines.y, 0.65 * sharp), 3.2 * px);
+      float away = length(vWorld.xz);
+      // The breaking and the tearing (four lookups of noise) are worked out only where a line could lie: on a sharp
+      // ridge high on the chop, within the widest a line gets of its top. Everywhere else the line comes to nothing.
+      if (crestN > uLines.z && away > 9.0 && sharp > 0.07 && vRidge > -0.5 * lwMost - px && vRidge < lwMost + px) {
+        vec2 along = vec2(dot(fp, uWind), dot(fp, vec2(-uWind.y, uWind.x)));
+        vec2 drift = vec2(along.x - uTime * 3.6, along.y);
+        float breaking = smoothstep(uLines.w, uLines.w + 0.14, noise(drift * vec2(0.045, 0.07) + 11.0) * 0.7 + noise(drift * vec2(0.13, 0.2)) * 0.3 + 0.12);
+        float torn = smoothstep(0.47, 0.64, noise(drift * vec2(0.22, 0.5) + 5.0) * 0.6 + noise(drift * vec2(0.5, 1.6)) * 0.4);
+        float lw = lwMost * (0.3 + 0.7 * torn);
+        float line = smoothstep(-0.5 * lw - px, -0.1 * lw, vRidge) * (1.0 - smoothstep(0.6 * lw, lw + px, vRidge)) * min(1.0, 1.4 * lw / px);
+        line *= breaking * torn * smoothstep(0.07, 0.22, sharp) * smoothstep(uLines.z, uLines.z + 0.1, crestN) * smoothstep(9.0, 17.0, away);
+        f = max(f, uLines.x * line);
+      }
+    }
+#endif
+    foamy = f * mix(vAtt, 1.0, uStorm) * 0.92 * (1.0 - kelpMat);
+    col = mix(col, uFoamCol, foamy);
   }
   // The sea laps along the hull: a band of foam that breathes with the chop, wider in rough water, with
   // broken lace drifting off it.
   float hn = noise(vec2(vWorld.x * 1.3 + uTime * 0.5, vWorld.z * 1.3 - uTime * 0.35));
+#ifdef ABYSS
+  // (uHullFoam: a narrower band in the Abyss, where the lamps' pool lies on black water.)
+  float lap = (0.2 + 0.3 * hn + 0.1 * sin(uTime * 1.3 + vWorld.x * 0.9)) * (1.0 + uFoam) * uHullFoam;
+  float lapOut = lap + (0.5 + 0.9 * uFoam) * uHullFoam;
+#else
   float lap = (0.2 + 0.3 * hn + 0.1 * sin(uTime * 1.3 + vWorld.x * 0.9)) * (1.0 + uFoam);
+  float lapOut = lap + 0.5 + 0.9 * uFoam;
+#endif
   float hull = 1.0 - smoothstep(lap * 0.5, lap, hd);
-  float lace = smoothstep(0.5, 0.72, noise(vWorld.xz * 2.6 + vec2(uTime * 0.25, 0.0))) * (1.0 - smoothstep(lap, lap + 0.5 + 0.9 * uFoam, hd));
+  float lace = smoothstep(0.5, 0.72, noise(vWorld.xz * 2.6 + vec2(uTime * 0.25, 0.0))) * (1.0 - smoothstep(lap, lapOut, hd));
   col = mix(col, uFoamCol, max(hull * 0.9, lace * 0.55));
   // After dark the deck lamps and lit windows glow on the water around the boat.
   col += vec3(1.0, 0.72, 0.42) * uBoatGlow * exp(-hd * 0.55) * (0.06 + 0.14 * hn * crest);
+  // The Abyss: the boat is the only warm light, a soft pool on the water hugging the hull. It is measured from the
+  // hull through the air, so a swell towering beside the boat is lit only at its foot (uPool: full within the first, gone
+  // by the second, in metres), a little stronger abreast of the two deck lamps, and shaped gently by the way each wave
+  // leans. On top, a few thin glints lie along the hull, fading with it, and the foam in it shows warm.
+#ifdef ABYSS
+  {
+    float pd = length(vec2(hd, max(vWorld.y - 1.0, 0.0) + max(-1.0 - vWorld.y, 0.0)));
+    if (pd < uPool.y) {
+      float fall = 1.0 - smoothstep(uPool.x, uPool.y, pd);
+      vec2 by = (vWorld.x - vec2(0.95, -6.2)) / 3.5;
+      float lamp = 0.55 + 0.45 * max(exp(-by.x * by.x), exp(-by.y * by.y));
+      vec3 L = normalize(vec3(clamp(vWorld.x, -6.2, 0.95), 2.9, 0.0) - vWorld);
+      // The ripples (g) shade it finely, the waves broadly.
+      float form = clamp(0.2 + 0.8 * smoothstep(0.3, 0.95, dot(n, L)) - 7.0 * dot(g, normalize(L.xz + 0.0001)), 0.0, 1.4);
+      // Glints: thin dashes lying along the hull, spaced down the water's slope rather than across the flat.
+      vec2 rp = vec2(vWorld.x * 3.4 + uTime * 0.4, (abs(vWorld.z) + vWorld.y) * 24.0 - uTime * 1.6);
+      float dash = smoothstep(0.785, 0.81, noise(rp) * 0.65 + noise(rp * vec2(2.3, 1.7) + 5.0) * 0.35) * (0.4 + 0.6 * hn);
+      foamy = max(foamy, max(hull * 0.9, lace * 0.55));
+      col += uPoolCol * fall * fall * lamp * (form * (1.0 + uPoolFoam * foamy) + uPoolGlint * dash);
+    }
+  }
+#endif
   col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, dist) * uHaze);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -193,7 +363,7 @@ function bare(geo: THREE.BufferGeometry, name: string, value: (y: number, i: num
 
 
 /** Low cloud: flat-bottomed puffs all around, darker underneath, merged into one draw (~5k triangles). */
-function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value: THREE.Color }; uShow: { value: number }; uCloudHaze: { value: number } }): THREE.Mesh {
+function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value: THREE.Color }; uShow: { value: number }; uCloudHaze: { value: number }; uCloudFlash: { value: THREE.Vector3 } }): THREE.Mesh {
   const rnd = mulberry(11);
   const parts: THREE.BufferGeometry[] = [];
   const flat = 0.5;
@@ -223,7 +393,8 @@ function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value
     uniforms: u as unknown as Record<string, THREE.IUniform>,
     vertexShader: `attribute float shade; varying float vShade; varying vec3 vWorld;
       void main(){ vShade = shade; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform vec3 uTop, uBot, uFogColor, uGlow, uSunDir; uniform float uShow, uFogNear, uFogFar, uCloudHaze; varying float vShade; varying vec3 vWorld;
+    fragmentShader: `uniform vec3 uTop, uBot, uFogColor, uGlow, uSunDir, uSeaUp; uniform vec3 uCloudFlash; uniform float uShow, uFogNear, uFogFar, uCloudHaze; varying float vShade; varying vec3 vWorld;
+      ${ABYSS_SKY_GLSL}
       void main(){
         // Three tones of cloud (the whole part of vShade), and facets a touch lighter where they face up.
         float tone = floor(vShade + 0.0005);
@@ -234,6 +405,21 @@ function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value
         lit += uGlow * pow(max(dot(normalize(vWorld.xz), normalize(uSunDir.xz)), 0.0), 4.0) * (1.0 - up) * 0.12;
         vec3 col = mix(uFogColor, lit, uShow);
         col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, length(cameraPosition - vWorld)) * uCloudHaze);
+        // The Abyss's light is behind the deck. Cloud well past the fog is the lit haze itself (the horizon's band and
+        // a bolt's flash show through it, a little dimmer, so its skirts still read), while nearer cloud stays a dark
+        // body, darker the nearer, whose rim (facets seen edge-on) lights up toward the bolt. Sheet lightning lights a
+        // patch of cloud from inside.
+        if (uAbyss > 0.0) {
+          vec3 D = normalize(vWorld - cameraPosition);
+          vec3 Ds = vec3(D.x, dot(D, uSeaUp), D.z);
+          float far = smoothstep(uFogFar * 0.8, uFogFar * 2.2, length(cameraPosition - vWorld));
+          col += (abyssBand(Ds, uBandShape.x) * uCloudFlash.x + abyssFlash(Ds) * uCloudFlash.y) * far;
+          float rim = 1.0 - abs(dot(fn, D));
+          float bolt = max(dot(D, uFlashDir), 0.0);
+          col += uFlashCol * (uFlashWide + (1.0 - uFlashWide) * bolt * bolt * bolt) * uCloudFlash.z * pow(rim, 5.0);
+          float inside = pow(max(dot(D, uSheetDir), 0.0), 2.0 + 14.0 * uSheetSize);
+          col += uSheetCol * inside * (0.45 + 0.2 * tone + 0.5 * rim * rim) * (1.15 - 0.5 * up);
+        }
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -382,8 +568,20 @@ const seaUniforms = (sky: SkyUniforms) => ({
   uFoam: { value: 0 },
   uLift: { value: 1 },
   uBoatGlow: { value: 0 },
+  // The Abyss (`ABYSS`); at rest these leave the water as it always was.
+  uCrestLit: { value: new THREE.Color(0) },
+  uFoamKeep: { value: new THREE.Vector4(1, 1, 1, 1) },
+  uFaceLit: { value: new THREE.Color(0) },
+  uRim: { value: new THREE.Vector3(0, 0.2, 0) },
+  uPool: { value: new THREE.Vector2(1.5, 4.5) },
+  uPoolCol: { value: new THREE.Color(0) },
+  uPoolFoam: { value: 0 },
+  uPoolGlint: { value: 0 },
+  uGlint: { value: new THREE.Vector2() },
+  uHullFoam: { value: 1 },
+  uLines: { value: new THREE.Vector4(0, 0.1, 0.6, 0.5) },
 });
-const cloudUniforms = (sky: SkyUniforms) => ({ ...sky, uTop: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uShow: { value: 0 }, uCloudHaze: { value: 1 } });
+const cloudUniforms = (sky: SkyUniforms) => ({ ...sky, uTop: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uShow: { value: 0 }, uCloudHaze: { value: 1 }, uCloudFlash: { value: new THREE.Vector3() } });
 const landUniforms = (sky: SkyUniforms) => ({ ...sky, uFade: { value: 0 }, uNight: { value: 0 } });
 
 const SPRAY = 420;
@@ -504,11 +702,25 @@ class Spindrift {
 /**
  * Lightning in the Abyss: a forked bolt out on the water every few seconds, more often the deeper,
  * flickering two or three times. `flash` (0..1) lights the sky, and with it the sea's reflections.
+ * Between bolts sheet lightning flickers inside the cloud (`sheet`), with no bolt and no thunder.
  */
 class Lightning {
   readonly group = new THREE.Group();
   /** How bright the sky is lit right now. */
   flash = 0;
+  /** Where the bolt lighting the sky stands (or the last one stood): its bearing (atan2 of z, x) and how far off it is (m). */
+  bearing = -Math.PI / 2;
+  distance = 150;
+  /** Sheet lightning: how bright the cloud is lit from inside right now (0..1), and the bearing of the patch. */
+  sheet = 0;
+  sheetBearing = -Math.PI / 2;
+  private sheetAge = Infinity;
+  private sheetLen = 0;
+  private sheetPeak = 0;
+  private sheetK = 0;
+  private sheetTimer = 1;
+  /** Its own dice, so the bolts fall as they always did. */
+  private sheetRnd = mulberry(31);
   private mat = new THREE.MeshBasicMaterial({ color: 0xf4f0ff, fog: false });
   private bolt: THREE.Mesh | null = null;
   private age = Infinity;
@@ -517,7 +729,8 @@ class Lightning {
   /** Called with each strike's distance in metres, for the thunder. */
   onStrike?: (dist: number) => void;
 
-  update(dt: number, level: number): void {
+  /** `level`: how often bolts strike (0..1); `sheets`: whether sheet lightning plays too (the Abyss's own look). */
+  update(dt: number, level: number, sheets = false): void {
     this.age += dt;
     if (level > 0) {
       this.timer -= dt;
@@ -526,11 +739,32 @@ class Lightning {
         this.timer = (12 - 9 * level) * (0.5 + this.rnd());
       }
     }
+    this.sheetAge += dt;
+    if (level > 0 && sheets) {
+      this.sheetTimer -= dt;
+      if (this.sheetTimer <= 0) {
+        this.flicker();
+        const [rare, often] = ABYSS.sheet.every;
+        this.sheetTimer = (rare + (often - rare) * level) * (0.4 + 1.2 * this.sheetRnd());
+      }
+    }
+    this.sheet = this.sheetPeak * sheetGlow(this.sheetAge, this.sheetLen, this.sheetK);
     // Three flickers in the first 0.4 s, then a fading afterglow.
     const a = this.age;
     const on = a < 0.08 || (a > 0.14 && a < 0.2) || (a > 0.3 && a < 0.4);
     if (this.bolt) this.bolt.visible = on;
     this.flash = on ? 1 : Math.max(0, this.flash - dt * 4);
+  }
+
+  /** Sheet lightning now, at `bearing` if given (anywhere round the sky otherwise) and `strength` (0..1) of its brightness. */
+  flicker(bearing?: number, strength?: number): void {
+    const r = this.sheetRnd;
+    const [l0, l1] = ABYSS.sheet.length, [s0, s1] = ABYSS.sheet.strength;
+    this.sheetBearing = bearing ?? r() * Math.PI * 2;
+    this.sheetLen = l0 + (l1 - l0) * r();
+    this.sheetPeak = strength ?? s0 + (s1 - s0) * r();
+    this.sheetK = r();
+    this.sheetAge = 0;
   }
 
   /** Throws a bolt now, at `bearing` (atan2 of z, x) if given; mostly over the open sea players face (-z). */
@@ -566,6 +800,8 @@ class Lightning {
     this.bolt.frustumCulled = false;
     this.group.add(this.bolt);
     this.age = 0;
+    this.bearing = a;
+    this.distance = d;
     this.onStrike?.(d);
   }
 }
@@ -583,6 +819,9 @@ export class Sea {
   private landU: ReturnType<typeof landUniforms>;
   private clouds: THREE.Mesh;
   private bankU: ReturnType<typeof cloudUniforms>;
+  /** The water, and the same water with the Abyss's shading built in (`seaFrag`): one of the two is drawn. */
+  private water: THREE.Mesh;
+  private waterAbyss: THREE.Mesh;
   private bank: THREE.Mesh;
   private land: THREE.Mesh;
   private spray = new Spray();
@@ -592,6 +831,8 @@ export class Sea {
   private buoy = new MarkerBuoy();
   private gulls = new Gulls();
   private jellies: Jellies;
+  /** What lurks in the Abyss (`LURK`). */
+  readonly lurk: AbyssLurk;
   private night = 0;
   private lamps = 0;
   /** The deep look `setColors` last had, for the weather. */
@@ -610,11 +851,11 @@ export class Sea {
 
   constructor(sky: SkyUniforms) {
     this.u = seaUniforms(sky);
-    const water = new THREE.Mesh(
-      radialGrid(96, 0.4, 1.06, 1100),
-      new THREE.ShaderMaterial({ uniforms: this.u, vertexShader: seaVert, fragmentShader: seaFrag }),
-    );
-    water.frustumCulled = false;
+    const shader = { uniforms: this.u, vertexShader: seaVert, fragmentShader: seaFrag };
+    this.water = new THREE.Mesh(radialGrid(96, 0.4, 1.06, 1100), new THREE.ShaderMaterial(shader));
+    this.waterAbyss = new THREE.Mesh(this.water.geometry, new THREE.ShaderMaterial({ ...shader, defines: { ABYSS: '' } }));
+    this.water.frustumCulled = this.waterAbyss.frustumCulled = false;
+    this.waterAbyss.visible = false;
     this.cloudU = cloudUniforms(sky);
     this.clouds = lowCloud(this.cloudU);
     this.bankU = cloudUniforms(sky);
@@ -624,8 +865,10 @@ export class Sea {
     this.frame.matrixAutoUpdate = false;
     this.rain = new Rain(sky);
     this.jellies = new Jellies(this.u);
-    this.frame.add(water, this.bank, this.clouds, this.land, this.drift.points, this.lightning.group, this.buoy.group, this.gulls.mesh, this.jellies.group);
+    this.frame.add(this.water, this.waterAbyss, this.bank, this.clouds, this.land, this.drift.points, this.lightning.group, this.buoy.group, this.gulls.mesh, this.jellies.group);
     this.onBoat.add(this.spray.points, this.rain.mesh);
+    this.lurk = new AbyssLurk(this.u);
+    this.frame.add(this.lurk.group);
   }
 
   /** Spray is see-through overdraw near the eye; lite graphics drops it, and thins the rain and the jellies. */
@@ -633,6 +876,7 @@ export class Sea {
     this.spray.points.visible = !on;
     this.rain.setLite(on);
     this.jellies.setLite(on);
+    this.lurk.setLite(on);
     this.lite = on;
   }
   private lite = false;
@@ -684,13 +928,73 @@ export class Sea {
     this.cloudU.uTop.value.copy(cloud).lerp(cloudAt(look.cloudTop, nightTop), m);
     this.cloudU.uBot.value.copy(cloud).multiplyScalar(0.93).lerp(cloudAt(look.cloudBot, dim(look.nightSkyT, 0.7)), m);
     const dimmed = 1 - 0.8 * nr * own * m;
-    (this.spray.points.material as THREE.PointsMaterial).color.copy(SPRAY_COL).multiplyScalar(dimmed);
-    (this.drift.points.material as THREE.PointsMaterial).color.copy(DRIFT_COL).multiplyScalar(dimmed);
     this.rainLit = dimmed;
     // The horizon's cumulus: white by day, peach at dusk, moonlit slate at night, its shaded side toward the sky's own colour.
     this.bankU.uTop.value.set(0xffffff).lerp(new THREE.Color(0x3a4668), n).lerp(new THREE.Color(0xffc09a), tw * 0.6);
     this.bankU.uBot.value.copy(this.bankU.uTop.value).multiplyScalar(0.78).lerp(u.uSkyT.value, 0.35);
     this.landU.uNight.value = n;
+    this.setAbyss(n, lamps, dimmed);
+  }
+
+  /**
+   * The Abyss's own look (`ABYSS`), laid over the colours above as far as it is in (`abyssAt`): black water with the
+   * horizon's band on its crests, little foam, dim spray, and the lamps' pool round the hull. Outside the Abyss every
+   * value here is the one that leaves the sea as it always was. `dimmed`: how far a look with its own night has the spray
+   * and spindrift dimmed (1 not at all).
+   */
+  private setAbyss(n: number, lamps: number, dimmed: number): void {
+    const A = ABYSS;
+    const ab = abyssAt(this.mood);
+    const u = this.u;
+    const c = this.scratch;
+    // The clock still passes: a little less light at night.
+    const lit = 1 - (1 - A.night) * n;
+    if (ab > 0) {
+      u.uShallow.value.lerp(c.set(A.water), ab);
+      u.uDeep.value.lerp(c.set(A.deep), ab);
+      u.uFoamCol.value.lerp(c.set(A.foam.color).multiplyScalar(lit), ab);
+      u.uLift.value *= 1 - ab;
+      this.cloudU.uTop.value.lerp(c.set(A.cloud[0]), ab);
+      this.cloudU.uBot.value.lerp(c.set(A.cloud[1]), ab);
+    }
+    u.uCrestLit.value.set(A.band).multiplyScalar(A.crest * lit * ab);
+    u.uFaceLit.value.set(A.band).multiplyScalar(A.face * lit * ab);
+    u.uRim.value.set(A.rim * ab, A.rimWidth, A.rimBreak);
+    u.uFoamKeep.value.set(1 + (A.foam.chop - 1) * ab, 1 + (A.foam.face - 1) * ab, 1 + (A.foam.streak - 1) * ab, 1 + (A.foam.caps - 1) * ab);
+    // The pool takes the place of the old faint glow, which showed as a flat stain on black water.
+    u.uBoatGlow.value = lamps * (1 - ab);
+    u.uPool.value.set(A.pool.core, A.pool.reach);
+    u.uPoolCol.value.set(A.pool.color).multiplyScalar(A.pool.glow * lamps * ab);
+    u.uPoolFoam.value = A.pool.foam;
+    u.uPoolGlint.value = A.pool.glints;
+    u.uHullFoam.value = 1 + (A.foam.hull - 1) * ab;
+    u.uLines.value.set(A.foam.lines * ab, A.foam.lineWidth, A.foam.lineHeight, A.foam.lineBare);
+    u.uGlint.value.set(A.flash.glint, A.flash.crests);
+    this.cloudU.uCloudFlash.value.set(A.cloudBand, A.flash.haze, A.flash.edge);
+    // Spray and rain take what light there is instead of glowing white against the black; the bow's spray is in the
+    // lamps. Under that they keep the dimming of a look with its own night (the Twilight's), which eases out as this eases in.
+    (this.drift.points.material as THREE.PointsMaterial).color.copy(DRIFT_COL).multiplyScalar(dimmed).multiplyScalar(1 + (A.spindrift - 1) * ab);
+    (this.spray.points.material as THREE.PointsMaterial).color.copy(SPRAY_COL).multiplyScalar(dimmed).lerp(c.set(A.bowSpray), ab);
+    this.rainStand = 1 + (A.rain - 1) * ab;
+    this.rainLamps = lamps * (1 + (A.pool.rain - 1) * ab);
+  }
+  private scratch = new THREE.Color();
+  /** How far the rain stands out from the fog (1; less against the Abyss's black), and how brightly the lamps catch it. */
+  private rainStand = 1;
+  private rainLamps = 0;
+
+  /** The Abyss's lightning for the sky, the cloud and the water: where the bolt and the sheet flicker are, and their light now. */
+  private setLightning(ab: number): void {
+    const A = ABYSS, L = this.lightning, u = this.u;
+    // Toward the bolt, a little above the horizon where its light comes through the cloud.
+    u.uFlashDir.value.set(Math.cos(L.bearing) * L.distance, 28, Math.sin(L.bearing) * L.distance).normalize();
+    u.uFlashCol.value.set(A.flash.color).multiplyScalar(A.flash.sky * L.flash * ab);
+    u.uFlashWide.value = A.flash.wide;
+    u.uSheetDir.value.set(Math.cos(L.sheetBearing), 0.32, Math.sin(L.sheetBearing)).normalize();
+    u.uSheetCol.value.set(A.sheet.color).multiplyScalar(A.sheet.cloud * L.sheet * ab);
+    u.uSheetSky.value = A.sheet.sky / Math.max(0.01, A.sheet.cloud);
+    u.uSheetSize.value = A.sheet.size;
+    this.rain.flash(A.flash.rain);
   }
 
   update(t: number, dt: number, mood: number): void {
@@ -745,11 +1049,17 @@ export class Sea {
     this.drift.points.visible = storm > 0;
     const look = this.look;
     if (storm > 0) this.drift.update(dt, t, mood, storm * (this.lite ? 0.5 : 1), 0.45 * this.swell + 0.3);
-    this.lightning.update(dt, lightningAt(mood));
-    this.rain.update(t, rainAt(mood), storm, WIND, this.lamps, this.rainLit);
+    const abyss = abyssAt(mood);
+    this.waterAbyss.visible = abyss > 0;
+    this.water.visible = !this.waterAbyss.visible;
+    this.lightning.update(dt, lightningAt(mood), abyss > 0);
+    this.setLightning(abyss);
+    u.uSeaUp.value.setFromMatrixColumn(this.frame.matrix, 1);
+    this.rain.update(t, rainAt(mood), storm, WIND, this.rainLamps, this.rainLit, this.rainStand);
     this.buoy.update(t, dt, mood, Math.max(this.night, this.lamps));
     this.gulls.update(t, dt, mood, this.night);
     this.jellies.update(t, mood, this.night);
+    this.lurk.update(t, dt, mood, this.night, this.lightning);
   }
 
   /** World height of the water at (x, z): the swell, carried by the sea's frame. */

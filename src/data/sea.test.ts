@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BOAT, DEEP_LOOKS, deepLookAt, nightRamp, JELLIES, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, jelliesAt, jellyGlow, jellyLight, jellyRises, jellyUp, onDeck, screenSprayAt, seaDepthFor, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
+import { ABYSS, BOAT, DEEP_LOOKS, abyssAt, deepLookAt, nightRamp, sheetGlow, JELLIES, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, jelliesAt, jellyGlow, jellyLight, jellyRises, jellyUp, onDeck, screenSprayAt, seaDepthFor, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
 import { MAPS } from './maps';
 import { isWater, onDock, setAtSea, standHeight } from '../game/env';
 
@@ -171,6 +171,61 @@ describe('deep zone looks', () => {
       expect(ch(l.skyH)).toBeGreaterThanOrEqual(Math.min(ch(twilight.skyH), ch(abyss.skyH)));
       expect(ch(l.skyH)).toBeLessThanOrEqual(Math.max(ch(twilight.skyH), ch(abyss.skyH)));
     }
+  });
+});
+
+describe('the Abyss\'s standing night', () => {
+  it('leaves every zone up to the Twilight alone and is fully in by the Abyss\'s first look stop', () => {
+    for (const d of [1, 8, 16, 26, 35, 48, 61, 76, 86]) expect(abyssAt(seaMood(d))).toBe(0);
+    for (const d of [97, 100, 160, 250]) expect(abyssAt(seaMood(d))).toBe(1);
+  });
+  it('eases in over the markers the Abyss\'s colours blend in over', () => {
+    const a = abyssAt(seaMood(89)), b = abyssAt(seaMood(92)), c = abyssAt(seaMood(95));
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(a);
+    expect(c).toBeGreaterThan(b);
+    expect(c).toBeLessThan(1);
+  });
+  it('scales with the amount knob, down to the old look at 0', () => {
+    const was = ABYSS.amount;
+    try {
+      ABYSS.amount = 0.5;
+      expect(abyssAt(seaMood(120))).toBe(0.5);
+      ABYSS.amount = 0;
+      for (const d of [92, 100, 250]) expect(abyssAt(seaMood(d))).toBe(0);
+    } finally {
+      ABYSS.amount = was;
+    }
+  });
+  it('keeps the fog far darker than the band on the horizon, and the sky no lighter than the fog', () => {
+    const sum = (h: number) => ((h >> 16) & 255) + ((h >> 8) & 255) + (h & 255);
+    expect(sum(ABYSS.band)).toBeGreaterThan(4 * sum(ABYSS.fog));
+    expect(sum(ABYSS.sky)).toBeLessThanOrEqual(sum(ABYSS.fog));
+  });
+  it('has thin dim lines of foam on its ridges in place of the storm\'s own foam', () => {
+    const f = ABYSS.foam;
+    expect([f.chop, f.face, f.streak, f.caps]).toEqual([0, 0, 0, 0]);
+    expect(f.lines).toBeGreaterThan(0);
+    expect(f.lines).toBeLessThan(1);
+    expect(f.lineBare).toBeLessThan(0.5);
+    // The sheen on a face stays below the rim along its crest.
+    expect(ABYSS.face).toBeLessThan(ABYSS.rim);
+  });
+  it('flickers sheet lightning only for its length, never past full', () => {
+    expect(sheetGlow(0, 0.6)).toBe(0);
+    expect(sheetGlow(-1, 0.6)).toBe(0);
+    expect(sheetGlow(0.6, 0.6)).toBe(0);
+    expect(sheetGlow(2, 0.6)).toBe(0);
+    expect(sheetGlow(0.3, 0)).toBe(0);
+    let peak = 0;
+    for (const k of [0, 0.3, 0.77])
+      for (let age = 0.01; age < 0.6; age += 0.01) {
+        const g = sheetGlow(age, 0.6, k);
+        expect(g).toBeGreaterThanOrEqual(0);
+        expect(g).toBeLessThanOrEqual(1);
+        peak = Math.max(peak, g);
+      }
+    expect(peak).toBeGreaterThan(0.6);
   });
 });
 
