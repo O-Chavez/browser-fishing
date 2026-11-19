@@ -123,6 +123,8 @@ export const WALK: Record<string, View> = {
   p18_rim: at(14.4, 9.4, FIRE.x, FIRE.z - 1, 'from the shore by the lane: the stone ledge and seat wall on the cove side of the rim'),
   p19_back: at(FIRE.x + 5, FIRE.z - 4.6, FIRE.x + 7.6, FIRE.z + 1.5, 'behind the panels: the turf, the retaining wall, the hedge and the side of the stall'),
   p21_wall: at(22.6, -5.4, 25.6, -2.6, 'from the beach: the low wall that holds the turf, the bay\'s flower bed and the hedge\'s end'),
+  p22_beach_east: at(22.2, -5.2, 23.6, -12, "from the beach by the stones: the wall's corner and the bay past the beach's east end"),
+  p23_bay: at(23.2, -6.2, 23.2 + 10 * Math.sin((165 * Math.PI) / 180), -6.2 + 10 * Math.cos((165 * Math.PI) / 180), 'at the stone pile, looking the way the stones fly: out down the bay'),
   // The bay between Deep Sea and the beach steps, by day and at night: from the clear ring facing it, from the fire, the whole back wall from the cove side, and the bay from the beach.
   d1_bay_ring: at(FIRE.x + 3.3 * Math.sin(2.775), FIRE.z + 3.3 * Math.cos(2.775), FIRE.x + 6 * Math.sin(2.775), FIRE.z + 6 * Math.cos(2.775), "in the clear ring facing the bay beside Deep Sea: its flower bed, the turf and the hedge's end", BOTH),
   d2_bay_fire: at(FIRE.x - 1.2, FIRE.z - 1.2, FIRE.x + 6 * Math.sin(2.775), FIRE.z + 6 * Math.cos(2.775), 'from beside the fire to the bay beside Deep Sea', BOTH),

@@ -9,7 +9,7 @@
 export const SKIP = {
   /**
    * How near the pile's middle the prompt reaches, in metres, and how much further the server allows (a `pos` on its
-   * way). The nearest seat is 2.74 m from the pile and offered from 1.5 m, so nowhere are both in reach.
+   * way). The nearest seat (the beach's bench) is 3.09 m from the pile and offered from 1.5 m, so nowhere are both in reach.
    */
   reach: 1.2,
   slack: 1,
@@ -29,8 +29,8 @@ export const SKIP = {
   sharp: 0.75,
   /** The luck in a throw: up to this many skips more or fewer. */
   jitter: 0.7,
-  /** The way every stone flies from the pile, in degrees round from +z toward +x (213 is out over the open lake, through the middle of the 2.6 m of water between the jetty's end and the fence's), and how far a throw may stray either side. */
-  bearing: 213,
+  /** The way every stone flies from the pile, in degrees round from +z toward +x (165 is past the corner of the beach's wall, over the sand and out down the middle of the bay east of the beach), and how far a throw may stray either side. */
+  bearing: 165,
   spread: 2,
   /** How far from the pile a plopped stone first touches the water, in metres, and how much further each skip in the count puts it (a flat throw carries). */
   first: 7.5,

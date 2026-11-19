@@ -101,7 +101,7 @@ export interface CampDef {
   hedge: Arc;
   /** The stone gate piers the hedge ends on, each square to the hedge's end. */
   piers: Spot[];
-  /** The fence's arc and its runs on from it: to the gate arch's outer post, and down the beach's east end (behind the beach wall as far as its last `via`) into the shallows, past where anyone can wade. */
+  /** The fence's arc and its run on from it to the gate arch's outer post. */
   fence: { arc: Arc; runs: { from: [number, number]; via?: [number, number][]; to: [number, number] }[] };
   /** The cove side of the rim, between two bearings: the seat wall's footing, a battered face of stone that runs `w` m out and down to the water's edge. */
   rimFace: { from: number; to: number; w: number };
@@ -112,11 +112,14 @@ export interface CampDef {
   /**
    * The turf behind the panels, between two bearings, and `lip` m on past the last, level, to the low stone wall that
    * holds it above the beach. `beachWall` is that wall, in two runs: along the beach's back from beside the kerb to
-   * the hedge's pier, and from the pier along the foot of the bank at the beach's east end to the fence.
+   * the hedge's pier, and from the pier down the beach's east end and round the foot of the bank into the bay past
+   * where anyone can wade. `bankTop` is the bank's turf behind that second run: a line a step back from it, point for
+   * point.
    */
   turf: { from: number; to: number; lip: number };
   beachWall: [number, number][][];
-  /** The beach's sand, between two bearings, out to `r` in the water or, short of that, to the fence down its east end. */
+  bankTop: [number, number][];
+  /** The beach's sand, between two bearings, out to `r` in the water or, short of that, to the wall at its east end. */
   sand: { from: number; to: number; r: number };
   /** The Legends' Totem on the beach's west tip, the stone pile and the skip sign at its east end. */
   totem: Spot;
@@ -203,23 +206,24 @@ const CAMP: CampDef = {
     arc: { r: CAMP_FENCE, from: CAMP_BANK[0], to: CAMP_BANK[1] },
     runs: [
       { from: beside(CAMP_BANK[0], CAMP_HEDGE, -PIER), to: [GATE_POST.x, GATE_POST.z] },
-      { from: [FENCE_END.x, FENCE_END.z], via: [[26.2, -6], [26, -7.6], [25.2, -9.6]], to: [22.2, -12.05] },
     ],
   },
   rimFace: { from: 197, to: 325, w: 1.3 },
   pier: byFire(TERRACE + 0.25, 267),
   steps: { ...CAMP_STEPS, rise: STEP.rise, treads: STEP.treads },
   // The turf starts where the lane's cobbles meet the kerb. Its wall stands on the beach's sand: from beside the kerb
-  // to the pier at the hedge's end, and from the pier's far side round the stones and the skip sign to the fence.
+  // to the pier at the hedge's end, and from the pier's far side past the stones and the skip sign, round the
+  // bank's corner and out into the bay, where the water is too deep to wade round its end.
   turf: { from: -5, to: CAMP_BANK[1], lip: TURF_LIP },
   beachWall: [
     [beside(CAMP_BANK[1], TERRACE + 0.5, TURF_LIP), beside(CAMP_BANK[1], CAMP_HEDGE - 0.35, TURF_LIP)],
-    [beside(CAMP_BANK[1], CAMP_HEDGE, PIER), [25.55, -6], [25.55, -7.6], [25.3, -9.3]],
+    [beside(CAMP_BANK[1], CAMP_HEDGE, PIER), [25.55, -6], [25.6, -7.3], [26.4, -8.1], [27.3, -9.4]],
   ],
+  bankTop: [[FENCE_END.x, FENCE_END.z], [26.2, -6], [26.15, -6.95], [26.9, -7.7], [27.8, -8.9]],
   sand: { from: CAMP_BANK[1], to: 222, r: 14.5 },
   // Its faces turned to whoever comes down the beach steps; the pier sees it side on against the open water.
   totem: { x: 17.75, z: -4.6, facing: faceToward(17.75, -4.6, CAMPFIRE.x, -3.6) },
-  stones: { x: 24.7, z: -6.4 },
+  stones: { x: 23.8, z: -7.1 },
   skipSign: { x: 24.9, z: -5, facing: faceToward(24.9, -5, 21.5, -5.6) },
   // The rack and its crate fill the jetty's end from edge to edge.
   rack: { x: 18.89, z: -11.7, facing: Math.PI },
@@ -485,7 +489,8 @@ export const MAPS: MapDef[] = [
       { x0: 15.5, x1: 17.2, z0: 9.6, z1: 12, h: 0.72 },
     ],
     // The camp's ground, laid in this order. The bank behind the retaining wall: the ridge's top, levelled and carried
-    // on round the terrace's back where the ground falls away behind it. The beach: a shelf of sand on the point's
+    // on round the terrace's back where the ground falls away behind it. The beach: a round tongue of sand at its
+    // south-east, where the lake falls away into the bay past the wall's corner, under a shelf of sand on the point's
     // lake side, cut into the foot of that bank at its east end, and a round of it under the Totem on its west tip.
     // The terrace's back: turf, flat from its rim to a step past the wall's line, so the wall holds the bank and the
     // bank's foot stays behind it. The terrace itself, built up on its water side, where its bank is steeper than the
@@ -496,6 +501,7 @@ export const MAPS: MapDef[] = [
     // Play-test: the heights and the shore.
     levels: [
       { ...CAMPFIRE, h: 1.7, hw: 11.2, arc: [CAMP_BANK[0] - 4, CAMP_BANK[1]], cut: 0, bank: 1, blend: 1 },
+      { x: 22.8, z: -8.4, h: 0.25, hw: 2.2, cut: 0, bank: 0.45 },
       { x: 21.15, z: -5.4, h: 0.45, hw: 3.75, hd: 2.55, cut: 0.7, bank: 0.75, blend: 1 },
       { ...CAMP.totem, h: 0.45, hw: 1.2, cut: 0, bank: 0.75 },
       { ...CAMPFIRE, h: 0.85, hw: CAMP_WALL + 0.85, arc: [CAMP_BANK[0] - 6, CAMP_BANK[1]], cut: 0, bank: 0.75, blend: 1, grass: true },

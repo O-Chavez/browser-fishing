@@ -146,9 +146,9 @@ describe('the flight', () => {
     expect(skipSpread(() => 0.5)).toBe(0);
     const [x, z] = skipDir(0);
     expect(Math.hypot(x, z)).toBeCloseTo(1, 9);
-    // Out over the lake (-z), a little toward the cove (-x).
-    expect(z).toBeLessThan(-0.8);
-    expect(x).toBeLessThan(-0.4);
+    // Out over the lake (-z), a little toward the bay east of the beach (+x).
+    expect(z).toBeLessThan(-0.9);
+    expect(x).toBeGreaterThan(0.2);
     expect(skipDir(5)).toEqual(skipDir(most));
     expect(skipDir(-5)).toEqual(skipDir(-most));
   });

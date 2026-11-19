@@ -1373,7 +1373,7 @@ export class Town {
     // Behind the panels: the retaining wall that holds the cut bank, either side of the stall's back; the hedge
     // behind it, planted at the wall's foot and clipped a metre above its top, with a stone pier a little taller at
     // each of its ends; and the picket fence behind that, on the bank, which runs on from one pier to the gate's
-    // outer post and from the other down the beach's east end into the shallows.
+    // outer post.
     const WALL_H = 0.9;
     for (const w of camp.wall) ring(buildStoneArc(w.r, w.from, w.to, WALL_H, 0.6, round));
     ring(buildHedgeArc(camp.hedge.r, camp.hedge.from, camp.hedge.to, WALL_H + 1, 0.7, round));
@@ -1394,7 +1394,7 @@ export class Town {
       this.solidRow(line, i ? 0.18 : 0.3);
     });
     // The low wall the beach's sand ends at, its foot on the beach's level: along the beach's back it holds the turf
-    // behind the panels, a step high on the turf's side, and round the east end the bank under the fence.
+    // behind the panels, a step high on the turf's side, and down the east end and round its corner the bank.
     const [bx, bz] = spot(180, camp.r + 2.5);
     const beach = groundHeight(bx, bz);
     for (const run of camp.beachWall) this.prop(buildStoneRun(run, y + 0.3 - beach, 0.35, () => beach), 0, 0, 0, 0);
@@ -1438,7 +1438,7 @@ export class Town {
   /**
    * The camp's turf and its beach's sand, relaid over the terrain (`relay`) so each keeps its edge: the turf from the
    * kerb out to the retaining wall's foot or, by the lane, to the fence's run to the gate; the sand from the kerb out
-   * into the water or, at the beach's east end, to the fence.
+   * into the water or, at the beach's east end, to the wall.
    */
   private relayCamp(camp: CampDef): void {
     const fire = this.map.campfire;
@@ -1471,7 +1471,7 @@ export class Town {
         const start = Math.max(kerb, near(deg));
         return [at(start, deg), at(Math.max(start, far(deg)), deg)];
       });
-    const [toGate, down] = camp.fence.runs.map((r) => [r.from, ...(r.via ?? []), r.to] as [number, number][]);
+    const [toGate] = camp.fence.runs.map((r) => [r.from, ...(r.via ?? []), r.to] as [number, number][]);
     const foot = camp.wall[0].r - 0.32;
     // The beach steps are stone: no sand is laid over them, across their width and down to their foot.
     const st = camp.steps;
@@ -1496,26 +1496,25 @@ export class Town {
       const r = Math.min(lipEnd, kerb + i * 0.5);
       return [at(r, turf.to), past(r, turf.lip - 0.2)];
     });
-    // The bank between the east wall and the fence behind it: the wall's points and the fence's, pair by pair.
+    // The bank's top behind the east wall: the wall's points and the top's, pair by pair.
     const bank: [[number, number], [number, number]][] = [];
     for (let i = 0; i + 1 < east.length; i++) {
       const n = Math.ceil(Math.hypot(east[i + 1][0] - east[i][0], east[i + 1][1] - east[i][1]) / 0.5);
       for (let k = i ? 1 : 0; k <= n; k++) {
         const mix = (p: [number, number], q: [number, number]): [number, number] => [p[0] + ((q[0] - p[0]) * k) / n, p[1] + ((q[1] - p[1]) * k) / n];
-        bank.push([mix(east[i], east[i + 1]), mix(down[i], down[i + 1])]);
+        bank.push([mix(east[i], east[i + 1]), mix(camp.bankTop[i], camp.bankTop[i + 1])]);
       }
     }
     // The sand starts at the back wall's beach face, where a line out from the fire crosses it, and ends at the east
-    // wall, the fence past the wall's end, or out in the water.
+    // wall or out in the water.
     const face: [number, number][] = [past(kerb - 0.6, turf.lip + 0.2), past(lipEnd + 0.15, turf.lip + 0.2)];
-    const edge: [number, number][] = [...east, ...down.slice(-2)];
     this.relay([
       // The turf's first row runs along the lane's cobbles, from the kerb to the gate's outer post. By the lane it
       // runs out to the fence, and from the retaining wall's start to the wall's foot.
       { turf: true, rows: [[at(kerb, turf.from), toGate[toGate.length - 1]], ...sweep(turf.from, turf.to, 3, (deg) => (deg < camp.wall[0].from ? reach(toGate, deg, foot) : foot))] },
       { turf: true, rows: lip, level: groundHeight(fire.x, fire.z) + GROUND_LIFT },
       { turf: true, rows: bank },
-      { turf: false, rows: sweep(bearingOf(face[1]), camp.sand.to, 1, (deg) => reach(edge, deg, camp.sand.r) - 0.1, (deg) => reach(face, deg, kerb)), hole: onSteps },
+      { turf: false, rows: sweep(bearingOf(face[1]), camp.sand.to, 1, (deg) => reach(east, deg, camp.sand.r) - 0.1, (deg) => reach(face, deg, kerb)), hole: onSteps },
     ]);
   }
 
