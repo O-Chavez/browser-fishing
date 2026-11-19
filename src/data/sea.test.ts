@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BOAT, DEEP_LOOKS, deepLookAt, JELLIES, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, jelliesAt, jellyGlow, jellyLight, jellyRises, jellyUp, onDeck, screenSprayAt, seaDepthFor, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
+import { BOAT, DEEP_LOOKS, deepLookAt, nightRamp, JELLIES, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, jelliesAt, jellyGlow, jellyLight, jellyRises, jellyUp, onDeck, screenSprayAt, seaDepthFor, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
 import { MAPS } from './maps';
 import { isWater, onDock, setAtSea, standHeight } from '../game/env';
 
@@ -171,6 +171,35 @@ describe('deep zone looks', () => {
       expect(ch(l.skyH)).toBeGreaterThanOrEqual(Math.min(ch(twilight.skyH), ch(abyss.skyH)));
       expect(ch(l.skyH)).toBeLessThanOrEqual(Math.max(ch(twilight.skyH), ch(abyss.skyH)));
     }
+  });
+});
+
+describe('the Twilight\'s atmosphere', () => {
+  // The values that leave a look's night, hidden sun and cloud haze as they were before the Twilight's atmosphere.
+  const plain = { nightLook: 0, nightHemiCol: 0x7088cc, nightHemi: 1, nightSun: 1, nightLamps: 1, glow: 0, sunLow: 0, sunCol: 0xfff0d6, cloudHaze: 1 };
+  it('leaves the other zones as they were', () => {
+    for (const z of [DEEP_LOOKS.dropoff, DEEP_LOOKS.kelp, DEEP_LOOKS.abyss]) expect(z).toMatchObject(plain);
+    expect(deepLookAt(seaMood(0))).toBe(DEEP_LOOKS.dropoff);
+    expect(deepLookAt(seaMood(45))).toBe(DEEP_LOOKS.kelp);
+    expect(deepLookAt(seaMood(100))).toBe(DEEP_LOOKS.abyss);
+  });
+  it('gives the Twilight its own night and a hidden sun', () => {
+    expect(DEEP_LOOKS.twilight.nightLook).toBe(1);
+    expect(DEEP_LOOKS.twilight.glow).toBeGreaterThan(0);
+    expect(DEEP_LOOKS.twilight.nightLamps).toBeLessThan(1);
+  });
+  it('blends the new amounts as numbers across the zone lines', () => {
+    const l = deepLookAt(seaMood(60));
+    expect(l.nightLook).toBeGreaterThan(0);
+    expect(l.nightLook).toBeLessThan(1);
+    expect(l.glow).toBeGreaterThan(0);
+    expect(l.glow).toBeLessThan(1);
+  });
+  it('ramp the night in by about 0.7 nightness', () => {
+    expect(nightRamp(0)).toBe(0);
+    expect(nightRamp(0.72)).toBe(1);
+    expect(nightRamp(1)).toBe(1);
+    for (let n = 0; n < 1; n += 0.05) expect(nightRamp(n + 0.05)).toBeGreaterThanOrEqual(nightRamp(n));
   });
 });
 

@@ -105,20 +105,61 @@ export interface DeepLook {
   glare: number;
   /** How far the boat's lamps are lit by day (0..1). */
   lamps: number;
+  /**
+   * Night (the Twilight's atmosphere, 2026-11-19). `nightLook` 0 is the old night: the day's sky dimmed by
+   * `nightSkyKeep`, the low cloud at 30%, the rain half white and the spray white. 1 blends instead, along `nightRamp`,
+   * to the look's own night sky (`nightSkyH`, `nightSkyT`), cloud that darkens with it, the foam turned `nightFoam`, and
+   * rain and spray that dim with the sky.
+   */
+  nightLook: number;
+  nightSkyH: number;
+  nightSkyT: number;
+  nightFoam: number;
+  /** The sky light's colour at night, its strength and the moon light's (times the old night's), and the boat's lamps at full night (0..1). */
+  nightHemiCol: number;
+  nightHemi: number;
+  nightSun: number;
+  nightLamps: number;
+  /**
+   * The hidden sun: a wide glow low on the horizon ahead of the rail, its path on the water and the cloud's undersides
+   * lit by it (`glow` 0 is none), `glowCol` by day and `nightGlow` at night; `sunLow` how far the sun sinks to the
+   * horizon (0..1); `sunCol` the sunlight's colour by day.
+   */
+  glow: number;
+  glowCol: number;
+  nightGlow: number;
+  sunLow: number;
+  sunCol: number;
+  /** How much of the distance haze the low cloud takes (1 all of it; less keeps the cloud's own colours). */
+  cloudHaze: number;
 }
+
+/** A look's night, hidden sun and cloud haze as they were before the Twilight's atmosphere: none of them changes a thing. */
+const PLAIN = {
+  nightLook: 0, nightSkyH: 0x241a3c, nightSkyT: 0x08061a, nightFoam: 0x8fb8e8, nightHemiCol: 0x7088cc, nightHemi: 1, nightSun: 1, nightLamps: 1,
+  glow: 0, glowCol: 0xffb98a, nightGlow: 0x5a3e6a, sunLow: 0, sunCol: 0xfff0d6, cloudHaze: 1,
+};
+
+/** How far into its own night colours a `nightLook` sky is at nightness `n`: properly dark by about 0.7, so dusk and dawn don't go terracotta. */
+export const nightRamp = (n: number): number => smooth(0.08, 0.72, n);
 
 /**
  * The deep zones' looks (Oscar, 2026-11-10, picked from in-game mockups): the Drop-off's lilac overcast carries on
  * over Kelp Deep and only the water turns kelp green; the Twilight is a standing dusk, a rose horizon under indigo
- * cloud over violet water; the Abyss is dark plum by day with the boat's lamps lit, and at night keeps enough light
- * on the water to see the swell by (Oscar, 2026-11-10: its night was too dark to see much). `dropoff` is the look the
+ * cloud over violet water, with a hidden sun glowing low ahead of the rail by day and a deep violet night where the
+ * jellies are the light (Oscar, 2026-11-19, "Last light" from a Fable 5.2 art review; he passed on sea mist); the
+ * Abyss is dark plum by day with the boat's lamps lit, and at night keeps enough light on the water to see the swell
+ * by (Oscar, 2026-11-10: its night was too dark to see much). `dropoff` is the look the
  * Drop-off ends on (mood 1), which the Shelf's sky blends toward. One block to tweak after a play test.
  */
 export const DEEP_LOOKS = {
-  dropoff: { skyH: 0xc8bcc6, skyT: 0x8c86a0, water: 0x3f6674, deep: 0x2a3a4e, nightWater: 0x10191d, nightDeep: 0x0e131a, nightLift: 1, cloudTop: 0xc4bac6, cloudBot: 0x8a8094, foam: 0xf6f4f2, hemiCol: 0xc6c3d0, hemi: 1.54, sun: 1.35, glare: 1, lamps: 0 },
-  kelp: { skyH: 0xc2bcc0, skyT: 0x7f8496, water: 0x256b58, deep: 0x0c3530, nightWater: 0x091b16, nightDeep: 0x041110, nightLift: 1, cloudTop: 0xbcb6ba, cloudBot: 0x7c7a88, foam: 0xf6f4f2, hemiCol: 0xc8c8d0, hemi: 1.45, sun: 1.15, glare: 0, lamps: 0 },
-  twilight: { skyH: 0xd79a8c, skyT: 0x4a3f78, water: 0x4a4f86, deep: 0x232450, nightWater: 0x121421, nightDeep: 0x0c0c1a, nightLift: 1, cloudTop: 0x9a7fa6, cloudBot: 0x4f456f, foam: 0xf6f4f2, hemiCol: 0xd0b8cc, hemi: 1.15, sun: 0.8, glare: 0, lamps: 0.5 },
-  abyss: { skyH: 0x3d2f4d, skyT: 0x0d0a16, water: 0x1a1b30, deep: 0x07070f, nightWater: 0x222c4c, nightDeep: 0x121830, nightLift: 8, cloudTop: 0x3a2f48, cloudBot: 0x17121f, foam: 0xb8b4c8, hemiCol: 0xa89cc8, hemi: 0.5, sun: 0.25, glare: 0, lamps: 1 },
+  dropoff: { ...PLAIN, skyH: 0xc8bcc6, skyT: 0x8c86a0, water: 0x3f6674, deep: 0x2a3a4e, nightWater: 0x10191d, nightDeep: 0x0e131a, nightLift: 1, cloudTop: 0xc4bac6, cloudBot: 0x8a8094, foam: 0xf6f4f2, hemiCol: 0xc6c3d0, hemi: 1.54, sun: 1.35, glare: 1, lamps: 0 },
+  kelp: { ...PLAIN, skyH: 0xc2bcc0, skyT: 0x7f8496, water: 0x256b58, deep: 0x0c3530, nightWater: 0x091b16, nightDeep: 0x041110, nightLift: 1, cloudTop: 0xbcb6ba, cloudBot: 0x7c7a88, foam: 0xf6f4f2, hemiCol: 0xc8c8d0, hemi: 1.45, sun: 1.15, glare: 0, lamps: 0 },
+  twilight: {
+    ...PLAIN, skyH: 0xd79a8c, skyT: 0x4a3f78, water: 0x4a4f86, deep: 0x232450, nightWater: 0x1a1636, nightDeep: 0x0e0b22, nightLift: 1, cloudTop: 0x8676aa, cloudBot: 0x463e72, foam: 0xf2dcd8, hemiCol: 0xa898d8, hemi: 0.95, sun: 0.8, glare: 0, lamps: 0.5,
+    nightLook: 1, nightHemiCol: 0x6a58b0, nightHemi: 0.47, nightSun: 0.4, nightLamps: 0.25, glow: 1, sunLow: 1, sunCol: 0xffc9a8, cloudHaze: 0.3,
+  },
+  abyss: { ...PLAIN, skyH: 0x3d2f4d, skyT: 0x0d0a16, water: 0x1a1b30, deep: 0x07070f, nightWater: 0x222c4c, nightDeep: 0x121830, nightLift: 8, cloudTop: 0x3a2f48, cloudBot: 0x17121f, foam: 0xb8b4c8, hemiCol: 0xa89cc8, hemi: 0.5, sun: 0.25, glare: 0, lamps: 1 },
 } satisfies Record<string, DeepLook>;
 
 /**
@@ -139,6 +180,11 @@ const mixHex = (a: number, b: number, t: number): number => {
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 };
 
+/** The look's fields that are amounts, blended as numbers; the rest are colours. */
+const LOOK_NUMBERS = new Set<keyof DeepLook>([
+  'nightLift', 'hemi', 'sun', 'glare', 'lamps', 'nightLook', 'nightHemi', 'nightSun', 'nightLamps', 'glow', 'sunLow', 'cloudHaze',
+]);
+
 /** The deep look for a sea mood: the Drop-off's up to mood 1, then each zone's, blended between `DEEP_LOOK_STOPS`. */
 export function deepLookAt(mood: number): DeepLook {
   const s = DEEP_LOOK_STOPS;
@@ -151,8 +197,7 @@ export function deepLookAt(mood: number): DeepLook {
     const m0 = seaMood(s[i - 1][0]);
     const t = (mood - m0) / (m1 - m0);
     const out = {} as DeepLook;
-    for (const k of Object.keys(a) as (keyof DeepLook)[])
-      out[k] = k === 'nightLift' || k === 'hemi' || k === 'sun' || k === 'glare' || k === 'lamps' ? a[k] + (b[k] - a[k]) * t : mixHex(a[k], b[k], t);
+    for (const k of Object.keys(a) as (keyof DeepLook)[]) out[k] = LOOK_NUMBERS.has(k) ? a[k] + (b[k] - a[k]) * t : mixHex(a[k], b[k], t);
     return out;
   }
   return s[s.length - 1][1];
