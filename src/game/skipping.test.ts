@@ -288,9 +288,8 @@ describe('a stone in the air', () => {
     }
   });
 
-  it('flies out past the end of the fence without crossing it or the jetty, over the sand and then the water', () => {
-    const run = camp.fence.runs[1];
-    const fence = [run.from, ...(run.via ?? []), run.to];
+  it("flies out past the corner of the beach's wall without crossing it or the jetty, over the sand and then the water", () => {
+    const wall = camp.beachWall[1];
     /** True when the step from p to q crosses the stretch from a to b, seen from above. */
     const crosses = (p: number[], q: number[], a: number[], b: number[]) => {
       const side = (u: number[], v: number[], w: number[]) => Math.sign((v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]));
@@ -310,21 +309,20 @@ describe('a stone in the air', () => {
           sk.update(1 / 120, true);
           const p = stone.position;
           const where = `${deg}° n ${n} stray ${a} at ${t.toFixed(2)} s`;
-          // Over the ground all the way, never across the fence's line, and wide of the jetty.
+          // Over the ground all the way, never across the wall's line, and wide of the jetty.
           expect(p.y, where).toBeGreaterThan(Math.max(0, groundHeight(p.x, p.z)) + 0.02);
-          if (was) for (let i = 0; i + 1 < fence.length; i++) expect(crosses(was, [p.x, p.z], fence[i], fence[i + 1]), where).toBe(false);
+          if (was) for (let i = 0; i + 1 < wall.length; i++) expect(crosses(was, [p.x, p.z], wall[i], wall[i + 1]), where).toBe(false);
           expect(Math.hypot(Math.max(j.x0 - p.x, 0, p.x - j.x1), Math.max(j.z0 - p.z, 0, p.z - j.z1)), where).toBeGreaterThan(0.4);
           was = [p.x, p.z];
         }
         expect(was![1]).toBeLessThan(PILE.z - 5);
       }
     }
-    // The line itself passes the fence's last post and the jetty's corner with 0.7 m or more to spare, at either edge of the spread.
-    const post = fence.at(-1)!;
+    // The line itself passes every bend of the wall and the jetty's corner with 0.7 m or more to spare, at either edge of the spread.
     for (const k of [-1, 1]) {
       const [dx, dz] = skipDir((k * SKIP.spread * Math.PI) / 180);
       const off = (x: number, z: number) => Math.abs((x - PILE.x) * dz - (z - PILE.z) * dx);
-      expect(off(post[0], post[1])).toBeGreaterThan(0.7);
+      for (const [x, z] of wall) expect(off(x, z), `${x}, ${z}`).toBeGreaterThan(0.7);
       expect(off(j.x1, j.z0)).toBeGreaterThan(0.7);
     }
   });

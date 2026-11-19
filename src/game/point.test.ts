@@ -379,23 +379,25 @@ describe('Ember Point', () => {
       for (const c of solids) if (c.z > camp.rack.z + 1) expect(offLine(c, root, { x: root.x, z: camp.rack.z + 1.2 }) - c.r).toBeGreaterThanOrEqual(1);
     });
 
-    it('cordons the camp: the fence runs from the gate round behind the hedge and down to the water', () => {
+    it("cordons the camp: the fence runs from the gate round behind the hedge, and the beach's wall from the hedge's end down to the water", () => {
       const [inner, outer] = archPosts(camp.arch, fire);
-      const [toGate, down] = camp.fence.runs;
+      const [toGate] = camp.fence.runs;
+      const down = camp.beachWall[1];
       expect(apart({ x: toGate.to[0], z: toGate.to[1] }, outer)).toBeLessThan(0.01);
       // The seat wall ends at the arch's other post, and the stone ledge under it stops short of the lane.
       expect(apart(inner, atBearing(fire, campRim(camp), camp.seatWall.to))).toBeLessThan(0.3);
-      // The fence's end stands at the water's edge.
-      const [ex, ez] = down.to;
+      // The fence has no other run, and the wall's end stands in the water.
+      expect(camp.fence.runs).toHaveLength(1);
+      const [ex, ez] = down.at(-1)!;
       expect(groundHeight(ex, ez)).toBeLessThan(0.35);
       expect([0, 1, 2, 3].some((k) => isWater(ex + Math.cos(k * 1.57) * 1.2, ez + Math.sin(k * 1.57) * 1.2))).toBe(true);
-      // Nobody slips through: along the fence's arc and both of its runs, every point has one of the fence's own
-      // colliders standing on it (the hedge's and the walls' stand half a metre off its line).
+      // Nobody slips through: along the fence's arc, its run and the beach's wall, every point has one of their own
+      // colliders standing on it (the hedge's and the retaining walls' stand half a metre off its line).
       const { arc } = camp.fence;
       const lines: [number, number][][] = [
         Array.from({ length: arc.to - arc.from + 1 }, (_, i) => Object.values(atBearing(fire, arc.r, arc.from + i)) as [number, number]),
         [toGate.from, toGate.to],
-        [down.from, ...down.via!, down.to],
+        down,
       ];
       for (const line of lines) {
         for (let i = 0; i + 1 < line.length; i++) {
@@ -406,19 +408,24 @@ describe('Ember Point', () => {
           }
         }
       }
-      // The hedge ends on a stone pier at each end, and the fence starts from each pier.
-      for (const [pier, start] of [[camp.piers[0], toGate.from], [camp.piers[1], down.from]] as const) {
+      // The hedge ends on a stone pier at each end; the fence starts from one and the beach's wall from the other.
+      for (const [pier, start] of [[camp.piers[0], toGate.from], [camp.piers[1], down[0]]] as const) {
         expect(solids.some((c) => apart(c, pier) < c.r)).toBe(true);
         expect(apart(pier, { x: start[0], z: start[1] })).toBeLessThan(0.75);
         // On the hedge's line at its end, no wider than the hedge by more than a hand.
         expect(fromFire(pier)).toBeCloseTo(camp.hedge.r, 1);
       }
-      // Nobody wades round either: past the fence's end, and at the foot of the ledge on the cove side, a player
+      // Nobody wades round either: past the wall's end, and at the foot of the ledge on the cove side, a player
       // (0.35 m) finds no ground shallower than the 0.3 m they can stand in.
       const wadeable = (x: number, z: number) => groundHeight(x, z) >= -0.3 && !solids.some((c) => apart(c, { x, z }) < c.r + 0.35);
-      const [vx, vz] = down.via![down.via!.length - 1];
+      const [vx, vz] = down.at(-2)!;
       const run = Math.hypot(ex - vx, ez - vz);
-      for (let d = 0.2; d <= 3; d += 0.1) expect(wadeable(ex + ((ex - vx) * d) / run, ez + ((ez - vz) * d) / run), `${d.toFixed(1)} m past the fence`).toBe(false);
+      for (let d = 0.2; d <= 3; d += 0.1) expect(wadeable(ex + ((ex - vx) * d) / run, ez + ((ez - vz) * d) / run), `${d.toFixed(1)} m past the wall`).toBe(false);
+      // Nor round its end: on a half ring beyond it, square to its last stretch.
+      for (let deg = -90; deg <= 90; deg += 10) {
+        const a = Math.atan2(ex - vx, ez - vz) + (deg * Math.PI) / 180;
+        expect(wadeable(ex + Math.sin(a) * 0.75, ez + Math.cos(a) * 0.75), `${deg}° round the wall's end`).toBe(false);
+      }
       for (const deg of [230, 250, 270, 290]) for (let r = campRim(camp); r < 12; r += 0.1) expect(wadeable(...(Object.values(atBearing(fire, r, deg)) as [number, number])), `${deg}° ${r.toFixed(1)} m`).toBe(false);
       // The retaining wall leaves the stall's width between its two arcs and nothing else.
       const [south, north] = camp.wall;
