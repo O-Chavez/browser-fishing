@@ -10,6 +10,7 @@ import { SIT, SKIP_THROW, type EmoteDef } from '../data/emotes';
 import { EmotePlayer } from './emotes/player';
 import type { SeatCtx } from './emotes/types';
 import { standHeight } from './env';
+import { Gait, gaitLift, gaitSway } from './gait';
 import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
 import { remoteHang, remoteScale } from './fishscale';
 import { JUMP_TIME, jumpLift } from './player';
@@ -60,6 +61,10 @@ class Avatar {
   private held: FishModel | null = null;
   private tipPos = new THREE.Vector3();
   private rod: THREE.Mesh;
+  /** The rod and its tip, which bounce and sway with the body's steps. */
+  private hand = new THREE.Group();
+  /** The walk cycle, from how fast the avatar is drawn moving. */
+  private gait = new Gait();
   private char: Character;
   private plate: THREE.Sprite;
   private name: string;
@@ -96,7 +101,8 @@ class Avatar {
     this.name = info.name;
     this.plate = this.nameplate(info.name);
     this.setPlate(info.name, false, atMaxRank(info.level), info.title);
-    this.group.add(this.char.group, this.rod, this.tip, this.plate);
+    this.hand.add(this.rod, this.tip);
+    this.group.add(this.char.group, this.hand, this.plate);
     this.group.visible = false;
 
     this.bobber = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat(0xe8442f));
@@ -244,6 +250,11 @@ class Avatar {
     this.emotes.start(def, dark, false, def.id === SIT.id ? this.seatAt(at.x, at.z) : undefined);
   }
 
+  /** Test hook: how much the avatar is walking (0 to 1), and how far its steps lift and lean the body now. */
+  stepping(): { moving: number; lift: number; sway: number } {
+    return { moving: this.gait.moving, lift: gaitLift(this.gait.phase, this.gait.moving), sway: gaitSway(this.gait.phase, this.gait.moving) };
+  }
+
   /** Test hook: how high the body's lowest point is drawn. */
   footY(): number {
     return this.char.footY();
@@ -264,9 +275,14 @@ class Avatar {
     if (!v) {
       this.setAct(null);
       this.emotes.clear();
-    } else if (shown && this.waiting) {
-      const w = this.waiting;
-      this.emote(w.def, w.at, w.dark);
+      this.gait.reset();
+    } else if (shown) {
+      // It appears where its player is now, not gliding (and stepping) over from where it was last drawn.
+      this.fresh = true;
+      if (this.waiting) {
+        const w = this.waiting;
+        this.emote(w.def, w.at, w.dark);
+      }
     }
   }
 
@@ -303,7 +319,9 @@ class Avatar {
       this.fresh = false;
     }
     const k = 1 - Math.exp(-dt * 10);
+    const { x: fromX, z: fromZ } = this.group.position;
     this.group.position.lerp(this.target, k);
+    const speed = dt > 0 ? Math.hypot(this.group.position.x - fromX, this.group.position.z - fromZ) / dt : 0;
     // The jump plays at full height on top of the smoothed ground, not through the lerp, which would flatten it.
     this.groundY += (this.target.y - this.groundY) * k;
     if (this.jumpT >= 0) this.jumpT = this.jumpT + dt >= JUMP_TIME ? -1 : this.jumpT + dt;
@@ -320,6 +338,14 @@ class Avatar {
     // are whole-body motion, and a stiff rod beside a leaning body would spoil them.
     if (this.emotes.playing && Math.hypot(p.x - this.emoteAt.x, p.z - this.emoteAt.z) > EMOTE_DRIFT) this.emotes.stop();
     const busy = this.emotes.update(dt);
+    // Walking bounces and sways the body like the townsfolk's, and the rod with it; the name tag stays level. Not
+    // mid-jump or under an emote's own motion.
+    this.gait.update(dt, speed, busy || this.jumpT >= 0);
+    const stepLift = gaitLift(this.gait.phase, this.gait.moving);
+    const stepSway = gaitSway(this.gait.phase, this.gait.moving);
+    this.char.step(stepLift, stepSway);
+    this.hand.position.y = stepLift;
+    this.hand.rotation.z = stepSway;
     // The name tag and a chat bubble rise with a body an emote lifts, so they stay as far over the head as at rest;
     // and over hands an emote holds up over the head, which they'd hide, as they're drawn over everything.
     const plateY = this.titled ? PLATE_TITLED_Y : PLATE_Y;
@@ -496,6 +522,12 @@ export class Avatars {
     if (!a?.group.visible) return null;
     const { x, y, z } = a.group.position;
     return { x, y, z };
+  }
+
+  /** Test hook: player `id`'s avatar's walk (`Avatar.stepping`), or null while it's hidden. */
+  stepping(id: number): { moving: number; lift: number; sway: number } | null {
+    const a = this.list.get(id);
+    return a?.group.visible ? a.stepping() : null;
   }
 
   /** Test hook: how high the lowest point of player `id`'s body is drawn, or null while it's hidden. */

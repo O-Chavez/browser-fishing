@@ -6,6 +6,7 @@ import { DARK, WOOD, ball, cyl, limb, mat, rbox, textPlane, woodSign } from './h
 import { mergeStatic } from './merge';
 import { INSTRUMENTS, partBit } from '../data/band';
 import { restInstrument } from './instruments';
+import { gaitLift, gaitSway } from './gait';
 import { NpcWalker, type Bystander } from './npcwalk';
 import { glowTag } from './nightglow';
 import { BOARD_POSTS, FurthestBoard } from './furthestboard';
@@ -1751,9 +1752,10 @@ export class Town {
       } else h.head.rotation.y *= 0.95;
       // Idle breathing, blending into a walking bob, sway and arm swing.
       const m = w?.moving ?? 0;
-      const s = Math.sin(w?.phase ?? 0);
-      h.body.position.y = Math.sin(t * 1.5 + h.pos.x) * 0.01 * (1 - m) + Math.abs(s) * 0.05 * m;
-      h.body.rotation.z = s * 0.05 * m;
+      const ph = w?.phase ?? 0;
+      const s = Math.sin(ph);
+      h.body.position.y = Math.sin(t * 1.5 + h.pos.x) * 0.01 * (1 - m) + gaitLift(ph, m);
+      h.body.rotation.z = gaitSway(ph, m);
       h.arms[0].rotation.x = s * 0.5 * m;
       h.arms[1].rotation.x = -s * 0.5 * m;
     }

@@ -1037,6 +1037,8 @@ export class Game {
       bandFakes: (sitters: Parameters<Game['fakeSitters']>[0]) => this.fakeSitters(sitters),
       /** Where another player's avatar is drawn (by player id), or null while it's hidden. */
       avatarAt: (id: number) => this.avatars.drawnAt(id),
+      /** Another player's avatar's walk (by player id): how much it is walking (0 to 1), and how far its steps lift (metres) and lean (radians) the body now. */
+      avatarStep: (id: number) => this.avatars.stepping(id),
       netId: () => this.net.id,
       /** Fireworks: the rocket that holds the sky as this player knows it, what is drawn of it and how many of its sounds have played (and the last one's gain after distance). */
       rocket: () => ({
