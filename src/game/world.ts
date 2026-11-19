@@ -35,7 +35,7 @@ import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { Boat } from './boat';
 import { Sea } from './sea';
-import { DEEP_LOOKS, deepLookAt, gloomAt, nightDarkAt, nightSkyKeep, seaMood } from '../data/sea';
+import { DEEP_LOOKS, deepLookAt, gloomAt, nightDarkAt, nightRamp, nightSkyKeep, seaMood } from '../data/sea';
 import { FX } from './fx';
 import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
@@ -68,6 +68,7 @@ const CLOUD_SEA = new THREE.Color(0xc4bac6);
 const DOCK_LAMP = new THREE.Color(0xffd27a);
 const scratchColor = new THREE.Color();
 const scratchLook = new THREE.Color();
+const scratchNight = new THREE.Color();
 
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.38, -0.85).normalize();
 /** The moon rides over the water too, off to the sun's right, so its path on the water is in view from the pier and the boat's rail. */
@@ -123,7 +124,7 @@ void main(){
 
 const skyVert = `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
 const skyFrag = `
-uniform vec3 uHorizon, uTop, uSunDir, uSunCol, uMoonDir, uMoonCol; uniform float uSunVis; varying vec3 vDir;
+uniform vec3 uHorizon, uTop, uSunDir, uSunCol, uMoonDir, uMoonCol, uGlow; uniform float uSunVis; varying vec3 vDir;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main(){
   vec3 d = normalize(vDir);
@@ -133,6 +134,10 @@ void main(){
   // uSunVis < 1 hides the sun behind cloud (at sea), leaving a soft glow where it is.
   col += uSunCol * uSunVis * (pow(s, 900.0) * 6.0 + pow(s, 24.0) * 0.35 + pow(s, 4.0) * 0.08);
   col += uSunCol * (1.0 - uSunVis) * pow(s, 6.0) * 0.12;
+  // At sea, the hidden sun's glow low ahead of the rail (zero ashore).
+  vec2 sxz = normalize(uSunDir.xz);
+  float az = max(dot(normalize(d.xz + vec2(1e-5)), sxz), 0.0);
+  col += uGlow * (pow(az, 3.0) * exp(-max(d.y, 0.0) * 9.0) * 0.55 + pow(s, 14.0) * 0.6 + pow(az, 1.5) * exp(-max(d.y, 0.0) * 3.0) * 0.07);
   // The moon: a soft-edged disc with a halo.
   float m = max(dot(d, uMoonDir), 0.0);
   col += uMoonCol * (smoothstep(0.99935, 0.9996, m) * 0.9 + pow(m, 700.0) * 0.22 + pow(m, 30.0) * 0.05);
@@ -245,6 +250,7 @@ export class World {
     uSunVis: { value: 1 },
     uMoonDir: { value: new THREE.Vector3().copy(MOON_DIR) },
     uMoonCol: { value: new THREE.Color(0) },
+    uGlow: { value: new THREE.Color(0) },
   };
   /** Grass tufts and flowers: thousands of tiny instances, hidden in lite graphics. */
   private clutter: THREE.Object3D[] = [];
@@ -258,6 +264,7 @@ export class World {
     uSunVis: this.waterU.uSunVis,
     uMoonDir: this.waterU.uMoonDir,
     uMoonCol: this.waterU.uMoonCol,
+    uGlow: this.waterU.uGlow,
   };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -573,11 +580,16 @@ export class World {
     // Drop-off each deep zone has its own sky (DEEP_LOOKS).
     const m = this.sea ? Math.min(1, this.mood) : 0;
     const look = deepLookAt(this.sea ? this.mood : 0);
+    // A look with its own night (`nightLook`) blends to its night colours rather than dimming the day's.
+    const nr = nightRamp(n);
     if (m > 0) {
       // Night out at sea darkens steeply with the league (SEA_NIGHT_DARK).
       const keep = nightSkyKeep(n, nightDarkAt(this.mood)) * (1 + (look.nightLift - 1) * n);
-      u.uSkyH.value.lerp(scratchLook.set(look.skyH).multiplyScalar(keep), m);
-      u.uSkyT.value.lerp(scratchLook.set(look.skyT).multiplyScalar(keep), m);
+      // On the way the horizon passes through the sky's own violet, so evenings don't go brown.
+      const sky = (day: number, night: number) =>
+        scratchLook.set(day).multiplyScalar(keep).lerp(scratchNight.set(day).lerp(scratchColor.set(look.skyT), 2 * nr * (1 - nr)).lerp(scratchColor.set(night), nr), look.nightLook);
+      u.uSkyH.value.lerp(sky(look.skyH, look.nightSkyH), m);
+      u.uSkyT.value.lerp(sky(look.skyT, look.nightSkyT), m);
     }
     // Past the Drop-off the fog closes in.
     const gloom = this.sea ? gloomAt(this.mood) : 0;
@@ -591,6 +603,9 @@ export class World {
       u.uSkyT.value.lerp(FLASH, 0.5 * flash);
     }
     u.uFogColor.value.copy(u.uSkyH.value);
+    // The hidden sun's glow (none ashore), a little stronger at dusk and dawn; it stays warm through dusk, turning to its
+    // night colour later than the sky does.
+    u.uGlow.value.set(look.glowCol).lerp(scratchLook.set(look.nightGlow), THREE.MathUtils.smoothstep(n, 0.3, 0.9)).multiplyScalar(look.glow * m * (1 + 0.5 * tw));
     const fog = this.scene.fog as THREE.Fog | null;
     if (fog) {
       fog.color.copy(u.uSkyH.value);
@@ -602,17 +617,17 @@ export class World {
     u.uSunCol.value.set(0xfff2d8).lerp(SUN_LOW, tw).multiplyScalar(1 - n);
     // No sun glare through the deep zones' cloud.
     u.uSunCol.value.multiplyScalar(look.glare);
-    const el = 0.38 * (1 - n) + 0.13 * n + 0.1 * tw;
+    const el = THREE.MathUtils.lerp(0.38 * (1 - n) + 0.13 * n + 0.1 * tw, 0.04, look.sunLow);
     u.uSunDir.value.set(SUN_DIR.x, el, SUN_DIR.z).normalize();
     // By day each deep zone sets its own light (as a share of the Drop-off's); nights dim with the gloom.
     const dayK = (v: number, at1: number, nightK: number) => (1 - n) * (v / at1) + n * nightK;
-    this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * dayK(look.hemi, DEEP_LOOKS.dropoff.hemi, 1 - 0.3 * gloom) + 2.5 * flash;
-    this.hemi.color.copy(b.top).lerp(WHITE, 0.5).lerp(scratchLook.set(look.hemiCol), m).lerp(HEMI_NIGHT, n);
+    this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * dayK(look.hemi, DEEP_LOOKS.dropoff.hemi, (1 - 0.3 * gloom) * look.nightHemi) + 2.5 * flash;
+    this.hemi.color.copy(b.top).lerp(WHITE, 0.5).lerp(scratchLook.set(look.hemiCol), m).lerp(scratchNight.copy(HEMI_NIGHT).lerp(scratchColor.set(look.nightHemiCol), m), n);
     // At sea the light bouncing up comes off the deck's warm planks, so the shaded inside of the rails reads warm, not grey.
     if (this.sea) this.hemi.groundColor.copy(b.water).multiplyScalar(0.5).lerp(DECK, 0.75).lerp(GROUND_NIGHT, n);
     else this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(GROUND_NIGHT, n);
-    this.sun.intensity = (3 * (1 - n) + 0.72 * n) * (1 - 0.55 * m) * dayK(look.sun, DEEP_LOOKS.dropoff.sun, 1 - 0.4 * gloom);
-    this.sun.color.set(0xfff0d6).lerp(SUN_LOW, tw * 0.8).lerp(SUN_NIGHT, n);
+    this.sun.intensity = (3 * (1 - n) + 0.72 * n) * (1 - 0.55 * m) * dayK(look.sun, DEEP_LOOKS.dropoff.sun, (1 - 0.4 * gloom) * look.nightSun);
+    this.sun.color.set(0xfff0d6).lerp(scratchLook.set(look.sunCol), m).lerp(SUN_LOW, tw * 0.8).lerp(SUN_NIGHT, n);
     this.cloudMat.color.set(0xffffff).lerp(CLOUD_NIGHT, n).lerp(CLOUD_DUSK, tw * 0.5).lerp(scratchColor.copy(CLOUD_SEA).multiplyScalar(1 - 0.7 * n), m);
     // Clear nights at sea get the pond's full starfield; the overcast rolling in toward the Drop-off hides it.
     const clearNight = Math.max(0, (n - 0.4) / 0.6) * (1 - THREE.MathUtils.smoothstep(m, 0.35, 0.65));
@@ -623,8 +638,8 @@ export class World {
     for (const l of this.dockLights) l.intensity = 8 * n;
     this.hub?.setNight(n);
     this.town?.setNight(n);
-    // The dark zones light the boat's lamps by day.
-    const lamps = Math.max(n, look.lamps);
+    // The dark zones light the boat's lamps by day; a look can turn them down at night (`nightLamps`).
+    const lamps = Math.max(n, look.lamps) * (1 - n * (1 - look.nightLamps));
     this.boat?.setNight(lamps);
     this.sea?.setColors(n, tw, b, look, lamps);
     for (const mt of this.mtMats) mt.mat.color.copy(mt.base).multiplyScalar(1 - 0.75 * n).lerp(u.uSkyH.value, mt.haze);

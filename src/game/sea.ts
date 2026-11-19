@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BOAT, CHINE, KEEL, KELP, SHELF_FAR, boatMotion, hullHalfWidth, lightningAt, kelpAt, rainAt, seaHeight, stormAt, type BoatMotion, type DeepLook } from '../data/sea';
+import { BOAT, CHINE, KEEL, KELP, SHELF_FAR, DEEP_LOOKS, boatMotion, hullHalfWidth, lightningAt, kelpAt, nightRamp, rainAt, seaHeight, stormAt, type BoatMotion, type DeepLook } from '../data/sea';
 import { mulberry } from './env';
 import { Jellies } from './jellies';
 import { Gulls, MarkerBuoy, Rain } from './seaatmo';
@@ -27,6 +27,8 @@ export interface SkyUniforms {
   uSunVis: { value: number };
   uMoonDir: { value: THREE.Vector3 };
   uMoonCol: { value: THREE.Color };
+  /** At sea: the hidden sun's glow (zero ashore). */
+  uGlow: { value: THREE.Color };
 }
 
 const seaVert = `
@@ -45,7 +47,7 @@ void main(){
 
 const seaFrag = `
 uniform float uTime, uSunVis, uFoam, uAmpChop, uAmpSwell, uStorm, uFogNear, uFogFar, uLift, uBoatGlow, uFarMix, uHaze, uKelp, uKelpPatch;
-uniform vec3 uKelpCol, uKelpCol2, uShallow, uDeep, uFar, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol;
+uniform vec3 uKelpCol, uKelpCol2, uShallow, uDeep, uFar, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uFoamCol, uMoonDir, uMoonCol, uGlow;
 uniform vec2 uWind;
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -89,6 +91,8 @@ void main(){
   float sp = max(dot(R, uSunDir), 0.0);
   col += uSunCol * uSunVis * (pow(sp, 350.0) * 4.0 + pow(sp, 30.0) * 0.15);
   col += uSunCol * (1.0 - uSunVis) * pow(sp, 8.0) * 0.08;
+  // The hidden sun's soft path on the water.
+  col += uGlow * (pow(sp, 6.0) * 0.35 + pow(sp, 40.0) * 0.5) * (0.3 + 0.7 * fres);
   // The moon's path on the water.
   float mp = max(dot(R, uMoonDir), 0.0);
   col += uMoonCol * (pow(mp, 260.0) * 1.6 + pow(mp, 24.0) * 0.12);
@@ -187,10 +191,9 @@ function bare(geo: THREE.BufferGeometry, name: string, value: (y: number, i: num
   return g;
 }
 
-const fogGLSL = `col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, length(cameraPosition - vWorld)));`;
 
 /** Low cloud: flat-bottomed puffs all around, darker underneath, merged into one draw (~5k triangles). */
-function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value: THREE.Color }; uShow: { value: number } }): THREE.Mesh {
+function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value: THREE.Color }; uShow: { value: number }; uCloudHaze: { value: number } }): THREE.Mesh {
   const rnd = mulberry(11);
   const parts: THREE.BufferGeometry[] = [];
   const flat = 0.5;
@@ -220,13 +223,17 @@ function lowCloud(u: SkyUniforms & { uTop: { value: THREE.Color }; uBot: { value
     uniforms: u as unknown as Record<string, THREE.IUniform>,
     vertexShader: `attribute float shade; varying float vShade; varying vec3 vWorld;
       void main(){ vShade = shade; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform vec3 uTop, uBot, uFogColor; uniform float uShow, uFogNear, uFogFar; varying float vShade; varying vec3 vWorld;
+    fragmentShader: `uniform vec3 uTop, uBot, uFogColor, uGlow, uSunDir; uniform float uShow, uFogNear, uFogFar, uCloudHaze; varying float vShade; varying vec3 vWorld;
       void main(){
         // Three tones of cloud (the whole part of vShade), and facets a touch lighter where they face up.
         float tone = floor(vShade + 0.0005);
         vec3 fn = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
-        vec3 lit = mix(uBot, uTop, pow(clamp(vShade - tone, 0.0, 1.0), 0.7)) * (0.86 + 0.09 * tone) * (0.95 + 0.07 * abs(fn.y));
-        vec3 col = mix(uFogColor, lit, uShow); ${fogGLSL}
+        float up = clamp(vShade - tone, 0.0, 1.0);
+        vec3 lit = mix(uBot, uTop, pow(up, 0.7)) * (0.86 + 0.09 * tone) * (0.95 + 0.07 * abs(fn.y));
+        // The hidden sun lights the undersides of the cloud toward it.
+        lit += uGlow * pow(max(dot(normalize(vWorld.xz), normalize(uSunDir.xz)), 0.0), 4.0) * (1.0 - up) * 0.12;
+        vec3 col = mix(uFogColor, lit, uShow);
+        col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, length(cameraPosition - vWorld)) * uCloudHaze);
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -376,10 +383,12 @@ const seaUniforms = (sky: SkyUniforms) => ({
   uLift: { value: 1 },
   uBoatGlow: { value: 0 },
 });
-const cloudUniforms = (sky: SkyUniforms) => ({ ...sky, uTop: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uShow: { value: 0 } });
+const cloudUniforms = (sky: SkyUniforms) => ({ ...sky, uTop: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uShow: { value: 0 }, uCloudHaze: { value: 1 } });
 const landUniforms = (sky: SkyUniforms) => ({ ...sky, uFade: { value: 0 }, uNight: { value: 0 } });
 
 const SPRAY = 420;
+const SPRAY_COL = new THREE.Color(0xf4f8fa);
+const DRIFT_COL = new THREE.Color(0xeef2f5);
 /** The open sea at night leans toward a deep blue rather than the pond's teal. */
 const NIGHT_SEA = new THREE.Color(0x07121f);
 
@@ -398,7 +407,7 @@ class Spray {
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     this.points = new THREE.Points(
       g,
-      new THREE.PointsMaterial({ map: dotTexture(), size: 0.11, color: 0xf4f8fa, transparent: true, opacity: 0.85, depthWrite: false }),
+      new THREE.PointsMaterial({ map: dotTexture(), size: 0.11, color: SPRAY_COL, transparent: true, opacity: 0.85, depthWrite: false }),
     );
     this.points.frustumCulled = false;
     this.pos.fill(-100);
@@ -454,7 +463,7 @@ class Spindrift {
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     this.points = new THREE.Points(
       g,
-      new THREE.PointsMaterial({ map: tex, size: 0.5, color: 0xeef2f5, transparent: true, opacity: 0.75, depthWrite: false }),
+      new THREE.PointsMaterial({ map: tex, size: 0.5, color: DRIFT_COL, transparent: true, opacity: 0.75, depthWrite: false }),
     );
     this.points.frustumCulled = false;
     this.pos.fill(-100);
@@ -585,6 +594,8 @@ export class Sea {
   private jellies: Jellies;
   private night = 0;
   private lamps = 0;
+  /** The deep look `setColors` last had, for the weather. */
+  private look: DeepLook = DEEP_LOOKS.dropoff;
   private lastBow = 0;
   /** How fast the bow is dropping into the water (m/s), for the spray on the screen. */
   slam = 0;
@@ -625,6 +636,8 @@ export class Sea {
     this.lite = on;
   }
   private lite = false;
+  /** How bright the rain is against the sky (1 the old half white; a look with its own night dims it). */
+  private rainLit = 1;
 
   /** Whether the marker buoy has drifted up alongside the boat. */
   get buoyAlongside(): boolean {
@@ -655,12 +668,25 @@ export class Sea {
     u.uKelpCol.value.set(KELP.color).multiplyScalar(1 - 0.85 * n);
     u.uKelpCol2.value.set(KELP.shade).multiplyScalar(1 - 0.85 * n);
     this.lamps = lamps;
-    u.uFoamCol.value.set(look.foam).lerp(new THREE.Color(0xf6f4f2), n).multiplyScalar(1 - 0.72 * n);
+    this.look = look;
+    // A look with its own night (`nightLook`): the foam turns to its glowing night surf, the cloud darkens with the
+    // sky to just above it, and the spray and spindrift dim with the night.
+    const nr = nightRamp(n);
+    const own = look.nightLook;
+    u.uFoamCol.value.set(look.foam).lerp(new THREE.Color(0xf6f4f2), n).multiplyScalar(1 - 0.72 * n)
+      .lerp(new THREE.Color(look.foam).lerp(dim(look.nightFoam, 0.2), nr), own * m);
     u.uLift.value = 1 - 0.85 * n;
     u.uBoatGlow.value = lamps;
+    this.cloudU.uCloudHaze.value = look.cloudHaze;
+    const nightTop = new THREE.Color(look.nightSkyT).lerp(new THREE.Color(look.nightSkyH), 0.3);
+    const cloudAt = (day: number, night: THREE.Color) => dim(day, 1 - 0.7 * n).lerp(new THREE.Color(day).lerp(night, nr), own);
     const cloud = new THREE.Color(0xffffff).lerp(new THREE.Color(0x26304f), n).lerp(new THREE.Color(0xffb890), tw * 0.5);
-    this.cloudU.uTop.value.copy(cloud).lerp(dim(look.cloudTop, 1 - 0.7 * n), m);
-    this.cloudU.uBot.value.copy(cloud).multiplyScalar(0.93).lerp(dim(look.cloudBot, 1 - 0.7 * n), m);
+    this.cloudU.uTop.value.copy(cloud).lerp(cloudAt(look.cloudTop, nightTop), m);
+    this.cloudU.uBot.value.copy(cloud).multiplyScalar(0.93).lerp(cloudAt(look.cloudBot, dim(look.nightSkyT, 0.7)), m);
+    const dimmed = 1 - 0.8 * nr * own * m;
+    (this.spray.points.material as THREE.PointsMaterial).color.copy(SPRAY_COL).multiplyScalar(dimmed);
+    (this.drift.points.material as THREE.PointsMaterial).color.copy(DRIFT_COL).multiplyScalar(dimmed);
+    this.rainLit = dimmed;
     // The horizon's cumulus: white by day, peach at dusk, moonlit slate at night, its shaded side toward the sky's own colour.
     this.bankU.uTop.value.set(0xffffff).lerp(new THREE.Color(0x3a4668), n).lerp(new THREE.Color(0xffc09a), tw * 0.6);
     this.bankU.uBot.value.copy(this.bankU.uTop.value).multiplyScalar(0.78).lerp(u.uSkyT.value, 0.35);
@@ -717,9 +743,10 @@ export class Sea {
     if (this.spray.points.visible) this.spray.update(dt, 90 * smooth(0.3, 1.1, mood) * (1 + 2 * Math.max(0, mood - 1)), sink);
     // Spindrift off the swell's crests (half the rate in lite graphics).
     this.drift.points.visible = storm > 0;
+    const look = this.look;
     if (storm > 0) this.drift.update(dt, t, mood, storm * (this.lite ? 0.5 : 1), 0.45 * this.swell + 0.3);
     this.lightning.update(dt, lightningAt(mood));
-    this.rain.update(t, rainAt(mood), storm, WIND, this.lamps);
+    this.rain.update(t, rainAt(mood), storm, WIND, this.lamps, this.rainLit);
     this.buoy.update(t, dt, mood, Math.max(this.night, this.lamps));
     this.gulls.update(t, dt, mood, this.night);
     this.jellies.update(t, mood, this.night);
