@@ -92,6 +92,13 @@ export const RARITY_XP: Record<Rarity, number> = {
 export const RARITY_COLOR: Record<Rarity, string> = {
   common: '#aaaaaa', uncommon: '#4cd964', rare: '#4a90e2', epic: '#b05ce6', legendary: '#ffc933',
 };
+/**
+ * A fish tier's colour for words over the scene and on the dark boards (the hooked and caught banner, the catch
+ * boards, the casino's record board): `RARITY_COLOR`'s grey, green, blue, purple and gold, lighter so they read
+ * there. White for no fish (tier 0).
+ */
+const TIER_TEXT = ['#ffffff', '#d6d6d6', '#8fe08f', '#6cc4ff', '#c58bff', '#ffd23a'];
+export const tierTextColor = (tier: number): string => TIER_TEXT[Math.max(0, Math.min(5, tier))];
 
 export const LOCATIONS: Location[] = [
   { id: 'pond', name: 'Starter Pond', unlockLevel: 1, sky: 0xbfe3f2, skyTop: 0x4f9fe0, water: 0x3aa6b9, deep: 0x0d4560, grass: 0x6bb04f, foliage: 0x3f8f43, sand: 0xd8c58f },

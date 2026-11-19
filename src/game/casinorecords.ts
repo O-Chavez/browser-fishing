@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FISH } from '../data/content';
+import { FISH, tierTextColor } from '../data/content';
 import type { Spot } from '../data/maps';
 import type { CasinoGame, CasinoRecord, CasinoRecords } from '../net/protocol';
 import { fillCoinAmount, rbox, textPlane } from './hub';
@@ -7,8 +7,6 @@ import { mergeStatic } from './merge';
 
 const GOLD = 0xe0b441;
 const GAMES: Record<CasinoGame, string> = { blackjack: 'Blackjack', roulette: 'Roulette', wheel: 'Lucky Wheel' };
-/** Fish tier colours, as on the Top Anglers board. */
-const TIER_COLORS = ['#ffffff', '#8fe08f', '#6cc4ff', '#c58bff', '#ff9b3d', '#ffd23a'];
 
 /** The casino's record board: the all-time biggest single win and loss, on the back wall. */
 export class RecordsBoard {
@@ -99,7 +97,7 @@ export class RecordsBoard {
     const f = FISH.find((x) => x.id === rec.fishId);
     const fish = `${rec.shiny ? '✨ ' : ''}${f ? `T${f.tier} ${f.name}` : 'a fish'}`;
     ctx.font = '600 24px system-ui, sans-serif';
-    ctx.fillStyle = TIER_COLORS[Math.min(5, f?.tier ?? 0)];
+    ctx.fillStyle = tierTextColor(f?.tier ?? 0);
     ctx.fillText(fish, L, y + 120);
     const fw = ctx.measureText(fish).width;
     ctx.fillStyle = '#d9a6bb';

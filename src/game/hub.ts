@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { FISH } from '../data/content';
 import { readingSpot, type MapDef, type Spot } from '../data/maps';
-import { DOCK_TOP, PILE_HEAD, groundHeight, pileLength, standHeight } from './env';
+import { DOCK_TOP, POST_TOP, groundHeight, postFoot, standHeight } from './env';
 import { mergeStatic } from './merge';
 import { glowTag } from './nightglow';
 import { buildFish, disposeFish, type FishModel } from './fishmodel';
@@ -424,9 +424,9 @@ export class Hub {
       }
       if (pile) {
         // A pile like the dock's own (world.ts), its head a little above the deck.
-        const len = pileLength(x, z);
-        const post = cyl(0.1, 0.12, len, 0x5b4128, 7);
-        post.position.y = PILE_HEAD - len / 2 - DOCK_TOP;
+        const foot = postFoot(x, z);
+        const post = cyl(0.1, 0.12, POST_TOP - foot, 0x5b4128, 7);
+        post.position.y = (POST_TOP + foot) / 2 - DOCK_TOP;
         lamp.add(post);
       }
       this.place(lamp, { x, z, facing: 0 }, 0, 0, pile ? DOCK_TOP : undefined);

@@ -307,12 +307,35 @@ export const DOCK_RECTS: DockRect[] = [
 ];
 
 /**
- * A dock pile's head, a little above the beams, and its length down to its foot: 0.3 m into the lake bed as the
- * terrain mesh draws it, so none ends in clear water where the bed drops away past the cove, and never shorter
- * than the 3.1 m the piles had before (where the ground stands near the deck, a short pile reads as a stub).
+ * The posts a dock stands on: a row under each long edge, 2.5 m apart, left out where another dock's boards lie over
+ * them. Each tops out at `POST_TOP`, a little proud of the planks, and its `foot` is `POST_SUNK` m down in the lake
+ * bed under it, and never higher than a post of `POST_MIN` m would reach. The bed falls to 6 m under the pier and its
+ * T end, where posts of one length stopped short in open water (a player's note, 2026-11-18).
  */
-export const PILE_HEAD = 0.95;
-export const pileLength = (x: number, z: number): number => Math.max(3.1, PILE_HEAD - terrainHeight(x, z) + 0.3);
+export const POST_TOP = 0.95;
+const POST_MIN = 3.1;
+const POST_SUNK = 0.5;
+/** Where a post at (x, z) ends: `POST_SUNK` m into the bed, and no higher than a post of `POST_MIN` m would. The lamp posts on their own piles (hub.ts) stand on the same. */
+export const postFoot = (x: number, z: number): number => Math.min(POST_TOP - POST_MIN, groundHeight(x, z) - POST_SUNK);
+export function dockPosts(r: DockRect): { x: number; z: number; foot: number }[] {
+  const w = r.x1 - r.x0;
+  const d = r.z1 - r.z0;
+  const alongZ = d >= w;
+  const len = alongZ ? d : w;
+  const cx = (r.x0 + r.x1) / 2;
+  const cz = (r.z0 + r.z1) / 2;
+  const posts: { x: number; z: number; foot: number }[] = [];
+  for (const side of [-1, 1]) {
+    const off = side * (((alongZ ? w : d) - 0.1) / 2 - 0.45) * 1.1;
+    for (let s = 0.3; s < len; s += 2.5) {
+      const x = alongZ ? cx + off : r.x0 + s;
+      const z = alongZ ? r.z0 + s : cz + off;
+      if (DOCK_RECTS.some((o) => o !== r && x > o.x0 - 0.05 && x < o.x1 + 0.05 && z > o.z0 - 0.05 && z < o.z1 + 0.05)) continue;
+      posts.push({ x, z, foot: postFoot(x, z) });
+    }
+  }
+  return posts;
+}
 
 export const onDock = (x: number, z: number, pad = 0): boolean =>
   atSea ? (pad > 0 ? inHull(x, z, pad) : onDeck(x, z)) : DOCK_RECTS.some((r) => x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad);

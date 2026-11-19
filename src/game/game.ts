@@ -13,6 +13,7 @@ import {
   TIERS,
   byId,
   tierName,
+  tierTextColor,
   type Bait,
   type Fish,
   type Line,
@@ -2047,7 +2048,7 @@ export class Game {
           fish: f?.name ?? '',
           tier: f?.tier ?? 0,
           // Every sea fish is tier 5, so the sea board keeps gold for the zones' legends.
-          color: f?.sea && !f.legend ? '#9fd8e8' : this.tierColor(f?.tier ?? 0),
+          color: f?.sea && !f.legend ? '#9fd8e8' : tierTextColor(f?.tier ?? 0),
           shiny: p.best?.shiny,
           title: p.title,
           ...(f?.sea ? { sea: true } : {}),
@@ -3201,7 +3202,7 @@ export class Game {
     const legendLanded = this.map.sea && verb === 'caught';
     if (legendLanded) el.classList.add('legend');
     const name = this.map.sea ? 'Legend' : `${tierName(fish.tier)} fish`;
-    el.style.color = this.map.sea ? '' : this.tierColor(fish.tier);
+    el.style.color = this.map.sea ? '' : tierTextColor(fish.tier);
     el.innerHTML = legendLanded
       ? `${shiny ? '✨ ' : ''}LEGEND LANDED!<small>${escapeHtml(fish.name ?? '')}</small>`
       : `${shiny ? '✨ Shiny ' : ''}${name} ${verb}!${verb === 'hooked' ? `<small>${focus}</small>` : ''}`;
@@ -4451,10 +4452,6 @@ export class Game {
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
-  }
-
-  private tierColor(tier: number): string {
-    return ['#ffffff', '#8fe08f', '#6cc4ff', '#c58bff', '#ff9b3d', '#ffd23a'][Math.min(5, tier)];
   }
 
   private esc(h: string): string {
