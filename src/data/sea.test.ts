@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BOAT, DEEP_LOOKS, deepLookAt, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, onDeck, screenSprayAt, seaDepthFor, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
+import { BOAT, DEEP_LOOKS, deepLookAt, JELLIES, NEAR_CUT, WAVES, boatMotion, gloomAt, inHull, jelliesAt, jellyGlow, jellyLight, jellyRises, jellyUp, onDeck, screenSprayAt, seaDepthFor, seaHeight, seaMood, tiltAt, waveAmp, zoneAt } from './sea';
 import { MAPS } from './maps';
 import { isWater, onDock, setAtSea, standHeight } from '../game/env';
 
@@ -171,5 +171,66 @@ describe('deep zone looks', () => {
       expect(ch(l.skyH)).toBeGreaterThanOrEqual(Math.min(ch(twilight.skyH), ch(abyss.skyH)));
       expect(ch(l.skyH)).toBeLessThanOrEqual(Math.max(ch(twilight.skyH), ch(abyss.skyH)));
     }
+  });
+});
+
+describe('the Twilight\'s lantern jellies', () => {
+  it('show only in the Twilight, easing in before its line and out before the Abyss', () => {
+    for (const d of [1, 16, 40, 48, 55, 92, 100, 150]) expect(jelliesAt(seaMood(d))).toBe(0);
+    for (const d of [61, 66, 76, 85]) expect(jelliesAt(seaMood(d))).toBe(1);
+    expect(jelliesAt(seaMood(58))).toBeGreaterThan(0);
+    expect(jelliesAt(seaMood(58))).toBeLessThan(1);
+    expect(jelliesAt(seaMood(89))).toBeGreaterThan(0);
+    expect(jelliesAt(seaMood(89))).toBeLessThan(1);
+  });
+
+  const field = [...jellyRises(JELLIES.near.count, JELLIES.day), ...jellyRises(JELLIES.far.count)];
+  const upAt = (n: number) => field.filter((r) => jellyUp(n, r) > 0).length;
+
+  it('are all out and at full glow at full night', () => {
+    expect(upAt(1)).toBe(field.length);
+    for (const r of field) expect(jellyGlow(1, r)).toBe(1);
+  });
+
+  it('leave only the few near the boat up by day, paler', () => {
+    expect(upAt(0)).toBe(JELLIES.day);
+    expect(JELLIES.day).toBeGreaterThanOrEqual(2);
+    expect(JELLIES.day).toBeLessThanOrEqual(4);
+    expect(jellyGlow(0, -1)).toBe(JELLIES.dayGlow);
+  });
+
+  it('hold the light round them back until the water has darkened, the same as their glow by day and at full night', () => {
+    for (const r of field) {
+      expect(jellyLight(0, r)).toBe(jellyGlow(0, r));
+      expect(jellyLight(1, r)).toBe(jellyGlow(1, r));
+      let last = 0;
+      for (let n = 0; n <= 1.0001; n += 0.02) {
+        const l = jellyLight(n, r);
+        expect(l).toBeLessThanOrEqual(jellyGlow(n, r));
+        expect(l).toBeGreaterThanOrEqual(last - 1e-12);
+        last = l;
+      }
+    }
+    // Mid-dusk, a jelly that has surfaced is held near the day's light.
+    expect(jellyLight(0.55, 0.2)).toBeLessThan(JELLIES.dayGlow + 0.05);
+  });
+
+  it('surface one by one through dusk, never fewer or dimmer as it gets darker', () => {
+    let up = 0;
+    const glow = field.map(() => 0);
+    const counts = new Set<number>();
+    for (let n = 0; n <= 1.0001; n += 0.01) {
+      const now = upAt(n);
+      expect(now).toBeGreaterThanOrEqual(up);
+      up = now;
+      counts.add(now);
+      field.forEach((r, i) => {
+        const g = jellyGlow(n, r);
+        expect(g).toBeGreaterThanOrEqual(glow[i] - 1e-12);
+        glow[i] = g;
+      });
+    }
+    // Many steps in between, not all at once.
+    expect(counts.size).toBeGreaterThan(30);
   });
 });
