@@ -2133,6 +2133,8 @@ export class Character {
    * effects sit beside it in `loose`, so a leaning or hopping body doesn't drag them along.
    */
   private poser = new THREE.Group();
+  /** Holds `poser`, and bounces and sways with a walk's steps (`step`), under whatever pose an emote puts on top. */
+  private stepper = new THREE.Group();
   private loose = new THREE.Group();
   /** A playing emote's own objects (`EmotePlay.group`), in the character's space; the pose doesn't move them. */
   readonly effects = new THREE.Group();
@@ -2175,7 +2177,8 @@ export class Character {
     this.head.position.y = 1.62;
     this.body.castShadow = this.head.castShadow = true;
     this.poser.add(this.body, this.head, this.outfit);
-    this.group.add(this.poser, this.loose, this.effects);
+    this.stepper.add(this.poser);
+    this.group.add(this.stepper, this.loose, this.effects);
     this.set(look);
   }
 
@@ -2250,6 +2253,15 @@ export class Character {
   /** Moves the body, head and outfit as one piece for an emote (`applyPose`); `null` stands it back at rest. */
   pose(p: EmotePose | null): void {
     applyPose(this.poser, p ?? REST);
+  }
+
+  /**
+   * A walk's bounce and sway on the body, head and outfit: `lift` metres up and `sway` radians of lean about the
+   * feet (`gaitLift`, `gaitSway`). The pet and ground effects stay where they are.
+   */
+  step(lift: number, sway: number): void {
+    this.stepper.position.y = lift;
+    this.stepper.rotation.z = sway;
   }
 
   /** Test hook: how high the body's lowest point is in the world now, pose and all (a seated body's should be its seat's top). */
