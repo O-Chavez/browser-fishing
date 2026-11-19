@@ -1,4 +1,4 @@
-import { screenSprayAt } from '../data/sea';
+import { ABYSS, abyssAt, screenSprayAt } from '../data/sea';
 
 /**
  * Spray on the screen at sea: when the bow slams into a wave, droplets land on the view and a misty
@@ -50,7 +50,7 @@ export class ScreenSpray {
       d.vy += 12 * dt;
     }
     this.drops = this.drops.filter((d) => d.life > 0);
-    this.draw(night);
+    this.draw(night, abyssAt(mood));
   }
 
   /** One wave over the bow, at strength `k` (0..1): a patch of drops where it hits, a few strays, and mist. */
@@ -95,13 +95,15 @@ export class ScreenSpray {
     }
   }
 
-  private draw(night: number): void {
+  private draw(night: number, abyss: number): void {
     const g = this.g;
     const { width: w, height: h } = this.cv;
     g.clearRect(0, 0, w, h);
     // Dimmer at night, but never grey: grey drops look like dirt on the screen.
     const lit = Math.round(255 * (1 - 0.3 * night));
-    const c = (a: number) => `rgba(${lit}, ${lit}, ${Math.min(255, lit + 8)}, ${a.toFixed(3)})`;
+    // The Abyss is black all round, so its drops are fainter rather than glowing white (ABYSS.screenSpray).
+    const faint = 1 + (ABYSS.screenSpray - 1) * abyss;
+    const c = (a: number) => `rgba(${lit}, ${lit}, ${Math.min(255, lit + 8)}, ${(a * faint).toFixed(3)})`;
     if (this.mist > 0.01) {
       const v = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.25, w / 2, h / 2, Math.max(w, h) * 0.75);
       v.addColorStop(0, c(this.mist * 0.15));

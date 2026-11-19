@@ -34,8 +34,8 @@ import type { Bystander } from './npcwalk';
 import type { Circle } from './player';
 import { CasinoHall } from './casinohall';
 import { Boat } from './boat';
-import { Sea } from './sea';
-import { DEEP_LOOKS, deepLookAt, gloomAt, nightDarkAt, nightRamp, nightSkyKeep, seaMood } from '../data/sea';
+import { ABYSS_SKY_GLSL, Sea, abyssSkyUniforms } from './sea';
+import { ABYSS, DEEP_LOOKS, abyssAt, deepLookAt, gloomAt, nightDarkAt, nightRamp, nightSkyKeep, seaMood } from '../data/sea';
 import { FX } from './fx';
 import { disposeTree } from './dispose';
 import { LineRenderer, Rig } from './rig';
@@ -125,11 +125,14 @@ void main(){
 const skyVert = `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
 const skyFrag = `
 uniform vec3 uHorizon, uTop, uSunDir, uSunCol, uMoonDir, uMoonCol, uGlow; uniform float uSunVis; varying vec3 vDir;
+${ABYSS_SKY_GLSL}
 float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main(){
   vec3 d = normalize(vDir);
   float h = max(d.y, 0.0);
   vec3 col = mix(uHorizon, uTop, pow(h, 0.55));
+  // The Abyss: a band of storm-light on the horizon, and lightning from behind the cloud.
+  if (uAbyss > 0.0) col += abyssBand(d, uBandShape.x) + abyssFlash(d);
   float s = max(dot(d, uSunDir), 0.0);
   // uSunVis < 1 hides the sun behind cloud (at sea), leaving a soft glow where it is.
   col += uSunCol * uSunVis * (pow(s, 900.0) * 6.0 + pow(s, 24.0) * 0.35 + pow(s, 4.0) * 0.08);
@@ -251,6 +254,7 @@ export class World {
     uMoonDir: { value: new THREE.Vector3().copy(MOON_DIR) },
     uMoonCol: { value: new THREE.Color(0) },
     uGlow: { value: new THREE.Color(0) },
+    ...abyssSkyUniforms(),
   };
   /** Grass tufts and flowers: thousands of tiny instances, hidden in lite graphics. */
   private clutter: THREE.Object3D[] = [];
@@ -265,6 +269,16 @@ export class World {
     uMoonDir: this.waterU.uMoonDir,
     uMoonCol: this.waterU.uMoonCol,
     uGlow: this.waterU.uGlow,
+    uAbyss: this.waterU.uAbyss,
+    uBand: this.waterU.uBand,
+    uBandShape: this.waterU.uBandShape,
+    uFlashDir: this.waterU.uFlashDir,
+    uFlashCol: this.waterU.uFlashCol,
+    uFlashWide: this.waterU.uFlashWide,
+    uSheetDir: this.waterU.uSheetDir,
+    uSheetCol: this.waterU.uSheetCol,
+    uSheetSky: this.waterU.uSheetSky,
+    uSheetSize: this.waterU.uSheetSize,
   };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -561,6 +575,8 @@ export class World {
   private updateDaylight(t: number): void {
     const f = this.dayOverride ?? dayFraction(this.clock() / 1000);
     const n = nightness(f);
+    // The sky light comes from straight up, except while one of the Abyss's bolts leans it (below).
+    this.hemi.position.set(0, 1, 0);
     if (this.indoor) {
       this.night = n;
       this.hemi.intensity = 2.6;
@@ -591,16 +607,28 @@ export class World {
       u.uSkyH.value.lerp(sky(look.skyH, look.nightSkyH), m);
       u.uSkyT.value.lerp(sky(look.skyT, look.nightSkyT), m);
     }
+    // The Abyss is a standing night (ABYSS): a near-black sky and fog whatever the clock says, with a band of dim
+    // storm-light on the horizon, a little brighter by day.
+    const abyss = this.sea ? abyssAt(this.mood) : 0;
+    if (abyss > 0) {
+      u.uSkyH.value.lerp(scratchLook.set(ABYSS.fog), abyss);
+      u.uSkyT.value.lerp(scratchLook.set(ABYSS.sky), abyss);
+    }
+    u.uAbyss.value = abyss;
+    u.uBand.value.set(ABYSS.band).multiplyScalar(abyss * (1 - (1 - ABYSS.night) * n));
+    u.uBandShape.value.set(ABYSS.bandHeight, ABYSS.bandBreak);
     // Past the Drop-off the fog closes in.
     const gloom = this.sea ? gloomAt(this.mood) : 0;
     u.uSunVis.value = 1 - 0.85 * m;
     u.uFogNear.value = 30 - 18 * m - 6 * gloom;
     u.uFogFar.value = 280 - 90 * m - 70 * gloom;
-    // A lightning strike lights the whole sky for a moment.
+    // A lightning strike lights the whole sky for a moment. In the Abyss it lights the sky from behind the cloud instead
+    // (the sea sets that light), and the fog and the water stay dark, so the swells stand black against it.
     const flash = this.sea?.lightning.flash ?? 0;
-    if (flash > 0) {
-      u.uSkyH.value.lerp(FLASH, 0.7 * flash);
-      u.uSkyT.value.lerp(FLASH, 0.5 * flash);
+    const wash = flash * (1 - abyss);
+    if (wash > 0) {
+      u.uSkyH.value.lerp(FLASH, 0.7 * wash);
+      u.uSkyT.value.lerp(FLASH, 0.5 * wash);
     }
     u.uFogColor.value.copy(u.uSkyH.value);
     // The hidden sun's glow (none ashore), a little stronger at dusk and dawn; it stays warm through dusk, turning to its
@@ -617,12 +645,22 @@ export class World {
     u.uSunCol.value.set(0xfff2d8).lerp(SUN_LOW, tw).multiplyScalar(1 - n);
     // No sun glare through the deep zones' cloud.
     u.uSunCol.value.multiplyScalar(look.glare);
-    const el = THREE.MathUtils.lerp(0.38 * (1 - n) + 0.13 * n + 0.1 * tw, 0.04, look.sunLow);
+    // While the Abyss's look eases in over the Twilight's, the hidden sun stays down on the horizon and fades there,
+    // instead of climbing a blackening sky as `sunLow` blends out (nothing of the sun shows in the Abyss itself).
+    const el = THREE.MathUtils.lerp(0.38 * (1 - n) + 0.13 * n + 0.1 * tw, 0.04, Math.min(1, look.sunLow + abyss));
     u.uSunDir.value.set(SUN_DIR.x, el, SUN_DIR.z).normalize();
     // By day each deep zone sets its own light (as a share of the Drop-off's); nights dim with the gloom.
     const dayK = (v: number, at1: number, nightK: number) => (1 - n) * (v / at1) + n * nightK;
-    this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * dayK(look.hemi, DEEP_LOOKS.dropoff.hemi, (1 - 0.3 * gloom) * look.nightHemi) + 2.5 * flash;
+    this.hemi.intensity = (1.1 * (1 - n) + 0.56 * n) * (1 + 0.4 * m) * dayK(look.hemi, DEEP_LOOKS.dropoff.hemi, (1 - 0.3 * gloom) * look.nightHemi) * (1 + (ABYSS.hemi - 1) * abyss) + 2.5 * wash;
     this.hemi.color.copy(b.top).lerp(WHITE, 0.5).lerp(scratchLook.set(look.hemiCol), m).lerp(scratchNight.copy(HEMI_NIGHT).lerp(scratchColor.set(look.nightHemiCol), m), n);
+    // The Abyss's bolts throw a short cold light across the boat from where they stand, not a wash from above.
+    const rim = flash * abyss;
+    if (rim > 0 && this.sea) {
+      const a = this.sea.lightning.bearing, lean = ABYSS.flash.lean * rim;
+      this.hemi.intensity += ABYSS.flash.rim * rim;
+      this.hemi.color.lerp(scratchLook.set(ABYSS.flash.rimColor), 0.85 * rim);
+      this.hemi.position.set(Math.cos(a) * lean, 1 - lean * 0.6, Math.sin(a) * lean);
+    }
     // At sea the light bouncing up comes off the deck's warm planks, so the shaded inside of the rails reads warm, not grey.
     if (this.sea) this.hemi.groundColor.copy(b.water).multiplyScalar(0.5).lerp(DECK, 0.75).lerp(GROUND_NIGHT, n);
     else this.hemi.groundColor.copy(b.grass).multiplyScalar(0.5).lerp(GROUND_NIGHT, n);
@@ -683,6 +721,8 @@ export class World {
     setAtSea(!!map.sea);
     this.fireworks = null;
     this.sea = null;
+    // Nothing of the Abyss's sky is left over from a sea just sailed away from.
+    this.waterU.uAbyss.value = 0;
     this.boat = null;
     this.scene.remove(this.decor);
     disposeTree(this.decor);

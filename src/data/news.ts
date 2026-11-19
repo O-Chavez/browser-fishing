@@ -16,6 +16,7 @@
  *   { id: 1, date: '2026-11-20', title: 'The Delve', image: delve, alt: 'Diving below the pond',
  *     body: ['Past level 30, ...', 'Ask <b>Captain Reed</b> at the harbour to ...'] },
  */
+import abyssDark from '../assets/images/news/abyss-dark.jpg';
 import abyssGear from '../assets/images/news/abyss-gear.jpg';
 import anglersRest from '../assets/images/news/anglers-rest.jpg';
 import charterChart from '../assets/images/news/charter-chart.jpg';
@@ -46,6 +47,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 17,
+    date: '2026-11-19',
+    title: 'The Abyss goes dark',
+    image: abyssDark,
+    alt: 'From the deck in the Abyss: the Leviathan rears its spined neck out of a black swell, jaws open and eyes lit, with a bolt of lightning behind it and dark cloud across a pale sky',
+    body: [
+      "<b>The Abyss</b> has a look of its own now. The sky is black by day and by night, with one band of violet storm-light on the horizon for the swells to rise against. Lightning lights the sky and leaves the sea a black shape in front of it.",
+      "You're not alone out there. Far off, <b>the Leviathan</b> arches through the swell, and now and then rears its whole neck out of the water. <b>The Kraken</b>'s arms rise from distant crests. And beside the boat, <b>the Drowned Dreamer</b>'s eyes open just under the water, until you look straight at them.",
+      "They're sights, not fights: the legends bite as they always have. Take a charter with <b>Captain Reed</b> out to the Abyss to see it.",
+    ],
+  },
   {
     id: 16,
     date: '2026-11-18',
