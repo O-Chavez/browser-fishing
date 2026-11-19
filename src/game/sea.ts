@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BOAT, CHINE, FAR_CUT, KEEL, NEAR_CUT, KELP, SHELF_FAR, WAVES, boatMotion, hullHalfWidth, lightningAt, kelpAt, rainAt, seaHeight, stormAt, waveAmp, type BoatMotion, type DeepLook } from '../data/sea';
+import { BOAT, CHINE, KEEL, KELP, SHELF_FAR, boatMotion, hullHalfWidth, lightningAt, kelpAt, rainAt, seaHeight, stormAt, type BoatMotion, type DeepLook } from '../data/sea';
 import { mulberry } from './env';
+import { Jellies } from './jellies';
 import { Gulls, MarkerBuoy, Rain } from './seaatmo';
+import { setWaves, waveUniforms, WAVE_GLSL } from './seawaves';
 
 /**
  * The open sea around the charter boat. The boat stays still at the origin and this whole frame (the
@@ -27,29 +29,13 @@ export interface SkyUniforms {
   uMoonCol: { value: THREE.Color };
 }
 
-const N = WAVES.length;
-
 const seaVert = `
-uniform float uTime; uniform vec4 uWa[${N}]; uniform vec4 uWb[${N}];
+${WAVE_GLSL}
 varying vec3 vWorld; varying vec3 vN; varying float vHc; varying float vHs; varying float vAtt;
 void main(){
-  vec3 p = position;
-  float r = length(p.xz);
-  float near = ${NEAR_CUT.keep.toFixed(3)} + ${(1 - NEAR_CUT.keep).toFixed(3)} * smoothstep(${NEAR_CUT.from.toFixed(1)}, ${NEAR_CUT.to.toFixed(1)}, r);
-  float far = 1.0 - smoothstep(${FAR_CUT.from.toFixed(1)}, ${FAR_CUT.to.toFixed(1)}, r);
-  float att = near * far;
-  vec3 d = vec3(0.0); vec3 n = vec3(0.0, 1.0, 0.0);
-  float hc = 0.0, hs = 0.0;
-  for (int i = 0; i < ${N}; i++) {
-    // uWb.w: 1 for the chop, cut down near the boat; 0 for the long swell, which the boat rides whole.
-    vec2 dir = uWa[i].xy; float k = uWa[i].z; float a = uWa[i].w * far * mix(1.0, near, uWb[i].w); float q = uWb[i].x;
-    float ph = k * dot(dir, p.xz) - uWb[i].y * uTime + uWb[i].z;
-    float c = cos(ph), s = sin(ph);
-    d.xz += q * a * dir * c; d.y += a * s;
-    if (uWb[i].w > 0.5) hc += a * s; else hs += a * s;
-    n.xz -= dir * k * a * c; n.y -= q * k * a * s;
-  }
-  p += d;
+  vec3 d, n; float hc, hs, att;
+  seaWaves(position.xz, d, n, hc, hs, att);
+  vec3 p = position + d;
   vHc = hc; vHs = hs; vAtt = att;
   vec4 w = modelMatrix * vec4(p, 1.0);
   vWorld = w.xyz;
@@ -371,9 +357,7 @@ function dotTexture(): THREE.Texture {
 
 const seaUniforms = (sky: SkyUniforms) => ({
   ...sky,
-  uTime: { value: 0 },
-  uWa: { value: WAVES.map((w) => new THREE.Vector4(w.dx, w.dz, w.k, 0)) },
-  uWb: { value: WAVES.map((w) => new THREE.Vector4(0, w.w, w.ph, w.cut ? 1 : 0)) },
+  ...waveUniforms(),
   uAmpChop: { value: 1 },
   uAmpSwell: { value: 1 },
   uStorm: { value: 0 },
@@ -598,6 +582,7 @@ export class Sea {
   private rain: Rain;
   private buoy = new MarkerBuoy();
   private gulls = new Gulls();
+  private jellies: Jellies;
   private night = 0;
   private lamps = 0;
   private lastBow = 0;
@@ -607,6 +592,7 @@ export class Sea {
   swell = 0;
   private boatM = new THREE.Matrix4();
   private tmp = new THREE.Vector3();
+  private sums = { chop: 0, swell: 0 };
   private mood = 0;
   private t = 0;
   private cloudTurn = 0;
@@ -626,14 +612,16 @@ export class Sea {
     this.land = headland(this.landU);
     this.frame.matrixAutoUpdate = false;
     this.rain = new Rain(sky);
-    this.frame.add(water, this.bank, this.clouds, this.land, this.drift.points, this.lightning.group, this.buoy.group, this.gulls.mesh);
+    this.jellies = new Jellies(this.u);
+    this.frame.add(water, this.bank, this.clouds, this.land, this.drift.points, this.lightning.group, this.buoy.group, this.gulls.mesh, this.jellies.group);
     this.onBoat.add(this.spray.points, this.rain.mesh);
   }
 
-  /** Spray is see-through overdraw near the eye; lite graphics drops it. */
+  /** Spray is see-through overdraw near the eye; lite graphics drops it, and thins the rain and the jellies. */
   setLite(on: boolean): void {
     this.spray.points.visible = !on;
     this.rain.setLite(on);
+    this.jellies.setLite(on);
     this.lite = on;
   }
   private lite = false;
@@ -684,20 +672,10 @@ export class Sea {
     this.mood = mood;
     const u = this.u;
     u.uTime.value = t;
-    const sharp = 0.5 + 0.5 * Math.min(1, mood);
-    let chop = 0;
-    let swell = 0;
-    WAVES.forEach((w, i) => {
-      const a = waveAmp(w, mood);
-      if (w.cut) chop += a;
-      else swell += a;
-      u.uWa.value[i].w = a;
-      // Gerstner steepness per wave, kept below the point where crests fold over.
-      u.uWb.value[i].x = a > 1e-4 ? (w.steep * sharp) / (w.k * a * N) : 0;
-    });
-    u.uAmpChop.value = chop;
-    u.uAmpSwell.value = swell;
-    this.swell = swell;
+    setWaves(u, mood, this.sums);
+    u.uAmpChop.value = this.sums.chop;
+    u.uAmpSwell.value = this.sums.swell;
+    this.swell = this.sums.swell;
     u.uStorm.value = stormAt(mood);
     u.uFoam.value = 0.15 + 0.65 * Math.min(1, mood) + 0.2 * stormAt(mood);
 
@@ -739,11 +717,12 @@ export class Sea {
     if (this.spray.points.visible) this.spray.update(dt, 90 * smooth(0.3, 1.1, mood) * (1 + 2 * Math.max(0, mood - 1)), sink);
     // Spindrift off the swell's crests (half the rate in lite graphics).
     this.drift.points.visible = storm > 0;
-    if (storm > 0) this.drift.update(dt, t, mood, storm * (this.lite ? 0.5 : 1), 0.45 * swell + 0.3);
+    if (storm > 0) this.drift.update(dt, t, mood, storm * (this.lite ? 0.5 : 1), 0.45 * this.swell + 0.3);
     this.lightning.update(dt, lightningAt(mood));
     this.rain.update(t, rainAt(mood), storm, WIND, this.lamps);
     this.buoy.update(t, dt, mood, Math.max(this.night, this.lamps));
     this.gulls.update(t, dt, mood, this.night);
+    this.jellies.update(t, mood, this.night);
   }
 
   /** World height of the water at (x, z): the swell, carried by the sea's frame. */

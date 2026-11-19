@@ -242,6 +242,101 @@ export const KELP = { rafts: 0.55, forest: 1, color: 0x7a5a1e, shade: 0x3d2e12 }
 /** How much of the kelp shows (0..1): it comes in over Kelp Deep's first markers and thins out before the Twilight's line (61). */
 export const kelpAt = (mood: number): number => smooth(seaMood(36), seaMood(41), mood) * (1 - smooth(seaMood(55), seaMood(61), mood));
 
+/**
+ * The Twilight's lantern jellies (Oscar, 2026-11-18, picked from in-game mockups): small jellies bobbing on the swell
+ * with their domes just breaking the surface, each with a bright heart, a soft halo and a pool of light on the water
+ * round it, in the Twilight set's three fish-light colours (cyan-white, lilac, peach). They are a night thing: by day
+ * only `day` of them are up, within `dayReach` metres of the boat, as an omen: pastel domes in their own colours, the
+ * bell at `dayBell` of its brightness and the halo and pool at `dayGlow` of their light. The rest surface one by one
+ * through dusk, each at its own nightness between `rise` (taking `fade` to come up), and at full night the whole field
+ * is out.
+ *
+ * `near`: about how many float within `ring` metres of the boat at once, each with a bell you can see, `starboard` the
+ * share of them on the side players fish from. `far`: about how many float in the field past them out toward the
+ * horizon; those within `bells` metres show their bells too (up to `bellCap` at once), and past that each is a halo and
+ * a pool (out to `pools` metres, then just the halo), the halo growing up to `farHalo` times as wide and `farGlow`
+ * times as bright to stand in for the bell, so they still read as jellies. They fade toward the fog but keep `floor` of
+ * their light. Lite graphics keeps `liteFar` of the far ones and drops the pools. `size`: a bell's radius range (m).
+ * `halo` and `pool`: how bright those are (1 is the mockup's); `poolRings`: how many rings of points a pool bends over
+ * the waves by (fewer is cheaper). `sail`: how fast the boat makes its way through the field (m/s, bow to stern),
+ * so the jellies go by the way the marker buoy falls astern (Oscar, 2026-11-18: "it looks like the boat is still
+ * sailing through the zone"). `current`: the water's own slow drift on top of that (m/s, along the sea's x and z;
+ * Kelp Deep's rafts drift about 0.55), each jelly wandering up to `wander` metres off its line; past each ring's rims they
+ * fade out over `edge` metres, and come round again where they have faded to nothing.
+ *
+ * `legs` (Oscar, 2026-11-18: "slight jellyfish legs flowing on the water", so they read as jellyfish, not glowing
+ * balls): every jelly showing its bell trails `threads` thin threads on the water behind it, the way it came, in a
+ * narrow fan, each `length` bell widths long, with `arms` shorter, wider frilly arms (`armLength`) down the middle,
+ * like the Twilight set's little jellies. A ripple runs down each from root to tip (`speed`, radians a second), swinging
+ * up to `sway` of its length at the tip, a little harder (`kick`) as the bell beats. They are `width` and `armWidth`
+ * metres wide at the root, brightest there at `glow` (and the arms `armGlow`) of the halo's light, and fade to nothing
+ * at the tip, bending over the waves in `segments` pieces. They trail out to `reach` metres from the boat (past it
+ * they are too fine to see); lite graphics keeps them on the near ring only. To tune after a play test.
+ */
+export const JELLIES = {
+  colors: [0xdff2ff, 0xc8b4f4, 0xffb09a],
+  size: [0.6, 1.05] as [number, number],
+  near: { count: 27, ring: [5, 30] as [number, number], starboard: 0.65 },
+  far: { count: 170, ring: [34, 240] as [number, number], bells: 50, bellCap: 16, pools: 120 },
+  day: 4,
+  dayReach: 20,
+  dayGlow: 0.3,
+  dayBell: 0.75,
+  rise: [0.12, 0.85] as [number, number],
+  fade: 0.1,
+  halo: 1,
+  pool: 1,
+  poolRings: 2,
+  farHalo: 2.6,
+  farGlow: 2.2,
+  floor: 0.5,
+  liteFar: 0.35,
+  sail: 3,
+  current: [-0.14, 0.03] as [number, number],
+  wander: 0.7,
+  edge: 6,
+  /**
+   * The light round a jelly (halo, pool and legs) is held at `dayGlow` until the water has darkened, coming up to full
+   * between these nightnesses: on still-bright dusk water a brighter glow washed out to a flat white disc (art review,
+   * 2026-11-19). The bells show as soon as they are up.
+   */
+  lightDark: [0.5, 0.95] as [number, number],
+  /**
+   * Pools and legs fade where the water is seen this edge-on (how square-on the eye is to the water there, 0 edge-on ..
+   * 1 straight down): low across the water a pool smeared into a wide streak and a jelly's legs stacked into one bright
+   * line, so a near peach jelly read as a fire (art review, 2026-11-19). The legs need the steeper view to stay apart.
+   */
+  grazing: { pools: [0.05, 0.2] as [number, number], legs: [0.12, 0.3] as [number, number] },
+  legs: { threads: 6, length: [2.5, 3.5] as [number, number], arms: 3, armLength: [1.2, 1.8] as [number, number], width: 0.05, armWidth: 0.12, glow: 1.1, armGlow: 0.8, sway: 0.1, speed: 2, kick: 0.5, segments: 6, reach: 34 },
+};
+
+/** How much of the jelly field shows (0..1): it comes in over the markers before the Twilight's line (61) and thins out before the Abyss's (91). */
+export const jelliesAt = (mood: number): number => smooth(seaMood(56), seaMood(61), mood) * (1 - smooth(seaMood(86), seaMood(91), mood));
+
+/**
+ * Whether one lantern jelly is up (0..1) at nightness `n` (0 day, 1 full night), from `rise`, the nightness it surfaces
+ * at; below 0 for the few that are up all day.
+ */
+export const jellyUp = (n: number, rise: number): number => (rise < 0 ? 1 : smooth(rise - JELLIES.fade, rise, n));
+
+/** How brightly one lantern jelly glows (0..1): `dayGlow` for the few up by day, rising to full with the night. */
+export const jellyGlow = (n: number, rise: number): number =>
+  jellyUp(n, rise) * (JELLIES.dayGlow + (1 - JELLIES.dayGlow) * smooth(0, 1, n));
+
+/**
+ * How bright the light round one lantern jelly is (its halo, pool and legs; 0..1): its glow, held at `dayGlow` until the
+ * water has darkened (`lightDark`). The same as `jellyGlow` by day and at full night.
+ */
+export const jellyLight = (n: number, rise: number): number =>
+  Math.min(jellyGlow(n, rise), JELLIES.dayGlow + (1 - JELLIES.dayGlow) * smooth(JELLIES.lightDark[0], JELLIES.lightDark[1], n));
+
+/** The nightness each of `count` jellies surfaces at: the first `day` are up all day, the rest spread evenly over `JELLIES.rise`. */
+export function jellyRises(count: number, day = 0): number[] {
+  const [a, b] = JELLIES.rise;
+  const m = count - day;
+  return Array.from({ length: count }, (_, i) => (i < day ? -1 : a + ((b - a) * (i - day + 0.5)) / m));
+}
+
 /** How often lightning strikes (0..1): from the Abyss's first depths (mood 1.85), more often the deeper. */
 export const lightningAt = (mood: number): number => smooth(1.8, 2.2, mood);
 export const screenSprayAt = (mood: number): number => Math.min(1, Math.max(0, (mood - SCREEN_SPRAY.from) / (SCREEN_SPRAY.to - SCREEN_SPRAY.from)));
