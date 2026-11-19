@@ -304,6 +304,14 @@ export const DOCK_RECTS: DockRect[] = [
   ROCKET_JETTY,
 ];
 
+/**
+ * A dock pile's head, a little above the beams, and its length down to its foot: 0.3 m into the lake bed as the
+ * terrain mesh draws it, so none ends in clear water where the bed drops away past the cove, and never shorter
+ * than the 3.1 m the piles had before (where the ground stands near the deck, a short pile reads as a stub).
+ */
+export const PILE_HEAD = 0.95;
+export const pileLength = (x: number, z: number): number => Math.max(3.1, PILE_HEAD - terrainHeight(x, z) + 0.3);
+
 export const onDock = (x: number, z: number, pad = 0): boolean =>
   atSea ? (pad > 0 ? inHull(x, z, pad) : onDeck(x, z)) : DOCK_RECTS.some((r) => x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad);
 

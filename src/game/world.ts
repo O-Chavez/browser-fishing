@@ -25,6 +25,8 @@ import {
   setAtSea,
   setPad,
   smooth,
+  PILE_HEAD,
+  pileLength,
   waveHeight,
 } from './env';
 import { Hub } from './hub';
@@ -1062,7 +1064,8 @@ export class World {
     const q = new THREE.Quaternion();
     let n = 0;
     const beamMat = lambert(0x5b4128);
-    const postGeo = new THREE.CylinderGeometry(0.1, 0.12, 3.1, 7);
+    // A pile 1 m tall, its head at y 0, stretched down to each pile's foot.
+    const postGeo = new THREE.CylinderGeometry(0.1, 0.12, 1, 7).translate(0, -0.5, 0);
     const inside = (x: number, z: number, skip: DockRect) =>
       DOCK_RECTS.some(
         (r) =>
@@ -1119,7 +1122,8 @@ export class World {
           const pz = alongZ ? o : cz + off * 1.1;
           if (inside(px, pz, r)) continue;
           const post = new THREE.Mesh(postGeo, beamMat);
-          post.position.set(px, -0.6, pz);
+          post.position.set(px, PILE_HEAD, pz);
+          post.scale.y = pileLength(px, pz);
           post.castShadow = true;
           dock.add(post);
         }
