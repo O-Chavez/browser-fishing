@@ -375,8 +375,8 @@ function growths(): THREE.BufferGeometry {
 }
 
 function face(c: LegendCtx): { eyes: THREE.BufferGeometry; flesh: THREE.BufferGeometry } {
-  const back = c.shiny ? c.L.back : BACK;
-  const belly = c.shiny ? c.L.belly : BELLY;
+  const back = BACK;
+  const belly = BELLY;
   // Her lips are her own skin, a little paler where they roll out, so they belong to her head.
   const lip = mix(back, belly, 0.32);
   const eyes: THREE.BufferGeometry[] = [];
@@ -406,7 +406,7 @@ function face(c: LegendCtx): { eyes: THREE.BufferGeometry; flesh: THREE.BufferGe
 }
 
 function build(c: LegendCtx): void {
-  const key = `grouper:${c.shiny ? 'gold' : 'plain'}`;
+  const key = 'grouper';
   const f = cached('grouper:fins', () => fins().body);
   const tail = cached('grouper:tail', () => fins().tail);
   if (c.shadow) {
@@ -418,15 +418,15 @@ function build(c: LegendCtx): void {
   }
   const bm = c.bodyMat as THREE.MeshPhysicalMaterial;
   // Old, not lacquered: a dry, soft skin with a warm sheen at the rim where the sun catches it.
-  bm.roughness = c.shiny ? 0.35 : 0.78;
-  bm.clearcoat = c.shiny ? 0.4 : 0.06;
+  bm.roughness = 0.78;
+  bm.clearcoat = 0.06;
   bm.sheen = 0.6;
   bm.sheenColor = new THREE.Color(0xffd890);
   bm.sheenRoughness = 0.45;
   bm.emissiveIntensity = 1;
   const finMat = MAT.fin(c.light);
-  add(c, f, c.shiny ? c.finMat : finMat);
-  add(c, tail, c.shiny ? c.finMat : finMat, c.tail);
+  add(c, f, finMat);
+  add(c, tail, finMat, c.tail);
   const fc = face(c);
   add(c, cached(`${key}:eyes`, () => fc.eyes), MAT.flatPaint());
   add(c, cached(`${key}:flesh`, () => fc.flesh), mat(`grouper:skin|${c.light}`, () => lit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 }), c.light)));

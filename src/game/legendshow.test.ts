@@ -7,7 +7,7 @@ import { buildFish, type FishModel } from './fishmodel';
 import { BOAT, boatMotion, inHull } from '../data/sea';
 import { LimpRide, bendAlong, keepOff, modelLength, rollAt, surfacingSpot, washPoints } from './legendshow';
 import { limpGiant } from './seafish/giants';
-import { LEGENDS } from './seafish/legends';
+import { LEGENDS, SHINY_LEGEND_SPARKLES } from './seafish/legends';
 import { setWaves, waveSurface, waveUniforms } from './seawaves';
 
 /** A canvas that draws nothing: the models' skins paint on a canvas when they are made, so no DOM is needed. */
@@ -486,6 +486,35 @@ describe('the legend models', () => {
     expect(triangles(serpent)).toBe(n);
     // The Dreamer is laid out as it fought.
     expect(limpGiant(model('dreamer'))).toBe(false);
+  });
+
+  /** Every material's colours and finish and every part's vertex colours, the shiny's sparkles left out. */
+  function looks(m: FishModel): string[] {
+    const out: string[] = [];
+    const hex = (c?: THREE.Color) => c?.getHexString() ?? '-';
+    m.group.traverse((o) => {
+      for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === m.orbit) return;
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh && !(o as THREE.Sprite).isSprite) return;
+      const mat = mesh.material as THREE.MeshPhysicalMaterial;
+      const col = mesh.geometry.getAttribute('color');
+      let sum = 0;
+      if (col) for (let i = 0; i < col.array.length; i++) sum += col.array[i];
+      out.push([o.type, mat.type, hex(mat.color), hex(mat.emissive), mat.roughness, mat.metalness, mat.clearcoat, mat.opacity, mat.map?.uuid, mat.emissiveMap?.uuid, sum.toFixed(3)].join(' '));
+    });
+    return out;
+  }
+
+  it('draw a shiny legend in its own colours, its gold sparkles the only mark (the silhouette too)', () => {
+    for (const f of seaLegends) {
+      const plain = model(f.id), shiny = model(f.id, false, true);
+      expect(looks(shiny), f.id).toEqual(looks(plain));
+      expect(looks(model(f.id, true, true)), `${f.id} silhouette`).toEqual(looks(model(f.id, true)));
+      expect(plain.orbit, f.id).toBeUndefined();
+      expect(shiny.orbit?.children.length ?? 0, f.id).toBe(SHINY_LEGEND_SPARKLES ? 10 : 0);
+    }
+    // Everyday sea fish still turn gold.
+    for (const id of ['boneserpent', 'pewtercod']) expect(looks(model(id, false, true)), id).not.toEqual(looks(model(id)));
   });
 
   it("are made as bright as their light asks, the silhouette left flat", () => {

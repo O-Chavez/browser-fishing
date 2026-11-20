@@ -16,37 +16,40 @@ export type { Legend, LegendCtx, PaintCtx } from './kit';
 
 export const LEGENDS: Record<string, Legend | undefined> = { grouper, marlin, kelpbeard, kelpwyrm, oarfish, chandelier };
 
-const GOLD = new THREE.Color(0xffd23a);
-const gold = (c: number, k = 0.55) => new THREE.Color(c).lerp(GOLD, k).getHex();
+/**
+ * A shiny sea legend keeps its own look (Oscar, 2026-11-20: the gold wash "kind of cheapens them"): no gold, no
+ * glossier finish, the same silhouette. Its only mark is the ring of small gold sparkles every shiny fish has, here and
+ * on the Abyss's three (`buildFish`). A play-test default: false leaves a shiny legend looking exactly like a plain one.
+ */
+export const SHINY_LEGEND_SPARKLES = true;
 
 /** A legend's whole model (its body, fins, face, parts and lost tackle), or null for any other fish. */
 export function buildLegend(id: string, shadow: boolean, shiny: boolean, glowTexture: () => THREE.Texture): FishModel | null {
   const legend = LEGENDS[id];
   if (!legend) return null;
   const look: FishLook = { ...FISH_LOOK[id], ...legend.look };
-  const L: FishLook = shiny ? { ...look, back: gold(look.back), belly: gold(look.belly, 0.35), fin: gold(look.fin), accent: 0xffe27a } : look;
-  const accent = new THREE.Color(L.accent ?? new THREE.Color(L.fin).lerp(new THREE.Color(0xffffff), 0.4).getHex());
+  const accent = new THREE.Color(look.accent ?? new THREE.Color(look.fin).lerp(new THREE.Color(0xffffff), 0.4).getHex());
   const group = new THREE.Group();
   const materials: THREE.Material[] = [];
   const pulse: THREE.Material[] = [];
   const twinkle: THREE.Object3D[] = [];
-  const shadowMat = () => new THREE.MeshBasicMaterial({ color: shiny ? 0x9a7410 : 0x06141a, transparent: true, opacity: shiny ? 0.9 : 0.75, side: THREE.DoubleSide });
+  const shadowMat = () => new THREE.MeshBasicMaterial({ color: 0x06141a, transparent: true, opacity: 0.75, side: THREE.DoubleSide });
   const light = shadow ? 1 : (legend.light ?? 1);
   const bodyMat: THREE.Material = shadow
     ? shadowMat()
     : new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(light, light, light),
-        map: legendSkin(legend, look, id, false, shiny),
-        roughness: shiny ? 0.25 : 0.5,
-        metalness: shiny ? 0.4 : 0,
+        map: legendSkin(legend, look, id, false),
+        roughness: 0.5,
+        metalness: 0,
         clearcoat: 0.5,
         clearcoatRoughness: 0.3,
         emissive: legend.glow ? 0xffffff : 0x000000,
-        emissiveMap: legend.glow ? legendSkin(legend, look, id, true, shiny) : null,
+        emissiveMap: legend.glow ? legendSkin(legend, look, id, true) : null,
         emissiveIntensity: 1,
       });
   materials.push(bodyMat);
-  const finMat: THREE.Material = shadow ? shadowMat() : new THREE.MeshStandardMaterial({ color: new THREE.Color(L.fin).multiplyScalar(light), roughness: 0.48, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+  const finMat: THREE.Material = shadow ? shadowMat() : new THREE.MeshStandardMaterial({ color: new THREE.Color(look.fin).multiplyScalar(light), roughness: 0.48, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
   materials.push(finMat);
   const body = new THREE.Mesh(legend.body(), bodyMat);
   body.castShadow = !shadow;
@@ -55,11 +58,11 @@ export function buildLegend(id: string, shadow: boolean, shiny: boolean, glowTex
   const tail = new THREE.Group();
   tail.position.z = 0.47;
   body.add(tail);
-  legend.build({ root: body, tail, look, L, id, shiny, shadow, accent, bodyMat, finMat, body, pulse, twinkle, glowTexture, light });
+  legend.build({ root: body, tail, look, id, shadow, accent, bodyMat, finMat, body, pulse, twinkle, glowTexture, light });
 
-  // A shiny's gold sparkles circle it, as on every shiny fish.
+  // A shiny's gold sparkles circle it, as on every shiny fish: its only mark (`SHINY_LEGEND_SPARKLES`).
   let orbit: THREE.Group | undefined;
-  if (shiny && !shadow) {
+  if (shiny && !shadow && SHINY_LEGEND_SPARKLES) {
     orbit = new THREE.Group();
     const geo = new THREE.SphereGeometry(0.011, 8, 6);
     const m = new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });

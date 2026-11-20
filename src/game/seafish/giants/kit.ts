@@ -6,7 +6,6 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 export type V3 = THREE.Vector3;
 export const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 export const TAU = Math.PI * 2;
-export const GOLD = 0xffd23a;
 export const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 export const smooth = (x: number) => {
   const k = clamp01(x);
@@ -356,12 +355,10 @@ export function chain(pts: V3[], link: number, wire: number): THREE.BufferGeomet
 // ---------- colour ----------
 
 export const hexKey = (c: THREE.Color | number) => (typeof c === 'number' ? c : c.getHex()).toString(16);
-/** A palette: colours by hex, gold-washed on a shiny. */
-export function palette(shiny: boolean): (c: number, k?: number) => THREE.Color {
-  const gold = new THREE.Color(GOLD);
+/** A palette: colours by hex, each scaled by `k`. A shiny legend keeps these colours (`SHINY_LEGEND_SPARKLES`). */
+export function palette(): (c: number, k?: number) => THREE.Color {
   return (c, k = 1) => {
     const out = new THREE.Color(c);
-    if (shiny) out.lerp(gold, 0.55);
     return k === 1 ? out : out.multiplyScalar(k);
   };
 }
@@ -454,7 +451,7 @@ export function painted(key: string, w: number, h: number, paint: (g: CanvasRend
 
 // ---------- a built legend ----------
 
-/** A legend's parts, made once per look (plain or shiny) and shared by every model of it. */
+/** A legend's parts, made once (once more for a limp build) and shared by every model of it, shiny or not. */
 export interface Built {
   /** The painted body: its geometry (with uvs) and how to finish the body's own material for it. */
   skin?: { geo: THREE.BufferGeometry; finish: (m: THREE.MeshPhysicalMaterial) => void };

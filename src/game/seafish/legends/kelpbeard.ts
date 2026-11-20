@@ -237,8 +237,8 @@ function mouthPath(a: number, yFront: number, fwd: number): THREE.Vector3[] {
 }
 
 function face(c: LegendCtx): { eyes: THREE.BufferGeometry; flesh: THREE.BufferGeometry } {
-  const back = c.shiny ? c.L.back : BACK;
-  const belly = c.shiny ? c.L.belly : BELLY;
+  const back = BACK;
+  const belly = BELLY;
   const eyes: THREE.BufferGeometry[] = [];
   const flesh: THREE.BufferGeometry[] = [];
   for (const s of [-1, 1]) {
@@ -262,7 +262,7 @@ let kelpMemo: ReturnType<typeof kelp> | null = null;
 const kelpParts = () => (kelpMemo ??= kelp());
 
 function build(c: LegendCtx): void {
-  const key = `kelpbeard:${c.shiny ? 'gold' : 'plain'}`;
+  const key = 'kelpbeard';
   const f = cached('kelpbeard:fins', () => finParts().body);
   const tail = cached('kelpbeard:tail', () => finParts().tail);
   const blades = cached('kelpbeard:blades', () => kelpParts().blades);
@@ -275,14 +275,14 @@ function build(c: LegendCtx): void {
   }
   const bm = c.bodyMat as THREE.MeshPhysicalMaterial;
   // Kelp Deep's gloss, softened: he is wet and old.
-  bm.roughness = c.shiny ? 0.3 : 0.55;
+  bm.roughness = 0.55;
   bm.clearcoat = 0.3;
   bm.clearcoatRoughness = 0.3;
   bm.emissiveIntensity = 1.3;
   const finMat = MAT.fin(c.light);
-  add(c, f, c.shiny ? c.finMat : finMat);
-  add(c, tail, c.shiny ? c.finMat : finMat, c.tail);
-  add(c, blades, c.shiny ? mat(`kelpbeard:goldleaf|${c.light}`, () => lit(new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffe080, roughness: 0.35, metalness: 0.3, side: THREE.DoubleSide, emissive: 0x2a2408 }), c.light)) : MAT.kelp(c.light));
+  add(c, f, finMat);
+  add(c, tail, finMat, c.tail);
+  add(c, blades, MAT.kelp(c.light));
   add(c, roots, MAT.hard(c.light));
   add(c, cached('kelpbeard:lodgers', lodgers), MAT.flesh(c.light));
   const fc = face(c);
@@ -290,8 +290,8 @@ function build(c: LegendCtx): void {
   add(c, cached(`${key}:flesh`, () => fc.flesh), mat(`kelpbeard:skin|${c.light}`, () => lit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), c.light)));
   // Motes of kelp-light drifting round him, thickest in the crown and the beard.
   const moteGeo = cached('kelpbeard:mote', () => new THREE.OctahedronGeometry(0.011, 0));
-  const moteMat = mat(`kelpbeard:mote${c.shiny}`, () => new THREE.MeshBasicMaterial({ color: c.shiny ? 0xfff0a0 : MOTE, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-  const halo = mat(`kelpbeard:halo${c.shiny}`, () => new THREE.SpriteMaterial({ map: c.glowTexture(), color: c.shiny ? 0xfff0a0 : MOTE, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const moteMat = mat('kelpbeard:mote', () => new THREE.MeshBasicMaterial({ color: MOTE, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const halo = mat('kelpbeard:halo', () => new THREE.SpriteMaterial({ map: c.glowTexture(), color: MOTE, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
   const rng = seeded('kelpbeard:motes');
   for (let i = 0; i < 12; i++) {
     const p = i < 5 ? V((rng() - 0.5) * 0.3, 0.25 + rng() * 0.25, -0.4 + rng() * 0.35) : i < 9 ? V((rng() - 0.5) * 0.25, -0.22 - rng() * 0.3, -0.5 + rng() * 0.25) : V((rng() - 0.5) * 0.4, (rng() - 0.5) * 0.5, rng() * 0.4);

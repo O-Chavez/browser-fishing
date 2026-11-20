@@ -61,8 +61,8 @@ const WAVE: Sway = (p) => [0.03 * smooth((p.z + 0.18) / 0.6), -p.z * 8];
 /** Which of a loft's rows a corner belongs to, for `cols` quads a row. */
 const rowOf = (i: number, cols: number) => Math.floor(Math.floor(i / 6) / cols) + ([2, 4, 5].includes(i % 6) ? 1 : 0);
 
-export function buildLeviathan(shiny: boolean, limp = false): Built {
-  const C = palette(shiny);
+export function buildLeviathan(limp = false): Built {
+  const C = palette();
   const hard = new Bucket(), soft = new Bucket(), glow = new Bucket(), bloom = new Bucket();
   // The underwater silhouette's plainer outline: the plates, spines, skull, horns, eyes and what it carries, in few pieces.
   const shade = new Bucket();

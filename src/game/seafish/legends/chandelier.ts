@@ -112,7 +112,7 @@ function grinPath(dy: number, lift = 1.0): THREE.Vector3[] {
 }
 
 function face(c: LegendCtx): { flesh: THREE.BufferGeometry; teeth: THREE.BufferGeometry; eyes: THREE.BufferGeometry } {
-  const back = c.shiny ? c.L.back : BACK;
+  const back = BACK;
   const flesh: THREE.BufferGeometry[] = [];
   const teeth: THREE.BufferGeometry[] = [];
   const eyes: THREE.BufferGeometry[] = [];
@@ -140,7 +140,7 @@ function face(c: LegendCtx): { flesh: THREE.BufferGeometry; teeth: THREE.BufferG
   for (const s of [-1, 1]) {
     const p = surf(F, EYE_T, EYE_A, s, 0.93);
     const out = surfNormal(F, EYE_T, EYE_A, s);
-    const e = { p, out, r: 0.04, white: 0xfff0d8, iris: c.shiny ? 0xffe060 : LAMP, irisR: 0.84, pupil: 0x140a10, pupilR: 0.36, look: V(0, 0.2, -0.3) };
+    const e = { p, out, r: 0.04, white: 0xfff0d8, iris: LAMP, irisR: 0.84, pupil: 0x140a10, pupilR: 0.36, look: V(0, 0.2, -0.3) };
     eyes.push(eyeGeo(e));
     flesh.push(lidGeo(e, 0.08, 0.3, mix(back, 0x8a6aa0, 0.3), 1.14));
   }
@@ -258,7 +258,7 @@ let chMemo: ReturnType<typeof chandelierParts> | null = null;
 const ch = () => (chMemo ??= chandelierParts());
 
 function build(c: LegendCtx): void {
-  const key = `chandelier:${c.shiny ? 'gold' : 'plain'}`;
+  const key = 'chandelier';
   const f = cached('chandelier:fins', () => finParts().body);
   const tail = cached('chandelier:tail', () => finParts().tail);
   const rod = cached('chandelier:rod', () => ch().rod);
@@ -270,18 +270,18 @@ function build(c: LegendCtx): void {
   }
   const bm = c.bodyMat as THREE.MeshPhysicalMaterial;
   // Lumpy, leathery angler skin: little gloss.
-  bm.roughness = c.shiny ? 0.35 : 0.8;
+  bm.roughness = 0.8;
   bm.clearcoat = 0;
   bm.sheen = 0.3;
   bm.sheenColor = new THREE.Color(0x6a4a90);
   bm.emissiveIntensity = 1.4;
-  add(c, f, c.shiny ? c.finMat : MAT.fin(c.light));
-  add(c, tail, c.shiny ? c.finMat : MAT.fin(c.light), c.tail);
+  add(c, f, MAT.fin(c.light));
+  add(c, tail, MAT.fin(c.light), c.tail);
   const brassMat = mat(`chandelier:brass|${c.light}`, () => lit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.55, emissive: 0x3a2408 }), c.light));
   add(c, rod, brassMat);
   add(c, brass, brassMat);
   add(c, cached('chandelier:crystal', () => ch().crystal), mat(`chandelier:crystal|${c.light}`, () => lit(new THREE.MeshStandardMaterial({ color: 0xfff4e0, roughness: 0.1, metalness: 0.2, emissive: 0x806040, flatShading: true, transparent: true, opacity: 0.9 }), c.light)));
-  add(c, cached(`${key}:warts`, () => warts(c.shiny ? c.L.back : BACK)), mat(`chandelier:wart|${c.light}`, () => lit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), c.light)));
+  add(c, cached(`${key}:warts`, () => warts(BACK)), mat(`chandelier:wart|${c.light}`, () => lit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), c.light)));
   const fc = face(c);
   add(c, cached(`${key}:flesh`, () => fc.flesh), MAT.flesh(c.light));
   // The teeth catch the lamplight.
@@ -289,12 +289,12 @@ function build(c: LegendCtx): void {
   add(c, cached(`${key}:eyes`, () => fc.eyes), MAT.flatPaint());
   // Exactly five lamps: a bright core in each cup, a warm halo round it.
   const lampGeo = cached('chandelier:lamp', () => new THREE.SphereGeometry(0.016, 10, 8));
-  const lampMat = mat(`chandelier:lamp${c.shiny}`, () => new THREE.MeshBasicMaterial({ color: c.shiny ? 0xfff2b0 : 0xffe6a8 }));
+  const lampMat = mat('chandelier:lamp', () => new THREE.MeshBasicMaterial({ color: 0xffe6a8 }));
   for (const q of ch().lamps) {
     const m = new THREE.Mesh(lampGeo, lampMat);
     m.position.copy(q);
     c.root.add(m);
-    glowSprite(c, c.shiny ? 0xffe890 : LAMP, 0.16, 0.9, q);
+    glowSprite(c, LAMP, 0.16, 0.9, q);
   }
   // One broad soft pool of lamplight hanging over its face.
   glowSprite(c, LAMP, 0.45, 0.14, V(0, 0.24, -0.62));
