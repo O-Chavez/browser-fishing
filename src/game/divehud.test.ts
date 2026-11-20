@@ -180,9 +180,9 @@ describe('charter screens', () => {
       expect(chartersToPart(mid({ holdLevel: 1, pearls: 0, rodStep: 3 }), 1, 0)).toEqual({ part: 'Deep lamps', plain: 42, lured: 10 });
       // The Drop-off at step 0, Kelp cutter next, 10 fish: 48.6 and 202.5 against 150: 3.1 and 0.7.
       expect(chartersToPart(reed({ boatParts: 1, rodStep: 0, pearls: 0 }), 1, 0)).toEqual({ part: 'Kelp cutter', plain: 4, lured: 1 });
-      // An Abyss marker counts its growth: marker 3 is 101.61 a fish plain, 25 fish a charter = 2,540.25 against the
-      // Iron keel's 25,000: 9.8 (without the growth, 2,025: 12.3).
-      expect(chartersToPart(reed({ boatParts: 3, rodStep: 8, pearls: 0, holdLevel: 3 }), 4, 3)).toEqual({ part: 'Iron keel', plain: 10, lured: 3 });
+      // An Abyss marker counts its growth and its legends always Brutish: marker 3 is 118.07 a fish plain, 25 fish a
+      // charter = 2,951.8 against the Iron keel's 25,000: 8.5 (without the growth, 2,353: 10.6).
+      expect(chartersToPart(reed({ boatParts: 3, rodStep: 8, pearls: 0, holdLevel: 3 }), 4, 3)).toEqual({ part: 'Iron keel', plain: 9, lured: 3 });
       // Nothing with the boat fully fitted, the part ready to fit, or the zone Too much for the rod (Kelp Deep at step 1).
       expect(chartersToPart(reed({ boatParts: 4, pearls: 0 }), 2, 0)).toBeNull();
       expect(chartersToPart(mid({ pearls: 3000 }), 2, 0)).toBeNull();

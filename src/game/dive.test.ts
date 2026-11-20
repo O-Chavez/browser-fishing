@@ -184,23 +184,26 @@ describe('pay', () => {
     // Lured: every fish shiny, 1.125 × 1.2 × 5 = 6.75 times.
     expect(averagePearls(0, 0, true)).toBeCloseTo(6.75, 12);
     expect(averagePearls(2, 0, true)).toBeCloseTo(54, 12);
-    // In the Abyss at marker 3, 1.12² more.
-    expect(averagePearls(ABYSS, 1)).toBeCloseTo(81, 12);
-    expect(averagePearls(ABYSS, 3)).toBeCloseTo(50 * 1.2544 * 1.62, 9);
-    expect(averagePearls(ABYSS, 3, true)).toBeCloseTo(423.36, 9);
-    // What casts in the zone really pay, plain and on a lure.
+    // In the Abyss every legend is Brutish: 0.95 × 1.125 + 0.05 × 5 × 2 = 1.56875 for the legend and tag, times 1.2
+    // for a shiny; at marker 3, 1.12² more.
+    expect(averagePearls(ABYSS, 1)).toBeCloseTo(94.125, 12);
+    expect(averagePearls(ABYSS, 3)).toBeCloseTo(50 * 1.2544 * 1.56875 * 1.2, 9);
+    expect(averagePearls(ABYSS, 3, true)).toBeCloseTo(50 * 1.2544 * 1.56875 * 5, 9);
+    // What casts in the zone really pay, plain and on a lure, in the Twilight and the Abyss.
     const rng = mulberry(17);
     const n = 40_000;
-    for (const lured of [false, true]) {
-      const s = newSave();
-      let sum = 0;
-      for (let k = 0; k < n; k++) {
-        s.lure = lured ? 1 : 0;
-        const roll = rollSeaCast(s, 2, 0, rod(4), rng);
-        sum += pearlsFor(2, 0, { tag: roll.tag ?? null, legend: !!byId(FISH, roll.fishId!).legend, shiny: roll.shiny });
+    for (const [zone, marker] of [[2, 0], [ABYSS, 1]]) {
+      for (const lured of [false, true]) {
+        const s = newSave();
+        let sum = 0;
+        for (let k = 0; k < n; k++) {
+          s.lure = lured ? 1 : 0;
+          const roll = rollSeaCast(s, zone, marker, rod(8), rng);
+          sum += pearlsFor(zone, marker, { tag: roll.tag ?? null, legend: !!byId(FISH, roll.fishId!).legend, shiny: roll.shiny });
+        }
+        expect(sum / n / averagePearls(zone, marker, lured), `${zone} ${lured}`).toBeGreaterThan(0.96);
+        expect(sum / n / averagePearls(zone, marker, lured), `${zone} ${lured}`).toBeLessThan(1.04);
       }
-      expect(sum / n / averagePearls(2, 0, lured)).toBeGreaterThan(0.96);
-      expect(sum / n / averagePearls(2, 0, lured)).toBeLessThan(1.04);
     }
   });
 
@@ -256,7 +259,7 @@ describe('pay', () => {
 
   it("tells the screens what a fish pays here: a plain fish's pearls and the average coins to three figures, with the Abyss marker's growth", () => {
     expect(payAt(0, 0)).toEqual({ pearls: 1, coins: Math.round(averageSale(0) / 10) * 10 });
-    expect([0, 1, 2, 3, 4].map((z) => payAt(z, 0).coins)).toEqual([1470, 3400, 6800, 13_600, 27_200]);
+    expect([0, 1, 2, 3, 4].map((z) => payAt(z, 0).coins)).toEqual([1470, 3400, 6800, 13_600, 27_700]);
     expect(payAt(ABYSS, 1).coins).toBe(Math.round(averageSale(ABYSS) / 100) * 100);
     expect(payAt(ABYSS, 3)).toEqual({ pearls: 63, coins: Math.round((averageSale(ABYSS) * 1.12 ** 2) / 100) * 100 });
   });
@@ -349,6 +352,33 @@ describe('sea zones and bites', () => {
     expect(Math.abs(count.pewtercod - count.snapper) / n).toBeLessThan(0.03);
   });
 
+  it("every Abyss legend is hooked Brutish, heavier by 1.5 times the tag; its everyday fish and other zones' legends still roll", () => {
+    expect(ZONES.map((z) => z.legendTag ?? null)).toEqual([null, null, null, null, { tag: 'brutish', tiers: 1.5 }]);
+    const rng = mulberry(21);
+    const s = newSave();
+    const tags = { abyssLegend: new Set<string>(), abyssEveryday: new Set<string>(), otherLegend: new Set<string>() };
+    const seen = new Set<string>();
+    for (let k = 0; k < 20_000; k++) {
+      const zone = k % 2 ? ABYSS : 3;
+      const roll = rollSeaCast(s, zone, zone === ABYSS ? 1 : 0, rod(8), rng);
+      const legend = !!byId(FISH, roll.fishId!).legend;
+      const key = zone === ABYSS ? (legend ? 'abyssLegend' : 'abyssEveryday') : legend ? 'otherLegend' : null;
+      if (key) tags[key].add(roll.tag ?? 'none');
+      if (zone === ABYSS && legend) {
+        seen.add(roll.fishId!);
+        // 1.5 times the tag's half tier on weight, within the fish's own spread; strength only the spread.
+        const base = seaGaps(ABYSS, 1, rod(8));
+        expect(Math.abs(roll.d!.weight - base.weight - 1.5 * TAG_TIERS.brutish)).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+        expect(Math.abs(roll.d!.strength - base.strength)).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+      }
+    }
+    expect([...seen].sort()).toEqual([...ZONES[ABYSS].legends].sort());
+    expect([...tags.abyssLegend]).toEqual(['brutish']);
+    expect(tags.abyssEveryday).toContain('none');
+    expect(tags.abyssEveryday).toContain('feisty');
+    expect(tags.otherLegend).toContain('none');
+  });
+
   it('a zone with several legends splits the 1 in 20 between them, and its everyday fish evenly', () => {
     const rng = mulberry(5);
     const n = 12000;
@@ -388,7 +418,9 @@ describe('sea zones and bites', () => {
         expect(ZONES[zone].fish.concat(ZONES[zone].legends)).toContain(fish.id);
         const g = seaGaps(zone, marker, r);
         expect(Math.abs(roll.d!.strength - g.strength - (roll.tag === 'feisty' ? TAG_TIERS.feisty : 0))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
-        expect(Math.abs(roll.d!.weight - g.weight - (roll.tag === 'brutish' ? TAG_TIERS.brutish : 0))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
+        // An Abyss legend's Brutish is 1.5 times the tag's weight (`Zone.legendTag`).
+        const scale = fish.legend && ZONES[zone].legendTag ? ZONES[zone].legendTag!.tiers : 1;
+        expect(Math.abs(roll.d!.weight - g.weight - (roll.tag === 'brutish' ? TAG_TIERS.brutish * scale : 0))).toBeLessThanOrEqual(FISH_SPREAD + 0.005);
         expect(roll.b).toBeUndefined();
       }
     }

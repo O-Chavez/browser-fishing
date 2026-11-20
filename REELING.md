@@ -306,7 +306,7 @@ Some individuals roll away from their species. Instead of hiding that as noise, 
 
 Rules:
 
-- Exactly two tags, one per axis, one tag per fish, roughly one fish in eight so they stay notable. Below-norm rolls get no tag; an easier-than-usual fish needs no excuse.
+- Exactly two tags, one per axis, one tag per fish, roughly one fish in eight so they stay notable. The one exception: every Abyss legend is Brutish at 1.5 times the tag's weight (Oscar, 2026-11-20, `Zone.legendTag`), so the giants fight longer; at the very top of Tough that crosses the rod's run-off for slow players (13% landed by the careful bot at the band's edge), a trade Oscar took to play-test. Below-norm rolls get no tag; an easier-than-usual fish needs no excuse.
 - The tag shows at hook time, before the first surge, so it is a heads-up rather than an excuse.
 - **An outlier never crosses a wall by itself.** A Feisty fish on matched gear still cannot reach the red; a Brutish fish on matched gear still gets landed. Without this rule, Feisty becomes "the game stole my fish" and the gear messages lose their trust.
 - Tags are the tutorial for the axes. A Feisty fish on matched gear is a safe lesson in what strength feels like before the real line wall arrives, and the same for Brutish and weight.

@@ -6,6 +6,7 @@
  * (`BOAT_PARTS`), all from Captain Reed. Only the Abyss has markers (`ABYSS`). The rules are in `src/game/dive.ts`;
  * every number is here, to tune after a play test.
  */
+import type { FishTag } from '../game/progression';
 
 /**
  * How a sea fish fights, by zone. Left off the fight while the foundation leaves variety out (REELING.md, "The
@@ -32,6 +33,13 @@ export interface Zone {
    * to decide on.
    */
   lead?: { weight?: number; strength?: number; paceCap?: number };
+  /**
+   * A tag every one of the zone's legends is hooked with, in place of the one-in-8 roll (`rollTag`), at `tiers` times the
+   * tag's own tiers (`TAG_TIERS`); it pays as any tagged fish does. The Abyss's giants are all Brutish at 1.5 times
+   * (Oscar, 2026-11-20: players loved the new giants but wanted their fights a bit harder and asked for Brutish on
+   * each; Tough-zone players landed them with no trouble, so 1.5 times, for a longer fight as a legend's should be).
+   */
+  legendTag?: { tag: FishTag; tiers: number };
 }
 
 /** The five zones, by index: 0 the Shelf ... 4 the Abyss. `SEA_ZONES` in `src/data/sea.ts` keeps the sea's look for each. */
@@ -43,7 +51,7 @@ export const ZONES: Zone[] = [
   { id: 'kelp', name: 'Kelp Deep', fish: ['frondback', 'lionfish', 'wolfeel'], legends: ['kelpbeard', 'kelpwyrm'], behaviours: ['thrasher'], lead: { strength: 10 } },
   // Twitchier fish. Tests the player.
   { id: 'twilight', name: 'The Twilight', fish: ['hatchet', 'fangjaw', 'lanternshark'], legends: ['oarfish', 'chandelier'], behaviours: ['sounder'], lead: { paceCap: 0.1 } },
-  { id: 'abyss', name: 'The Abyss', fish: ['lurker', 'gulper', 'krakenspawn', 'boneserpent'], legends: ['leviathan', 'dreamer', 'kraken'], behaviours: ['runner', 'thrasher', 'sounder'] },
+  { id: 'abyss', name: 'The Abyss', fish: ['lurker', 'gulper', 'krakenspawn', 'boneserpent'], legends: ['leviathan', 'dreamer', 'kraken'], behaviours: ['runner', 'thrasher', 'sounder'], legendTag: { tag: 'brutish', tiers: 1.5 } },
 ];
 
 /** The Abyss's index in `ZONES`: the one zone with markers. */

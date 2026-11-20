@@ -565,7 +565,7 @@ export function rollCast(s: SaveData, locationId: string, rng: () => number = Ma
 /**
  * A cast on a charter: the fish comes from the zone (`rollSeaFish`) and fights at the zone's (and Abyss marker's) gaps
  * over the charter's rod (`seaGaps`) with its own modifiers (`rollFishGaps`), whatever the bait. No bait is spent.
- * Shinies roll as in the daytime pond, Shiny Lure included; a shiny sea fish is worth more, not harder.
+ * A legend in a zone with a `legendTag` (the Abyss's giants, Brutish at 1.5 times its weight) always has that tag. Shinies roll as in the daytime pond, Shiny Lure included; a shiny sea fish is worth more, not harder.
  */
 export function rollSeaCast(s: SaveData, zone: number, marker: number, rod: SeaRod, rng: () => number = Math.random): Roll {
   const bite = rollSeaFish(zone, rng);
@@ -575,7 +575,7 @@ export function rollSeaCast(s: SaveData, zone: number, marker: number, rod: SeaR
   const wait = DIVE.biteMin + rng() * DIVE.biteSpread;
   const shiny = lure || rng() < SHINY_CHANCE * shinyMult(s);
   const seed = Math.floor(rng() * 4294967296);
-  const m = rollFishGaps(seaGaps(zone, marker, rod), rng);
+  const m = rollFishGaps(seaGaps(zone, marker, rod), rng, bite.fish.legend ? ZONES[zone].legendTag : undefined);
   const tune = fightTune(s);
   return { fishId: bite.fish.id, size, wait, shiny, ...(lure ? { lured: true } : {}), seed, d: m.d, ...(m.tag ? { tag: m.tag } : {}), ...(tune ? { tune } : {}) };
 }
