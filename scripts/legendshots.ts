@@ -10,6 +10,7 @@
 //   npx tsx scripts/legendshots.ts <out dir> [only ids, comma-separated]
 //
 // TAG=feisty (or brutish) gives every staged fish that tag (landings and fights).
+// SHINY=1 lands (and fights) every staged fish shiny.
 // FRESH=1: no legend landed yet, so each staged legend's landing is its first and unlocks a piece of its set.
 // RISE="0.5,0.9" (seconds): `<id>-rise-<n>` frames that long after a surfacing (Abyss) legend starts to come up
 //   (its bolt lands half-way up its rise).
@@ -57,6 +58,7 @@ const list = (v: string | undefined, d: string) => (v ?? d).split(',').filter((x
 const SINK = list(process.env.SINK, '');
 const RISE = list(process.env.RISE, '');
 const WAIT = Number(process.env.WAIT ?? 1.2);
+const SHINY = !!process.env.SHINY;
 const CLIP = Number(process.env.CLIP ?? 0);
 const FPS = Number(process.env.FPS ?? 20);
 const SHADOW_AFTER = list(process.env.SHADOW_AFTER, '350');
@@ -207,7 +209,7 @@ try {
           if (f && typeof e.data === 'string' && e.data.includes('"castok"')) {
             const m = JSON.parse(e.data);
             if (m.t === 'castok') {
-              Object.assign(m, { fishId: f.id, size: f.size, shiny: false, wait: f.wait });
+              Object.assign(m, { fishId: f.id, size: f.size, shiny: f.shiny, wait: f.wait });
               // The roll's own Feisty or Brutish tag was for the fish swapped out: dropped, or `TAG=feisty|brutish` stages one.
               if (f.tag) m.tag = f.tag;
               else delete m.tag;
@@ -280,7 +282,7 @@ try {
       const clip = CLIP > 0 && place.zone === 4 && legend;
       // Any banner left from joining (a staging account's "New in town") is put away first.
       if (clip) await page.evaluate(() => { document.getElementById('banner')?.classList.add('hidden'); (window as any).__game.freeze(true); (window as any).__virt.on(); });
-      await page.evaluate((id, size, tag, sea) => {
+      await page.evaluate((id, size, tag, sea, shiny) => {
         const G = (window as any).__game;
         const sc = G.world.scene;
         const add = sc.add;
@@ -288,9 +290,9 @@ try {
         sc.add = function (...o: any[]) { got ??= o[0]; return add.apply(this, o); };
         // The same moment of the swell (the boat's heave and roll swing the catch) for every landing, so runs compare.
         G.world.time = Number(sea);
-        try { G.land(id, size, false, false, tag); } finally { sc.add = add; }
+        try { G.land(id, size, shiny, false, tag); } finally { sc.add = add; }
         (window as any).__fishObj = got;
-      }, f.id, size, process.env.TAG ?? null, process.env.SEA_TIME ?? '100');
+      }, f.id, size, process.env.TAG ?? null, process.env.SEA_TIME ?? '100', SHINY);
       if (clip) {
         // The landing from its first frame, the game's clock stepped by hand.
         const dir = path.join(OUT, `${name}-clip`);
@@ -383,7 +385,7 @@ try {
       const size = mid(id);
       await setView(DAY, [-1.6, 0.3]);
       await sleep(800);
-      await page.evaluate((id, size, tag, wait) => { (window as any).__force = { id, size, tag, wait }; }, id, size, process.env.TAG ?? null, WAIT);
+      await page.evaluate((id, size, tag, wait, shiny) => { (window as any).__force = { id, size, tag, wait, shiny }; }, id, size, process.env.TAG ?? null, WAIT, SHINY);
       let ok = false;
       for (let attempt = 0; attempt < 4 && !ok; attempt++) {
         await page.evaluate(() => (window as any).__game.press());

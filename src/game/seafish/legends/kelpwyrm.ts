@@ -226,15 +226,15 @@ function build(c: LegendCtx): void {
     return;
   }
   const bm = c.bodyMat as THREE.MeshPhysicalMaterial;
-  bm.roughness = c.shiny ? 0.3 : 0.42;
+  bm.roughness = 0.42;
   bm.clearcoat = 0.7;
   bm.clearcoatRoughness = 0.2;
   bm.emissiveIntensity = 1.4;
-  const leaf = c.shiny ? mat('kelpwyrm:goldleaf', () => new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffe080, roughness: 0.35, metalness: 0.3, side: THREE.DoubleSide, emissive: 0x2a2408 })) : MAT.kelp();
+  const leaf = MAT.kelp();
   add(c, blades, leaf);
   add(c, thorns, MAT.hard());
   add(c, bone, mat('kelpwyrm:bone', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 })));
-  add(c, f, c.shiny ? c.finMat : MAT.fin());
+  add(c, f, MAT.fin());
   add(c, tail, leaf, c.tail);
   add(c, cached('kelpwyrm:flesh', () => headParts().flesh), MAT.flesh());
   add(c, cached('kelpwyrm:teeth', () => headParts().teeth), mat('kelpwyrm:tooth', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, emissive: 0x2a281e })));
@@ -243,16 +243,16 @@ function build(c: LegendCtx): void {
   for (const s of [-1, 1]) {
     const p = surf(F, EYE_T, EYE_A, s, 0.92);
     const out = surfNormal(F, EYE_T, EYE_A, s);
-    const e = { p, out, r: 0.03, white: 0xfaf0a0, iris: c.shiny ? 0xffd040 : 0xe8e030, irisR: 0.9, pupil: 0x101808, pupilR: 0.42, look: V(0, 0, -0.3) };
+    const e = { p, out, r: 0.03, white: 0xfaf0a0, iris: 0xe8e030, irisR: 0.9, pupil: 0x101808, pupilR: 0.42, look: V(0, 0, -0.3) };
     eyes.push(eyeGeo(e));
-    lids.push(lidGeo(e, 0.22, 0.7, shade(c.shiny ? c.L.back : BACK, 1.15), 1.16));
+    lids.push(lidGeo(e, 0.22, 0.7, shade(BACK, 1.15), 1.16));
   }
-  add(c, cached(`kelpwyrm:eyes${c.shiny}`, () => fuse(eyes)), MAT.flatPaint());
-  add(c, cached(`kelpwyrm:lids${c.shiny}`, () => fuse(lids)), MAT.flesh());
+  add(c, cached('kelpwyrm:eyes', () => fuse(eyes)), MAT.flatPaint());
+  add(c, cached('kelpwyrm:lids', () => fuse(lids)), MAT.flesh());
   // Kelp-light drifting round the mane.
   const moteGeo = cached('kelpwyrm:mote', () => new THREE.OctahedronGeometry(0.011, 0));
-  const moteMat = mat(`kelpwyrm:mote${c.shiny}`, () => new THREE.MeshBasicMaterial({ color: c.shiny ? 0xfff0a0 : MOTE, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-  const halo = mat(`kelpwyrm:halo${c.shiny}`, () => new THREE.SpriteMaterial({ map: c.glowTexture(), color: c.shiny ? 0xfff0a0 : MOTE, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const moteMat = mat('kelpwyrm:mote', () => new THREE.MeshBasicMaterial({ color: MOTE, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const halo = mat('kelpwyrm:halo', () => new THREE.SpriteMaterial({ map: c.glowTexture(), color: MOTE, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
   const rng = seeded('kelpwyrm:motes');
   for (let i = 0; i < 12; i++) {
     const t = 0.15 + rng() * 0.8;

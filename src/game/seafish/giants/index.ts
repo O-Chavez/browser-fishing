@@ -10,23 +10,23 @@ import { buildLeviathan } from './leviathan';
 
 export type LegendKind = 'leviathan' | 'dreamer' | 'kraken';
 
-const BUILDERS: Partial<Record<LegendKind, (shiny: boolean, limp?: boolean) => Built>> = { leviathan: buildLeviathan, dreamer: buildDreamer, kraken: buildKraken };
+const BUILDERS: Partial<Record<LegendKind, (limp?: boolean) => Built>> = { leviathan: buildLeviathan, dreamer: buildDreamer, kraken: buildKraken };
 /** The legends with a limp build of their own, laid out as they lie beaten on the water (`limpGiant`). */
 const LIMP: Partial<Record<LegendKind, true>> = { kraken: true, leviathan: true };
 const builds = new Map<string, Built>();
-function built(kind: LegendKind, shiny: boolean, limp = false): Built | null {
+/** A legend's build, the same for a shiny: it keeps its own look (`SHINY_LEGEND_SPARKLES`). */
+function built(kind: LegendKind, limp = false): Built | null {
   const make = BUILDERS[kind];
   if (!make || (limp && !LIMP[kind])) return null;
-  const key = `${kind}|${shiny}${limp ? '|limp' : ''}`;
+  const key = `${kind}${limp ? '|limp' : ''}`;
   let b = builds.get(key);
-  if (!b) builds.set(key, (b = make(shiny, limp)));
+  if (!b) builds.set(key, (b = make(limp)));
   return b;
 }
 
 /** What `legendModel` mounted, kept on the model's body so its limp build can be laid out in its place (`limpGiant`). */
 interface Mounted {
   kind: LegendKind;
-  shiny: boolean;
   parts: Partial<Record<'hard' | 'soft' | 'rim' | 'glow' | 'bloom', THREE.Mesh>>;
   sprites: THREE.Sprite[];
   twinkles: THREE.Mesh[];
@@ -35,7 +35,7 @@ interface Mounted {
 /** Builds a giant's limp build ahead of its landing, so the landing does not wait for it (nothing for one without). */
 export function primeLimp(model: FishModel): void {
   const m = model.body?.userData.giant as Mounted | undefined;
-  if (m) built(m.kind, m.shiny, true);
+  if (m) built(m.kind, true);
 }
 
 /**
@@ -45,7 +45,7 @@ export function primeLimp(model: FishModel): void {
  */
 export function limpGiant(model: FishModel): boolean {
   const m = model.body?.userData.giant as Mounted | undefined;
-  const b = m && built(m.kind, m.shiny, true);
+  const b = m && built(m.kind, true);
   if (!m || !b) return false;
   const geo = { hard: b.hard?.geo, soft: b.soft?.geo, rim: b.rim?.geo, glow: b.glow, bloom: b.bloom?.geo };
   for (const [k, mesh] of Object.entries(m.parts) as [keyof typeof geo, THREE.Mesh][]) if (geo[k]) mesh.geometry = geo[k]!;
@@ -79,11 +79,11 @@ function mote(r: number): THREE.BufferGeometry {
 
 /** Builds a legend's own body onto the model. Returns false if this legend has none yet. */
 export function legendModel(ctx: SeaModelCtx, kind: LegendKind): boolean {
-  const b = built(kind, ctx.shiny);
+  const b = built(kind);
   if (!b) return false;
   const { group, body, tail } = ctx;
   clear(group, body, tail);
-  const mounted: Mounted = { kind, shiny: ctx.shiny, parts: {}, sprites: [], twinkles: [] };
+  const mounted: Mounted = { kind, parts: {}, sprites: [], twinkles: [] };
   body.userData.giant = mounted;
   const add = (geo: THREE.BufferGeometry | null | undefined, m: THREE.Material, parent: THREE.Object3D = body): THREE.Mesh | undefined => {
     if (!geo) return undefined;
@@ -148,7 +148,7 @@ export function legendModel(ctx: SeaModelCtx, kind: LegendKind): boolean {
 
 /** The legend's dark underwater silhouette, in place of the fish shape's. Returns false if this legend has no body of its own yet. */
 export function legendShadow(kind: LegendKind, group: THREE.Group, body: THREE.Mesh, tail: THREE.Group): boolean {
-  const b = built(kind, false);
+  const b = built(kind);
   if (!b) return false;
   let s = shades.get(kind);
   if (!s) shades.set(kind, (s = silhouette(b)));

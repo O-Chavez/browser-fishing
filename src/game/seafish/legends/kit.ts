@@ -5,7 +5,6 @@ import type { FishLook } from '../../../data/fishlook';
 // (vertex-coloured) parts merged into a few meshes, eyes with lids, and glints. Everything a legend builds is merged
 // by material and cached per species, so a legend stays a few dozen draw calls.
 
-export const GOLD = 0xffd23a;
 export const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 export const mix = (a: number, b: number, t: number) => new THREE.Color(a).lerp(new THREE.Color(b), t).getHex();
 export const shade = (c: number, k: number) => new THREE.Color(c).multiplyScalar(k).getHex();
@@ -33,11 +32,9 @@ export interface LegendCtx {
   root: THREE.Object3D;
   /** The tail's pivot at the tail root (z = 0.47): parts on it wag. */
   tail: THREE.Group;
-  /** The look the model is built from, and `L`, the same with a shiny's gold applied. */
+  /** The look the model is built from: a shiny's too, which keeps the legend's own colours. */
   look: FishLook;
-  L: FishLook;
   id: string;
-  shiny: boolean;
   /** True for the dark underwater silhouette: only `bodyMat` and `finMat` (its two flat materials) may be used. */
   shadow: boolean;
   accent: THREE.Color;
@@ -63,9 +60,8 @@ export interface PaintCtx {
   rng: () => number;
   /** True for the glow layer (the emissive map): black, with only what glows painted in. */
   glow: boolean;
-  shiny: boolean;
   look: FishLook;
-  /** A colour as CSS, pulled toward gold on a shiny. */
+  /** A colour as CSS. */
   ink: (c: number, a?: number) => string;
   /**
    * Draws on both flanks: `fn` gets P(d, v), the canvas point `d` of the way around above the side line
@@ -103,8 +99,8 @@ const skins = new Map<string, THREE.CanvasTexture>();
  * plain fish's countershading, dark back to pale belly; the legend paints the rest. A legend is seen big and close,
  * so its canvas is four times finer than a plain fish's, drawn in the same 512 x 256 units.
  */
-export function legendSkin(legend: Legend, look: FishLook, id: string, glow: boolean, shiny: boolean): THREE.CanvasTexture {
-  const key = `${id}|${glow}|${shiny}`;
+export function legendSkin(legend: Legend, look: FishLook, id: string, glow: boolean): THREE.CanvasTexture {
+  const key = `${id}|${glow}`;
   let t = skins.get(key);
   if (t) return t;
   const c = document.createElement('canvas');
@@ -116,7 +112,6 @@ export function legendSkin(legend: Legend, look: FishLook, id: string, glow: boo
   const Y = (v: number) => (1 - v) * TEX_H;
   const ink = (col: number, a = 1) => {
     const k = new THREE.Color(col);
-    if (shiny) k.lerp(new THREE.Color(GOLD), 0.5);
     return `rgba(${Math.round(k.r * 255)},${Math.round(k.g * 255)},${Math.round(k.b * 255)},${a})`;
   };
   if (glow) {
@@ -136,7 +131,7 @@ export function legendSkin(legend: Legend, look: FishLook, id: string, glow: boo
     fn((d, v) => [-d * TEX_W, Y(v)]);
     fn((d, v) => [(1 - d) * TEX_W, Y(v)]);
   };
-  legend.paint?.({ g, X, Y, W: TEX_W, H: TEX_H, rng: seeded(id), glow, shiny, look, ink, flanks });
+  legend.paint?.({ g, X, Y, W: TEX_W, H: TEX_H, rng: seeded(id), glow, look, ink, flanks });
   t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;

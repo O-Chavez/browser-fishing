@@ -146,17 +146,17 @@ function build(c: LegendCtx): void {
   const bm = c.bodyMat as THREE.MeshPhysicalMaterial;
   // Silver: metallic, with a pearly shimmer, glowing faintly with the moon.
   bm.roughness = 0.28;
-  bm.metalness = c.shiny ? 0.5 : 0.35;
+  bm.metalness = 0.35;
   bm.clearcoat = 0.8;
   bm.iridescence = 0.5;
   bm.iridescenceIOR = 1.3;
   bm.emissiveIntensity = 1.2;
-  add(c, fins, c.shiny ? c.finMat : MAT.fin());
+  add(c, fins, MAT.fin());
   // The moonlight round it: a soft shell of light hugging the whole ribbon.
-  add(c, cached('oarfish:shell', () => bodyGeo(SHELL, 160, 12)), glowMat(c, c.shiny ? 0xffe890 : MOON, 0.26, THREE.BackSide));
+  add(c, cached('oarfish:shell', () => bodyGeo(SHELL, 160, 12)), glowMat(c, MOON, 0.26, THREE.BackSide));
   // The oars' glowing tips.
-  add(c, cached('oarfish:tips', () => P().tips), mat(`oarfish:tip${c.shiny}`, () => new THREE.MeshBasicMaterial({ color: c.shiny ? 0xfff0a0 : TIP })));
-  for (const q of P().at) glowSprite(c, c.shiny ? 0xffe890 : 0xffb0c8, 0.07, 0.8, q);
+  add(c, cached('oarfish:tips', () => P().tips), mat('oarfish:tip', () => new THREE.MeshBasicMaterial({ color: TIP })));
+  for (const q of P().at) glowSprite(c, 0xffb0c8, 0.07, 0.8, q);
   // The moon of an eye: big, silver-white, with a soft halo.
   const eyes: THREE.BufferGeometry[] = [];
   const lids: THREE.BufferGeometry[] = [];
@@ -166,7 +166,7 @@ function build(c: LegendCtx): void {
     const e = { p, out, r: 0.022, white: 0xf8faff, iris: 0xc4d6f6, irisR: 0.8, pupil: 0x1a1830, pupilR: 0.4, look: V(0, 0.05, -0.2) };
     eyes.push(eyeGeo(e));
     lids.push(lidGeo(e, 0.05, 0.2, mix(BACK, 0x8a96b8, 0.4), 1.12));
-    glowSprite(c, c.shiny ? 0xffe890 : MOON, 0.075, 0.55, p.clone().addScaledVector(out, 0.012));
+    glowSprite(c, MOON, 0.075, 0.55, p.clone().addScaledVector(out, 0.012));
   }
   add(c, cached('oarfish:eyes', () => fuse(eyes)), MAT.flatPaint());
   add(c, cached('oarfish:lids', () => fuse(lids)), MAT.flesh());

@@ -37,8 +37,8 @@ function domeN(d: V3): V3 {
 /** The direction from the dome's middle that is `yaw` round from straight ahead (toward -x first) and `pitch` up. */
 const dir = (yaw: number, pitch: number) => V(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 
-export function buildDreamer(shiny: boolean): Built {
-  const C = palette(shiny);
+export function buildDreamer(): Built {
+  const C = palette();
   const rng = seeded('dreamer');
   const soft = new Bucket(), hard = new Bucket(), glow = new Bucket(), shade = new Bucket(), rim = new Bucket();
   const SH = new THREE.Color(0);
@@ -346,8 +346,8 @@ export function buildDreamer(shiny: boolean): Built {
 
   return {
     hard: { geo: hard.build(), rough: 0.7, metal: 0.3 },
-    soft: { geo: soft.build(), rough: 0.68, coat: 0.12, tint: shiny ? 0x161004 : 0x041a18 },
-    rim: { geo: rim.build(), rough: 0.75, color: shiny ? 0x6a5420 : 0x1f7468, power: 2.6 },
+    soft: { geo: soft.build(), rough: 0.68, coat: 0.12, tint: 0x041a18 },
+    rim: { geo: rim.build(), rough: 0.75, color: 0x1f7468, power: 2.6 },
     glow: glow.build(),
     shade: shade.build(),
     ring: { at: V(0, 0.42, -0.12), tilt: new THREE.Euler(0.22, 0, -0.12), speed: 0.22, glow: ring.build() },

@@ -107,8 +107,8 @@ function lie(p: V3, len: number, L: Lie, rad: (q: number) => number, ph: number,
   return c;
 }
 
-export function buildKraken(shiny: boolean, limp = false): Built {
-  const C = palette(shiny);
+export function buildKraken(limp = false): Built {
+  const C = palette();
   const rng = seeded('kraken');
   const soft = new Bucket(), hard = new Bucket(), glow = new Bucket(), shade = new Bucket();
   const SH = new THREE.Color(0);

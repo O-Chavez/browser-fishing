@@ -3,7 +3,7 @@ import { FISH_LOOK, SHAPES, envelope, type DorsalKind, type FishLook, type Shape
 import { FISH, isSeaFish } from '../data/content';
 import { WATER_ORDER } from './env';
 import { addSeaParts, addSeaShadow } from './seafish';
-import { buildLegend } from './seafish/legends';
+import { SHINY_LEGEND_SPARKLES, buildLegend } from './seafish/legends';
 
 /** A glow material whose colour cycles through the rainbow (the aurora pike). */
 type Hue = { m: THREE.Material & { color: THREE.Color }; off: number };
@@ -299,7 +299,11 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
   // Sea fish are tier 5 for gear but get the satin lake-giant finish: no jewel sheen, spirit glow or crown.
   if (isSeaFish(FISH.find((f) => f.id === id))) tier = Math.min(tier, 3);
   const look: FishLook = FISH_LOOK[id] ?? { shape: 'torpedo', tail: 'fork', dorsal: 'soft', back: baseColor, belly: new THREE.Color(baseColor).lerp(new THREE.Color(0xffffff), 0.5).getHex(), fin: baseColor };
-  const L = shiny ? goldify(look) : look;
+  // The Abyss's three legends are built on this model (`seafish/giants`) and, like every sea legend, keep their own
+  // look on a shiny: no gold wash, no gold silhouette, only the sparkles if `SHINY_LEGEND_SPARKLES`.
+  const giant = !!look.abyss?.legend;
+  const gilded = shiny && !giant;
+  const L = gilded ? goldify(look) : look;
   const sh = SHAPES[look.shape];
   const group = new THREE.Group();
   const materials: THREE.Material[] = [];
@@ -314,24 +318,24 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
   // Tier finish: matte → satin → bold → jewel sheen → spirit glow.
   const rough = [0.85, 0.6, 0.48, 0.28, 0.3][Math.min(4, tier - 1)];
   const metal = tier === 4 ? 0.35 : tier >= 5 ? 0.15 : 0;
-  const shadowMat = () => new THREE.MeshBasicMaterial({ color: shiny ? 0x9a7410 : 0x06141a, transparent: true, opacity: shiny ? 0.9 : 0.75, side: THREE.DoubleSide });
+  const shadowMat = () => new THREE.MeshBasicMaterial({ color: gilded ? 0x9a7410 : 0x06141a, transparent: true, opacity: gilded ? 0.9 : 0.75, side: THREE.DoubleSide });
   const ghost = spirit === 'ghost';
   const hasGlowSkin = !shadow && (look.marks ?? []).some((m) => m.k === 'glowdots' || m.k === 'stars');
 
   const bodyMat: THREE.Material = shadow
     ? shadowMat()
     : new THREE.MeshPhysicalMaterial({
-        map: skin(look, id || 'fish', false, shiny),
+        map: skin(look, id || 'fish', false, gilded),
         // A clear-coat gloss that builds with tier: none on shallows fish, full on jewels and spirits.
         clearcoat: [0, 0.3, 0.8, 1, 1][Math.min(4, tier - 1)],
         clearcoatRoughness: 0.25,
         // A colour-shifting shimmer from lake giants up, strongest on the jewels.
         iridescence: [0, 0, 0.45, 0.9, 0.6][Math.min(4, tier - 1)],
         iridescenceIOR: 1.35,
-        roughness: shiny ? 0.25 : rough,
-        metalness: shiny ? 0.4 : metal,
+        roughness: gilded ? 0.25 : rough,
+        metalness: gilded ? 0.4 : metal,
         emissive: hasGlowSkin ? 0xffffff : spirit ? accent.clone().multiplyScalar(0.22) : 0x000000,
-        emissiveMap: hasGlowSkin ? skin(look, id, true, shiny) : null,
+        emissiveMap: hasGlowSkin ? skin(look, id, true, gilded) : null,
         emissiveIntensity: hasGlowSkin ? 1.2 : 1,
         transparent: ghost,
         opacity: ghost ? 0.7 : 1,
@@ -403,7 +407,7 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
 
   // Jewel (T4): a coloured rim glow that keeps the body colour readable; spirits (T5) a stronger aura.
   let orbit: THREE.Group | undefined;
-  if (!shadow && (tier >= 4 || shiny)) {
+  if (!shadow && (tier >= 4 || (shiny && (!giant || SHINY_LEGEND_SPARKLES)))) {
     const glowMat = (op: number, c = accent, cycle = false) => {
       const m = new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
       pulse.push(m);

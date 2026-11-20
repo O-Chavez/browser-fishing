@@ -242,7 +242,7 @@ let finMemo: ReturnType<typeof fins> | null = null;
 const finParts = () => (finMemo ??= fins());
 
 function face(c: LegendCtx): { eyes: THREE.BufferGeometry; flesh: THREE.BufferGeometry } {
-  const back = c.shiny ? c.L.back : BACK;
+  const back = BACK;
   const eyes: THREE.BufferGeometry[] = [];
   const flesh: THREE.BufferGeometry[] = [];
   for (const s of [-1, 1]) {
@@ -270,7 +270,7 @@ function face(c: LegendCtx): { eyes: THREE.BufferGeometry; flesh: THREE.BufferGe
 }
 
 function build(c: LegendCtx): void {
-  const key = `marlin:${c.shiny ? 'gold' : 'plain'}`;
+  const key = 'marlin';
   const all = cached('marlin:fins', () => finParts().body);
   const tail = cached('marlin:tail', () => finParts().tail);
   const bolts = cached('marlin:bolts', () => finParts().bolts);
@@ -282,20 +282,20 @@ function build(c: LegendCtx): void {
   }
   const mat = c.bodyMat as THREE.MeshPhysicalMaterial;
   // Storm-wet, but dark: a soft gloss, no silver sheen over the back.
-  mat.roughness = c.shiny ? 0.25 : 0.55;
+  mat.roughness = 0.55;
   mat.clearcoat = 0.25;
   mat.clearcoatRoughness = 0.35;
   mat.emissiveIntensity = 1.5;
   const finMat = MAT.fin();
-  add(c, all, c.shiny ? c.finMat : finMat);
-  add(c, tail, c.shiny ? c.finMat : finMat, c.tail);
-  add(c, bolts, glowMat(c, c.shiny ? 0xfff0a0 : 0x9fd8ff, 0.85, THREE.DoubleSide));
+  add(c, all, finMat);
+  add(c, tail, finMat, c.tail);
+  add(c, bolts, glowMat(c, 0x9fd8ff, 0.85, THREE.DoubleSide));
   const fc = face(c);
   add(c, cached(`${key}:eyes`, () => fc.eyes), MAT.flatPaint());
   add(c, cached(`${key}:flesh`, () => fc.flesh), MAT.flesh());
   // Sparks crackling round the sail and off the spear.
   for (const [x, y, z, s] of [[0.02, 0.5, -0.24, 0.07], [-0.03, 0.44, -0.08, 0.05], [0.0, 0.32, 0.12, 0.06], [-0.02, 0.2, 0.22, 0.045], [0.0, 0.42, -0.34, 0.04], [0.02, 0.04, -0.82, 0.05], [-0.02, 0.28, 0.66, 0.05], [0.01, -0.3, 0.66, 0.045]] as [number, number, number, number][]) {
-    glint(c, V(x, y, z), s, c.shiny ? 0xfff0a0 : SPARK, 0.95);
+    glint(c, V(x, y, z), s, SPARK, 0.95);
   }
   // Lost tackle: a hook in the jaw with a long snapped line, a spoon under the jaw, and a fly halfway down the spear
   // with its line wound round it.
