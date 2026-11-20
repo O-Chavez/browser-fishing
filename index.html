@@ -11,6 +11,10 @@
   <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="manifest" href="/site.webmanifest" />
+  <!-- Opened from the Home Screen, the game runs like an app without the browser's bars (src/game/homescreen.ts). -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Lakeside" />
 
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Lakeside" />
@@ -133,6 +137,8 @@
         </div>
       </div>
     </div>
+    <!-- A phone's first visit: add to the Home Screen first? (homeJoinHtml, src/game/homescreen.ts), in place of the form above. -->
+    <div id="join-home" class="panel join"></div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

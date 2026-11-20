@@ -9,6 +9,9 @@ export const CHAT_TTL_MS = 5 * 60_000;
 export const FLASH_MS = 4000;
 /** Lines shown at once; older ones scroll away. */
 const SHOWN = 8;
+/** Touch, chat closed: the most lines the glance at the corner shows, and how long a line stays in it (play-test defaults). */
+export const TOUCH_SHOWN = 3;
+export const TOUCH_GLANCE_MS = 30_000;
 /** Matches the server's limits (`server/chat.ts`, and `server/feedback.ts` for slash commands like /bug). */
 const MAX_LEN = 120;
 const CMD_MAX_LEN = 500;
@@ -34,6 +37,15 @@ export const liveLines = (lines: ChatLine[], now: number): ChatLine[] => lines.f
 /** The newest lines for the window, optionally only those from one map. */
 export const shownLines = (lines: ChatLine[], onlyMap: string | null): ChatLine[] =>
   lines.filter((l) => !onlyMap || l.system || l.map === onlyMap).slice(-SHOWN);
+
+const inWorld = (l: ChatLine, onlyMap: string | null): boolean => !onlyMap || !!l.system || l.map === onlyMap;
+
+/** Touch, chat closed: the last few lines from the last half minute, optionally one map only. Older lines stay in the full log. */
+export const glanceLines = (lines: ChatLine[], onlyMap: string | null, now: number): ChatLine[] =>
+  lines.filter((l) => now - l.at < TOUCH_GLANCE_MS && inWorld(l, onlyMap)).slice(-TOUCH_SHOWN);
+
+/** Touch, chat open: every line kept, to scroll back through, optionally one map only. */
+export const fullLines = (lines: ChatLine[], onlyMap: string | null): ChatLine[] => lines.filter((l) => inWorld(l, onlyMap));
 
 /**
  * How far into its flash a line is, or null once it's over. The window is rebuilt on every change,
@@ -127,6 +139,10 @@ export class ChatBox {
   private repeat = 0;
   /** The layer and ⇧ the keys were last drawn for; letters only redraw when these change. */
   private drawnKeys = '';
+  /** Touch, chat open: the log is scrolled to its newest line, so a new line keeps it there. */
+  private stick = true;
+  /** The glance last drawn (touch, closed), so the 5 s tick only redraws when it changed. */
+  private glanceKey = '';
 
   constructor(
     private root: HTMLElement,
@@ -154,6 +170,13 @@ export class ChatBox {
     this.keysEl = root.querySelector('.chat-keys')!;
     this.scope = root.querySelector('.chat-scope')!;
     this.wireTouch();
+    this.log.addEventListener('scroll', () => {
+      this.stick = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 8;
+    });
+    // The browser's bars showing or hiding change the glance's room.
+    addEventListener('resize', () => {
+      if (this.opts.soft?.() && !this.isOpen) this.render();
+    });
     this.input.maxLength = MAX_LEN;
     this.input.placeholder = 'Say something… or /bug, /idea to send feedback';
     // Feedback reports get more room than chat lines.
@@ -220,6 +243,7 @@ export class ChatBox {
     this.setUnread(0);
     this.input.classList.remove('hidden');
     this.root.classList.add('typing');
+    this.stick = true;
     if (this.opts.soft?.()) {
       this.keys = startKeys();
       this.root.classList.add('soft');
@@ -401,9 +425,15 @@ export class ChatBox {
 
   private expire(): void {
     const keep = liveLines(this.lines, this.now());
-    if (keep.length === this.lines.length) return;
-    this.lines = keep;
-    this.render();
+    if (keep.length !== this.lines.length) {
+      this.lines = keep;
+      this.render();
+    } else if (this.opts.soft?.() && !this.isOpen && this.glanceKey !== this.glanceId()) this.render();
+  }
+
+  /** Which lines the touch glance holds right now. */
+  private glanceId(): string {
+    return glanceLines(this.lines, this.onlyHere ? this.opts.map() : null, this.now()).map((l) => l.at).join();
   }
 
   private render(): void {
@@ -413,13 +443,22 @@ export class ChatBox {
       const t = flashElapsed(l, now);
       return t === null ? `<div class="chat-line${cls}">` : `<div class="chat-line${cls} fresh" style="animation-delay:${-t}ms">`;
     };
-    this.log.innerHTML = shownLines(this.lines, this.onlyHere ? here : null)
+    const only = this.onlyHere ? here : null;
+    const touch = !!this.opts.soft?.();
+    const shown = !touch ? shownLines(this.lines, only) : this.isOpen ? fullLines(this.lines, only) : glanceLines(this.lines, only, now);
+    this.glanceKey = touch && !this.isOpen ? shown.map((l) => l.at).join() : '';
+    this.log.innerHTML = shown
       .map((l) => {
         if (l.system) return `${open(l, ' sys')}${coinText(l.text)}</div>`;
         const tag = !this.onlyHere && l.map !== here ? `<span class="chat-tag">${esc(this.opts.mapName(l.map))}</span> ` : '';
         return `${open(l, l.self ? ' self' : '')}${tag}<b>${anchorHtml(!!l.top)}${l.sup ? '<span class="sup" title="Lakeside supporter">💗</span>' : ''}${esc(l.name)}:</b> ${coinText(l.text)}</div>`;
       })
       .join('');
+    // The open log on touch scrolls back; a new line only follows if the player was already at the bottom.
+    if (touch && this.isOpen && this.stick) this.log.scrollTop = this.log.scrollHeight;
+    // The closed glance keeps to the room its CSS gives it (less when the browser's bars show): the oldest lines that
+    // don't fit whole go, rather than one showing cut in half.
+    if (touch && !this.isOpen) while (this.log.childElementCount > 1 && this.log.scrollHeight > this.log.clientHeight + 1) this.log.firstElementChild!.remove();
     this.renderHint();
     this.renderTouch();
   }

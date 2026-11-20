@@ -6,6 +6,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ## Up next
 
+
 - [ ] Play-test the Abyss's art pass (DONE.md, 2026-11-19): the sightings' pacing (a far one about every one to two minutes, eyes about every two), the look by day against night (nearly the same, by design), whether the swell reads well enough with the foam lines, and the frame rate on a real phone (Ideas, Performance). Then the rough spots and the sea reacting to a legend (Ideas, Deep sea charters)
 
 - [ ] Play-test the Twilight's jellies and atmosphere (DONE.md, 2026-11-19): the legs from the deck, the sail speed, the day omens, the frame rate on a real phone (13 to 15% of a frame in the SwiftShader stand-in), and the new night, hidden-sun glow and cloud colours
@@ -192,5 +193,7 @@ Finished items move to [DONE.md](DONE.md).
 
 ### Mobile
 
+- Play-test the phone chat and the Home Screen card (DONE.md, 2026-11-20) on real phones: the glance (2 or 3 lines, 30 s), scrolling back in the open chat, the card's wording and timing (20 s after joining), and on Android whether Chrome offers 📲 Install on the live site, and whether the installed game opens sideways without bars. On an iPhone: Add to Home Screen, logging in there with the password, and the black side bars by the notch (the `viewport-fit=cover` idea below)
+- 📋 True full screen on Android (from the phone chat item, 2026-11-20): Chrome ignores the page's viewport while full screen (`requestFullscreen`), so the touch layout, which is the desktop HUD at 1400px scaled down by the viewport (`touchLayoutWidth`), draws at 1x, about 1.7 times too big. Full screen would need the touch layout scaled another way (CSS `zoom` on the page, with every place that turns touch or mouse positions into layout pixels checked: the stick, taps on the view, tooltips, the Drop button). Only worth it if the Home Screen card doesn't catch on
 - Full mobile support is planned in Up next (2026-11-15); the old "Chat on a real phone" and "Full mobile support" ideas are folded into it
 - The rest of the touch layout's bottom edge against the iPhone's home bar (from the chat keyboard's fix, DONE.md, 2026-11-16). The hotbar sits 22px of the layout (about 13 points) above the foot of the screen, inside the bar's 21 points, so a tap on a slot may be taken by the phone the way the space bar's were; JUMP and the action button are higher (54 and 44px, about 26 to 32 points) and a full menu's Close is 14px up in the left rail. Check each on a real iPhone first ("Play it on real phones"), then lift what misfires by the same rule (`keysLiftPx`). The page also can't tell where the bar is: `viewport-fit=cover` with `env(safe-area-inset-bottom)` would, but it also lets the page run under the notch, so every HUD corner would need the same care 📋

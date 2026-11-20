@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_TTL_MS, FLASH_MS, commandMatches, countsAsUnread, unreadLabel, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
+import { CHAT_TTL_MS, FLASH_MS, TOUCH_GLANCE_MS, TOUCH_SHOWN, fullLines, glanceLines, commandMatches, countsAsUnread, unreadLabel, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
 
 const line = (text: string, map = 'pond', at = 0): ChatLine => ({ name: 'Ann', map, text, self: false, at });
 
@@ -14,6 +14,32 @@ describe('chat window lines', () => {
     const lines = Array.from({ length: 12 }, (_, i) => line(`m${i}`, i % 2 ? 'casino' : 'pond'));
     expect(shownLines(lines, null).map((l) => l.text)).toEqual(['m4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11']);
     expect(shownLines(lines, 'casino').map((l) => l.text)).toEqual(['m1', 'm3', 'm5', 'm7', 'm9', 'm11']);
+  });
+
+  it('glances at the last three lines from the last half minute on touch', () => {
+    const lines = [line('stale', 'pond', 0), ...Array.from({ length: 5 }, (_, i) => line(`m${i}`, 'pond', 40_000 + i))];
+    expect(TOUCH_SHOWN).toBe(3);
+    expect(glanceLines(lines, null, 40_010).map((l) => l.text)).toEqual(['m2', 'm3', 'm4']);
+    expect(glanceLines(lines.slice(0, 3), null, 40_010).map((l) => l.text)).toEqual(['m0', 'm1']);
+  });
+
+  it('lets a line leave the glance after thirty seconds, but not the full log', () => {
+    const lines = [line('hi', 'pond', 1000)];
+    expect(glanceLines(lines, null, 1000 + TOUCH_GLANCE_MS - 1)).toHaveLength(1);
+    expect(glanceLines(lines, null, 1000 + TOUCH_GLANCE_MS)).toHaveLength(0);
+    expect(liveLines(lines, 1000 + TOUCH_GLANCE_MS)).toHaveLength(1);
+    expect(fullLines(lines, null)).toHaveLength(1);
+  });
+
+  it('applies the world filter to the glance and the full log, keeping notices', () => {
+    const lines = [line('a', 'pond'), line('b', 'casino'), { ...line('Bob has joined', ''), system: true }];
+    expect(glanceLines(lines, 'casino', 1).map((l) => l.text)).toEqual(['b', 'Bob has joined']);
+    expect(fullLines(lines, 'casino').map((l) => l.text)).toEqual(['b', 'Bob has joined']);
+  });
+
+  it('gives the open touch log every line, not just eight', () => {
+    const lines = Array.from({ length: 30 }, (_, i) => line(`m${i}`));
+    expect(fullLines(lines, null)).toHaveLength(30);
   });
 
   it('keeps server notices in every world filter', () => {
