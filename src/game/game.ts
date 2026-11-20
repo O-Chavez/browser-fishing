@@ -30,6 +30,7 @@ import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
 import { TouchControls, touchLayoutWidth, touchOnly } from './touch';
 import { HOME_JOIN_KEY, HOME_TIP_BEAT_SECS, HOME_TIP_DELAY_SECS, HOME_TIP_KEY, HOME_TIP_TITLE, homeJoinDue, homeJoinHtml, homeTipDue, homeTipHtml, installedSinceLoad, installReady, offersHomeScreen, promptInstall, readScreenEnv, watchInstall, type ScreenEnv } from './homescreen';
+import { readChatKeyboard, writeChatKeyboard } from './chatkeyboard';
 import { ChatBox, maskedEcho, secretPrompt, unreadLabel, type SecretPrompt } from './chatbox';
 import { DevPrompt } from './devprompt';
 import { FEEDBACK_MAX, FEEDBACK_WAIT_MS, FeedbackForm, OFFLINE_MSG, type FeedbackKind } from './feedback';
@@ -671,6 +672,7 @@ export class Game {
       mapName: (id) => MAPS.find((m) => m.id === id)?.name ?? id,
       onUnread: (n) => this.touch?.setUnread(unreadLabel(n)),
       soft: () => !!this.touch,
+      phoneKeys: () => readChatKeyboard() === 'phone',
     });
     $('resume').addEventListener('click', (e) => {
       const acct = (e.target as HTMLElement).closest<HTMLElement>('#resume-fb, [data-acct]');
@@ -1655,6 +1657,7 @@ export class Game {
     else if (act === 'music') audio.toggleMusic();
     else if (act === 'sound') audio.toggleSound();
     else if (act === 'graphics') this.toggleGraphics();
+    else if (act === 'chatkb') writeChatKeyboard(readChatKeyboard() === 'phone' ? 'game' : 'phone');
     else if (act === 'sellall') return this.sellAll();
     else if (act === 'equiprod') this.equipRod(id!);
     else if (act === 'equipbait') this.equipBait(id!);
@@ -5565,12 +5568,19 @@ export class Game {
       : `<p>Start over from level 1. Your name, colour and face stay.</p>${this.btn('Reset account…', 'data-act="reset"', 'plain')}`;
     return `<div class="cols settings"><div class="main"><h4>Controls</h4><div class="controls">${controls}</div></div>
       <aside class="detail"><h4>Account</h4>${this.accountHtml()}<h4>Sound</h4><div class="btnrow">${this.btn(audio.sound ? '🔊 Sound on' : '🔇 Sound off', 'data-act="sound"', 'plain')}${this.btn(audio.music ? '🎵 Music on' : '🔇 Music off', 'data-act="music"', 'plain')}</div>
-      <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.newsLinkHtml()}${this.homeLinkHtml()}${this.feedbackHtml()}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
+      <h4>Graphics</h4><p>Lite turns off shadows, grass and flowers and draws fewer pixels. Smoother on phones and older computers.</p>${this.btn(this.world.isLite ? '🍃 Lite graphics' : '🌲 Full graphics', 'data-act="graphics"', 'plain')}${this.chatKeyboardHtml()}${this.newsLinkHtml()}${this.homeLinkHtml()}${this.feedbackHtml()}${this.supportHtml()}<h4 class="danger-h">Danger zone</h4>${reset}</aside></div>`;
   }
 
   /** Settings' way back to the "What's new" board, once it has entries. */
   private newsLinkHtml(): string {
     return NEWS.length ? `<h4>What's new</h4><p>Notes from the latest big updates.</p>${this.btn("📰 What's new", 'data-tab="news"', 'plain')}` : '';
+  }
+
+  /** Settings, phones and tablets only: which keyboard 💬 opens with. */
+  private chatKeyboardHtml(): string {
+    if (!this.touch) return '';
+    const phone = readChatKeyboard() === 'phone';
+    return `<h4>Chat keyboard</h4><p>The phone's keyboard has autocomplete, emoji and voice typing, but covers more of the screen.</p>${this.btn(phone ? "📱 Phone's keyboard" : '⌨️ Game keyboard', 'data-act="chatkb"', 'plain')}`;
   }
 
   /** Settings' way back to the Home Screen card, on a phone or tablet still in a browser tab (`homeOffered`). */
