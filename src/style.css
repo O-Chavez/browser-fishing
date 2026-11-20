@@ -780,8 +780,9 @@ body.touch #fishtag b small { font-size: 15px; }
 body.touch #toast { font-size: 22px; }
 /* A fight needs only the gauge and the button: JUMP and the top buttons step aside, like the hotbar. */
 body.touch[data-phase="reeling"] #touch .t-jump, body.touch[data-phase="reeling"] #touch .t-top, body.touch[data-phase="reeling"] #chat:not(.typing) { visibility: hidden; }
-/* Emotes only play with nothing on the line, so their button steps aside for the rest of a cast too. */
-body.touch:not([data-phase="idle"]) #touch .t-emote { visibility: hidden; }
+/* Emotes only play with nothing on the line, so their button steps aside for the rest of a cast too. Taken out rather
+   than hidden: on an iPhone the hidden button left a one-pixel sliver of its ring and hand on the water (2026-11-20). */
+body.touch:not([data-phase="idle"]) #touch .t-emote { display: none; }
 /* Narrow layouts (small phones, touchLayoutWidth under 1300): centre the hotbar in the room left of JUMP and the action
    button (their 360px at the right), so even 7 slots clear them. */
 @media (max-width: 1299px) { body.touch #hotbar, body.touch #heldname { left: calc((100% - 360px) / 2); } }
