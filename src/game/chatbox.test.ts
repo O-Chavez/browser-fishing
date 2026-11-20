@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { CHAT_TTL_MS, FLASH_MS, TOUCH_GLANCE_MS, TOUCH_SHOWN, fullLines, glanceLines, commandMatches, countsAsUnread, unreadLabel, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ChatBox, CHAT_TTL_MS, FLASH_MS, TOUCH_GLANCE_MS, TOUCH_SHOWN, fullLines, glanceLines, commandMatches, countsAsUnread, unreadLabel, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
 
 const line = (text: string, map = 'pond', at = 0): ChatLine => ({ name: 'Ann', map, text, self: false, at });
 
@@ -132,5 +132,60 @@ describe('unread chat badge', () => {
     expect(unreadLabel(1)).toBe('1');
     expect(unreadLabel(9)).toBe('9');
     expect(unreadLabel(10)).toBe('9+');
+  });
+});
+
+describe('touch chat keyboard setting', () => {
+  // The tests run without a DOM, so the chat box gets a stand-in root whose elements remember only what open() touches.
+  const fakeEl = () => {
+    const cls = new Set<string>();
+    const el: Record<string, unknown> = {
+      classList: { add: (...c: string[]) => c.forEach((x) => cls.add(x)), remove: (...c: string[]) => c.forEach((x) => cls.delete(x)), contains: (c: string) => cls.has(c), toggle: () => false },
+      style: { setProperty() {}, fontSize: '' },
+      dataset: {},
+      value: '',
+      readOnly: false,
+      scrollHeight: 0,
+      clientHeight: 0,
+      childElementCount: 0,
+      addEventListener() {},
+      focus: vi.fn(),
+      blur() {},
+    };
+    return el;
+  };
+  const build = (phoneKeys?: () => boolean) => {
+    const els = new Map<string, ReturnType<typeof fakeEl>>();
+    const root = { ...fakeEl(), innerHTML: '', querySelector: (sel: string) => (els.has(sel) ? els.get(sel)! : (els.set(sel, fakeEl()), els.get(sel)!)) };
+    vi.stubGlobal('addEventListener', () => {});
+    vi.stubGlobal('removeEventListener', () => {});
+    vi.stubGlobal('screen', { width: 844, height: 390 });
+    vi.stubGlobal('innerWidth', 1000);
+    vi.stubGlobal('setInterval', () => 0);
+    const chat = new ChatBox(root as unknown as HTMLElement, { send() {}, map: () => 'pond', mapName: (id) => id, soft: () => true, phoneKeys });
+    const input = els.get('.chat-input')!;
+    return { chat, root: root as unknown as { classList: { contains(c: string): boolean } }, input };
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('opens straight into the phone keyboard when the setting says phone', () => {
+    const { chat, root, input } = build(() => true);
+    chat.open();
+    expect(root.classList.contains('typing')).toBe(true);
+    expect(root.classList.contains('native')).toBe(true);
+    expect(root.classList.contains('soft')).toBe(false);
+    expect(input.readOnly).toBe(false);
+    expect(input.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the game's keys by default", () => {
+    for (const phoneKeys of [undefined, () => false]) {
+      const { chat, root, input } = build(phoneKeys);
+      chat.open();
+      expect(root.classList.contains('soft')).toBe(true);
+      expect(root.classList.contains('native')).toBe(false);
+      expect(input.readOnly).toBe(true);
+      expect(input.focus).not.toHaveBeenCalled();
+    }
   });
 });

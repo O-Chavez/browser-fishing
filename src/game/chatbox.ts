@@ -156,6 +156,8 @@ export class ChatBox {
       onUnread?: (n: number) => void;
       /** Touch mode: chat opens with the in-game keyboard. */
       soft?: () => boolean;
+      /** Touch mode: open with the phone's own keyboard (the setting), not the in-game one. */
+      phoneKeys?: () => boolean;
     },
   ) {
     root.innerHTML =
@@ -244,6 +246,11 @@ export class ChatBox {
     this.input.classList.remove('hidden');
     this.root.classList.add('typing');
     this.stick = true;
+    // The phone's keyboard must be focused inside the tap that opened chat (iOS), so this stays synchronous.
+    if (this.opts.soft?.() && this.opts.phoneKeys?.()) {
+      this.enterNative();
+      return;
+    }
     if (this.opts.soft?.()) {
       this.keys = startKeys();
       this.root.classList.add('soft');
@@ -398,6 +405,11 @@ export class ChatBox {
     this.keys = null;
     removeEventListener('keydown', this.hardKey, true);
     removeEventListener('keyup', this.hardKeyUp, true);
+    this.enterNative();
+  }
+
+  /** The phone's keyboard up and the field at the top; 🌐 and the "phone's keyboard" setting both land here. */
+  private enterNative(): void {
     this.input.readOnly = false;
     this.root.classList.remove('soft');
     this.root.classList.add('native');
