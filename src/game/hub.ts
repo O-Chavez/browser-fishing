@@ -214,8 +214,8 @@ export class Hub {
   private lakeTrophy!: Trophy;
   private seaTrophy: Trophy | null = null;
   /**
-   * Given each trophy fish as it is mounted (`World.warm`), so its shaders are compiled and its model drawn once
-   * before anyone looks up at it; otherwise the first look at a new record stalls.
+   * Given each trophy fish as it is mounted (`World.warmups.show`): it stays hidden until its shaders are compiled,
+   * then shows; otherwise the frame a new record went up stalled for whoever had the board in view.
    */
   warm: (o: THREE.Object3D) => void = () => {};
   private thanksCtx!: CanvasRenderingContext2D;

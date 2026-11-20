@@ -5,6 +5,7 @@ import { standHeight } from './env';
 import { disposeTree } from './dispose';
 import { FISH_LOOK, SHAPES } from '../data/fishlook';
 import { buildFish } from './fishmodel';
+import { SHOWN, type WarmShow } from './prewarm';
 import { dropScale } from './fishscale';
 import { buildRodModel, buildTin } from './itemmodels';
 
@@ -14,7 +15,12 @@ export class DropsView {
   readonly group = new THREE.Group();
   private meshes = new Map<number, { obj: THREE.Object3D; drop: Drop }>();
 
-  constructor(scene: THREE.Scene, private surface: (x: number, z: number) => number) {
+  constructor(
+    scene: THREE.Scene,
+    private surface: (x: number, z: number) => number,
+    /** Keeps a dropped item hidden until its shaders are ready (`World.warmups`). */
+    private warm: WarmShow = SHOWN,
+  ) {
     scene.add(this.group);
   }
 
@@ -60,8 +66,13 @@ export class DropsView {
     }
     for (const d of list) {
       if (d.map !== map || this.meshes.has(d.id)) continue;
-      const obj = this.build(d);
+      // The item inside a holder: `update` blinks the holder, and the item itself stays hidden until its shaders are
+      // ready (a dropped fish can be a kind not seen yet this visit, and its first frame would wait on them).
+      const obj = new THREE.Group();
+      const item = this.build(d);
+      obj.add(item);
       this.group.add(obj);
+      this.warm.show(item);
       this.meshes.set(d.id, { obj, drop: d });
     }
   }

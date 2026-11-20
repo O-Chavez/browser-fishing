@@ -2,7 +2,7 @@ import { audio } from './audio';
 import * as THREE from 'three';
 import { LightPool } from './lightpool';
 import { NightGlow, glowTag } from './nightglow';
-import { revealAll } from './prewarm';
+import { revealAll, Warmups } from './prewarm';
 import type { Location } from '../data/content';
 import { onCobbles, type MapDef } from '../data/maps';
 import {
@@ -158,10 +158,14 @@ export class World {
   /** The running `prewarm`, until its shaders are ready and drawn once. */
   private warming: Promise<unknown> | null = null;
   private compiled = false;
-  /** Objects `warm` has compiled since, waiting for their one-pixel draw. */
-  private warmed: THREE.Object3D[] = [];
-  /** `warm` compiles still running. */
-  private warmsLeft = 0;
+  /**
+   * Shaders compiled after `prewarm`, in the background, against the scene's lights and fog: hidden stand-ins
+   * (`warm`) and what is built during play, like a hooked fish, which stays hidden until it is ready (`show`).
+   */
+  readonly warmups = new Warmups(
+    (o) => this.renderer.compileAsync(o, this.camera, this.scene).then(() => this.programsReady()),
+    () => this.renderer.info.programs?.length ?? 0,
+  );
   /** Rendering is fill-rate bound; 1.25 keeps Retina screens sharp at about 30% fewer pixels than 1.5. */
   private pixelCap = 1.25;
   private trees: Circle[] = [];
@@ -336,17 +340,35 @@ export class World {
    * draws it once on a later frame (see `warmDraw`). The next `prewarm` covers it again with the rest.
    */
   warm(obj: THREE.Object3D): void {
-    this.warmsLeft++;
-    const done = (): void => {
-      this.warmsLeft--;
-      if (obj.parent) this.warmed.push(obj);
-    };
-    void this.renderer.compileAsync(obj, this.camera, this.scene).then(done, done);
+    this.warmups.warm(obj);
   }
 
-  /** False while something `warm` was given is still compiling or waits for its one-pixel draw. */
+  /**
+   * Settles once every shader program there is has finished compiling and has been asked for its uniforms.
+   * `compileAsync` waits on each material's current program only, and a see-through two-sided material (a fish's
+   * fins) has a second one for its back faces. And three.js asks a program for its link log and uniforms the first
+   * time it draws with it, a call that waits for every draw queued before it: inside the warm-up's draw that is
+   * the first draw of the program before, which is when the driver builds its pipeline (10 to 60 ms each on an
+   * M1, 150 ms for a fish with five new ones). Asked here, before anything is drawn with them, it returns at once.
+   */
+  private programsReady(): Promise<void> {
+    return new Promise((done) => {
+      const check = (): void => {
+        const programs = (this.renderer.info.programs ?? []) as unknown as { isReady(): boolean; getUniforms(): unknown }[];
+        // A lost context never finishes one; the game is asking for a reload by then.
+        if (this.renderer.getContext().isContextLost()) return done();
+        if (!programs.every((p) => p.isReady())) return void setTimeout(check, 10);
+        // A no-op for one already used.
+        for (const p of programs) p.getUniforms();
+        done();
+      };
+      check();
+    });
+  }
+
+  /** False while something given to `warm` or `warmups.show` is still compiling or waits for its one-pixel draw. */
   get warmedAll(): boolean {
-    return !this.warmsLeft && !this.warmed.length;
+    return this.warmups.idle;
   }
 
   /**
@@ -768,7 +790,7 @@ export class World {
     this.buildFireflies();
     this.buildMountains();
     this.hub = new Hub(map);
-    this.hub.warm = (o) => this.warm(o);
+    this.hub.warm = (o) => this.warmups.show(o);
     this.decor.add(this.hub.group);
     this.town = new Town(map);
     this.decor.add(this.town.group);
@@ -1469,9 +1491,15 @@ export class World {
     if (this.compiled) {
       this.compiled = false;
       this.warming = null;
-      this.warmed = [];
       this.warmDraw();
-    } else if (this.warmed.length) this.warmDraw(this.warmed.splice(0));
+      this.warmups.drawn();
+    } else {
+      const due = this.warmups.due;
+      if (due.length) {
+        this.warmDraw(due);
+        this.warmups.drawn();
+      }
+    }
     if (!this.paused && !(this.holdForShaders && (this.warming || performance.now() < this.holdUntil))) this.renderer.render(this.scene, this.camera);
   }
 }
