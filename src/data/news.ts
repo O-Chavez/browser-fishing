@@ -48,6 +48,15 @@ export interface NewsEntry {
 
 export const NEWS: NewsEntry[] = [
   {
+    id: 18,
+    date: '2026-11-20',
+    title: 'Play from your Home Screen',
+    body: [
+      "On a phone, add Lakeside to your Home Screen and it opens like an app, without the browser's address bar and tabs, so more of your screen is the lake. No download and no app store: it's the same game. Find it in <b>⚙️ Settings</b> > <b>Home Screen</b>.",
+      'Chat on phones is tidier too: the corner shows just the last few lines, and <b>💬</b> opens the whole chat to scroll back through.',
+    ],
+  },
+  {
     id: 17,
     date: '2026-11-19',
     title: 'The Abyss goes dark',

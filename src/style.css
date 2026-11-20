@@ -768,6 +768,11 @@ body.touch #hud { z-index: 2; }
 body.touch #help, body.touch #crosshair { display: none; }
 body.touch #chat { top: 108px; width: 480px; font-size: 19px; }
 body.touch #chat .chat-tag { font-size: 15px; }
+/* Closed on a phone the log is a glance: one line each, at most a quarter of the screen, and ending above 👋 (its top
+   is 168 + 84px up from the foot, the log starts 108px down), which the browser's bars bring close on a short screen.
+   ChatBox drops the oldest lines that don't fit whole. */
+body.touch #chat:not(.typing) .chat-log { max-height: min(25vh, calc(100vh - 364px)); overflow: hidden; }
+body.touch #chat:not(.typing) .chat-line { flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Phone-sized text (step 4 of full mobile support): the touch layout shows at about 0.6x, so 14-16px labels came out
    near 9pt. These are about 11pt on a phone. */
 body.touch #spot, body.touch #nightchip, body.touch #lurechip { font-size: 19px; padding: 6px 14px; }
@@ -820,6 +825,29 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 #rotate b { display: block; font-size: 180px; color: var(--gold); }
 #rotate small { display: block; margin-top: 16px; font-size: 40px; font-weight: 700; color: var(--cream-muted); }
 @media (orientation: portrait) { body.touch #rotate { display: flex; } }
+/* ---------- Home Screen card on touch (src/game/homescreen.ts) ----------
+   A fitted card like the nudge, wide and tight so it fits a phone with Safari's bars showing (a 1400x432 layout); its
+   body scrolls if it still doesn't. Play-test defaults. */
+#menu.homescreen > .win { width: min(960px, 94vw); max-height: var(--win-h); }
+#menu.homescreen .who { flex: 1 1 auto; }
+#menu.homescreen .who b { font-size: 24px; }
+#menu.homescreen .close { flex: none; }
+#menu.homescreen .sheet { min-height: 0; overflow-y: auto; padding: 14px 18px; }
+.hometip p { margin: 0 0 8px; font-size: 19px; font-weight: 700; line-height: 1.35; }
+.hometip .steps { padding: 8px 14px; border-radius: 12px; background: var(--paper-2); color: var(--ink); }
+.hometip .btns { display: flex; gap: 12px; margin: 12px 0 0; }
+.hometip .btns .btn { flex: 1; padding: 12px 16px; font-size: 21px; }
+/* A phone's first visit: the join screen opens on "Add to Home Screen first?" in the join card's look, in place of the
+   form until "Play in the browser" (homeJoinHtml). Sized to fit the same 1400x432 layout; scrolls if it doesn't. */
+#join:not(.homestep) #join-home, #join.homestep > .panel:not(#join-home) { display: none; }
+#join #join-home { width: min(900px, 94vw); max-height: 94vh; overflow-y: auto; box-sizing: border-box; padding: 18px 26px 16px; }
+#join-home h1 { margin: 0 0 8px; font-size: 30px; }
+#join-home p { margin: 0 0 10px; font-size: 20px; font-weight: 700; line-height: 1.35; }
+#join-home .steps { padding: 8px 14px; border-radius: 12px; background: var(--paper-2); }
+#join-home .home-done { padding: 12px 14px; border-radius: 12px; background: var(--paper-2); font-size: 22px; }
+#join-home .btns { display: flex; gap: 12px; margin: 12px 0 8px; }
+#join-home .btns .btn { flex: 1; padding: 12px 16px; font-size: 21px; }
+#join-home .home-foot { margin: 0; font-size: 19px; color: var(--ink-muted); }
 @media (prefers-reduced-motion: reduce) { .t-action.hook { animation: none; } }
 body.touch #chat .chat-hint { display: none; }
 /* No Esc key on a phone: the menu's close button is just the ✕. */
@@ -868,7 +896,9 @@ body.touch #chat.typing { --kb-h: calc(40vh - 26px); --kb-lift: 54px; position: 
 body.touch #chat.typing .chat-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 12px; pointer-events: auto; }
 body.touch #chat.typing .chat-top button { height: 76px; min-width: 76px; padding: 0 20px; border: 0; border-radius: 20px; font: 900 26px Nunito, ui-rounded, system-ui, sans-serif; color: var(--cream); background: var(--hud-bg); box-shadow: var(--hud-edge); }
 body.touch #chat.typing .chat-x { font-size: 34px; }
-body.touch #chat.typing .chat-log { flex: 0 1 auto; min-height: 0; overflow: hidden; justify-content: flex-end; width: min(860px, 62vw); margin: 0 0 0 80px; }
+body.touch #chat.typing .chat-log { flex: 0 1 auto; min-height: 0; overflow-y: auto; width: min(860px, 62vw); margin: 0 0 0 80px; pointer-events: auto; touch-action: pan-y; overscroll-behavior: contain; }
+/* The open log scrolls back with a finger; the auto margin keeps a short log at the bottom, which flex-end would break for scrolling. */
+body.touch #chat.typing .chat-log > :first-child { margin-top: auto; }
 body.touch #chat.typing .chat-hint:not(:empty) { display: block; margin: 0 80px; text-align: left; font-size: 20px; opacity: 1; pointer-events: auto; }
 body.touch #chat.typing .chat-cmd { margin: 0 2px; padding: 8px 16px; border: 0; border-radius: 99px; font: 900 22px Nunito, ui-rounded, system-ui, sans-serif; color: var(--gold-ink); background: var(--gold); box-shadow: 0 3px 0 var(--gold-dark); }
 body.touch #chat.typing .chat-bar { display: flex; gap: 12px; margin: 0 80px; pointer-events: auto; }
