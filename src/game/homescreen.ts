@@ -61,7 +61,7 @@ export const HOME_TIP_BEAT_SECS = 1.5;
 /** Seconds after joining before the card may open, so the welcome and a stage's banner (4.6 s in) have had their turn (play-test default). */
 export const HOME_TIP_DELAY_SECS = 20;
 
-export const HOME_TIP_TITLE = 'Add to Home Screen';
+export const HOME_TIP_TITLE = 'Get the whole screen';
 
 /** The browser remembers the first-visit step at the join was shown here (apart from `HOME_TIP_KEY`). */
 export const HOME_JOIN_KEY = 'fishing-homescreen-join';
@@ -91,6 +91,30 @@ export function homeJoinDue(e: ScreenEnv, j: JoinState): boolean {
   return offersHomeScreen(e) && j.shown && !j.joining && !j.name && !j.auto && j.freshSave && !j.seen;
 }
 
+/** Safari's Share icon (a square with an arrow out of its top), drawn so players can match it to the button they're looking for. */
+const SHARE_ICON =
+  '<svg class="share-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M8 10H6v10h12V10h-2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** Why: one line, then what the player gets. */
+const HOME_WHY = `<p class="home-lead">Add Lakeside to your Home Screen and it opens like an app:</p>`;
+const HOME_GAINS = `<ul class="home-gains"><li>No address bar or tabs</li><li>The whole screen for the lake</li><li>Opens straight into the game</li><li>No download, no app store</li></ul>`;
+
+/**
+ * How, as numbered steps. iPhones: Safari's Share, which Chrome, Edge and Firefox have too; Brave doesn't (2026), so
+ * the last line sends players without it to Safari. Elsewhere the browser's menu, unless it has offered its install
+ * prompt, which a button then opens in one tap (the button sits with the card's others).
+ */
+function homeStepsHtml(o: { ios: boolean; canPrompt: boolean }): string {
+  if (o.ios)
+    return `<ol class="home-steps"><li>Tap <b>Share</b> ${SHARE_ICON} (on some iPhones it's under <b>···</b>)</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b></li><li>Open <b>Lakeside</b> from your Home Screen</li></ol><p class="home-note">Don't see <b>Add to Home Screen</b>? Open this page in <b>Safari</b> and try there.</p>`;
+  if (o.canPrompt) return `<ol class="home-steps"><li>Tap <b>📲 Add to Home Screen</b> below</li><li>Confirm with <b>Install</b></li><li>Open <b>Lakeside</b> from your Home Screen</li></ol>`;
+  return `<ol class="home-steps"><li>Tap your browser's menu <b class="kebab">⋮</b></li><li>Tap <b>Add to Home screen</b> or <b>Install app</b></li><li>Open <b>Lakeside</b> from your Home Screen</li></ol>`;
+}
+
+/** The two columns both versions share: what the player gets on the left, the steps on the right. */
+const homeGrid = (o: { ios: boolean; canPrompt: boolean }): string =>
+  `<div class="home-grid"><div>${HOME_GAINS}</div><div class="home-how">${homeStepsHtml(o)}</div></div>`;
+
 /**
  * The first-visit step on the join screen, in place of the join form until "Play in the browser". No password talk:
  * there's no account yet. Once installed (or the prompt accepted) it says where to open the game instead.
@@ -100,37 +124,28 @@ export function homeJoinHtml(o: { ios: boolean; canPrompt: boolean; installed: b
   const foot = '<p class="home-foot">You can find this again in ⚙️ Settings.</p>';
   // Installed, Settings no longer offers it, so no pointer there.
   if (o.installed) return `<p class="home-done">Installed! Open Lakeside from your Home Screen.</p><div class="btns">${browser}</div>`;
-  const action = o.ios
-    ? '<p class="steps">Tap <b>Share</b> (in Safari it may be under <b>···</b>), then <b>Add to Home Screen</b>.</p>'
-    : o.canPrompt
-      ? ''
-      : `<p class="steps">Open your browser's menu (<b>⋮</b>), then <b>Add to Home screen</b> or <b>Install app</b>.</p>`;
-  const install = !o.ios && o.canPrompt ? '<button class="btn gold" data-home="install">📲 Install</button>' : '';
-  return `<h1>📲 Add to Home Screen first?</h1>
-    <p>On a phone, the browser's address bar and tabs take about a third of the screen. Add Lakeside to your Home Screen and it opens like an app, with the whole screen for the lake. No download and no app store: it's the same game.</p>
-    ${action}<div class="btns">${install}${browser}</div>${foot}`;
+  const install = !o.ios && o.canPrompt ? '<button class="btn gold" data-home="install">📲 Add to Home Screen</button>' : '';
+  return `<h1>📲 ${HOME_TIP_TITLE}</h1>${HOME_WHY}${homeGrid(o)}<div class="btns">${install}${browser}</div>${foot}`;
 }
 
 /**
- * The card. iPhones get Safari's steps; elsewhere the browser's own install prompt as a button when it has offered one
- * (`installReady`), else its menu's steps. A Home Screen game on an iPhone keeps its own storage apart from Safari's, so
- * it doesn't have this browser's login: there a player without a password would find their name taken, and is sent to
- * set one. An installed app on Android shares the browser's storage, so the login carries over.
+ * The card in a later session. iPhones get Safari's steps; elsewhere the browser's own install prompt as a button when
+ * it has offered one (`installReady`), else its menu's steps. A Home Screen game on an iPhone keeps its own storage
+ * apart from Safari's, so it doesn't have this browser's login: there a player without a password would find their
+ * name taken, and is sent to set one. An installed app on Android shares the browser's storage, so the login carries over.
  */
 export function homeTipHtml(o: { ios: boolean; hasPass: boolean; canPrompt: boolean }): string {
-  const intro = `<p>Play Lakeside from your Home Screen and it opens like an app, without the browser's address bar and tabs, so more of the screen is the lake. No download and no app store: it's the same game.</p>`;
+  const grid = homeGrid({ ios: o.ios, canPrompt: !o.ios && o.canPrompt });
   if (o.ios) {
     const login = o.hasPass
-      ? '<p>Log in there with your name and password.</p>'
-      : '<p>Your Home Screen game logs in with your name and a password, so set one first.</p>';
-    const pass = o.hasPass ? '' : '<button class="btn gold" data-acct="pass">🔒 Set a password</button>';
-    return `<div class="hometip">${intro}<p class="steps">Tap <b>Share</b> (in Safari it may be under <b>···</b>), then <b>Add to Home Screen</b>.</p>${login}
-      <div class="btns">${pass}<button class="btn ${o.hasPass ? 'gold' : 'plain'}" data-act="close">Got it</button></div></div>`;
+      ? '<p class="home-login">Log in there with your name and password.</p>'
+      : '<p class="home-login">🔒 Your Home Screen game logs in with a password, so set one first.</p>';
+    const pass = o.hasPass ? '' : '<button class="btn gold" data-acct="pass">Set a password</button>';
+    // The login line and the buttons share a row, so the card fits a phone with Safari's bars.
+    return `<div class="hometip">${HOME_WHY}${grid}<div class="home-row">${login}<div class="btns">${pass}<button class="btn ${o.hasPass ? 'gold' : 'plain'}" data-act="close">Got it</button></div></div></div>`;
   }
-  if (o.canPrompt)
-    return `<div class="hometip">${intro}<div class="btns"><button class="btn gold" data-act="install">📲 Install</button><button class="btn plain" data-act="close">Got it</button></div></div>`;
-  return `<div class="hometip">${intro}<p class="steps">Open your browser's menu (<b>⋮</b>), then <b>Add to Home screen</b> or <b>Install app</b>.</p>
-    <div class="btns"><button class="btn gold" data-act="close">Got it</button></div></div>`;
+  const install = o.canPrompt ? '<button class="btn gold" data-act="install">📲 Add to Home Screen</button>' : '';
+  return `<div class="hometip">${HOME_WHY}${grid}<div class="btns">${install}<button class="btn ${o.canPrompt ? 'plain' : 'gold'}" data-act="close">Got it</button></div></div>`;
 }
 
 // ---------- the DOM side ----------

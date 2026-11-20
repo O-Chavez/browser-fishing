@@ -75,6 +75,7 @@ describe('Home Screen card', () => {
   it("points to the browser's menu when there is no prompt", () => {
     const html = homeTipHtml({ ios: false, hasPass: false, canPrompt: false });
     expect(html).toContain('<b>Add to Home screen</b> or <b>Install app</b>');
+    expect(html).toContain('⋮</b>');
     expect(html).not.toContain('data-act="install"');
     expect(html).not.toContain('data-acct');
     expect(html).toContain('Got it');
@@ -113,7 +114,8 @@ describe('Home Screen step at the join', () => {
 
   it("gives iPhones Safari's steps, with no password talk and a way on in the browser", () => {
     const html = homeJoinHtml({ ios: true, canPrompt: false, installed: false });
-    expect(html).toContain('Add to Home Screen first?');
+    expect(html).toContain('Get the whole screen');
+    expect(html).toContain('Open this page in <b>Safari</b>');
     expect(html).toContain('Tap <b>Share</b>');
     expect(html).toContain('data-home="browser"');
     expect(html).toContain('again in ⚙️ Settings');
@@ -124,7 +126,8 @@ describe('Home Screen step at the join', () => {
   it("offers the browser's install prompt, else its menu's steps", () => {
     const prompt = homeJoinHtml({ ios: false, canPrompt: true, installed: false });
     expect(prompt).toContain('data-home="install"');
-    expect(prompt).not.toContain('class="steps"');
+    expect(prompt).toContain('below');
+    expect(prompt).not.toContain('⋮');
     const menu = homeJoinHtml({ ios: false, canPrompt: false, installed: false });
     expect(menu).toContain('<b>Install app</b>');
     expect(menu).not.toContain('data-home="install"');
