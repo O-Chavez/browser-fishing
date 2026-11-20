@@ -10,7 +10,6 @@ import {
   POST_TOP,
   dockPosts,
   WATER_ORDER,
-  TERRAIN,
   groundHeight,
   innerRadius,
   isWater,
@@ -26,6 +25,7 @@ import {
   setAtSea,
   setPad,
   smooth,
+  terrainGrid,
   waveHeight,
 } from './env';
 import { Hub } from './hub';
@@ -47,8 +47,12 @@ import { ColliderList } from './colliderlist';
 import { groundTexture, plankTexture, speckleTexture } from './textures';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Fireworks } from './fireworks';
+import { LakeWater } from './lakewater';
+import { BED_DEFINES, installUnderwater, setLake, setUnderwaterLite } from './underwater';
 
 const NO_COLLIDERS: Circle[] = [];
+/** Terrain triangles with a corner lower than this are the lake's bed and its strand (wet sand and foam reach 0.25 m up). */
+const BED_TOP = 0.45;
 
 // Fixed colours for the daylight blend, and scratch colours for the ones built from a look.
 const NIGHT_H = new THREE.Color(0x152649);
@@ -76,51 +80,6 @@ export const MOON_DIR = new THREE.Vector3(0.5, 0.4, -0.77).normalize();
 /** The moon's light at full night: its colour, and how bright its disc, halo and path on the water are. A default to play-test. */
 const MOON = { color: 0xdde6ff, path: 1 };
 const NO_TILT = new THREE.Quaternion();
-
-const WAVE_GLSL = `
-float wave(vec2 p, float t){
-  return sin(p.x*0.35+t*1.1)*0.07 + sin(p.y*0.5-t*1.3+p.x*0.2)*0.05 + sin((p.x+p.y)*0.9+t*2.0)*0.02;
-}
-vec2 waveGrad(vec2 p, float t){
-  float a = cos(p.x*0.35+t*1.1)*0.35*0.07;
-  float b = cos(p.y*0.5-t*1.3+p.x*0.2)*0.05;
-  float c = cos((p.x+p.y)*0.9+t*2.0)*0.9*0.02;
-  return vec2(a + 0.2*b + c, 0.5*b + c);
-}`;
-
-const waterVert = `
-uniform float uTime; varying vec3 vWorld;
-${WAVE_GLSL}
-void main(){
-  vec3 p = position; p.y = wave(p.xz, uTime);
-  vec4 w = modelMatrix * vec4(p,1.0); vWorld = w.xyz;
-  gl_Position = projectionMatrix * viewMatrix * w;
-}`;
-
-const waterFrag = `
-uniform float uTime; uniform vec3 uShallow, uDeep, uSkyH, uSkyT, uSunCol, uSunDir, uFogColor, uMoonDir, uMoonCol;
-uniform float uFogNear, uFogFar; varying vec3 vWorld;
-${WAVE_GLSL}
-void main(){
-  vec2 g = waveGrad(vWorld.xz, uTime) * 2.5;
-  g += 0.018 * vec2(sin(vWorld.x*2.7+uTime*1.9) + sin(vWorld.z*4.1-uTime*1.3), cos(vWorld.z*3.1+uTime*1.6) + cos(vWorld.x*5.3+uTime*1.1));
-  vec3 n = normalize(vec3(-g.x, 1.0, -g.y));
-  vec3 V = normalize(cameraPosition - vWorld);
-  float fres = pow(1.0 - max(dot(n,V),0.0), 3.0);
-  vec3 R = reflect(-V, n);
-  vec3 sky = mix(uSkyH, uSkyT, pow(clamp(R.y,0.0,1.0),0.6));
-  float dist = length(cameraPosition - vWorld);
-  vec3 base = mix(uShallow, uDeep, smoothstep(4.0, 70.0, dist));
-  vec3 col = mix(base, sky, clamp(fres*0.8 + 0.03, 0.0, 1.0));
-  float spec = pow(max(dot(R, uSunDir), 0.0), 350.0) * 4.0 + pow(max(dot(R, uSunDir), 0.0), 30.0) * 0.25;
-  col += uSunCol * spec;
-  float mp = max(dot(R, uMoonDir), 0.0);
-  col += uMoonCol * (pow(mp, 400.0) * 0.6 + pow(mp, 30.0) * 0.04);
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, dist));
-  gl_FragColor = vec4(col, clamp(0.55 + 0.45*smoothstep(3.0,45.0,dist) + fres*0.3, 0.0, 1.0));
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}`;
 
 const skyVert = `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
 const skyFrag = `
@@ -230,6 +189,8 @@ export class World {
   private dockLights: THREE.PointLight[] = [];
   private dockGlow = new THREE.MeshBasicMaterial({ color: 0xffd27a });
   private islet: { x: number; z: number; r: number } | null = null;
+  /** The lake's water: its surface, and what it does to whatever is under it (null off the lake). */
+  private lake: LakeWater | null = null;
   private base = { water: new THREE.Color(), deep: new THREE.Color(), sky: new THREE.Color(), top: new THREE.Color(), grass: new THREE.Color() };
   /** Set (0..1 of the day) to freeze the time of day; null follows the shared clock. */
   dayOverride: number | null = null;
@@ -282,6 +243,8 @@ export class World {
   };
 
   constructor(canvas: HTMLCanvasElement) {
+    // Before anything compiles: whatever goes under the lake's water fades with it.
+    installUnderwater();
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -343,8 +306,11 @@ export class World {
   setLite(on: boolean): void {
     const changed = on !== this.lite;
     this.lite = on;
+    // Before the scene compiles again below: lite programs leave out the under-water fade (the surface veils instead).
+    setUnderwaterLite(on);
     this.applyQuality();
     this.sea?.setLite(on);
+    this.lake?.setLite(on);
     // Shadows on or off changes most shader programs (before the first map is built there's nothing to compile).
     if (changed && this.decor.children.length) this.prewarm();
   }
@@ -681,6 +647,7 @@ export class World {
     this.boat?.setNight(lamps);
     this.sea?.setColors(n, tw, b, look, lamps);
     for (const mt of this.mtMats) mt.mat.color.copy(mt.base).multiplyScalar(1 - 0.75 * n).lerp(u.uSkyH.value, mt.haze);
+    this.lake?.update(n);
 
     const fl = this.flies;
     if (fl) {
@@ -720,6 +687,8 @@ export class World {
     } : null);
     setAtSea(!!map.sea);
     this.fireworks = null;
+    this.lake = null;
+    setLake(false);
     this.sea = null;
     // Nothing of the Abyss's sky is left over from a sea just sailed away from.
     this.waterU.uAbyss.value = 0;
@@ -784,28 +753,16 @@ export class World {
       return;
     }
 
-    const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(420, 420, 110, 110).rotateX(-Math.PI / 2),
-      new THREE.ShaderMaterial({
-        uniforms: this.waterU,
-        vertexShader: waterVert,
-        fragmentShader: waterFrag,
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    water.renderOrder = WATER_ORDER;
-    water.frustumCulled = false;
-    this.decor.add(water);
-
+    // The floor of the deep middle, under the terrain where it falls below 6 m: the same sand as the bed round it (the
+    // water over it gives it its colour), so no rim shows where one meets the other.
     const bed = new THREE.Mesh(
       new THREE.CircleGeometry(300, 48).rotateX(-Math.PI / 2),
-      lambert(loc.deep),
+      lambert(new THREE.Color(loc.sand).multiplyScalar(0.85).getHex()),
     );
     bed.position.y = -6;
     this.decor.add(bed);
 
-    this.buildTerrain(loc);
+    const terrain = this.buildTerrain(loc);
     this.buildForest(loc, map);
     this.buildDock();
     this.buildFireflies();
@@ -816,6 +773,10 @@ export class World {
     this.town = new Town(map);
     this.decor.add(this.town.group);
     this.hall = null;
+    this.lake = new LakeWater(this.waterU, terrain.heights, terrain.material, this.town.hulls);
+    this.lake.surface.renderOrder = WATER_ORDER;
+    this.lake.setLite(this.lite);
+    this.decor.add(this.lake.surface, this.lake.stones);
     // In the scene before `prewarm` below, which compiles its shader and draws it once with the rest of the map,
     // so the first rocket doesn't stall on either.
     if (map.camp) {
@@ -829,60 +790,64 @@ export class World {
     this.prewarm();
   }
 
-  private buildTerrain(loc: Location): void {
+  /** The terrain mesh, the lake's bed included; returns its heights, one for each of `terrainGrid`'s points, and its material. */
+  private buildTerrain(loc: Location): { heights: Float32Array; material: THREE.Material } {
     // `terrainHeight` (env.ts) reads the same grid, so what lies on the ground can follow the mesh as drawn.
-    const { NR, NT } = TERRAIN;
-    const pos: number[] = [];
-    const col: number[] = [];
-    const idx: number[] = [];
+    const { points, index } = terrainGrid();
+    const count = points.length / 2;
+    const heights = new Float32Array(count);
+    const pos = new Float32Array(count * 3);
+    const col = new Float32Array(count * 3);
+    const uv = new Float32Array(count * 2);
     const grass = new THREE.Color(loc.grass);
     const sand = new THREE.Color(loc.sand);
     const rock = new THREE.Color(0x7d7a74);
     const dirt = new THREE.Color(0xa58b62);
     const c = new THREE.Color();
     const tmp = new THREE.Color();
-    for (let j = 0; j <= NT; j++) {
-      const th = -Math.PI + (j / NT) * Math.PI * 2;
-      // One shared start radius keeps neighbouring columns aligned. A per-column start made long slivers across the bay behind the dock.
-      for (let i = 0; i <= NR; i++) {
-        const r = TERRAIN.radius(i);
-        const x = Math.sin(th) * r;
-        const z = Math.cos(th) * r;
-        const y = groundHeight(x, z);
-        pos.push(x, y, z);
-        const n =
-          0.88 + 0.24 * (Math.sin(x * 0.4) * Math.cos(z * 0.37) * 0.5 + 0.5);
-        c.copy(sand).multiplyScalar(0.65 + 0.35 * smooth(-1.2, 0.4, y));
-        // A town's pad is grass too, worn to dirt along its paths (`dirtWeight`).
-        const dw = dirtWeight(x, z);
-        const gm = dw < 1 ? grassWeight(x, z, y) / (1 - 0.85 * dw) : smooth(0.3, 1.6, y);
-        c.lerp(tmp.copy(grass).multiplyScalar(n), gm);
-        if (y > 12) c.lerp(rock, Math.min(1, (y - 12) / 14));
-        if (dw > 0) c.lerp(dirt, dw * 0.85);
-        col.push(c.r, c.g, c.b);
-      }
-    }
-    for (let j = 0; j < NT; j++) {
-      for (let i = 0; i < NR; i++) {
-        const a = j * (NR + 1) + i;
-        const b = a + 1;
-        const d = a + NR + 1;
-        const e = d + 1;
-        idx.push(a, b, d, b, e, d);
-      }
+    for (let k = 0; k < count; k++) {
+      const x = points[k * 2];
+      const z = points[k * 2 + 1];
+      const y = groundHeight(x, z);
+      heights[k] = y;
+      pos.set([x, y, z], k * 3);
+      // Painted ground texture in world space, one tile per 3.2 m, multiplied over the vertex colours
+      uv.set([x / 3.2, z / 3.2], k * 2);
+      const n =
+        0.88 + 0.24 * (Math.sin(x * 0.4) * Math.cos(z * 0.37) * 0.5 + 0.5);
+      // Damp sand darkens toward the water; under it, the water over the bed does the darkening (underwater.ts).
+      c.copy(sand).multiplyScalar(0.65 + 0.35 * smooth(-1.2, 0.4, Math.max(y, 0)));
+      // A town's pad is grass too, worn to dirt along its paths (`dirtWeight`).
+      const dw = dirtWeight(x, z);
+      const gm = dw < 1 ? grassWeight(x, z, y) / (1 - 0.85 * dw) : smooth(0.3, 1.6, y);
+      c.lerp(tmp.copy(grass).multiplyScalar(n), gm);
+      if (y > 12) c.lerp(rock, Math.min(1, (y - 12) / 14));
+      if (dw > 0) c.lerp(dirt, dw * 0.85);
+      col.set([c.r, c.g, c.b], k * 3);
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    // Dry land first, drawn as ever; then the lake's bed and the sand along it (any corner under `BED_TOP`), which carries
+    // the bed's own shading (`BED_DEFINES`, underwater.ts): two draws of one mesh, so the hills pay nothing for it.
+    const land: number[] = [];
+    const bed: number[] = [];
+    for (let t = 0; t < index.length; t += 3) {
+      const tri = index.slice(t, t + 3);
+      (Math.min(heights[tri[0]], heights[tri[1]], heights[tri[2]]) < BED_TOP ? bed : land).push(...tri);
+    }
+    geo.setIndex([...land, ...bed]);
+    geo.addGroup(0, land.length, 0);
+    geo.addGroup(land.length, bed.length, 1);
     geo.computeVertexNormals();
-    // Painted ground texture in world space, one tile per 3.2 m, multiplied over the vertex colours
-    const uv: number[] = [];
-    for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] / 3.2, pos[i + 2] / 3.2);
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    const mesh = new THREE.Mesh(geo, lambert(0xffffff, { vertexColors: true, map: groundTexture() }));
+    // The bed's material is smooth-shaded, for under water; above it the shader lights it flat, as the land is.
+    const mat = lambert(0xffffff, { vertexColors: true, map: groundTexture(), flatShading: false });
+    mat.defines = { ...BED_DEFINES };
+    const mesh = new THREE.Mesh(geo, [lambert(0xffffff, { vertexColors: true, map: groundTexture() }), mat]);
     mesh.receiveShadow = true;
     this.decor.add(mesh);
+    return { heights, material: mat };
   }
 
   private buildForest(loc: Location, map: MapDef): void {

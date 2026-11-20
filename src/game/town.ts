@@ -833,6 +833,8 @@ export class Town {
 
   /** The seaplane bobbing in the shallows, kept out of the town's merge so it can move; `update` rocks it. */
   plane: THREE.Group | null = null;
+  /** Open hulls afloat (the rowboats): their footprints at the waterline, which the lake keeps dry (`setDry`, underwater.ts). */
+  readonly hulls: { x: number; z: number; facing: number; half: [number, number] }[] = [];
 
   private buildSeaplane(s: Spot): void {
     const CREAM = 0xf3ead8, GREEN = 0x6f9e96, RED = 0xc0453a, GLASS = 0x34465e, METAL = 0x3a3532;
@@ -961,6 +963,9 @@ export class Town {
     oar.position.set(0.5, 0.7, 0.2);
     g.add(hull, rim, oar);
     this.at(g, s.x, s.z, s.facing, -0.2);
+    // Its hull dips 0.25 m under the water: where it crosses the waterline, an ellipse 0.67 by 1.84 m (a little less, so
+    // no dry ring shows outside it), the lake leaves its inside dry.
+    this.hulls.push({ x: s.x, z: s.z, facing: s.facing, half: [0.64, 1.8] });
     for (const lz of [-1.3, 0, 1.3]) {
       this.solid(s.x + Math.sin(s.facing) * lz, s.z + Math.cos(s.facing) * lz, 0.8);
     }
