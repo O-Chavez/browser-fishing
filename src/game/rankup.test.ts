@@ -65,8 +65,8 @@ describe('legendUp', () => {
 
 describe('zoneUp', () => {
   it("says in one line which piece is unlocked at Reed's and the fish landed in its zone", () => {
-    expect(zoneUp({ id: 'kelpcap', zone: 2, fish: 40 })).toBe("🌿 Kelp Cap unlocked at Captain Reed's · 40 fish landed in Kelp Deep");
-    expect(zoneUp({ id: 'jellylocket', zone: 3, fish: 550 })).toBe("🪼 Jelly Locket unlocked at Captain Reed's · 550 fish landed in the Twilight");
+    expect(zoneUp({ id: 'kelpcap', zone: 2, fish: 30 })).toBe("🌿 Kelp Cap unlocked at Captain Reed's · 30 fish landed in Kelp Deep");
+    expect(zoneUp({ id: 'jellylocket', zone: 3, fish: 300 })).toBe("🪼 Jelly Locket unlocked at Captain Reed's · 300 fish landed in the Twilight");
   });
 
   it('has a mark for every zone with a set', () => {

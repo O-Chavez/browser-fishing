@@ -74,7 +74,10 @@ const legendPiece = (id: string, slot: CosSlot, name: string, fish: string, land
 /**
  * A sea zone's set piece (2026-11-14): unlocked once `zoneFish` fish have been landed in zone `zone` (counted from the
  * Fishdex, `zoneLanded`), then sold by Captain Reed for `price` coins. Each set is a goal for the long grind in its
- * zone: in the charter sim (`scripts/seaeconomy.ts`) every piece unlocks, and can be bought, before the next zone opens.
+ * zone: in the charter sim (`scripts/seaeconomy.ts`) a plain-casting player unlocks and buys every piece about halfway
+ * through the zone's leg, and one on Shiny Lures (whose pearls open the next zone far sooner, after about 65 Kelp Deep
+ * or 200 Twilight fish) has the set's first pieces on the leg and comes back for the last (Oscar, 2026-11-19, from a
+ * play tester: the Twilight's last piece was 550 fish, about 2 hours back in the Twilight for a lured player).
  */
 const zonePiece = (id: string, slot: CosSlot, name: string, zone: number, zoneFish: number, price: number, tier: number, color: number, accent: number, blurb: string): Cosmetic => ({
   ...c(id, slot, name, price, tier, color, accent, blurb, 'zone'),
@@ -141,12 +144,12 @@ export const COSMETICS: Cosmetic[] = [
 
   // The zone sets for Kelp Deep (Epic) and the Twilight (Legendary) (deep sea cosmetics, 2026-11-14): each wears its zone,
   // flowing kelp and glowing jellies. Milestones and prices from the charter sim, so a set is earned and bought on its leg.
-  zonePiece('kelpcap', 'hat', 'Kelp Cap', 2, 40, 150_000, 3, 0x7d8a34, 0xc8962e, 'Woven kelp with blades rising off it, each held up by its float, swaying as if the sea were still round you.'),
-  zonePiece('kelpwrap', 'shirt', 'Kelp Wrap', 2, 90, 200_000, 3, 0x7d8a34, 0xc8962e, 'Kelp blades wrapped to the hip, with streamers drifting up behind you and bubbles rising all round.'),
-  zonePiece('holdfast', 'jewelry', 'Holdfast Pendant', 2, 150, 100_000, 3, 0x8ff0c0, 0x7a5a1e, "Kelp's roots knotted round a pebble of sea glass, the way kelp holds on to the sea floor."),
+  zonePiece('kelpcap', 'hat', 'Kelp Cap', 2, 30, 150_000, 3, 0x7d8a34, 0xc8962e, 'Woven kelp with blades rising off it, each held up by its float, swaying as if the sea were still round you.'),
+  zonePiece('kelpwrap', 'shirt', 'Kelp Wrap', 2, 60, 200_000, 3, 0x7d8a34, 0xc8962e, 'Kelp blades wrapped to the hip, with streamers drifting up behind you and bubbles rising all round.'),
+  zonePiece('holdfast', 'jewelry', 'Holdfast Pendant', 2, 100, 100_000, 3, 0x8ff0c0, 0x7a5a1e, "Kelp's roots knotted round a pebble of sea glass, the way kelp holds on to the sea floor."),
   zonePiece('anemonecrown', 'hat', 'Anemone Crown', 3, 100, 1_000_000, 5, 0x8e88c8, 0xffb09a, 'A crown of glowing see-through tendrils swaying up, with little jellies rising off it and fading.'),
-  zonePiece('drifttunic', 'shirt', 'Drift Tunic', 3, 300, 1_250_000, 5, 0x6462a4, 0xdff2ff, "Lavender like the Twilight's sea, veined with light, and little glowing jellies circling you on their own."),
-  zonePiece('jellylocket', 'jewelry', 'Jelly Locket', 3, 550, 750_000, 5, 0xd0d6dc, 0xffb09a, 'A glass locket on a silver chain with a tiny glowing jelly drifting inside.'),
+  zonePiece('drifttunic', 'shirt', 'Drift Tunic', 3, 200, 1_250_000, 5, 0x6462a4, 0xdff2ff, "Lavender like the Twilight's sea, veined with light, and little glowing jellies circling you on their own."),
+  zonePiece('jellylocket', 'jewelry', 'Jelly Locket', 3, 300, 750_000, 5, 0xd0d6dc, 0xffb09a, 'A glass locket on a silver chain with a tiny glowing jelly drifting inside.'),
 ];
 
 export const cosById = (id: string | null | undefined): Cosmetic | undefined => COSMETICS.find((x) => x.id === id);

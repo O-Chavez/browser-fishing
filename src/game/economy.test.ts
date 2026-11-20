@@ -850,36 +850,36 @@ describe("a sea zone's set", () => {
   });
 
   it('unlocks each piece at its milestone of fish landed in its zone', () => {
-    expect(eco.zonePieces(KELP).map((c) => [c.id, c.zoneFish])).toEqual([['kelpcap', 40], ['kelpwrap', 90], ['holdfast', 150]]);
-    expect(eco.zonePieces(TWILIGHT).map((c) => [c.id, c.zoneFish])).toEqual([['anemonecrown', 100], ['drifttunic', 300], ['jellylocket', 550]]);
-    expect(eco.zoneUnlocked(withFish(KELP, 39), piece('kelpcap'))).toBe(false);
-    expect(eco.zoneUnlocked(withFish(KELP, 40), piece('kelpcap'))).toBe(true);
-    expect(eco.zoneUnlocked(withFish(KELP, 89), piece('kelpwrap'))).toBe(false);
-    expect(eco.zoneUnlocked(withFish(KELP, 90), piece('kelpwrap'))).toBe(true);
-    expect(eco.zoneUnlocked(withFish(KELP, 149), piece('holdfast'))).toBe(false);
-    expect(eco.zoneUnlocked(withFish(KELP, 150), piece('holdfast'))).toBe(true);
+    expect(eco.zonePieces(KELP).map((c) => [c.id, c.zoneFish])).toEqual([['kelpcap', 30], ['kelpwrap', 60], ['holdfast', 100]]);
+    expect(eco.zonePieces(TWILIGHT).map((c) => [c.id, c.zoneFish])).toEqual([['anemonecrown', 100], ['drifttunic', 200], ['jellylocket', 300]]);
+    expect(eco.zoneUnlocked(withFish(KELP, 29), piece('kelpcap'))).toBe(false);
+    expect(eco.zoneUnlocked(withFish(KELP, 30), piece('kelpcap'))).toBe(true);
+    expect(eco.zoneUnlocked(withFish(KELP, 59), piece('kelpwrap'))).toBe(false);
+    expect(eco.zoneUnlocked(withFish(KELP, 60), piece('kelpwrap'))).toBe(true);
+    expect(eco.zoneUnlocked(withFish(KELP, 99), piece('holdfast'))).toBe(false);
+    expect(eco.zoneUnlocked(withFish(KELP, 100), piece('holdfast'))).toBe(true);
     // Fish from another zone never count.
     expect(eco.zoneUnlocked(withFish(TWILIGHT, 500), piece('kelpcap'))).toBe(false);
     expect(eco.zoneUnlocked(withFish(KELP, 999), piece('krakencrown'))).toBe(false);
-    expect(eco.reedUnlocked(withFish(KELP, 40), piece('kelpcap'))).toBe(true);
+    expect(eco.reedUnlocked(withFish(KELP, 30), piece('kelpcap'))).toBe(true);
     expect(eco.reedUnlocked({ ...newSave(), legends: { kraken: 1 } }, piece('krakencrown'))).toBe(true);
   });
 
   it('says how many fish a piece still takes, and where', () => {
-    expect(eco.zoneFishText(newSave(), piece('kelpcap'))).toBe('Land 40 fish in Kelp Deep');
-    expect(eco.zoneFishText(withFish(KELP, 87), piece('kelpwrap'))).toBe('Land 3 more fish in Kelp Deep');
-    expect(eco.zoneFishText(withFish(TWILIGHT, 299), piece('drifttunic'))).toBe('Land 1 more fish in the Twilight');
-    expect(eco.zoneFishLeft(withFish(KELP, 87), piece('kelpcap'))).toBe(0);
+    expect(eco.zoneFishText(newSave(), piece('kelpcap'))).toBe('Land 30 fish in Kelp Deep');
+    expect(eco.zoneFishText(withFish(KELP, 57), piece('kelpwrap'))).toBe('Land 3 more fish in Kelp Deep');
+    expect(eco.zoneFishText(withFish(TWILIGHT, 199), piece('drifttunic'))).toBe('Land 1 more fish in the Twilight');
+    expect(eco.zoneFishLeft(withFish(KELP, 57), piece('kelpcap'))).toBe(0);
     expect(eco.zoneFishLeft(newSave(), piece('krakencrown'))).toBe(0);
-    expect(eco.reedUnlockText(withFish(KELP, 87), piece('kelpwrap'))).toBe('Land 3 more fish in Kelp Deep');
+    expect(eco.reedUnlockText(withFish(KELP, 57), piece('kelpwrap'))).toBe('Land 3 more fish in Kelp Deep');
     expect(eco.reedUnlockText(newSave(), piece('krakencrown'))).toBe('Land the Kraken once');
   });
 
   it("gives the bar at Reed's the count, the next piece and every milestone", () => {
-    expect(eco.zoneSetProgress(withFish(KELP, 87), KELP)).toEqual({ landed: 87, next: piece('kelpwrap'), marks: [40, 90, 150] });
+    expect(eco.zoneSetProgress(withFish(KELP, 57), KELP)).toEqual({ landed: 57, next: piece('kelpwrap'), marks: [30, 60, 100] });
     expect(eco.zoneSetProgress(newSave(), KELP).next?.id).toBe('kelpcap');
-    expect(eco.zoneSetProgress(withFish(KELP, 150), KELP).next).toBeUndefined();
-    expect(eco.zoneSetProgress(withFish(KELP, 151), KELP).next).toBeUndefined();
+    expect(eco.zoneSetProgress(withFish(KELP, 100), KELP).next).toBeUndefined();
+    expect(eco.zoneSetProgress(withFish(KELP, 101), KELP).next).toBeUndefined();
   });
 
   it('is silhouetted until its zone is open, then locked, on sale and owned', () => {
@@ -892,7 +892,7 @@ describe("a sea zone's set", () => {
     expect(eco.zoneSetReached(s, KELP)).toBe(true);
     expect(eco.reedOffer(s, piece('anemonecrown'))).toBe('unseen');
     expect(['kelpcap', 'kelpwrap', 'holdfast'].map((id) => eco.reedOffer(s, piece(id)))).toEqual(['locked', 'locked', 'locked']);
-    withFish(KELP, 90, s);
+    withFish(KELP, 60, s);
     s.owned = ['kelpcap'];
     expect(['kelpcap', 'kelpwrap', 'holdfast'].map((id) => eco.reedOffer(s, piece(id)))).toEqual(['owned', 'sale', 'locked']);
     // A fish landed in a zone not open yet (a dev charter or an old save) reaches its set too, like a legend's landing.
@@ -908,16 +908,16 @@ describe("a sea zone's set", () => {
     s.chips = 1e9;
     s.boatParts = 4;
     for (const at of ['stall', 'casino', 'earned', 'legend', 'zone'] as const) expect(eco.buyCosmetic(s, 'kelpcap', at)).toBe(false);
-    withFish(KELP, 40, s);
+    withFish(KELP, 30, s);
     for (const at of ['stall', 'casino', 'earned', 'legend', 'zone'] as const) expect(eco.buyCosmetic(s, 'kelpcap', at)).toBe(false);
-    withFish(KELP, 39, s);
+    withFish(KELP, 29, s);
     expect(eco.reedBuyError(s, 'kelpcap')).toBe('Land 1 more fish in Kelp Deep to unlock the Kelp Cap.');
     expect(eco.buyReedPiece(s, 'kelpcap')).toBe(false);
-    withFish(KELP, 40, s);
+    withFish(KELP, 30, s);
     s.coins = 149_999;
     expect(eco.reedBuyError(s, 'kelpcap')).toBe('The Kelp Cap costs 150,000 coins.');
     expect(eco.buyReedPiece(s, 'kelpcap')).toBe(false);
-    expect(eco.reedBuyError(s, 'kelpwrap')).toBe('Land 50 more fish in Kelp Deep to unlock the Kelp Wrap.');
+    expect(eco.reedBuyError(s, 'kelpwrap')).toBe('Land 30 more fish in Kelp Deep to unlock the Kelp Wrap.');
     s.coins = 150_100;
     expect(eco.buyReedPiece(s, 'kelpcap')).toBe(true);
     expect(s.coins).toBe(100);
@@ -930,15 +930,15 @@ describe("a sea zone's set", () => {
   });
 
   it('says once, on the landing that reaches it, that a piece is unlocked', () => {
-    const s = withFish(KELP, 38);
+    const s = withFish(KELP, 28);
     expect(land(s).zonePiece).toBeUndefined();
-    expect(land(s).zonePiece).toEqual({ id: 'kelpcap', zone: KELP, fish: 40 });
+    expect(land(s).zonePiece).toEqual({ id: 'kelpcap', zone: KELP, fish: 30 });
     expect(land(s).zonePiece).toBeUndefined();
     // A legend's landing counts toward its zone too, and can reach a milestone with its own piece.
-    s.dex.frondback.count = 89;
-    expect(land(s, 'kelpbeard').zonePiece).toEqual({ id: 'kelpwrap', zone: KELP, fish: 90 });
+    s.dex.frondback.count = 59;
+    expect(land(s, 'kelpbeard').zonePiece).toEqual({ id: 'kelpwrap', zone: KELP, fish: 60 });
     // Owned already (bought after a dev reset): nothing to say.
-    s.dex.frondback.count = 148;
+    s.dex.frondback.count = 98;
     s.owned = ['holdfast'];
     expect(land(s).zonePiece).toBeUndefined();
     expect(land(s).zonePiece).toBeUndefined();
