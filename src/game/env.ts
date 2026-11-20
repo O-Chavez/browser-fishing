@@ -231,9 +231,54 @@ function deckBed(x: number, z: number): number {
 
 /**
  * The terrain mesh's polar grid (world.ts draws it): `NT` spokes round the lake's middle and `NR` rings out from it,
- * closer together near the middle. Each cell is two triangles.
+ * closer together near the middle. Each cell is two triangles, and a fan from the lake's middle closes the first ring,
+ * 1 m out (under the pier's root, where the deep disc used to show through as a blue circle).
  */
 export const TERRAIN = { NR: 150, NT: 120, radius: (i: number): number => 1 + 174 * Math.pow(i / 150, 1.7) };
+
+/** Where the terrain mesh's point on spoke `j`, ring `i` lies (x, z). */
+const gridPoint = (j: number, i: number): [number, number] => {
+  const th = -Math.PI + (j / TERRAIN.NT) * Math.PI * 2;
+  return [Math.sin(th) * TERRAIN.radius(i), Math.cos(th) * TERRAIN.radius(i)];
+};
+
+/**
+ * The terrain mesh's points (x, z pairs), spoke by spoke from the middle out, then the lake's middle itself last, and
+ * its triangles as indices into them, wound to face up.
+ */
+export function terrainGrid(): { points: Float64Array; index: number[] } {
+  const { NR, NT } = TERRAIN;
+  const points = new Float64Array(((NT + 1) * (NR + 1) + 1) * 2);
+  let k = 0;
+  for (let j = 0; j <= NT; j++) {
+    for (let i = 0; i <= NR; i++) {
+      const [x, z] = gridPoint(j, i);
+      points[k++] = x;
+      points[k++] = z;
+    }
+  }
+  const middle = k / 2;
+  const index: number[] = [];
+  for (let j = 0; j < NT; j++) {
+    for (let i = 0; i < NR; i++) {
+      const a = j * (NR + 1) + i;
+      const b = a + 1;
+      const d = a + NR + 1;
+      const e = d + 1;
+      index.push(a, b, d, b, e, d);
+    }
+    index.push(middle, j * (NR + 1), (j + 1) * (NR + 1));
+  }
+  return { points, index };
+}
+
+/** Height at (x, z) on the flat triangle p, q, s (each x, z, height). */
+function onTriangle(p: number[], q: number[], s: number[], x: number, z: number): number {
+  const det = (q[1] - s[1]) * (p[0] - s[0]) + (s[0] - q[0]) * (p[1] - s[1]);
+  const u = ((q[1] - s[1]) * (x - s[0]) + (s[0] - q[0]) * (z - s[1])) / det;
+  const v = ((s[1] - p[1]) * (x - s[0]) + (p[0] - s[0]) * (z - s[1])) / det;
+  return u * p[2] + v * q[2] + (1 - u - v) * s[2];
+}
 
 /**
  * Height of the terrain as it is drawn at (x, z): on the flat triangles of the terrain mesh, which sit up to a few
@@ -243,28 +288,24 @@ export const TERRAIN = { NR: 150, NT: 120, radius: (i: number): number => 1 + 17
 export function terrainHeight(x: number, z: number): number {
   const { NR, NT, radius } = TERRAIN;
   const r = Math.hypot(x, z);
-  if (atSea || r <= radius(0) || r >= radius(NR)) return groundHeight(x, z);
+  if (atSea || r >= radius(NR)) return groundHeight(x, z);
   const step = (Math.PI * 2) / NT;
   const j = Math.min(NT - 1, Math.max(0, Math.floor((Math.atan2(x, z) + Math.PI) / step)));
-  const i = Math.min(NR - 1, Math.floor(NR * Math.pow((r - 1) / 174, 1 / 1.7)));
   // The cell's corners, as the mesh lays them: a and b on spoke j (rings i and i + 1), d and e on spoke j + 1.
-  const corner = (jj: number, ii: number): [number, number, number] => {
-    const th = -Math.PI + jj * step;
-    const cx = Math.sin(th) * radius(ii);
-    const cz = Math.cos(th) * radius(ii);
+  const corner = (jj: number, ii: number): number[] => {
+    const [cx, cz] = gridPoint(jj, ii);
     return [cx, cz, groundHeight(cx, cz)];
   };
+  // Inside the first ring: on the fan's triangle from the middle.
+  if (r <= radius(0)) return onTriangle([0, 0, groundHeight(0, 0)], corner(j, 0), corner(j + 1, 0), x, z);
+  const i = Math.min(NR - 1, Math.floor(NR * Math.pow((r - 1) / 174, 1 / 1.7)));
   const a = corner(j, i);
   const b = corner(j, i + 1);
   const d = corner(j + 1, i);
   const e = corner(j + 1, i + 1);
   // Its two triangles are (a, b, d) and (b, e, d); the point lies in the first if it is on a's side of b-d.
-  const side = (p: [number, number, number]) => (d[0] - b[0]) * (p[1] - b[1]) - (d[1] - b[1]) * (p[0] - b[0]);
-  const [p, q, s] = side([x, z, 0]) * side(a) >= 0 ? [a, b, d] : [b, e, d];
-  const det = (q[1] - s[1]) * (p[0] - s[0]) + (s[0] - q[0]) * (p[1] - s[1]);
-  const u = ((q[1] - s[1]) * (x - s[0]) + (s[0] - q[0]) * (z - s[1])) / det;
-  const v = ((s[1] - p[1]) * (x - s[0]) + (p[0] - s[0]) * (z - s[1])) / det;
-  return u * p[2] + v * q[2] + (1 - u - v) * s[2];
+  const side = (p: number[]) => (d[0] - b[0]) * (p[1] - b[1]) - (d[1] - b[1]) * (p[0] - b[0]);
+  return side([x, z]) * side(a) >= 0 ? onTriangle(a, b, d, x, z) : onTriangle(b, e, d, x, z);
 }
 
 function rawGroundHeight(x: number, z: number): number {
