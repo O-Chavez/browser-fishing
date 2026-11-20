@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DOCK_RECTS, DOCK_TOP, WATER_ORDER, isWater, onDock, standHeight } from './env';
+import { DOCK_RECTS, DOCK_TOP, WATER_ORDER, isWater, terrainHeight } from './env';
 
 /**
  * Cheap night glow so far-off lamps still read as lit once the `LightPool` has switched their real
@@ -31,8 +31,16 @@ interface Source {
   spec: GlowSpec;
 }
 
-/** Pool brightness per unit of light intensity, matched by eye to what the real light does to each surface. */
-const POOL_GAIN = { ground: 0.17, deck: 0.015 };
+/**
+ * A pool adds what its lamp's light would add on screen to ground of `POOL_BASE` brightness, through the same tone
+ * mapping and encoding as the scene: the moonlit ground at night, in linear light, and the share of a lamp's light the
+ * surface gives back (its colour), less for the dark planks than the cobbles and grass, wherever the light comes from.
+ * Matched by eye to the real lights, so a far lamp's pool and the light that replaces it as the player nears look alike.
+ */
+const POOL_BASE = 0.02;
+const POOL_GAIN = { ground: 0.15, deck: 0.04 };
+/** A pool's mesh reaches this share of its light's range, and the pool fades out before its edge. */
+const POOL_REACH = 0.6;
 /** How far a pool lies above the ground: clear of the cobbles (`COBBLE_LIFT` in town.ts), which sit on it too. */
 const POOL_LIFT = 0.09;
 
@@ -86,42 +94,58 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+// aEdge: 1 on land, 0 over water, and 2 on the dock layer.
 const POOL_VERT = /* glsl */ `
 attribute vec2 aR; attribute float aIdx; attribute float aEdge;
 uniform float uAmp[POOLS];
 uniform vec3 uCol[POOLS];
 uniform vec4 uShape[POOLS];
-varying vec2 vR; varying vec3 vCol; varying float vEdge; varying vec4 vShape; varying vec2 vXZ;
+varying vec2 vR; varying vec3 vCol; varying float vEdge; varying float vDock; varying vec3 vShape; varying vec2 vXZ; varying float vH;
 void main() {
   int i = int(aIdx + 0.5);
   // A pool whose real light is on draws nothing: move the whole disc off screen so it costs no pixels.
   if (uAmp[i] < 0.002) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   vR = aR;
-  vEdge = aEdge;
+  vDock = step(1.5, aEdge);
+  vEdge = min(aEdge, 1.0);
   vCol = uCol[i] * uAmp[i];
-  vShape = uShape[i];
+  vShape = uShape[i].yzw;
   vXZ = position.xz;
+  // The lamp's height over the surface here, which a slope or a dock changes across the pool.
+  vH = max(0.3, uShape[i].x - (position.y - LIFT));
   gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
 }`;
 // The light a point light lays on flat ground, by three.js's own falloff, so a pool matches its lamp.
 const POOL_FRAG = /* glsl */ `
+vec3 screen(vec3 c) {
+  #ifdef TONE_MAPPING
+  c = toneMapping(c);
+  #endif
+  return linearToOutputTexel(vec4(c, 1.0)).rgb;
+}
 uniform vec4 uDock[DOCKS];
-varying vec2 vR; varying vec3 vCol; varying float vEdge; varying vec4 vShape; varying vec2 vXZ;
+uniform vec2 uGain;
+uniform float uBase;
+varying vec2 vR; varying vec3 vCol; varying float vEdge; varying float vDock; varying vec3 vShape; varying vec2 vXZ; varying float vH;
 void main() {
-  float h = vShape.x, range = vShape.y, decay = vShape.z;
-  if (vShape.w > 0.5) {
-    bool on = false;
-    for (int k = 0; k < DOCKS; k++) {
-      vec4 r = uDock[k];
-      on = on || (vXZ.x > r.x && vXZ.x < r.y && vXZ.y > r.z && vXZ.y < r.w);
-    }
-    if (!on) discard;
+  float h = vH, range = vShape.x, decay = vShape.y;
+  // Each pool has a layer on the ground and one on the planks; each keeps to its own surface.
+  bool on = false;
+  for (int k = 0; k < DOCKS; k++) {
+    vec4 r = uDock[k];
+    on = on || (vXZ.x > r.x && vXZ.x < r.y && vXZ.y > r.z && vXZ.y < r.w);
   }
+  if (on != (vDock > 0.5)) discard;
   float d = length(vec3(vR, h));
   float win = clamp(1.0 - pow(d / range, 4.0), 0.0, 1.0);
   float e = h / pow(d, decay + 1.0) * win * win;
-  gl_FragColor = vec4(vCol * e * vEdge, 1.0);
-  #include <colorspace_fragment>
+  // Fade out before the mesh's square edge, or the light's tail is cut off along straight lines.
+  e *= 1.0 - smoothstep(0.55, 1.0, length(vR) / (REACH * range));
+  // What the light adds once tone mapped and encoded, over the ground's own light: on dark ground the tone curve's toe
+  // swallows a faint tail, as it does a real light's, where adding the encoded light alone would inflate it.
+  vec3 base = vec3(uBase);
+  vec3 lit = base + vCol * e * vEdge * (on ? uGain.y : uGain.x);
+  gl_FragColor = vec4(screen(lit) - screen(base), 1.0);
 }`;
 
 const STREAK_VERT = /* glsl */ `
@@ -159,7 +183,6 @@ export class NightGlow {
   private streakU = { uTime: { value: 0 } };
   private poolAmp: number[] = [];
   private poolCol: THREE.Color[] = [];
-  private poolGain: number[] = [];
   private poolShape: THREE.Vector4[] = [];
   private col = new THREE.Color();
   private v = new THREE.Vector3();
@@ -185,31 +208,38 @@ export class NightGlow {
     }
   }
 
-  /** One mesh of terrain-hugging discs, one per lamp light, faded per lamp through uniforms. */
+  /**
+   * One mesh for every lamp light's pool, faded per lamp through uniforms. Each pool has a layer draped over the
+   * terrain as it is drawn, which stops at the water's edge, and a flat one on the docks' planks: draped over both,
+   * the layer would cut under a dock's edge between its points.
+   */
   private buildPools(): THREE.Mesh {
-    const N = 16;
+    const N = 24;
     const pos: number[] = [];
     const rel: number[] = [];
     const idx: number[] = [];
     const edge: number[] = [];
     const index: number[] = [];
+    const vertex = (i: number, x: number, y: number, z: number, u: number, w: number, e: number): void => {
+      pos.push(x, y, z);
+      rel.push(u, w);
+      idx.push(i);
+      edge.push(e);
+    };
     this.pools.forEach((l, i) => {
       const c = l.getWorldPosition(new THREE.Vector3());
-      const deck = onDock(c.x, c.z, 0.5);
-      const floor = deck ? DOCK_TOP : standHeight(c.x, c.z);
-      const R = l.distance * 0.6;
-      const base = pos.length / 3;
+      const R = l.distance * POOL_REACH;
+      let base = pos.length / 3;
       for (let a = 0; a <= N; a++) {
         for (let b = 0; b <= N; b++) {
           const u = ((a / N) * 2 - 1) * R;
           const w = ((b / N) * 2 - 1) * R;
           const x = c.x + u;
           const z = c.z + w;
-          // Dock lights are clipped to the planks in the shader; ground lights stop at the water's edge.
-          pos.push(x, (deck ? DOCK_TOP : standHeight(x, z)) + POOL_LIFT, z);
-          rel.push(u, w);
-          idx.push(i);
-          edge.push(deck || !isWater(x, z) ? 1 : 0);
+          // Off at the waterline, so a pool doesn't light the water over the shallows or round a dock (`isWater`
+          // counts both as dry).
+          const y = terrainHeight(x, z);
+          vertex(i, x, Math.max(y, -0.1) + POOL_LIFT, z, u, w, isWater(x, z) ? 0 : THREE.MathUtils.smoothstep(y, -0.1, 0.05));
         }
       }
       for (let a = 0; a < N; a++) {
@@ -218,9 +248,13 @@ export class NightGlow {
           index.push(k, k + 1, k + N + 1, k + 1, k + N + 2, k + N + 1);
         }
       }
+      if (DOCK_RECTS.some((r) => r.x1 > c.x - R && r.x0 < c.x + R && r.z1 > c.z - R && r.z0 < c.z + R)) {
+        base = pos.length / 3;
+        for (const [u, w] of [[-R, -R], [-R, R], [R, -R], [R, R]]) vertex(i, c.x + u, DOCK_TOP + POOL_LIFT, c.z + w, u, w, 2);
+        index.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+      }
       this.poolCol.push(new THREE.Color());
-      this.poolGain.push(deck ? POOL_GAIN.deck : POOL_GAIN.ground);
-      this.poolShape.push(new THREE.Vector4(Math.max(0.5, c.y - floor), l.distance, l.decay, deck ? 1 : 0));
+      this.poolShape.push(new THREE.Vector4(c.y, l.distance, l.decay, 0));
       this.poolAmp.push(0);
     });
     const g = new THREE.BufferGeometry();
@@ -231,9 +265,16 @@ export class NightGlow {
     g.setIndex(index);
     const docks = DOCK_RECTS.map((r) => new THREE.Vector4(r.x0, r.x1, r.z0, r.z1));
     const m = additive(
-      POOL_VERT.replace(/POOLS/g, String(this.pools.length)),
-      POOL_FRAG.replace(/DOCKS/g, String(docks.length)),
-      { uAmp: { value: this.poolAmp }, uCol: { value: this.poolCol }, uShape: { value: this.poolShape }, uDock: { value: docks } },
+      POOL_VERT.replace(/POOLS/g, String(this.pools.length)).replace(/LIFT/g, POOL_LIFT.toFixed(3)),
+      POOL_FRAG.replace(/DOCKS/g, String(docks.length)).replace(/REACH/g, POOL_REACH.toFixed(3)),
+      {
+        uAmp: { value: this.poolAmp },
+        uCol: { value: this.poolCol },
+        uShape: { value: this.poolShape },
+        uDock: { value: docks },
+        uGain: { value: new THREE.Vector2(POOL_GAIN.ground, POOL_GAIN.deck) },
+        uBase: { value: POOL_BASE },
+      },
     );
     m.polygonOffset = true;
     // A little more depth bias than the cobbles' (town.ts): with the lift, the pool lies on them, and it stays
@@ -297,7 +338,7 @@ export class NightGlow {
       const lit = (l.userData.lit as number | undefined) ?? 0;
       const base = (l.userData.base as number | undefined) ?? l.intensity;
       this.poolAmp[i] = (1 - lit) * base;
-      this.poolCol[i].copy(l.color).multiplyScalar(this.poolGain[i]);
+      this.poolCol[i].copy(l.color);
     });
   }
 }
