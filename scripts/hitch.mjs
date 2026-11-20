@@ -274,10 +274,11 @@ try {
     const q = [ONLINE && 'room=hitch'].filter(Boolean).join('&');
     await page.goto(`http://localhost:${PORT}/${q ? '?' + q : ''}`, { waitUntil: 'load', timeout: 90000 });
     await page.waitForFunction(() => window.__game, { timeout: 90000 });
-    // A phone opens on the "made for desktop" notice (the world isn't drawn); the player taps "Try touch controls".
+    // A phone used to open on the "made for desktop" notice (the world isn't drawn), tapped through with "Try touch
+    // controls"; the notice went with full mobile support, so it is tapped only when there.
     if (PHONE) {
       await sleep(1000);
-      await page.evaluate(() => document.getElementById('desktop-anyway').click());
+      await page.evaluate(() => document.getElementById('desktop-anyway')?.click());
     }
     if (LTRACE) { await sleep(2500); await page.tracing.stop(); if (!RETURNING) await sleep(WAIT - 2500); } else
     if (!RETURNING) await sleep(WAIT);

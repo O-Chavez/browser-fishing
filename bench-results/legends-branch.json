@@ -1,0 +1,138 @@
+{
+  "label": "legends-branch",
+  "date": "2026-11-20T05:17:07.166Z",
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)",
+  "scenes": {
+    "pondDay": {
+      "renderMs": 2.6383333335320156,
+      "drawCalls": 80,
+      "triangles": 148810,
+      "visibleLights": 10,
+      "pixelRatio": 1.25,
+      "renderMsLo": 2.625,
+      "renderMsHi": 2.6383333335320156,
+      "renderMsRounds": [
+        2.6383333335320156,
+        2.625,
+        2.6383333335320156
+      ]
+    },
+    "pondNight": {
+      "renderMs": 2.8233333339293796,
+      "drawCalls": 84,
+      "triangles": 158814,
+      "visibleLights": 10,
+      "pixelRatio": 1.25,
+      "renderMsLo": 2.8183333337306977,
+      "renderMsHi": 2.830000000198682,
+      "renderMsRounds": [
+        2.8233333339293796,
+        2.8183333337306977,
+        2.830000000198682
+      ]
+    },
+    "plazaDay": {
+      "renderMs": 2.769999999801318,
+      "drawCalls": 170,
+      "triangles": 226406,
+      "visibleLights": 10,
+      "pixelRatio": 1.25,
+      "renderMsLo": 2.7683333327372868,
+      "renderMsHi": 2.7700000007947287,
+      "renderMsRounds": [
+        2.769999999801318,
+        2.7683333327372868,
+        2.7700000007947287
+      ]
+    },
+    "plazaNight": {
+      "renderMs": 2.853333334128062,
+      "drawCalls": 174,
+      "triangles": 236410,
+      "visibleLights": 10,
+      "pixelRatio": 1.25,
+      "renderMsLo": 2.8366666664679845,
+      "renderMsHi": 3.2649999996026358,
+      "renderMsRounds": [
+        2.853333334128062,
+        2.8366666664679845,
+        3.2649999996026358
+      ]
+    },
+    "casino": {
+      "renderMs": 2.0150000005960464,
+      "drawCalls": 140,
+      "triangles": 30230,
+      "visibleLights": 10,
+      "pixelRatio": 1.25,
+      "renderMsLo": 1.998333332935969,
+      "renderMsHi": 2.02666666607062,
+      "renderMsRounds": [
+        2.0150000005960464,
+        1.998333332935969,
+        2.02666666607062
+      ]
+    },
+    "seaShelf": {
+      "renderMs": 2.273333332935969,
+      "drawCalls": 32,
+      "triangles": 39117,
+      "visibleLights": 4,
+      "pixelRatio": 1.25,
+      "renderMsLo": 2.2433333337306975,
+      "renderMsHi": 2.3099999994039537,
+      "renderMsRounds": [
+        2.2433333337306975,
+        2.273333332935969,
+        2.3099999994039537
+      ]
+    },
+    "seaDropoff": {
+      "renderMs": 2.096666665871938,
+      "drawCalls": 24,
+      "triangles": 37237,
+      "visibleLights": 4,
+      "pixelRatio": 1.25,
+      "renderMsLo": 2.0883333335320153,
+      "renderMsHi": 2.1100000003973642,
+      "renderMsRounds": [
+        2.1100000003973642,
+        2.096666665871938,
+        2.0883333335320153
+      ]
+    },
+    "seaDropoffNight": {
+      "renderMs": 2.128333334128062,
+      "drawCalls": 24,
+      "triangles": 37237,
+      "visibleLights": 4,
+      "pixelRatio": 1.25,
+      "renderMsLo": 2.066666666666667,
+      "renderMsHi": 2.1399999996026358,
+      "renderMsRounds": [
+        2.1399999996026358,
+        2.066666666666667,
+        2.128333334128062
+      ]
+    }
+  },
+  "loops": {
+    "afterPlayOffline": 1,
+    "afterWardrobeClosed": 1
+  },
+  "mapChange": {
+    "pondBuildMs": 269.4000000357628,
+    "pondFirstRenderMs": 18.099999964237213,
+    "casinoBuildMs": 33.59999996423721,
+    "casinoFirstRenderMs": 1.399999976158142,
+    "seaBuildMs": 44.19999998807907,
+    "seaFirstRenderMs": 2.600000023841858,
+    "leakedGeometriesPerTrip": 0,
+    "leakedTexturesPerTrip": 1,
+    "newProgramsPerTrip": 0,
+    "firstCasinoVisitBuildMs": 137,
+    "firstCasinoVisitRenderMs": 130.5999999642372,
+    "firstSeaVisitBuildMs": 137.30000001192093,
+    "firstSeaVisitRenderMs": 148.19999998807907
+  }
+}

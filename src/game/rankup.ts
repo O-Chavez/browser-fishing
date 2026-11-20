@@ -33,23 +33,20 @@ export function rankUp(ranks: Rank[]): RankUp | null {
 export const LEGEND_MARK: Record<string, string> = { kraken: '🦑', leviathan: '🐉', dreamer: '💤' };
 
 export interface LegendUp {
-  /** The big teal banner: "🦑 KRAKEN CROWN 🦑". */
-  title: string;
-  /** The line under it: "Unlocked at Captain Reed's · piece 1 of 3". */
-  line: string;
+  /** The teal line under LEGEND LANDED! and the legend's name: "🦑 Kraken Crown unlocked at Captain Reed's · piece 1 of 3". */
+  banner: string;
   /** The catch card's line, with the piece's mark: "🦑 Kraken Crown · unlocked at Reed's". */
   card: string;
 }
 
-/** The banner and catch-card line for a piece of a legend's set that a landing unlocked (bought at Captain Reed's). */
+/** The banner's and the catch card's line for a piece of a legend's set that a landing unlocked (bought at Captain Reed's). */
 export function legendUp(p: LegendPiece): LegendUp | null {
   const c = cosById(p.id);
   const fish = FISH.find((f) => f.id === c?.legend);
   if (!c || !fish) return null;
   const mark = LEGEND_MARK[fish.id] ?? '✦';
   return {
-    title: `${mark} ${c.name.toUpperCase()} ${mark}`,
-    line: c.slot === 'pet' ? `${fish.name}'s pet · unlocked at Captain Reed's` : `Unlocked at Captain Reed's · piece ${p.landing} of ${p.of}`,
+    banner: `${mark} ${c.name} unlocked at Captain Reed's · ${c.slot === 'pet' ? `${fish.name}'s pet` : `piece ${p.landing} of ${p.of}`}`,
     card: `${mark} ${c.name} · unlocked at Reed's`,
   };
 }
@@ -66,4 +63,15 @@ export function zoneUp(p: ZonePiece): string | null {
   const zone = ZONES[p.zone];
   if (!c || c.zone !== p.zone || !zone) return null;
   return `${ZONE_MARK[zone.id] ?? '✦'} ${c.name} unlocked at Captain Reed's · ${p.fish.toLocaleString('en-US')} fish landed in ${zone.name.replace(/^The /, 'the ')}`;
+}
+
+/**
+ * What a landing's banner says, and what is left to a toast. A sea legend's landing always reads LEGEND LANDED!
+ * (placed as the legend's landing places it, off the creature): a piece of its set unlocked goes under its name as a
+ * line (`piece`), and a rank reached on the same catch says itself in a toast. Any other catch that reaches a rank
+ * gets the rank's banner; the rest get the tier's (which shows only for the best the bait can attract).
+ */
+export function catchBanner(seaLegend: boolean, piece: LegendUp | null, rank: RankUp | null): { banner: 'legend' | 'rank' | 'tier'; piece?: string; toast?: string } {
+  if (seaLegend) return { banner: 'legend', ...(piece ? { piece: piece.banner } : {}), ...(rank ? { toast: `${rank.title} · ${rank.line}` } : {}) };
+  return { banner: rank ? 'rank' : 'tier' };
 }

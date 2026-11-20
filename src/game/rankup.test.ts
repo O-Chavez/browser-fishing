@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RANKS, ranksBetween } from '../data/ranks';
 import { COSMETICS } from '../data/cosmetics';
 import { ZONES } from '../data/dive';
-import { LEGEND_MARK, ZONE_MARK, legendUp, rankUp, zoneUp } from './rankup';
+import { LEGEND_MARK, ZONE_MARK, catchBanner, legendUp, rankUp, zoneUp } from './rankup';
 
 describe('rankUp', () => {
   it('names the rank and its outfit', () => {
@@ -35,20 +35,18 @@ describe('rankUp', () => {
 describe('legendUp', () => {
   it("names the piece in the legend's mark and says it's unlocked at Reed's", () => {
     expect(legendUp({ id: 'krakencrown', landing: 1, of: 3 })).toEqual({
-      title: '🦑 KRAKEN CROWN 🦑',
-      line: "Unlocked at Captain Reed's · piece 1 of 3",
+      banner: "🦑 Kraken Crown unlocked at Captain Reed's · piece 1 of 3",
       card: "🦑 Kraken Crown · unlocked at Reed's",
     });
     const pet = legendUp({ id: 'krakenpet', landing: 4, of: 3 })!;
-    expect(pet.title).toBe('🦑 KRAKEN HATCHLING 🦑');
-    expect(pet.line).toBe("The Kraken's pet · unlocked at Captain Reed's");
+    expect(pet.banner).toBe("🦑 Kraken Hatchling unlocked at Captain Reed's · The Kraken's pet");
   });
 
   it.each([
-    { id: 'leviathanjaw', landing: 1, title: "🐉 LEVIATHAN'S JAW 🐉", line: "Unlocked at Captain Reed's · piece 1 of 3", card: "🐉 Leviathan's Jaw · unlocked at Reed's" },
-    { id: 'leviathanpet', landing: 4, title: '🐉 LEVIATHAN WYRMLING 🐉', line: "The Leviathan's pet · unlocked at Captain Reed's", card: "🐉 Leviathan Wyrmling · unlocked at Reed's" },
-    { id: 'dreamerrobe', landing: 2, title: '💤 DREAM ROBE 💤', line: "Unlocked at Captain Reed's · piece 2 of 3", card: "💤 Dream Robe · unlocked at Reed's" },
-    { id: 'dreamerpet', landing: 4, title: '💤 SLEEPY DREAMER 💤', line: "The Drowned Dreamer's pet · unlocked at Captain Reed's", card: "💤 Sleepy Dreamer · unlocked at Reed's" },
+    { id: 'leviathanjaw', landing: 1, banner: "🐉 Leviathan's Jaw unlocked at Captain Reed's · piece 1 of 3", card: "🐉 Leviathan's Jaw · unlocked at Reed's" },
+    { id: 'leviathanpet', landing: 4, banner: "🐉 Leviathan Wyrmling unlocked at Captain Reed's · The Leviathan's pet", card: "🐉 Leviathan Wyrmling · unlocked at Reed's" },
+    { id: 'dreamerrobe', landing: 2, banner: "💤 Dream Robe unlocked at Captain Reed's · piece 2 of 3", card: "💤 Dream Robe · unlocked at Reed's" },
+    { id: 'dreamerpet', landing: 4, banner: "💤 Sleepy Dreamer unlocked at Captain Reed's · The Drowned Dreamer's pet", card: "💤 Sleepy Dreamer · unlocked at Reed's" },
   ])("gives $id its legend's mark", ({ id, landing, ...want }) => {
     expect(legendUp({ id, landing, of: 3 })).toEqual(want);
   });
@@ -60,6 +58,26 @@ describe('legendUp', () => {
   it('is null for an item that is no legend piece', () => {
     expect(legendUp({ id: 'crown', landing: 1, of: 1 })).toBeNull();
     expect(legendUp({ id: 'bogus', landing: 1, of: 1 })).toBeNull();
+  });
+});
+
+describe('catchBanner', () => {
+  const piece = legendUp({ id: 'krakencrown', landing: 1, of: 3 })!;
+  const rank = rankUp(RANKS.slice(0, 1))!;
+
+  it('keeps LEGEND LANDED! for a sea legend whose landing unlocks a piece of its set, with the piece as a line under it', () => {
+    expect(catchBanner(true, piece, null)).toEqual({ banner: 'legend', piece: "🦑 Kraken Crown unlocked at Captain Reed's · piece 1 of 3" });
+    expect(catchBanner(true, null, null)).toEqual({ banner: 'legend' });
+  });
+
+  it('keeps LEGEND LANDED! when the same catch reaches a rank, which goes to a toast', () => {
+    expect(catchBanner(true, null, rank)).toEqual({ banner: 'legend', toast: `${rank.title} · ${rank.line}` });
+    expect(catchBanner(true, piece, rank)).toEqual({ banner: 'legend', piece: piece.banner, toast: `${rank.title} · ${rank.line}` });
+  });
+
+  it("gives any other catch its rank's banner, or the tier's", () => {
+    expect(catchBanner(false, null, rank)).toEqual({ banner: 'rank' });
+    expect(catchBanner(false, null, null)).toEqual({ banner: 'tier' });
   });
 });
 

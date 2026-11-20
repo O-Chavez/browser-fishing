@@ -215,6 +215,8 @@ export class World {
   readonly others: Bystander[] = [];
   private you: Bystander = { x: 0, z: 0, fishing: false };
   fovKick = 0;
+  /** Degrees the view is held open (or closed) by, on top of the kick: set by the game while a giant is shown. */
+  fovPull = 0;
   pitchKick = 0;
   private shake = 0;
   private decor = new THREE.Group();
@@ -282,6 +284,7 @@ export class World {
   };
 
   constructor(canvas: HTMLCanvasElement) {
+    this.fx.seaSurface = (x, z) => this.surface(x, z);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -1488,7 +1491,7 @@ export class World {
       (v ? v.yaw : this.yaw) + (Math.sin(t * 47) + Math.sin(t * 63)) * 0.5 * s * 0.012,
       Math.sin(t * 29) * s * 0.01,
     );
-    const fov = 70 + this.fovKick;
+    const fov = 70 + this.fovKick + this.fovPull;
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();

@@ -144,11 +144,11 @@ export const FISH_LOOK: Record<string, FishLook> = {
   boneserpent: { shape: 'eel', tail: 'eel', dorsal: 'none', back: 0xe8e0cc, belly: 0xcab89c, fin: 0xf2ecdc, accent: 0x7affd8, finish: 'abyssal', eye: 'none',
     abyss: { eye: { t: 0.07, r: 0.034, up: 0.35, pupil: 'lamp' }, ribs: { n: 10, color: 0x6a5a48 }, spines: { n: 18, len: 0.11, color: 0xf2ecdc }, horns: { n: 2, len: 0.2, color: 0xf2ecdc }, fangs: 2, wave: { amp: 0.06, freq: 1.3 } } },
   leviathan: { shape: 'plated', tail: 'shark', dorsal: 'none', back: 0x2c2c42, belly: 0x4c3c44, fin: 0x3e3a56, extras: ['bigmouth'], accent: 0xff7a2a, finish: 'abyssal', eye: 'none',
-    abyss: { eye: { t: 0.1, r: 0.045, up: 0.3, iris: 0xffb02e, pupil: 'slit' }, eyeRow: 2, seams: { n: 4, color: 0xff6a1a }, spines: { n: 10, len: 0.14, color: 0xf4e8cc }, horns: { n: 3, len: 0.3, color: 0xf4e8cc }, fangs: 3, tentacles: { n: 5, len: 0.22, r: 0.016, color: 0x9a86c0, dir: 'down' } } },
+    abyss: { eye: { t: 0.1, r: 0.045, up: 0.3, iris: 0xffb02e, pupil: 'slit' }, eyeRow: 2, seams: { n: 4, color: 0xff6a1a }, spines: { n: 10, len: 0.14, color: 0xf4e8cc }, horns: { n: 3, len: 0.3, color: 0xf4e8cc }, fangs: 3, tentacles: { n: 5, len: 0.22, r: 0.016, color: 0x9a86c0, dir: 'down' }, legend: 'leviathan' } },
   dreamer: { shape: 'bulb', tail: 'round', dorsal: 'soft', back: 0x2c6a5c, belly: 0x9ad8b8, fin: 0x4a9a7c, accent: 0x9affd0, finish: 'abyssal', eye: 'none',
-    abyss: { eye: { t: 0.16, r: 0.075, up: 0.35 }, eyes: { n: 6, r: [0.026, 0.05] }, tentacles: { n: 8, len: 0.6, r: 0.042, color: 0x2f7a62, dir: 'down' }, halo: true } },
+    abyss: { eye: { t: 0.16, r: 0.075, up: 0.35 }, eyes: { n: 6, r: [0.026, 0.05] }, tentacles: { n: 8, len: 0.6, r: 0.042, color: 0x2f7a62, dir: 'down' }, halo: true, legend: 'dreamer' } },
   kraken: { shape: 'mantle', tail: 'none', dorsal: 'none', back: 0x6a1a36, belly: 0xe07a96, fin: 0x9a2a50, marks: [{ k: 'spots', color: 0xffc8d6, n: 14, size: 0.03 }], accent: 0xff6a9a, finish: 'abyssal', eye: 'none',
-    abyss: { eye: { t: 0.17, r: 0.1, up: 0.25, iris: 0xffc23a, pupil: 'bar' }, tentacles: { n: 9, len: 0.9, r: 0.075, color: 0x8a2246, dir: 'forward', suckers: 0xffc8d6 }, squidFins: 1.35 } },
+    abyss: { eye: { t: 0.17, r: 0.1, up: 0.25, iris: 0xffc23a, pupil: 'bar' }, tentacles: { n: 9, len: 0.9, r: 0.075, color: 0x8a2246, dir: 'forward', suckers: 0xffc8d6 }, squidFins: 1.35, legend: 'kraken' } },
 };
 
 /** Tier themes, shown as Fishdex section headers and on the catch card. */

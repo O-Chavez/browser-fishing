@@ -162,7 +162,9 @@ body.shopping #toast { top: auto; bottom: 120px; font-size: 16px; }
 #alert { position: fixed; left: 50%; top: 34%; transform: translateX(-50%); font-size: 96px; font-weight: 900; color: #ff3b30; text-shadow: 0 0 18px #fff, 0 4px 8px #000; pointer-events: none; animation: pop .25s ease-in-out infinite alternate; }
 @keyframes pop { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.2); } }
 /* Spray on the screen at sea (ScreenSpray): drawn at half resolution and stretched over the view. */
-#spray { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#spray { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; transition: opacity .6s; }
+/* An Abyss legend beside the hull: the drops on the lens clear while it is shown. */
+body.giant #spray { opacity: .12; }
 #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,10,25,.45) 100%); }
 #catch .weight { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 40px; font-weight: 900; margin: 4px 0 8px; color: var(--gold-dark); }
 #catch .weight .coin { width: 34px; height: 34px; }
@@ -315,8 +317,11 @@ body.touch #seagear { bottom: 236px; right: 30px; }
 #banner.legend { color: var(--gold); font-size: 56px; animation-duration: 4.6s; }
 #banner.legend small { margin-top: 6px; color: var(--cream); font-size: 22px; text-shadow: 0 1px 3px #000, 0 2px 12px rgba(0,0,0,.9); }
 #banner.welcome small { margin-top: 6px; color: var(--cream); }
-/* a piece of a sea legend's set: the rank banner in the Abyssal teal */
-#banner.rank.abyssal { color: var(--abyssal); }
+/* a piece of a sea legend's set that the landing unlocked: a line under the legend's name, in the Abyssal teal */
+#banner.legend small.piece { margin-top: 4px; color: var(--abyssal); font-size: 18px; font-weight: 800; }
+/* a sea legend hooked: its name in the legends' gold over the gauge, where the charter strip is (the strip steps aside while it shows) */
+#banner.legend.hooked { top: 8%; font-size: 46px; letter-spacing: 3px; animation-duration: 3.2s; }
+#banner.legend.hooked small { margin-top: 2px; font-size: 18px; letter-spacing: 0; }
 @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.12); } 18% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 
 #purse, #chipbox { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 9px; border-radius: 999px; background: var(--hud-bg); box-shadow: var(--hud-edge); font-size: 22px; font-weight: 900; color: var(--gold); }
@@ -1086,3 +1091,14 @@ body.touch #prompt.info { pointer-events: none; box-shadow: var(--hud-edge); }
 .reed.bram .cols { margin-top: 6px; }
 .dcard.rack .btns { flex-wrap: wrap; }
 .dcard.rack .btns .btn { min-width: 150px; }
+
+/* A sea legend is seen first. Its LEGEND LANDED! sits to the right over the sky, off the
+   fish (which hangs left of the rod, or surfaces left of it); the charter strip steps aside until the catch is put
+   away; the card comes in a beat later, smaller, low on the right over the rod's butt. */
+#banner.legend.low { top: 27%; left: auto; right: 3%; transform: none; text-align: right; transform-origin: right center; animation-name: bannerInSide; }
+@keyframes bannerInSide { 0% { opacity: 0; transform: scale(.6); } 10% { opacity: 1; transform: scale(1.12); } 18% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+#divehud { transition: opacity .35s; }
+#divehud.shy { opacity: 0; }
+#catch.late { left: auto; right: 2%; bottom: 12%; scale: .8; transform-origin: right bottom; }
+/* On a phone the right is the action buttons' (Jump, OK): the late card goes to the left there. */
+body.touch #catch.late.sea { left: 2%; right: auto; bottom: 3%; scale: .7; transform-origin: left bottom; }

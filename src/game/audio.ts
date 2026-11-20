@@ -23,6 +23,41 @@ const SEA_MUSIC_DUCK = 0.6;
 const STORM_VOL = 0.7;
 /** The bow has to drop at least this fast (m/s) to thud into a wave. */
 const SLAM = 0.25;
+/** How far the wind and the rain drop for a quiet moment at sea (`hush`), as a share of their level. */
+const HUSH = 0.18;
+/** An Abyss legend with a landing sound of its own (`giant`). */
+export type Giant = 'leviathan' | 'kraken' | 'dreamer';
+
+/** A point on a sound's course: seconds from its start, and the value there. */
+type Pt = [at: number, v: number];
+
+/** A creature's voice (`voice`): a buzzing throat ringing through a mouth that opens and shuts. */
+interface Voice {
+  /** How long it sounds (s), and how long from now it starts. */
+  dur: number;
+  at?: number;
+  /** Its level at its loudest, and its swell and fall (0..1) over its course. */
+  gain: number;
+  level: Pt[];
+  /** The throat's pitch (Hz) over its course, and the voices stacked on it (each a ratio of that pitch). */
+  pitch: Pt[];
+  stack?: number[];
+  /** How far each voice's pitch wanders at random (cents), and how many times a second it turns. */
+  waver: number;
+  waverHz?: number;
+  /** The mouth: the bands the buzz rings through, each moving (Hz) as the mouth opens and shuts. */
+  mouth: { f: Pt[]; q: number; gain: number }[];
+  /** The growl: the level shaken this many times a second, this deep (0..1); `loose` is how much of the shake is random. */
+  rough: Pt[];
+  depth: number;
+  loose?: number;
+  /** Breath: how much noise is mixed into the buzz. */
+  breath: number;
+  /** Grit: how hard the voice is pushed into clipping (1 barely, 6 torn). */
+  grit: number;
+  /** Where it goes (the master gain unless given). */
+  out?: AudioNode;
+}
 
 /** At sea, what the boat is doing this frame. */
 export interface SeaSound {
@@ -53,6 +88,8 @@ class AudioFX {
   private creakOsc?: OscillatorNode;
   private lake?: GainNode;
   private duck?: GainNode;
+  /** The wind and the rain at sea go through this, so a quiet moment can drop them together (`hush`). */
+  private weather?: GainNode;
   private sea?: { wash: Bed; hiss: Bed; wind: Bed; howl: Bed; rain: Bed; patter: Bed; gull: number; buoy: boolean; gust: number; gustTo: number; lap: number; creak: number; cool: number; on: boolean };
 
   start(): void {
@@ -261,7 +298,7 @@ class AudioFX {
     this.creakOsc.start();
   }
 
-  private noise(dur: number, type: BiquadFilterType, f0: number, f1: number, gain: number, q = 1, at = 0): void {
+  private noise(dur: number, type: BiquadFilterType, f0: number, f1: number, gain: number, q = 1, at = 0, out: AudioNode = this.master!): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + at;
@@ -277,12 +314,12 @@ class AudioFX {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gain, t + Math.min(0.03, dur / 3));
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(this.master!);
+    src.connect(f).connect(g).connect(out);
     src.start(t);
     src.stop(t + dur + 0.05);
   }
 
-  private tone(f0: number, f1: number, dur: number, gain: number, when?: number, type: OscillatorType = 'sine'): void {
+  private tone(f0: number, f1: number, dur: number, gain: number, when?: number, type: OscillatorType = 'sine', out: AudioNode = this.master!): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const t = when ?? ctx.currentTime;
@@ -294,7 +331,7 @@ class AudioFX {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gain, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(this.master!);
+    o.connect(g).connect(out);
     o.start(t);
     o.stop(t + dur + 0.05);
   }
@@ -361,8 +398,8 @@ class AudioFX {
     this.creakOsc.frequency.setTargetAtTime(110 + tension * 220, t, 0.08);
   }
 
-  /** A looping noise bed through one filter, silent until `seaSound` sets it. */
-  private bed(type: BiquadFilterType, freq: number, q: number): Bed {
+  /** A looping noise bed through one filter, silent until `seaSound` sets it; `out`: where it plays (the master gain unless given). */
+  private bed(type: BiquadFilterType, freq: number, q: number, out: AudioNode = this.master!): Bed {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuf!;
@@ -373,7 +410,7 @@ class AudioFX {
     f.Q.value = q;
     const g = ctx.createGain();
     g.gain.value = 0;
-    src.connect(f).connect(g).connect(this.master!);
+    src.connect(f).connect(g).connect(out);
     // Different start points so the beds don't share the same noise.
     src.start(0, Math.random() * 3);
     return { f, g };
@@ -399,14 +436,18 @@ class AudioFX {
       }
       return;
     }
+    if (!this.weather) {
+      this.weather = ctx.createGain();
+      this.weather.connect(this.master!);
+    }
     this.sea ??= {
       wash: this.bed('lowpass', 300, 0.7),
       hiss: this.bed('bandpass', 1600, 0.6),
-      wind: this.bed('bandpass', 450, 1.5),
-      howl: this.bed('bandpass', 1000, 9),
+      wind: this.bed('bandpass', 450, 1.5, this.weather),
+      howl: this.bed('bandpass', 1000, 9, this.weather),
       // Rain on the deck: a soft hiss over a lower patter.
-      rain: this.bed('bandpass', 3400, 0.4),
-      patter: this.bed('bandpass', 1100, 0.7),
+      rain: this.bed('bandpass', 3400, 0.4, this.weather),
+      patter: this.bed('bandpass', 1100, 0.7, this.weather),
       gull: 4 + Math.random() * 6,
       buoy: false,
       gust: 0,
@@ -524,11 +565,11 @@ class AudioFX {
     this.noise(0.9 + 0.5 * k, 'bandpass', 2400, 900, 0.14 * k, 0.7, 0.08);
   }
 
-  /** A slow wooden groan from the hull: a buzzy tone through a narrow band, sliding in pitch. */
-  private hullCreak(k: number): void {
+  /** A slow wooden groan from the hull: a buzzy tone through a narrow band, sliding in pitch. `at`: seconds from now; `len`: how long it is (random unless given). */
+  private hullCreak(k: number, at = 0, len?: number): void {
     const ctx = this.ctx!;
-    const t = ctx.currentTime;
-    const dur = 0.35 + Math.random() * 0.5;
+    const t = ctx.currentTime + at;
+    const dur = len ?? 0.35 + Math.random() * 0.5;
     const o = ctx.createOscillator();
     o.type = 'sawtooth';
     const f0 = 55 + Math.random() * 40;
@@ -599,6 +640,300 @@ class AudioFX {
   /** Silences what is still sounding of a firework show: the player has left the map it is over. */
   rocketCut(): void {
     this.showBus?.cut();
+  }
+
+  /** The wind and the rain drop away for `secs` seconds and come back: a quiet moment at sea (the Dreamer waking). */
+  hush(secs: number): void {
+    if (!this.ctx || !this.weather) return;
+    const t = this.ctx.currentTime;
+    const g = this.weather.gain;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(HUSH, t, 0.12);
+    g.setTargetAtTime(1, t + secs, 0.5);
+  }
+
+  /** Under the bite of an Abyss legend: one low falling note, with a little of it an octave up for small speakers. */
+  deepNote(): void {
+    this.tone(62, 37, 1.7, 0.5);
+    this.tone(124, 74, 1.1, 0.12, undefined, 'triangle');
+  }
+
+  /**
+   * A voice from something huge: a buzzing throat (stacked saws and a little breath) whose pitch follows `pitch`,
+   * shaken into a growl, ringing through the bands of a mouth that opens and shuts, then pushed into clipping for grit.
+   */
+  private voice(v: Voice): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + (v.at ?? 0);
+    const end = t + v.dur + 0.05;
+    const course = (p: AudioParam, pts: Pt[], k = 1) => {
+      p.setValueAtTime(pts[0][1] * k, t);
+      for (const [at, val] of pts.slice(1)) p.linearRampToValueAtTime(val * k, t + at);
+    };
+    // A slow random drift, turning about `hz` times a second: the noise with all but its slowest part filtered away,
+    // brought back up to swing about `depth` either way.
+    const drift = (hz: number, depth: number, to: AudioParam) => {
+      const n = ctx.createBufferSource();
+      n.buffer = this.noiseBuf!;
+      n.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = hz;
+      const g = ctx.createGain();
+      g.gain.value = depth * 0.5 * Math.sqrt((1.35 * ctx.sampleRate) / hz);
+      n.connect(f).connect(g).connect(to);
+      n.start(t, Math.random() * 2.9);
+      n.stop(end);
+    };
+    const throat = ctx.createGain();
+    for (const k of v.stack ?? [1, 1.012]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      course(o.frequency, v.pitch, k);
+      if (v.waver > 0) drift(v.waverHz ?? 23, v.waver, o.detune);
+      o.connect(throat);
+      o.start(t);
+      o.stop(end);
+    }
+    if (v.breath > 0) {
+      const n = ctx.createBufferSource();
+      n.buffer = this.noiseBuf!;
+      n.loop = true;
+      const g = ctx.createGain();
+      g.gain.value = v.breath;
+      n.connect(g).connect(throat);
+      n.start(t, Math.random() * 2.9);
+      n.stop(end);
+    }
+    // The growl: the level shaken, part of it evenly and part of it at random.
+    const loose = v.loose ?? 0;
+    const shake = ctx.createGain();
+    shake.gain.value = 1 - v.depth / 2;
+    const lfo = ctx.createOscillator();
+    course(lfo.frequency, v.rough);
+    const even = ctx.createGain();
+    even.gain.value = (v.depth / 2) * (1 - loose);
+    lfo.connect(even).connect(shake.gain);
+    lfo.start(t);
+    lfo.stop(end);
+    if (loose > 0) drift(v.rough[0][1] * 2, (v.depth / 2) * loose, shake.gain);
+    throat.connect(shake);
+    const mouth = ctx.createGain();
+    for (const m of v.mouth) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = m.q;
+      course(f.frequency, m.f);
+      const g = ctx.createGain();
+      g.gain.value = m.gain;
+      shake.connect(f).connect(g).connect(mouth);
+    }
+    const tear = ctx.createWaveShaper();
+    const curve = new Float32Array(513);
+    for (let i = 0; i < 513; i++) curve[i] = Math.tanh((i / 256 - 1) * v.grit) / Math.tanh(v.grit);
+    tear.curve = curve;
+    const soft = ctx.createBiquadFilter();
+    soft.type = 'lowpass';
+    soft.frequency.value = 6000;
+    const out = ctx.createGain();
+    course(out.gain, v.level, v.gain);
+    mouth.connect(tear).connect(soft).connect(out).connect(v.out ?? this.master!);
+  }
+
+  /**
+   * An Abyss legend breaking the water beside the hull, each with a sound of its own in place of the legendary jingle:
+   * - the Leviathan: a roar, heard over its bolt's thunder;
+   * - the Kraken: a long wet groan out of a hollow body, bubbles running off it, the hull creaking as it leans on it;
+   * - the Drowned Dreamer: a music box running down on a tune that goes wrong (the game drops the wind and the rain
+   *   under it, `hush`).
+   * Each is the take Oscar picked by ear (2026-11-20) of the two that were made.
+   */
+  giant(id: Giant): void {
+    if (!this.ctx) return;
+    if (id === 'leviathan') this.leviathan();
+    else if (id === 'kraken') this.kraken();
+    else this.dreamer();
+  }
+
+  /**
+   * The Leviathan's roar: a living throat, not a rumble, so it reads over the thunder it lands with. Its pitch climbs
+   * into the roar and falls away, its mouth opening and shutting round it, torn and shaken all the way.
+   */
+  private leviathan(): void {
+    // A dragon's roar: a rattle low in the shut throat, then the mouth opens on a long torn "raaawr" that sags
+    // back down into the chest.
+    this.voice({
+      dur: 0.7, gain: 0.14, level: [[0, 0], [0.1, 0.8], [0.5, 1], [0.7, 0]],
+      pitch: [[0, 44], [0.5, 56], [0.7, 80]], waver: 50,
+      mouth: [{ f: [[0, 230], [0.7, 330]], q: 3, gain: 1 }, { f: [[0, 640], [0.7, 820]], q: 4, gain: 0.7 }],
+      rough: [[0, 17], [0.7, 30]], depth: 0.95, breath: 0.3, grit: 4,
+    });
+    this.voice({
+      at: 0.55, dur: 2.6, gain: 0.22, level: [[0, 0], [0.12, 0.6], [0.45, 1], [1.1, 0.9], [1.9, 0.45], [2.6, 0]],
+      pitch: [[0, 72], [0.45, 185], [0.9, 168], [1.6, 108], [2.6, 48]], stack: [1, 1.012, 0.5], waver: 50,
+      mouth: [
+        { f: [[0, 150], [2.6, 120]], q: 1.5, gain: 0.22 },
+        { f: [[0, 280], [0.45, 700], [1.2, 560], [2.0, 360], [2.6, 280]], q: 4, gain: 1 },
+        { f: [[0, 900], [0.45, 1200], [1.2, 1000], [2.0, 720], [2.6, 640]], q: 5, gain: 0.9 },
+        { f: [[0, 1300], [0.45, 2200], [1.2, 2000], [2.0, 1400], [2.6, 1300]], q: 6, gain: 0.45 },
+      ],
+      rough: [[0, 34], [0.45, 57], [1.4, 44], [2.6, 24]], depth: 0.8, loose: 0.35, breath: 0.35, grit: 6,
+    });
+  }
+
+  /**
+   * The Kraken's groan: nothing like the Leviathan's roar. Long, low and slow, out of a hollow body with water in it:
+   * a moan that bends rather than climbs, gurgling, with bubbles running off it and the hull creaking under its weight.
+   */
+  private kraken(): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    // The hollow of it: the wet sounds come back off its insides in a few echoes, each duller than the last.
+    const cave = ctx.createGain();
+    cave.connect(this.master!);
+    for (const [wait, k, lp] of [[0.11, 0.5, 900], [0.24, 0.32, 600], [0.41, 0.2, 400]]) {
+      const d = ctx.createDelay(1);
+      d.delayTime.value = wait;
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = lp;
+      const g = ctx.createGain();
+      g.gain.value = k;
+      cave.connect(d).connect(f).connect(g).connect(this.master!);
+    }
+    // A run of bubbles: short rising blips, a "glug-glug" of `n` of them.
+    const glug = (at: number, n: number, k = 1) => {
+      for (let i = 0; i < n; i++) {
+        const f = 190 + Math.random() * 420;
+        this.tone(f, f * (1.5 + Math.random() * 0.7), 0.06 + Math.random() * 0.05, 0.09 * k, t + at + i * (0.07 + Math.random() * 0.05), 'sine', cave);
+      }
+    };
+    // A wet suck: a narrow band of noise sweeping up as it swells, cut off short, and the pop as it lets go.
+    const suck = (at: number, dur: number, gain: number) => {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuf!;
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = 5;
+      f.frequency.setValueAtTime(260, t + at);
+      f.frequency.exponentialRampToValueAtTime(1500, t + at + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(gain, t + at + dur * 0.92);
+      g.gain.linearRampToValueAtTime(0.0001, t + at + dur);
+      src.connect(f).connect(g).connect(cave);
+      src.start(t + at);
+      src.stop(t + at + dur + 0.05);
+      this.tone(280, 110, 0.08, gain * 0.5, t + at + dur, 'sine', cave);
+    };
+    // A moan out of a cave: one long breath that sags, bends up and sinks away, the mouth barely open, gurgling
+    // unevenly; it ends on a suck and a pop.
+    this.voice({
+      dur: 3.6, gain: 0.3, level: [[0, 0], [0.7, 0.8], [1.7, 1], [2.6, 0.75], [3.6, 0]],
+      pitch: [[0, 57], [0.9, 50], [1.8, 63], [2.6, 54], [3.6, 41]], stack: [1, 1.006, 2.004], waver: 25, waverHz: 5,
+      mouth: [
+        { f: [[0, 120], [3.6, 100]], q: 6, gain: 0.3 },
+        { f: [[0, 210], [1.7, 300], [3.6, 220]], q: 10, gain: 1 },
+        { f: [[0, 480], [1.7, 640], [3.6, 450]], q: 11, gain: 1.1 },
+        { f: [[0, 1050], [1.7, 1250], [3.6, 950]], q: 12, gain: 0.6 },
+      ],
+      rough: [[0, 7], [1.7, 11], [3.6, 5]], depth: 0.55, loose: 0.7, breath: 0.15, grit: 1.5, out: cave,
+    });
+    glug(0.3, 3);
+    glug(1.05, 4);
+    glug(1.9, 3, 0.8);
+    glug(2.5, 5);
+    suck(2.75, 0.55, 0.12);
+    this.hullCreak(2.2, 0.8, 0.9);
+    this.hullCreak(1.6, 1.9, 0.7);
+  }
+
+  /**
+   * The Drowned Dreamer's music box: a lullaby that goes wrong and runs down. Every tine has a second one a little off
+   * beside it, the whole box wavers like a warped cylinder, each note comes later than the last, and the last one sags.
+   */
+  private dreamer(): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + 0.25;
+    const hz = (note: number) => 440 * 2 ** ((note - 69) / 12);
+    // The waver every tine shares (cents): a slow lurch and a quick flutter.
+    const wow = ctx.createGain();
+    for (const [rate, cents] of [[0.6, 9], [5.5, 3.5]]) {
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = rate;
+      const g = ctx.createGain();
+      g.gain.value = cents;
+      lfo.connect(g).connect(wow);
+      lfo.start(t);
+      lfo.stop(t + 6.2);
+    }
+    // One note of the comb (a MIDI note number): the tine, its neighbour a little off, the octave and the comb's
+    // ring, and the tick of the pin letting go. `sag`: how far it sinks as it rings (cents); `k`: how hard it is plucked.
+    const tine = (note: number, at: number, ring: number, sag = 0, k = 1) => {
+      const off = note % 2 ? 6 : -7;
+      for (const [ratio, level, len, cents] of [[1, 0.08, 1, 0], [1, 0.038, 0.8, off], [2, 0.021, 0.45, 4], [5.4, 0.011, 0.12, 0]]) {
+        const o = ctx.createOscillator();
+        o.frequency.value = hz(note) * ratio;
+        o.detune.setValueAtTime(cents, t + at);
+        if (sag) o.detune.linearRampToValueAtTime(cents - sag, t + at + ring);
+        wow.connect(o.detune);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t + at);
+        g.gain.linearRampToValueAtTime(level * k, t + at + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + at + ring * len);
+        o.connect(g).connect(this.master!);
+        o.start(t + at);
+        o.stop(t + at + ring * len + 0.05);
+      }
+      this.noise(0.012, 'highpass', 5000, 7000, 0.018, 0.7, 0.25 + at);
+    };
+    // A low tone under the box, swelling in over `up` seconds and dying away: two a little apart, so it throbs.
+    const drone = (note: number, at: number, dur: number, gain: number, up: number) => {
+      for (const k of [1, 1.006]) {
+        const o = ctx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.value = hz(note) * k;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t + at);
+        g.gain.linearRampToValueAtTime(gain, t + at + up);
+        g.gain.setValueAtTime(gain, t + at + dur * 0.6);
+        g.gain.linearRampToValueAtTime(0.0001, t + at + dur);
+        o.connect(g).connect(this.master!);
+        o.start(t + at);
+        o.stop(t + at + dur + 0.05);
+      }
+    };
+    // The tune: [note, beats, a low note plucked under it]. Each beat is `slow` times as long as the one before; the
+    // last note is left to ring and sag.
+    const play = (tune: [note: number, beats: number, under?: number][], beat: number, slow: number, at = 0) => {
+      tune.forEach(([note, beats, under], i) => {
+        const last = i === tune.length - 1;
+        tine(note, at, last ? 2.4 : 1.4, last ? 45 : 0);
+        if (under) tine(under, at, last ? 2.4 : 1.8, 0, 0.55);
+        for (let b = 0; b < beats; b++, beat *= slow) at += beat;
+      });
+    };
+    // A cradle rocking as it sinks, in E minor over a low E and the F beside it: B5 G5 B5 G5 rocking; then the
+    // top note slips a semitone each time while the bottom gives way under it (A#5 G5, A5 F5, G#5 and a long F5);
+    // and D#5, a semitone short of home, left ringing and sinking over a low E. It opens on two notes a tritone
+    // apart swelling in backwards.
+    for (const note of [76, 82]) {
+      const o = ctx.createOscillator();
+      o.frequency.value = hz(note);
+      wow.connect(o.detune);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t - 0.25);
+      g.gain.exponentialRampToValueAtTime(0.05, t + 0.47);
+      g.gain.linearRampToValueAtTime(0.0001, t + 0.52);
+      o.connect(g).connect(this.master!);
+      o.start(t - 0.25);
+      o.stop(t + 0.57);
+    }
+    drone(52, -0.2, 6, 0.025, 1.2);
+    drone(53, 1.5, 4.3, 0.017, 1.8);
+    // The box starts as the swell cuts off.
+    play([[83, 1, 64], [79, 1], [83, 1], [79, 1], [82, 1, 64], [79, 1], [81, 1], [77, 1], [80, 1, 64], [77, 2], [75, 1, 64]], 0.2, 1.07, 0.5);
   }
 
   jingle(rarity: Rarity): void {

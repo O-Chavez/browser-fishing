@@ -22,6 +22,8 @@ export interface SeaModelCtx {
   /** Additive glow materials here breathe; objects in `twinkle` sparkle. Both are animated by the game. */
   pulse: THREE.Material[];
   twinkle: THREE.Object3D[];
+  /** Called every frame the fish is animated, with the time in seconds: a zone's own motion (a sway, a slow turn). */
+  ticks: ((t: number) => void)[];
   /** Half-height (y) and half-width (x) of the body at t. */
   extents: (t: number) => { y: number; x: number };
   /** A flat fin from 2D points (x toward the tail, y up), standing in the YZ plane. */

@@ -23,7 +23,7 @@ type LurkUniforms = WaveUniforms & {
 /** The sea's lightning, as far as the lurkers need it: how lit the sky is, and a bolt thrown where they stand. */
 export interface LurkLightning {
   flash: number;
-  strike(bearing?: number): void;
+  strike(bearing?: number, dist?: number): void;
 }
 
 export type FarKind = 'pass' | 'flash' | 'breach' | 'arm' | 'arms';
@@ -645,6 +645,11 @@ export class AbyssLurk {
   private aSeed = new Float32Array(ARMS);
   private aHang = new Float32Array(ARMS);
   private aTop = new Float32Array(ARMS);
+  /** Seconds each arm takes to rise and to sink (`LURK.kraken.rise` and `sink`, or a hooked Kraken's own). */
+  private aRise = new Float32Array(ARMS).fill(LURK.kraken.rise);
+  private aSink = new Float32Array(ARMS).fill(LURK.kraken.sink);
+  /** Per arm: 1 for one a hooked Kraken raised (`reach`), which `letGo` sinks. */
+  private aReach = new Uint8Array(ARMS);
   private aSeen = false;
   private aOn = false;
 
@@ -666,6 +671,8 @@ export class AbyssLurk {
   private eR = 1;
   private eStared = 0;
   private eBearing: number | null = null;
+  /** A ring the game asked for (`ring`): its radius (m), how many eyes and how long they stay; they are not shy and open nowhere else. */
+  private eRing: { radius: number; count: number; stay: number; size: number } | null = null;
   private eOx = new Float32Array(EYES);
   private eOz = new Float32Array(EYES);
   private eAcross = new Float32Array(EYES);
@@ -807,6 +814,61 @@ export class AbyssLurk {
     }
   }
 
+  /**
+   * A hooked Kraken shows an arm. One arm up out of the water at (x, z) in the sea's frame,
+   * `height` m tall, curling toward `face` (radians), up in `rise` seconds and down after `hold` (in `sink` seconds, the
+   * far arms' own unless given), or sooner with `letGo`. Not counted as a sighting.
+   */
+  reach(x: number, z: number, height: number, face: number, rise: number, hold: number, sink = LURK.kraken.sink): void {
+    let i = this.aMode.indexOf(0);
+    if (i < 0) i = 0;
+    this.aSink[i] = sink;
+    this.aReach[i] = 1;
+    this.aX[i] = x;
+    this.aZ[i] = z;
+    this.aFace[i] = face;
+    this.aLen[i] = height / 0.8;
+    this.aSeed[i] = this.rnd();
+    this.aHang[i] = hold;
+    this.aTop[i] = 1;
+    this.aT[i] = 0;
+    this.aRise[i] = rise;
+    this.aMode[i] = 1;
+  }
+
+  /** The arms a hooked Kraken raised (`reach`) slide under now, in `sink` seconds, from however far up they are. */
+  letGo(sink: number): void {
+    for (let i = 0; i < ARMS; i++) {
+      if (this.aMode[i] !== 1 || !this.aReach[i]) continue;
+      const up = this.aRise[i] + this.aHang[i];
+      // Already sinking: left to it. Still rising: it sinks from where it has got to.
+      if (this.aT[i] >= up) continue;
+      const r = ease(this.aT[i] / this.aRise[i]);
+      this.aTop[i] *= r;
+      this.aSink[i] = sink;
+      this.aT[i] = up;
+    }
+  }
+
+  /**
+   * The Dreamer's eyes open in a ring: `count` of them `radius` m round (x, z) in the sea's frame, for `stay` seconds
+   * or until `shut`, drawn `size` times a sighting's (far from the boat they need it). Unlike a sighting's they are not
+   * shy (the player is looking right at them), a lightning strike does not shut them (in the far Abyss one lands
+   * every few seconds), and they open nowhere else after. Not counted as a sighting.
+   */
+  ring(x: number, z: number, radius: number, count: number, stay: number, size = 1): void {
+    this.startEyes(0, 0);
+    this.spot[0] = x;
+    this.spot[1] = z;
+    this.eMoves = 0;
+    this.eRing = { radius, count, stay, size };
+  }
+
+  /** Shuts a `ring` now. */
+  shut(): void {
+    if (this.eRing && (this.eState === 1 || this.eState === 2)) this.eState = this.eState === 1 ? 0 : 3;
+  }
+
   /** Staging: puts everything away. */
   hide(): void {
     this.sKind = 'none';
@@ -899,6 +961,9 @@ export class AbyssLurk {
         this.aHang[i] = lerp(K.hang[0], K.hang[1], r());
         this.aTop[i] = n > 1 ? 0.75 + 0.25 * r() : 1;
         this.aT[i] = 0;
+        this.aRise[i] = K.rise;
+        this.aSink[i] = K.sink;
+        this.aReach[i] = 0;
         this.aMode[i] = kind === 'arm' ? 1 : 2;
       }
       this.aSeen = false;
@@ -1009,9 +1074,9 @@ export class AbyssLurk {
       const tt = (this.aT[i] += dt);
       let r = this.aTop[i];
       if (mode === 1) {
-        const down = tt - K.rise - this.aHang[i];
-        r *= down > 0 ? 1 - ease(down / K.sink) : ease(tt / K.rise);
-        if (down >= K.sink) {
+        const down = tt - this.aRise[i] - this.aHang[i];
+        r *= down > 0 ? 1 - ease(down / this.aSink[i]) : ease(tt / this.aRise[i]);
+        if (down >= this.aSink[i]) {
           this.aMode[i] = 0;
           continue;
         }
@@ -1054,6 +1119,7 @@ export class AbyssLurk {
   // ----- the eyes -----
 
   private startEyes(bearing?: number, dist?: number): void {
+    this.eRing = null;
     this.eState = 1;
     this.eMoves = LURK.eyes.moves;
     this.camSeen = false;
@@ -1070,7 +1136,8 @@ export class AbyssLurk {
   private openEyes(x: number, z: number, level: number): void {
     const E = LURK.eyes, r = this.rnd;
     const most = this.lite ? Math.min(E.liteCount, E.count[1]) : E.count[1];
-    const n = Math.min(EYES, Math.max(Math.min(E.count[0], most), Math.round(lerp(E.count[0], most, r() * (0.6 + 0.4 * level)))));
+    const ring = this.eRing;
+    const n = ring ? Math.min(EYES, most, ring.count) : Math.min(EYES, Math.max(Math.min(E.count[0], most), Math.round(lerp(E.count[0], most, r() * (0.6 + 0.4 * level)))));
     this.eN = n;
     this.eX = x;
     this.eZ = z;
@@ -1080,10 +1147,18 @@ export class AbyssLurk {
     const td = Math.hypot(tx, tz) || 1;
     tx /= td;
     tz /= td;
+    const turn = r() * TAU;
     for (let i = 0; i < n; i++) {
       this.eSize[i] = i === 0 ? E.size[1] : lerp(E.size[0], E.size[1], r() * r());
+      if (ring) {
+        // Evenly round the ring, a little unevenly, on the water as it lies (not drawn out along the view).
+        const a = turn + ((i + 0.5 * (r() - 0.5)) / n) * TAU, d = ring.radius * (0.9 + 0.2 * r());
+        this.eSize[i] = lerp(E.size[0], E.size[1], 0.35 + 0.65 * r()) * ring.size;
+        this.eOx[i] = Math.cos(a) * d;
+        this.eOz[i] = Math.sin(a) * d;
+      }
       // A few tries at a place clear of the others.
-      for (let k = 0; k < 12; k++) {
+      for (let k = 0; k < 12 && !ring; k++) {
         const a = r() * TAU, d = i === 0 ? 0.3 * r() : this.eR * Math.sqrt(0.08 + 0.92 * r());
         const across = Math.cos(a) * d, along = Math.sin(a) * d;
         this.eAcross[i] = across;
@@ -1094,8 +1169,8 @@ export class AbyssLurk {
         for (let j = 0; j < i && clear; j++) clear = Math.hypot(across - this.eAcross[j], along - this.eAlong[j]) > (this.eSize[i] + this.eSize[j]) * 1.5;
         if (clear) break;
       }
-      // The big one first, then the others one by one.
-      this.eDelay[i] = i === 0 ? 0 : E.open * (0.4 + i * (0.6 + 0.8 * r()));
+      // The big one first, then the others one by one (a ring's, quickly round).
+      this.eDelay[i] = ring ? i * 0.14 : i === 0 ? 0 : E.open * (0.4 + i * (0.6 + 0.8 * r()));
       this.eOpen[i] = 0;
       this.eBlink[i] = this.eDelay[i] + 2 + 5 * r();
       this.eShutFor[i] = 0;
@@ -1104,7 +1179,8 @@ export class AbyssLurk {
       this.eGz[i] = Math.sin(this.eWander[i]);
     }
     this.eT = 0;
-    this.eStay = lerp(E.stay[0], E.stay[1], r());
+    this.eStay = ring ? ring.stay : lerp(E.stay[0], E.stay[1], r());
+    if (ring) this.eR = ring.radius;
     this.eStared = 0;
     this.eState = 2;
   }
@@ -1143,9 +1219,10 @@ export class AbyssLurk {
       const dx = this.eX - cam.x, dy = y - cam.y, dz = this.eZ - cam.z;
       const d = Math.hypot(dx, dy, dz) || 1;
       const angle = Math.acos(Math.min(1, Math.max(-1, (dx * this.camDir.x + dy * this.camDir.y + dz * this.camDir.z) / d)));
-      this.eStared = stareTime(this.eStared, angle, 0.5 * Math.atan2(this.eR, d), dt);
+      // A ring is not shy: it is where the player is looking.
+      this.eStared = this.eRing ? 0 : stareTime(this.eStared, angle, 0.5 * Math.atan2(this.eR, d), dt);
       const over = this.eT > this.eStay;
-      if (over || eyesShut(this.eStared, lightning.flash)) {
+      if (over || (!this.eRing && eyesShut(this.eStared, lightning.flash))) {
         this.eState = 3;
         if (over) this.eMoves = 0;
       }

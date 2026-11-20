@@ -767,15 +767,23 @@ class Lightning {
     this.sheetAge = 0;
   }
 
-  /** Throws a bolt now, at `bearing` (atan2 of z, x) if given; mostly over the open sea players face (-z). */
-  strike(bearing?: number): void {
+  /** Holds the sea's own bolts off for `secs` seconds (a quiet moment: the Dreamer waking). Bolts thrown with `strike` still land. */
+  hush(secs: number): void {
+    this.timer = Math.max(this.timer, secs);
+  }
+
+  /**
+   * Throws a bolt now, at `bearing` (atan2 of z, x) if given; mostly over the open sea players face (-z). `dist`: how
+   * far off it stands (m; 90 to 200 at random unless given), which sets its thunder: a near one cracks.
+   */
+  strike(bearing?: number, dist?: number): void {
     const r = this.rnd;
     if (this.bolt) {
       this.group.remove(this.bolt);
       this.bolt.geometry.dispose();
     }
     const a = bearing ?? (r() < 0.7 ? -Math.PI * (0.15 + 0.7 * r()) : r() * Math.PI * 2);
-    const d = 90 + r() * 110;
+    const d = dist ?? 90 + r() * 110;
     const parts: THREE.BufferGeometry[] = [];
     const up = new THREE.Vector3(0, 1, 0);
     const seg = (p: THREE.Vector3, q: THREE.Vector3, w: number) => {
@@ -812,6 +820,11 @@ export class Sea {
   /** Things fixed to the boat: the spray. */
   readonly onBoat = new THREE.Group();
   readonly motion: BoatMotion = { heave: 0, pitch: 0, roll: 0 };
+  /**
+   * A push on the boat on top of the swell's own motion (a surfacing giant's swell lifting it, its weight heeling it):
+   * set by the game each frame, nothing unless it is. The sea and the sky move by it like any other heave and roll.
+   */
+  readonly shove: BoatMotion = { heave: 0, pitch: 0, roll: 0 };
   /** The sea frame's rotation (the boat's, reversed), for the sky to tilt with. */
   readonly tilt = new THREE.Quaternion();
   private u: ReturnType<typeof seaUniforms>;
@@ -882,6 +895,11 @@ export class Sea {
   private lite = false;
   /** How bright the rain is against the sky (1 the old half white; a look with its own night dims it). */
   private rainLit = 1;
+
+  /** The waves' uniforms, for things drawn riding the water (`WAVE_GLSL`): a legend's shadow. */
+  get waves(): { uTime: THREE.IUniform; uWa: THREE.IUniform; uWb: THREE.IUniform } {
+    return { uTime: this.u.uTime, uWa: this.u.uWa, uWb: this.u.uWb };
+  }
 
   /** Whether the marker buoy has drifted up alongside the boat. */
   get buoyAlongside(): boolean {
@@ -1031,7 +1049,8 @@ export class Sea {
     this.land.visible = fade < 1;
 
     const mo = boatMotion(t, mood, this.motion);
-    this.boatM.makeRotationFromEuler(new THREE.Euler(mo.roll, 0, mo.pitch, 'YXZ')).setPosition(0, mo.heave, 0);
+    const sv = this.shove;
+    this.boatM.makeRotationFromEuler(new THREE.Euler(mo.roll + sv.roll, 0, mo.pitch + sv.pitch, 'YXZ')).setPosition(0, mo.heave + sv.heave, 0);
     this.frame.matrix.copy(this.boatM).invert();
     this.frame.matrixWorldNeedsUpdate = true;
     this.tilt.setFromRotationMatrix(this.frame.matrix);

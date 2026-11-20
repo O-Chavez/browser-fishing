@@ -10,9 +10,11 @@ describe('Twilight fish icons', () => {
       const hidden = fishIcon(id, { hidden: true });
       const shiny = fishIcon(id, { shiny: true });
       for (const svg of [normal, hidden, shiny]) expect(svg).toMatch(/^<svg/);
-      expect(normal).toContain('filter="url(#tg');
-      expect(hidden).not.toContain('filter="url(#t');
-      expect(hidden).not.toContain('#fff');
+      if (id !== 'oarfish' && id !== 'chandelier') { // those two have hand-drawn legend icons, no blur glow
+        expect(normal).toContain('filter="url(#tg');
+        expect(hidden).not.toContain('filter="url(#t');
+        expect(hidden).not.toContain('#fff');
+      }
       expect(shiny).not.toBe(normal);
       expect(normal).not.toContain('NaN');
     });

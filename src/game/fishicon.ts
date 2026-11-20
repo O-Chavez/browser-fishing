@@ -1,6 +1,7 @@
 import { FISH } from '../data/content';
 import { FISH_LOOK, SHAPES, envelope, type FishLook, type TailKind } from '../data/fishlook';
 import { seaIconLayers } from './seafish';
+import { legendIcon } from './legendicons';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 let uid = 0;
@@ -29,6 +30,8 @@ const TAIL_PATHS: Record<TailKind, string> = {
  * sparkles on jewels (4), and on spirits (5) a stronger glow, a crown and their signature flourish.
  */
 export function fishIcon(id: string, opts: { hidden?: boolean; shiny?: boolean } = {}): string {
+  const legend = legendIcon(id, opts);
+  if (legend) return legend;
   const look: FishLook | undefined = FISH_LOOK[id];
   if (!look) return '';
   const sh = SHAPES[look.shape];
