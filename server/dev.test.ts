@@ -291,22 +291,22 @@ describe('dev commands in a room', () => {
     const a = join('Ann');
     const b = join('Bob');
     room.handle(a.id, { t: 'cmd', text: '/login admin hunter2' });
-    room.handle(a.id, { t: 'cmd', text: '/zonefish 2 87' });
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 2 57' });
     // Spread over Kelp Deep's plain fish in the Fishdex, which is the count.
-    expect(Object.fromEntries(Object.entries(a.save.dex).map(([id, e]) => [id, e.count]))).toEqual({ frondback: 29, lionfish: 29, wolfeel: 29 });
-    expect(eco.zoneLanded(a.save, 2)).toBe(87);
+    expect(Object.fromEntries(Object.entries(a.save.dex).map(([id, e]) => [id, e.count]))).toEqual({ frondback: 19, lionfish: 19, wolfeel: 19 });
+    expect(eco.zoneLanded(a.save, 2)).toBe(57);
     expect(a.save.owned).toEqual([]);
-    expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 87 fish landed, 1 of 3 pieces of its set unlocked at Reed's.");
-    expect([...a.log].reverse().find((m) => m.t === 'state')).toMatchObject({ save: { dex: { frondback: { count: 29 } } } });
+    expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 57 fish landed, 1 of 3 pieces of its set unlocked at Reed's.");
+    expect([...a.log].reverse().find((m) => m.t === 'state')).toMatchObject({ save: { dex: { frondback: { count: 19 } } } });
     // By id too; the zone's legends keep their own count.
     a.save.dex.kelpbeard = { count: 2, best: 300 };
-    room.handle(a.id, { t: 'cmd', text: '/zonefish kelp 150' });
-    expect(eco.zoneLanded(a.save, 2)).toBe(150);
+    room.handle(a.id, { t: 'cmd', text: '/zonefish kelp 100' });
+    expect(eco.zoneLanded(a.save, 2)).toBe(100);
     expect(a.save.dex.kelpbeard.count).toBe(2);
-    expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 150 fish landed, 3 of 3 pieces of its set unlocked at Reed's.");
+    expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 100 fish landed, 3 of 3 pieces of its set unlocked at Reed's.");
     a.save.owned.push('kelpcap', 'kelpwrap', 'cap');
     room.handle(a.id, { t: 'equip', slot: 'shirt', id: 'kelpwrap' });
-    room.handle(a.id, { t: 'cmd', text: '/zonefish 2 40' });
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 2 30' });
     expect(a.save.owned).toEqual(['kelpcap', 'cap']);
     // The piece taken back comes off, for everyone.
     expect(a.save.look.shirt).toBeNull();
@@ -315,8 +315,8 @@ describe('dev commands in a room', () => {
     expect(devLines(a.log).at(-1)).toBe("Kelp Deep: 2 fish landed (its legends' 2 stay), 0 of 3 pieces of its set unlocked at Reed's.");
     expect(a.save.dex.frondback).toBeUndefined();
     expect(a.save.owned).toEqual(['cap']);
-    room.handle(a.id, { t: 'cmd', text: '/zonefish 3 300' });
-    expect(devLines(a.log).at(-1)).toBe("The Twilight: 300 fish landed, 2 of 3 pieces of its set unlocked at Reed's.");
+    room.handle(a.id, { t: 'cmd', text: '/zonefish 3 250' });
+    expect(devLines(a.log).at(-1)).toBe("The Twilight: 250 fish landed, 2 of 3 pieces of its set unlocked at Reed's.");
     room.handle(a.id, { t: 'cmd', text: '/zonefish 0 5' });
     expect(devLines(a.log).at(-1)).toBe('The Shelf: 5 fish landed (it has no set).');
     for (const bad of ['/zonefish kelp', '/zonefish reef 3', '/zonefish']) {

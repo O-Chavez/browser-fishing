@@ -1773,9 +1773,9 @@ describe('charters', () => {
     // Locked: the server says what it takes and sells nothing, whatever the client thinks.
     const buy = (id = 'kelpcap') => t.room.handle(a.id, { t: 'buylegend', id });
     buy();
-    expect(last(a.c, 'notice').msg).toBe('Land 38 more fish in Kelp Deep to unlock the Kelp Cap.');
+    expect(last(a.c, 'notice').msg).toBe('Land 28 more fish in Kelp Deep to unlock the Kelp Cap.');
     expect(s.owned).toEqual([]);
-    s.dex.frondback = { count: 40, best: 100 };
+    s.dex.frondback = { count: 30, best: 100 };
     s.coins = 149_999;
     buy();
     expect(last(a.c, 'notice').msg).toBe('The Kelp Cap costs 150,000 coins.');

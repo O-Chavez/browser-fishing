@@ -683,7 +683,7 @@ export function zoneFishLeft(s: Pick<SaveData, 'dex'>, c: Cosmetic): number {
   return Math.max(0, c.zoneFish - zoneLanded(s, c.zone));
 }
 
-/** What a locked zone piece still takes: "Land 40 fish in Kelp Deep" before any, then "Land 3 more fish in Kelp Deep". */
+/** What a locked zone piece still takes: "Land 30 fish in Kelp Deep" before any, then "Land 3 more fish in Kelp Deep". */
 export function zoneFishText(s: Pick<SaveData, 'dex'>, c: Cosmetic): string {
   const left = zoneFishLeft(s, c);
   const more = c.zone !== undefined && zoneLanded(s, c.zone) > 0 ? ' more' : '';

@@ -5966,7 +5966,7 @@ export class Game {
   }
 
   /**
-   * A zone set's bar at Reed's: the fish landed in the zone toward the next piece's milestone ("87 / 90 fish landed in
+   * A zone set's bar at Reed's: the fish landed in the zone toward the next piece's milestone ("57 / 60 fish landed in
    * Kelp Deep · next: Kelp Wrap"), filled along the whole set with a mark at each piece's milestone, lit once reached;
    * "Set unlocked" once every piece is. In the set's rarity colour.
    */

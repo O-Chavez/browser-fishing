@@ -58,7 +58,7 @@ export function legendUp(p: LegendPiece): LegendUp | null {
 export const ZONE_MARK: Record<string, string> = { kelp: '🌿', twilight: '🪼' };
 
 /**
- * The one line for a piece of a zone's set that a landing unlocked: "🌿 Kelp Cap unlocked at Captain Reed's · 40 fish
+ * The one line for a piece of a zone's set that a landing unlocked: "🌿 Kelp Cap unlocked at Captain Reed's · 30 fish
  * landed in Kelp Deep". Only the player sees it (on the catch card), like a legend's piece.
  */
 export function zoneUp(p: ZonePiece): string | null {
