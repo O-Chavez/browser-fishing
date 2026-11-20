@@ -762,10 +762,11 @@ body:has(#join:not(.hidden)) #menu { visibility: hidden; }
 /* ---------- touch mode (body.touch; see TouchControls) ----------
    Sizes are in the 1400px-wide touch layout, which a phone in landscape shows at about 0.6x. */
 body.touch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
-/* 28px in the touch layout is about 17 real px on a phone (touchLayoutWidth keeps phones near 0.6x): at 16 or more,
-   iPhones don't zoom the page into a field when it's tapped (the join name, passwords, feedback). */
-body.touch input, body.touch textarea { -webkit-user-select: text; user-select: text; font-size: 28px; }
-body.touch #join-name, body.touch #join-pass, body.touch #acct-pass, body.touch #acct-name, body.touch #fb-text { font-size: 28px; }
+/* Fields are at least 16 real px on the screen, or iPhones zoom the page into a field when it's tapped (the join name,
+   passwords, feedback) and leave it zoomed. --field-px is set in enableTouch (touchFieldPx): 28px of the touch layout
+   is about 17 real px at 0.6x, but beside a notch Safari shows the layout nearer 0.53x, so it's more there. */
+body.touch input, body.touch textarea { -webkit-user-select: text; user-select: text; font-size: var(--field-px, 28px); }
+body.touch #join-name, body.touch #join-pass, body.touch #acct-pass, body.touch #acct-name, body.touch #fb-text { font-size: var(--field-px, 28px); }
 #touch { position: fixed; inset: 0; z-index: 1; touch-action: none; }
 #touch.hidden { display: none; }
 #touch .t-view { position: absolute; inset: 0; }

@@ -28,7 +28,7 @@ import { DropsView, itemName } from './dropsview';
 import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
-import { TouchControls, touchLayoutWidth, touchOnly } from './touch';
+import { TouchControls, touchFieldPx, touchLayoutWidth, touchOnly } from './touch';
 import { HOME_JOIN_KEY, HOME_TIP_BEAT_SECS, HOME_TIP_DELAY_SECS, HOME_TIP_KEY, HOME_TIP_TITLE, homeJoinDue, homeJoinHtml, homeTipDue, homeTipHtml, installedSinceLoad, installReady, offersHomeScreen, promptInstall, readScreenEnv, watchInstall, type ScreenEnv } from './homescreen';
 import { readChatKeyboard, writeChatKeyboard } from './chatkeyboard';
 import { ChatBox, maskedEcho, secretPrompt, unreadLabel, type SecretPrompt } from './chatbox';
@@ -1600,6 +1600,9 @@ export class Game {
     // Lay the page out wide and let the browser scale it to the screen, so the desktop HUD and menus fit a phone
     // in landscape at about 0.6x without a separate layout (`touchLayoutWidth`).
     document.querySelector('meta[name=viewport]')?.setAttribute('content', `width=${touchLayoutWidth(screen.width, screen.height)}, user-scalable=no`);
+    document.documentElement.style.setProperty('--field-px', `${touchFieldPx(screen.width, screen.height)}px`);
+    // The phone's keyboard can leave the page scrolled up after it closes (iPhones), the top cut off: put it back.
+    document.addEventListener('focusout', () => setTimeout(() => !document.activeElement?.matches('input, textarea') && scrollTo(0, 0), 100));
     this.world.setPixelCap(1);
     this.forceActive = true;
     $('resume').classList.add('hidden');

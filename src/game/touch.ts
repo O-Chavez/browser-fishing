@@ -13,6 +13,21 @@ export function touchLayoutWidth(w: number, h: number): number {
 }
 
 /**
+ * Font size of a text field in the touch layout, in its CSS pixels, so the field is at least 17 real pixels on the
+ * screen: under 16, Safari on an iPhone zooms the page into a field when it's tapped and leaves it zoomed (and
+ * scrolled, the top cut off) afterwards. The layout's scale comes from the width Safari shows it in, which on a phone
+ * with a notch (a screen more than twice as long as it is tall) is the long side less about 62 points each end, so
+ * the layout is nearer 0.53x than 0.6x there. Never under 28, the size tablets and wide screens get.
+ */
+export function touchFieldPx(w: number, h: number): number {
+  const long = Math.max(w, h);
+  const short = Math.min(w, h);
+  if (!long) return 28;
+  const shown = long / short > 2 ? long - 124 : long;
+  return Math.max(28, Math.ceil((17 * touchLayoutWidth(w, h)) / shown));
+}
+
+/**
  * Whether a touch on this part of the on-screen controls keeps the browser's own handling. Only the top buttons (💬,
  * 🎒) do: they act on the click, which a cancelled touch never sends, and iOS opens the keyboard only from a click.
  */
