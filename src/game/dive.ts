@@ -131,14 +131,24 @@ export const pearlsFor = (zone: number, marker: number, fish: PearlFish = {}): n
 
 /**
  * The Black Pearls a landed fish pays here on average, unrounded, for Reed's chart: the zone's (`PEARLS.zone`) with the
- * Abyss marker's growth, and the odds of a Feisty or Brutish fish (`TAG_CHANCE`), a legend (`DIVE.legendChance`) and a
- * shiny counted in: the natural `SHINY_CHANCE`, or every fish shiny when `lured` (a Shiny Lure on every cast).
+ * Abyss marker's growth, and the odds of a Feisty or Brutish fish (`TAG_CHANCE`, every legend where the zone has a
+ * `legendTag`), a legend (`DIVE.legendChance`) and a shiny counted in: the natural `SHINY_CHANCE`, or every fish shiny
+ * when `lured` (a Shiny Lure on every cast).
  */
 export function averagePearls(zone: number, marker: number, lured = false): number {
-  const tag = 1 + TAG_CHANCE * (PEARLS.tag - 1);
-  const legend = 1 + DIVE.legendChance * (PEARLS.legend - 1);
   const shiny = lured ? PEARLS.shiny : 1 + SHINY_CHANCE * (PEARLS.shiny - 1);
-  return PEARLS.zone[zone] * markerGrowth(zone, marker) * tag * legend * shiny;
+  return PEARLS.zone[zone] * markerGrowth(zone, marker) * tagged(zone, PEARLS.legend, PEARLS.tag) * shiny;
+}
+
+/**
+ * The legend and tag odds of a landed fish here together, as a multiplier on a plain everyday fish's pay: a legend
+ * (`DIVE.legendChance`) pays `legend` times, a tag `tag` times, rolled one in `TAG_CHANCE` or certain on a legend where
+ * the zone has a `legendTag`.
+ */
+function tagged(zone: number, legend: number, tag: number): number {
+  const rolled = 1 + TAG_CHANCE * (tag - 1);
+  const onLegend = zoneOf(zone).legendTag ? tag : rolled;
+  return (1 - DIVE.legendChance) * rolled + DIVE.legendChance * legend * onLegend;
 }
 
 /** Bins for `meanSale`'s average over a fish's sizes. */
@@ -166,14 +176,15 @@ export const typicalSale = (zone: number): number => meanOf(zoneOf(zone).fish);
 /**
  * What a landed fish sells for in this zone on average (Oscar, 2026-11-13: the shown coins a fish are what a player
  * really gets): over its everyday fish and its legends (`DIVE.legendChance`) and their sizes, with the shiny chance
- * (`SHINY_CHANCE`, worth `SHINY_VALUE` times) and the Feisty or Brutish bonus (`TAG_CHANCE`, `TAG_BONUS`) counted in.
+ * (`SHINY_CHANCE`, worth `SHINY_VALUE` times) and the Feisty or Brutish bonus (`TAG_CHANCE`, `TAG_BONUS`; every legend
+ * where the zone has a `legendTag`) counted in.
  * About a third over `typicalSale`. Before any Abyss marker's growth, and without what's the player's own: the
  * clean-catch bonus, a snack or dish, a charm.
  */
 export function averageSale(zone: number): number {
   const z = zoneOf(zone);
-  const bite = (1 - DIVE.legendChance) * meanOf(z.fish) + DIVE.legendChance * meanOf(z.legends);
-  return bite * (1 + SHINY_CHANCE * (SHINY_VALUE - 1)) * (1 + TAG_CHANCE * TAG_BONUS);
+  const legend = meanOf(z.legends) / meanOf(z.fish);
+  return meanOf(z.fish) * tagged(zone, legend, 1 + TAG_BONUS) * (1 + SHINY_CHANCE * (SHINY_VALUE - 1));
 }
 
 /** A number to three figures: 1,473 as 1,470, 15,468 as 15,500. */

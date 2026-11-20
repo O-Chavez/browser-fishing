@@ -199,14 +199,20 @@ export function rollTag(rng: () => number): FishTag | null {
 
 const hundredths = (x: number) => Math.round(x * 100) / 100;
 
-/** A hooked fish's gaps with its modifiers: maybe a tag (`rollTag`), then its own spread on each axis (`FISH_SPREAD`). */
-export function rollFishGaps(g: Gaps, rng: () => number): { d: Gaps; tag: FishTag | null } {
-  const tag = rollTag(rng);
+/**
+ * A hooked fish's gaps with its modifiers: maybe a tag (`rollTag`), or always `force.tag` at `force.tiers` times its
+ * tiers when given (an Abyss giant's Brutish, `Zone.legendTag`; the roll still draws, so the rest of the cast's rolls
+ * don't shift), then its own spread on each axis (`FISH_SPREAD`).
+ */
+export function rollFishGaps(g: Gaps, rng: () => number, force?: { tag: FishTag; tiers: number }): { d: Gaps; tag: FishTag | null } {
+  const rolled = rollTag(rng);
+  const tag = force?.tag ?? rolled;
+  const k = force?.tiers ?? 1;
   const spread = () => (2 * rng() - 1) * FISH_SPREAD;
   return {
     d: {
-      strength: hundredths(g.strength + (tag === 'feisty' ? TAG_TIERS.feisty : 0) + spread()),
-      weight: hundredths(g.weight + (tag === 'brutish' ? TAG_TIERS.brutish : 0) + spread()),
+      strength: hundredths(g.strength + (tag === 'feisty' ? TAG_TIERS.feisty * k : 0) + spread()),
+      weight: hundredths(g.weight + (tag === 'brutish' ? TAG_TIERS.brutish * k : 0) + spread()),
     },
     tag,
   };
