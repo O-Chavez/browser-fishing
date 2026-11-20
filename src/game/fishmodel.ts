@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { FISH_LOOK, SHAPES, envelope, type DorsalKind, type FishLook, type Shape, type TailKind } from '../data/fishlook';
 import { FISH, isSeaFish } from '../data/content';
 import { WATER_ORDER } from './env';
-import { addSeaParts } from './seafish';
+import { addSeaParts, addSeaShadow } from './seafish';
+import { buildLegend } from './seafish/legends';
 
 /** A glow material whose colour cycles through the rainbow (the aurora pike). */
 type Hue = { m: THREE.Material & { color: THREE.Color }; off: number };
@@ -19,6 +20,8 @@ export interface FishModel {
   flames?: THREE.Object3D[];
   hue?: Hue[];
   twinkle?: THREE.Object3D[];
+  /** A deep sea fish's own motion, called with the time whenever it is animated. */
+  ticks?: ((t: number) => void)[];
 }
 
 /** Top and side extents of the body at t, for placing fins, eyes and extras. */
@@ -290,6 +293,9 @@ const TAILS: Record<TailKind, [number, number][]> = {
 
 /** Model for a species, nose toward -Z, length 1 unit. `shadow` makes a dark underwater silhouette. */
 export function buildFish(baseColor: number, shadow = false, shiny = false, tier = 1, id = ''): FishModel {
+  // A sea legend (`seafish/legends/`) builds its own whole model.
+  const legend = buildLegend(id, shadow, shiny, glowTexture);
+  if (legend) return legend;
   // Sea fish are tier 5 for gear but get the satin lake-giant finish: no jewel sheen, spirit glow or crown.
   if (isSeaFish(FISH.find((f) => f.id === id))) tier = Math.min(tier, 3);
   const look: FishLook = FISH_LOOK[id] ?? { shape: 'torpedo', tail: 'fork', dorsal: 'soft', back: baseColor, belly: new THREE.Color(baseColor).lerp(new THREE.Color(0xffffff), 0.5).getHex(), fin: baseColor };
@@ -300,6 +306,7 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
   const pulse: THREE.Material[] = [];
   const flames: THREE.Object3D[] = [];
   const twinkle: THREE.Object3D[] = [];
+  const ticks: ((t: number) => void)[] = [];
   const hue: Hue[] = [];
   const accent = new THREE.Color(L.accent ?? new THREE.Color(L.fin).lerp(new THREE.Color(0xffffff), 0.4).getHex());
   const spirit = tier >= 5 && !shadow ? look.spirit : undefined;
@@ -386,13 +393,13 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
     addExtras(group, look, L, finMat, pulse, accent);
     if (look.finish) {
       addSeaParts({
-        group, look, L, id, shiny, accent, body, tail, pulse, twinkle, finScale, finGeo, glowTexture,
+        group, look, L, id, shiny, accent, body, tail, pulse, twinkle, ticks, finScale, finGeo, glowTexture,
         bodyMat: bodyMat as THREE.MeshPhysicalMaterial,
         finMat: finMat as THREE.MeshStandardMaterial,
         extents: (t) => extents(look.shape, t),
       });
     }
-  }
+  } else if (look.finish) addSeaShadow(look, group, body, tail);
 
   // Jewel (T4): a coloured rim glow that keeps the body colour readable; spirits (T5) a stronger aura.
   let orbit: THREE.Group | undefined;
@@ -444,7 +451,7 @@ export function buildFish(baseColor: number, shadow = false, shiny = false, tier
 
   const outer = new THREE.Group();
   outer.add(group);
-  return { group: outer, body, tail, materials, orbit, pulse, flames, hue, twinkle };
+  return { group: outer, body, tail, materials, orbit, pulse, flames, hue, twinkle, ticks };
 }
 
 /**
@@ -637,6 +644,7 @@ export function animateFish(m: FishModel, t: number, speed: number, amp: number)
   m.twinkle?.forEach((o, i) => o.scale.setScalar(0.6 + 0.6 * Math.abs(Math.sin(t * 3 + i * 1.3))));
   m.hue?.forEach((h) => h.m.color.setHSL((t * 0.12 + h.off) % 1, 0.85, 0.62));
   if (m.orbit) m.orbit.rotation.z = t * 0.9;
+  m.ticks?.forEach((f) => f(t));
   if (m.pulse) {
     const k = 0.8 + Math.sin(t * 3) * 0.2;
     m.pulse.forEach((p, i) => ((p as THREE.MeshBasicMaterial).opacity = Math.min(1, ((p as THREE.MeshBasicMaterial).userData.o ??= (p as THREE.MeshBasicMaterial).opacity) * k * (i % 2 ? 1.1 : 1))));

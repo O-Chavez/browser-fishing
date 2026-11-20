@@ -1,6 +1,7 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { LURK, SEA_LOOK_DEPTH, inHull, lurkAt, lurkLevel, seaDepthFor, seaMood } from '../data/sea';
-import { SPINE_GLSL, breachLength, breachPose, eyeSpot, eyesShut, farEvery, lurkDist, lurkGap, lurkRate, passPhase, pickFar, seaSight, serpentShape, serpentSpine, stareTime, type FarKind } from './abysslurk';
+import { AbyssLurk, SPINE_GLSL, breachLength, breachPose, eyeSpot, eyesShut, farEvery, lurkDist, lurkGap, lurkRate, passPhase, pickFar, seaSight, serpentShape, serpentSpine, stareTime, type FarKind } from './abysslurk';
 
 describe('where the Abyss lurkers show', () => {
   it('nowhere before the Abyss, eased in over its first markers', () => {
@@ -213,5 +214,76 @@ describe('the view over the swell', () => {
     expect(hidden).toBeGreaterThan(5);
     // Within a swell or two there is a moment with sky behind it: a flash sighting can wait for one.
     expect(sky).toBeGreaterThan(0);
+  });
+});
+
+describe('what a hooked legend asks of the lurkers', () => {
+  const mood = seaMood(seaDepthFor(4, 4));
+  const uniforms = () => ({ uTime: { value: 0 }, uWa: { value: [] }, uWb: { value: [] }, uFogColor: { value: new THREE.Color() }, uFogNear: { value: 20 }, uFogFar: { value: 200 } });
+  const calm = { flash: 0, strike: () => {} };
+  const make = () => {
+    const lurk = new AbyssLurk(uniforms() as unknown as ConstructorParameters<typeof AbyssLurk>[0]);
+    lurk.auto = false;
+    const parts = lurk as unknown as { eyes: THREE.Mesh; eyeGeo: THREE.InstancedBufferGeometry; eyeA: THREE.InstancedBufferAttribute; armGeo: THREE.InstancedBufferGeometry; armB: THREE.InstancedBufferAttribute };
+    // The eyes learn where the camera is from their own draw: looking straight at the ring from the deck.
+    const cam = new THREE.PerspectiveCamera();
+    cam.position.set(0, 3, 0);
+    cam.lookAt(20, 0, 0);
+    cam.updateMatrixWorld();
+    const seen = () => parts.eyes.onBeforeRender(null as never, null as never, cam, null as never, null as never, null as never);
+    let t = 0;
+    const run = (secs: number, lightning = calm) => {
+      for (let i = 0; i < Math.round(secs * 30); i++) {
+        lurk.update((t += 1 / 30), 1 / 30, mood, 1, lightning);
+        seen();
+      }
+    };
+    const open = () => Array.from({ length: parts.eyeGeo.instanceCount }, (_, i) => parts.eyeA.array[i * 4 + 3]);
+    return { lurk, parts, run, open };
+  };
+
+  it("opens the Dreamer's eyes in a ring that stays open while stared at and through a lightning strike", () => {
+    const { lurk, parts, run, open } = make();
+    lurk.ring(20, 0, 2.5, 7, 60);
+    run(3);
+    expect(parts.eyeGeo.instanceCount).toBe(7);
+    for (let i = 0; i < 7; i++) {
+      const d = Math.hypot(parts.eyeA.array[i * 4] - 20, parts.eyeA.array[i * 4 + 1]);
+      expect(d).toBeGreaterThan(2.5 * 0.85);
+      expect(d).toBeLessThan(2.5 * 1.15);
+    }
+    // Stared at for seconds, and a bolt: a sighting's eyes would have shut at either.
+    run(2, { flash: 1, strike: () => {} });
+    expect(Math.max(...open())).toBeGreaterThan(0.9);
+    // Shut on the word, and they open nowhere else after.
+    lurk.shut();
+    run(1.5);
+    expect(parts.eyes.visible).toBe(false);
+    run(20);
+    expect(parts.eyes.visible).toBe(false);
+  });
+
+  it('shuts a ring by itself once its time is up', () => {
+    const { lurk, parts, run } = make();
+    lurk.ring(20, 0, 2, 5, 2);
+    run(1.5);
+    expect(parts.eyeGeo.instanceCount).toBe(5);
+    run(3);
+    expect(parts.eyes.visible).toBe(false);
+  });
+
+  it("lets a hooked Kraken's arm go under at once", () => {
+    const { lurk, parts, run } = make();
+    lurk.reach(20, 2, 6, 0, 1, 30);
+    run(1.5);
+    expect(parts.armGeo.instanceCount).toBe(1);
+    const up = parts.armB.array[0];
+    expect(up).toBeGreaterThan(0.7);
+    // Held for half a minute if left; let go, it is under in the time given.
+    lurk.letGo(0.5);
+    run(0.25);
+    expect(parts.armB.array[0]).toBeLessThan(up);
+    run(0.4);
+    expect(parts.armGeo.instanceCount).toBe(0);
   });
 });

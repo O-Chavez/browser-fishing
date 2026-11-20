@@ -25,6 +25,7 @@ import charterLures from '../assets/images/news/charter-lures.jpg';
 import deepSea from '../assets/images/news/deep-sea.jpg';
 import harbour from '../assets/images/news/harbour.jpg';
 import phones from '../assets/images/news/phones.jpg';
+import seaLegends from '../assets/images/news/sea-legends.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import emotes from '../assets/images/news/emotes.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
@@ -47,6 +48,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 19,
+    date: '2026-11-20',
+    title: 'The legends rise',
+    image: seaLegends,
+    alt: "From the deck in the Abyss at night: the Kraken lies beaten on the swell beside the boat, its red mantle rolled over with one gold eye turned up to the deck and its arms sprawled across the water beyond the rail, the Deep Sea Rod in hand and LEGEND LANDED! across the sky",
+    body: [
+      "The sea's legends have been remade, and they look the part now. Each carries what it has collected over the years: old hooks, lures and snapped line on <b>Grandmother Grouper</b>, the <b>Squall Marlin</b>, <b>Old Kelpbeard</b>, the <b>Thornback Kelpwyrm</b>, the <b>Moonlit Oarfish</b> and the <b>Chandelier Angler</b>, and ships' wreckage on the Abyss's three.",
+      "A legend shows itself from the bite: it drags your bobber under in a burst of white water and fights at the surface, near its full size. Land one and it hangs from your rod far bigger than anything else in its zone. In the Abyss, <b>the Leviathan</b>, <b>the Drowned Dreamer</b> and <b>the Kraken</b> are too big to lift: watch the water by your bobber before they bite, and when you land one it breaks the water right beside the boat.",
+      "Take a charter with <b>Captain Reed</b> to meet them. Your Fishdex shows them in their new look too.",
+    ],
+  },
   {
     id: 18,
     date: '2026-11-20',

@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FISH } from '../../data/content';
 import { SHAPES, envelope, type Shape } from '../../data/fishlook';
 import type { AbyssParts } from '../../data/seaparts/abyss';
+import { legendModel } from './giants';
 import type { SeaIconCtx, SeaIconLayers, SeaModelCtx } from './types';
 
 type V3 = THREE.Vector3;
@@ -447,6 +448,8 @@ export function abyssModel(ctx: SeaModelCtx): void {
   const { look, L, id, shiny, accent, group } = ctx;
   const p = look.abyss;
   if (!p) return;
+  // A legend with a body of its own is built whole, in place of the fish shape and the parts below.
+  if (p.legend && legendModel(ctx, p.legend)) return;
   const shape = look.shape;
   const legend = isLegend(id);
   const C = (c: number) => (shiny ? new THREE.Color(c).lerp(new THREE.Color(GOLD), 0.55) : new THREE.Color(c));

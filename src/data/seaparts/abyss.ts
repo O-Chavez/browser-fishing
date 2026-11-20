@@ -31,4 +31,9 @@ export interface AbyssParts {
   fangs?: number;
   /** Humps along a serpent's body: their height (in body lengths) and how many waves. */
   wave?: { amp: number; freq: number };
+  /**
+   * A legend with a body of its own (`src/game/seafish/giants/`), built whole in place of the shape's body, fins and
+   * the parts above on the 3D model. The icon is still drawn from the shape and the parts above.
+   */
+  legend?: 'leviathan' | 'dreamer' | 'kraken';
 }

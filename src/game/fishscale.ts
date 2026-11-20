@@ -47,6 +47,21 @@ export const heldScale = (cm: number, tier: number): number => softCap(tierScale
 export const seaHeldScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier), 2.2, 4.5);
 
 /**
+ * A sea legend dangling from the Deep Sea Rod: the drawn length (m) of its whole model, nose to tail.
+ * A fifth over the zone's everyday rule (with its own size curve) and eased toward a ceiling that still frames a whole fish under the rod with the
+ * view pulled up (`LEGEND_SHOW`); a legend that hangs with its tail in the water (`wet`) gets the room the water hides.
+ */
+export const LEGEND_HANG = { grow: 1.2, knee: 3.2, max: 4, maxWet: 9 };
+export const legendHangLen = (cm: number, tier: number, grow = 1, wet = 0): number =>
+  softCap(tierScale(cm, tier) * LEGEND_HANG.grow, LEGEND_HANG.knee, wet > 0 ? LEGEND_HANG.maxWet : LEGEND_HANG.max) * grow;
+
+/**
+ * A sea legend in the water (its shadow before the bite, and the fight): drawn near its real length, so a legend is
+ * plainly bigger than a cod at the same distance. Eased toward a ceiling for the Abyss's giants.
+ */
+export const legendWaterScale = (cm: number, tier: number): number => softCap(tierScale(cm, tier) * 0.95, 4.5, 8.5);
+
+/**
  * Line length between the rod tip and the mouth of a dangling catch. Big fish hang on a shorter
  * line (and the rod is raised, see `hangPitch`) so their tail stays clear of the dock and water.
  */

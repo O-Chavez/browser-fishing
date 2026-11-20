@@ -3,6 +3,8 @@ import { FISH } from '../../data/content';
 import { FISH_LOOK } from '../../data/fishlook';
 import { fishIcon } from '../fishicon';
 
+/** The three legends have their own hand-drawn icons (src/game/legendicons.ts), tested in fishicon.test.ts. */
+const LEGEND_ICONS = new Set(['leviathan', 'dreamer', 'kraken']);
 const ABYSS = FISH.filter((f) => f.locations.includes('abyss'));
 
 describe('the Abyss fish looks', () => {
@@ -17,7 +19,7 @@ describe('the Abyss fish looks', () => {
   });
 
   it('draws a glowing icon without blur filters, the same every time', () => {
-    for (const f of ABYSS) {
+    for (const f of ABYSS.filter((x) => !LEGEND_ICONS.has(x.id))) {
       const svg = fishIcon(f.id);
       expect(svg, f.id).not.toContain('<filter');
       expect(svg, f.id).toContain('radialGradient');
@@ -36,6 +38,6 @@ describe('the Abyss fish looks', () => {
   });
 
   it('turns the parts gold on a shiny', () => {
-    for (const f of ABYSS) expect(fishIcon(f.id, { shiny: true }), f.id).toContain('#ffe27a');
+    for (const f of ABYSS.filter((x) => !LEGEND_ICONS.has(x.id))) expect(fishIcon(f.id, { shiny: true }), f.id).toContain('#ffe27a');
   });
 });

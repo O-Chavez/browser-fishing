@@ -19,7 +19,7 @@ import {
   type Line,
   type Rod,
 } from '../data/content';
-import { audio } from './audio';
+import { audio, type Giant } from './audio';
 import { MAPS, arrivalSpot, campSeats, type MapDef } from '../data/maps';
 import { EYE_HEIGHT, isWater, mulberry, standHeight } from './env';
 import { Avatars, whenIdle } from './avatars';
@@ -60,10 +60,14 @@ import {
   setFishOpacity,
   type FishModel,
 } from './fishmodel';
-import { carryScale, hangLen, hangPitch, heldScale, seaHangPitch, seaHeldScale, waterScale } from './fishscale';
+import { carryScale, hangLen, hangPitch, heldScale, legendHangLen, legendWaterScale, seaHangPitch, seaHeldScale, waterScale } from './fishscale';
+import { ABYSS_TELL, LEGEND_FIGHT, LEGEND_HANG_VIEW, LEGEND_HUD, SURFACE_LAMP, SURFACE_LIMP, SURFACE_PULLBACK, SURFACE_ROD, SURFACE_SINK, SURFACE_VIEW, leapSecs, legendShow, rearAt, type LegendShow, type SurfaceShow } from '../data/legendshow';
+import { LimpRide, bendAlong, disposeBent, limpStandIns, modelBounds, modelLength, rideWater, surfacingSpot, washPoints } from './legendshow';
+import { limpGiant, primeLimp } from './seafish/giants';
+import type { WaveUniforms } from './seawaves';
 import type { LeaderRow } from './hub';
 import { buildTin } from './itemmodels';
-import { LEGEND_MARK, ZONE_MARK, legendUp, rankUp, zoneUp, type LegendUp, type RankUp } from './rankup';
+import { LEGEND_MARK, ZONE_MARK, catchBanner, legendUp, rankUp, zoneUp, type LegendUp, type RankUp } from './rankup';
 import {
   fishWeight,
   formatWeight,
@@ -106,7 +110,7 @@ import type { Seat } from './town';
 import type { BandSeat, SeatCtx } from './emotes/types';
 import { EmotePlayer } from './emotes/player';
 import { LookWarmer } from './emotes/warm';
-import { ThirdPerson, type CamEnv } from './emotes/thirdperson';
+import { ThirdPerson, type CamEnv, type CamView } from './emotes/thirdperson';
 import { touchRelease, wheelSlots } from './emotes/wheel';
 import { EmoteWheel } from './emotes/wheelview';
 import { KOFI_URL } from '../data/support';
@@ -129,6 +133,10 @@ type Phase =
   | 'reeling'
   | 'landing'
   | 'result';
+
+/** The boat's lamp colour, for `lampLight`. */
+const scratchLamp = new THREE.Color();
+const scratchLay = new THREE.Vector3();
 
 const defaultLookWith = (color: number, face: string): Look => ({ color, face, hat: null, shirt: null, jewelry: null, pet: null });
 
@@ -304,6 +312,8 @@ export class Game {
   private splashCd = 0;
   private tickCd = 0;
   private dbgLock = false;
+  /** Staging: the frame loop is stopped and frames are stepped by hand (`freeze`, `step`). */
+  private dbgFrozen = false;
   private landT = 0;
   private landFrom = new THREE.Vector3();
   private hang = new THREE.Vector3();
@@ -311,6 +321,90 @@ export class Game {
   private bobVel = new THREE.Vector3();
   private tipPos = new THREE.Vector3();
   private swingDir = new THREE.Vector3();
+  /**
+   * A sea legend being shown off, from its landing until the catch is put away. A `hang`
+   * legend dangles from the rod, bigger, with the view pulled up; a `surface` one breaks the water beside the hull.
+   */
+  private show: {
+    spec: LegendShow;
+    t: number;
+    /** Surfacing: where it breaks the water (boat frame), its drawn length, the jaw and the point the view turns to (its own frame). */
+    base?: THREE.Vector3;
+    len?: number;
+    jaw?: THREE.Vector3;
+    look?: THREE.Vector3;
+    splashCd?: number;
+    /** Surfacing: its lit materials with their own colours (the boat's lamps bring them up), and the lamps' level last set (0 dark .. 1 full). */
+    lit?: { m: THREE.MeshStandardMaterial; base: THREE.Color }[];
+    lampK?: number;
+    /** Surfacing: which legend it is, how far its top stands out of the water (m), and when its moment came (the bolt behind it, its own sound; seconds into the show, -1 before). */
+    id?: string;
+    top?: number;
+    boltT?: number;
+    /** Surfacing: the way out from the hull it lies. */
+    a?: THREE.Vector3;
+    /**
+     * Surfacing, a beaten giant (`SurfaceShow.limp`): its ride on the water, its heading there, the spots along its
+     * waterline where white water breaks (its own frame), and whether it has crashed back down yet (0, then 1 as its
+     * body lands and 2 once its last parts have).
+     */
+    limp?: LimpRide;
+    yaw?: number;
+    wash?: THREE.Vector3[];
+    washCd?: number;
+    crashed?: number;
+  } | null = null;
+  /**
+   * The pulled-back camera of a surfacing giant (`SURFACE_PULLBACK`): where it stands and looks, how far out it is
+   * (0 in the player's eyes .. 1 there), and whether it has been sent home (its time is up, or the player turned the
+   * view or pressed). The player's own model stands at the rail meanwhile, the Deep Sea Rod itself held where their
+   * own eyes see it (`rigHold`).
+   */
+  private cutaway: { at: THREE.Vector3; yaw: number; pitch: number; k: number; t: number; until: number; home: boolean; homeSecs: number } | null = null;
+  /**
+   * The player's eyes as a place in the scene: where they stand, turned the way they look. The rod's rig hangs from
+   * it instead of from the camera while the pulled-back camera is out, so the rod in their model's hands is the rod
+   * they hold, bowed as it is and with the line on its tip, and nothing moves when the camera comes home.
+   */
+  private rigHold = new THREE.Group();
+  /**
+   * A surfacing legend's send-off: its model sinking back beside the hull once the card is put away (`SURFACE_SINK`).
+   * Nothing waits for it; a new landing, the next cast reaching the water or leaving the map puts it away at once.
+   */
+  private sinking: {
+    model: FishModel;
+    /** Where it stands (boat frame), how far its top stood out of the water (m), how far it rides the swell, its drawn length. */
+    base: THREE.Vector3;
+    top: number;
+    ride: number;
+    len: number;
+    /** A beaten giant's ride on the water, its heading and its wash spots (`show`). */
+    limp?: LimpRide;
+    yaw?: number;
+    wash?: THREE.Vector3[];
+    /** The last of it to go under (its own frame): where the closing splash lands. */
+    last: THREE.Vector3;
+    t: number;
+    /** Its soft glows and their full size: they go out as it sinks. */
+    glows: { o: THREE.Object3D; s: number }[];
+    splashCd: number;
+  } | null = null;
+  /**
+   * An Abyss legend's tell by the bobber in the last seconds before it bites (`ABYSS_TELL`): seconds since it began and
+   * the seconds to the bite it began with; for the Leviathan, its own model rolling past (kept on for the fight) and its run.
+   */
+  private tell: { t: number; last: number; span: number; model: FishModel | null; mid: THREE.Vector3; dir: THREE.Vector3; wakeCd: number } | null = null;
+  /** The Leviathan's rear in the fight: seconds in (`rearAt`), or -1. */
+  private rearT = -1;
+  /** The view easing toward a legend (yaw, pitch), until it gets there or the player turns it. */
+  /** The view easing somewhere (`pullView`): where to, and after `until` seconds the next place (`then`), with how far the view is held open (degrees). */
+  private viewPull: { yaw: number; pitch: number; t: number; fov: number; until: number; then?: { yaw: number; pitch: number; fov: number } } | null = null;
+  /** Seconds until a legend's held-back catch card comes in (0: shown). */
+  private cardDue = 0;
+  /** A legend's wake in the fight: seconds to the next boil, to its next glimpse (the Abyss three), and since the last. */
+  private wakeCd = 0;
+  private glimpseCd = 0;
+  private glimpseAgo = 0;
   private baseDist = 1;
   private map: MapDef = MAPS[0];
   private player!: Player;
@@ -867,7 +961,7 @@ export class Game {
     this.setMenu(false);
     const { title, line } = welcomeText(name, this.s, chartersToTry(this.s));
     const el = $('banner');
-    el.classList.remove('rank', 'abyssal');
+    el.classList.remove('rank', 'legend', 'hooked', 'low');
     el.classList.add('welcome');
     el.style.color = '';
     // Returning players learn where to switch accounts, and those who could lose theirs with this
@@ -1238,17 +1332,29 @@ export class Game {
       skipWait: () => {
         this.elapsed = this.waitTotal - 0.01;
       },
+      /** For staging (`scripts/legendshots.ts`): `s` seconds left before the bite (a legend's shadow shows in the last few). */
+      waitLeft: (s: number) => {
+        this.elapsed = Math.max(0, this.waitTotal - s);
+      },
+      /** For recording clips (`scripts/legendshots.ts`): stops the frame loop, then `step` runs one frame of `dt` seconds. */
+      freeze: (on: boolean) => {
+        this.dbgFrozen = on;
+        this.last = performance.now();
+      },
+      step: (dt: number) => this.frame(dt, performance.now()),
       /** Lands a given fish straight away (dev only), to check how each tier looks when caught. */
-      land: (id: string, size: number, shiny = false, clean = false) => {
+      land: (id: string, size: number, shiny = false, clean = false, tag: FishTag | null = null) => {
         if (this.phase !== 'idle' && this.phase !== 'result') return;
         if (this.phase === 'result') this.dismissCatch();
         this.landedClean = clean;
+        // Its own tag (none unless asked), not the one the last real cast rolled.
+        this.fightTag = tag ?? undefined;
         this.hooked = byId(FISH, id);
         this.hookedSize = size;
         this.hookedShiny = shiny;
         this.hookedLured = false;
         this.fish = buildFish(this.hooked.color, false, shiny, this.hooked.tier, id);
-        this.fish.group.scale.setScalar(waterScale(size, this.hooked.tier));
+        this.fish.group.scale.setScalar(this.inWaterScale());
         const f = this.world.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
         this.fish.group.position.copy(this.world.camera.position).addScaledVector(f, 6).setY(-0.3);
         this.world.scene.add(this.fish.group);
@@ -1437,6 +1543,8 @@ export class Game {
     if (!this.active || this.dbgLock) return;
     // While an emote plays, a drag turns the camera round the player, who keeps facing the way they were.
     if (this.tp.framing) return this.tp.drag(dYaw, dPitch);
+    this.viewPull = null;
+    this.endCutaway();
     this.world.yaw -= dYaw;
     this.world.pitch = Math.max(-1.2, Math.min(0.6, this.world.pitch - dPitch));
   }
@@ -2355,6 +2463,10 @@ export class Game {
   /** Builds the current map and places the player: at the gate when coming back from `from`, else at the spawn. */
   private applyLocation(from?: string): void {
     const left = MAPS.find((m) => m.id === from);
+    // Nothing of a legend's show comes along to another map.
+    this.endSendOff();
+    this.endTell();
+    document.body.classList.remove('giant');
     this.map = MAPS.find((m) => m.id === this.s.location) ?? MAPS[0];
     if (this.map.sea || left?.sea) this.showCastOff(!!this.map.sea);
     if (!this.map.sea) this.diveHud.set(null);
@@ -2973,8 +3085,10 @@ export class Game {
     this.seat = null;
     this.bodyEmotes.clear();
     this.tp.reset();
+    this.cutaway = null;
     this.world.view = null;
     this.showBody(false);
+    this.holdRig();
   }
 
   /** The player's own model shows only in third person, in place of the first-person rod and the crosshair. */
@@ -3007,12 +3121,16 @@ export class Game {
     const playing = this.bodyEmotes.update(dt);
     // It ran its length (the others' copies end by themselves too).
     if (this.emote && !playing) this.endEmote(false);
-    if (!this.tp.active) {
+    // A surfacing giant's pulled-back camera, while no emote has the view.
+    const cut = this.tp.active ? null : this.tickCutaway(dt);
+    if (!this.tp.active && !cut) {
       w.view = null;
-      return this.showBody(false);
+      this.showBody(false);
+      return this.holdRig();
     }
-    w.view = this.tp.update(dt, { x: w.eye.x, y: w.eye.y + w.walkBob, z: w.eye.z }, w.yaw, w.pitch, this.camEnv());
-    this.showBody(this.tp.showsBody);
+    w.view = cut ?? this.tp.update(dt, { x: w.eye.x, y: w.eye.y + w.walkBob, z: w.eye.z }, w.yaw, w.pitch, this.camEnv());
+    this.showBody(cut ? Math.hypot(cut.x - w.eye.x, cut.y - w.eye.y, cut.z - w.eye.z) >= 0.9 : this.tp.showsBody);
+    this.holdRig();
     if (!this.body.group.visible) return;
     this.body.set(this.s.look);
     // The model stands where the player does and faces the way they do (the model's front is +z, yaw 0 looks along -z).
@@ -3190,7 +3308,10 @@ export class Game {
   private onPress(): void {
     switch (this.phase) {
       case 'result':
-        if (!this.dbgLock) this.dismissCatch();
+        // A legend's beat before its card: a press brings the card in rather than putting the catch away.
+        this.endCutaway();
+        if (this.cardDue > 0) this.showCard();
+        else if (!this.dbgLock) this.dismissCatch();
         break;
       case 'idle':
       {
@@ -3263,6 +3384,8 @@ export class Game {
 
   private land(): void {
     const w = this.world;
+    // The water is the new cast's: a legend still sinking from its send-off is gone.
+    this.endSendOff();
     const b = w.bobber.position;
     b.set(
       this.target.x,
@@ -3296,14 +3419,19 @@ export class Game {
     this.approachAngle = Math.random() * Math.PI * 2;
     if (this.hooked) {
       this.shadow = buildFish(this.hooked.color, true, this.hookedShiny, this.hooked.tier, this.hooked.id);
-      this.shadow.group.scale.setScalar(waterScale(this.hookedSize, this.hooked.tier));
+      this.shadow.group.scale.setScalar(this.inWaterScale());
       w.scene.add(this.shadow.group);
+      this.tintShadow();
+      // A legend's shadow is drawn on the sea's surface, riding the swell.
+      this.shadowRide = this.legendSpec() && w.sea ? rideWater(this.shadow, w.sea.waves) : null;
       // The fish itself is built now too, hidden, so its shaders compile in the background during the wait: the first
       // of each kind used to compile on the frame it was hooked, a freeze of 0.3 to 1.3 s on an M1 and seconds under
       // load. It shows from the hook on (`startReel`), or the moment its shaders are ready if that comes later (a slow
-      // GPU and a quick bite); the shadow the same, from `updateShadow`.
+      // GPU and a quick bite); the shadow the same, from `updateShadow` and `layShadow`.
       const fish = (this.fish = buildFish(this.hooked.color, false, this.hookedShiny, this.hooked.tier, this.hooked.id));
-      fish.group.scale.setScalar(waterScale(this.hookedSize, this.hooked.tier));
+      fish.group.scale.setScalar(this.inWaterScale());
+      // A legend pitches and rolls about its own length (a leap, the Leviathan's rear), whichever way it is heading.
+      if (this.legendSpec()) fish.group.rotation.order = 'YXZ';
       w.scene.add(fish.group);
       w.warmups.show(this.shadow.group, () => false);
       w.warmups.show(fish.group, () => this.phase !== 'waiting' && this.phase !== 'bite');
@@ -3318,7 +3446,9 @@ export class Game {
     if (!this.hooked) return this.reset('Nothing is biting that bait here.');
     this.phase = 'bite';
     this.timer = 0.95 + eco.reelControl(this.s, this.rod.control) * 0.2;
-    this.removeShadow();
+    const legend = !!this.legendSpec();
+    if (legend) this.legendBite();
+    else this.removeShadow();
     const b = w.bobber.position;
     w.fx.splash(b, 22, 0.9);
     w.fx.ripple(b, 2.5);
@@ -3335,33 +3465,42 @@ export class Game {
    * Celebrates landing or hooking the best tier of fish the current bait can attract. At sea, where every fish is
    * tier 5, only a zone's legend gets it, and landing one gets the gold LEGEND LANDED! with its name.
    */
-  private topTierBanner(fish: { tier: number; legend?: boolean; name?: string }, verb: string, shiny: boolean): void {
-    // A legend hooked at sea says what it pays.
-    const focus = this.map.sea && fish.legend ? 'Five times the pearls. Stay focused...' : 'Stay focused...';
-    if (this.map.sea ? !fish.legend : fish.tier !== this.bait.tier) return;
+  private topTierBanner(fish: { tier: number; legend?: boolean; name?: string }, verb: string, shiny: boolean, piece?: string): void {
+    const sea = !!this.map.sea;
+    if (sea ? !fish.legend : fish.tier !== this.bait.tier) return;
     const el = $('banner');
-    el.classList.remove('welcome', 'rank', 'legend', 'abyssal');
-    const legendLanded = this.map.sea && verb === 'caught';
-    if (legendLanded) el.classList.add('legend');
-    const name = this.map.sea ? 'Legend' : `${tierName(fish.tier)} fish`;
-    el.style.color = this.map.sea ? '' : tierTextColor(fish.tier);
+    el.classList.remove('welcome', 'rank', 'legend', 'hooked', 'low');
+    const legendLanded = sea && verb === 'caught';
+    // A legend hooked at sea is named, in the legends' gold, with what it pays.
+    const legendHooked = sea && verb === 'hooked';
+    el.classList.toggle('legend', legendLanded || legendHooked);
+    el.classList.toggle('hooked', legendHooked);
+    // Low over the rail, off the legend's head.
+    el.classList.toggle('low', legendLanded && !!legendShow(this.hooked?.id ?? (fish as { id?: string }).id));
+    el.style.color = sea ? '' : tierTextColor(fish.tier);
     el.innerHTML = legendLanded
-      ? `${shiny ? '✨ ' : ''}LEGEND LANDED!<small>${escapeHtml(fish.name ?? '')}</small>`
-      : `${shiny ? '✨ Shiny ' : ''}${name} ${verb}!${verb === 'hooked' ? `<small>${focus}</small>` : ''}`;
+      ? `${shiny ? '✨ ' : ''}LEGEND LANDED!<small>${escapeHtml(fish.name ?? '')}</small>${piece ? `<small class="piece">${escapeHtml(piece)}</small>` : ''}`
+      : legendHooked
+        ? `${shiny ? '✨ ' : ''}${escapeHtml((fish.name ?? 'Legend').toUpperCase())}<small>Legend hooked · five times the pearls</small>`
+        : `${shiny ? '✨ Shiny ' : ''}${tierName(fish.tier)} fish ${verb}!${verb === 'hooked' ? '<small>Stay focused...</small>' : ''}`;
     el.classList.remove('hidden');
     el.style.animation = 'none';
     void el.offsetWidth;
     el.style.animation = '';
     clearTimeout(this.bannerTimer);
-    this.bannerTimer = window.setTimeout(() => el.classList.add('hidden'), legendLanded ? 4600 : 3200);
+    // A hooked legend's name takes the charter strip's place while it shows (there is no room for both over the gauge).
+    if (legendHooked) $('divehud').classList.add('shy');
+    this.bannerTimer = window.setTimeout(() => {
+      el.classList.add('hidden');
+      if (legendHooked && this.phase === 'reeling') $('divehud').classList.remove('shy');
+    }, legendLanded ? 4600 : 3200);
   }
 
-  /** The big gold "⚓ BOSUN ⚓" over what the rank gave, or with `abyssal` the teal one for a piece of a legend's set. */
-  private rankBanner(r: { title: string; line: string }, abyssal = false): void {
+  /** The big gold "⚓ BOSUN ⚓" over what the rank gave. */
+  private rankBanner(r: { title: string; line: string }): void {
     const el = $('banner');
-    el.classList.remove('welcome', 'legend', 'abyssal');
+    el.classList.remove('welcome', 'legend', 'hooked', 'low');
     el.classList.add('rank');
-    el.classList.toggle('abyssal', abyssal);
     el.style.color = '';
     el.innerHTML = `${escapeHtml(r.title)}<small>${escapeHtml(r.line)}</small>`;
     el.classList.remove('hidden');
@@ -3421,8 +3560,30 @@ export class Game {
     this.frayFlash = 0;
     this.landedClean = false;
     this.leapT = -1;
-    // Built when the bobber landed (`land`); still hidden if its shaders aren't ready, and shown when they are.
-    this.fish!.group.visible = w.warmups.isWarm(this.fish!.group);
+    this.rearT = -1;
+    // A legend's shadow stays on under it through the fight: the size of what is on the line, seen from the deck.
+    // (Not an Abyss legend's: a glow on black water reads as pink scraps in stills; its arms, eyes and back carry the fight.)
+    const legend = this.legendSpec();
+    if (legend?.kind !== 'hang') this.removeShadow();
+    // The Leviathan's back that rolled past the bobber is the Leviathan now on the line, in place of the one built,
+    // hidden, when the bobber landed (its shaders, the same, are compiled by then).
+    const told = this.tell?.model ?? null;
+    if (this.tell) this.tell.model = null;
+    this.endTell();
+    if (told) {
+      this.fish?.group.removeFromParent();
+      this.fish = told;
+      this.fish.group.scale.setScalar(this.inWaterScale());
+      this.fish.group.rotation.order = 'YXZ';
+    } else {
+      // Built when the bobber landed (`land`); still hidden if its shaders aren't ready, and shown when they are.
+      this.fish!.group.visible = w.warmups.isWarm(this.fish!.group);
+    }
+    // A beaten giant's landing is made ready while it is fought.
+    if (legend?.kind === 'surface' && legend.limp) this.readyLimp(this.fish!);
+    this.wakeCd = 0;
+    this.glimpseCd = LEGEND_FIGHT.glimpseFirst;
+    this.glimpseAgo = LEGEND_FIGHT.glimpseRest;
     w.rig.kick('pitch', 7);
     w.fovKick = 4;
     w.addShake(0.8);
@@ -3437,7 +3598,10 @@ export class Game {
     // At sea the zone's rating for the rod is what the fight is (the fish's own gaps would read "Too much" for a Brutish one in a Fair zone).
     const easy = this.map.sea ? '' : underGear(this.fightD) ? ' An easy one.' : '';
     const says = this.map.sea ? ` ${ratingToast(rating)}` : match.words ? ` ${match.words}${match.too ? '!' : '.'}` : '';
-    this.toast(`Hooked!${tag}${easy}${says}`, says ? 3 : 2);
+    // A sea legend's banner names it, the pill under the gauge gives the zone's rating and the badge beside it the
+    // Feisty or Brutish tag: no toast on top of them (the bite's own is put away).
+    if (legend) this.toastTimer = 0.01;
+    else this.toast(`Hooked!${tag}${easy}${says}`, says ? 3 : 2);
     this.showFishTag(this.fightTag, !!double);
   }
 
@@ -3445,6 +3609,11 @@ export class Game {
     const w = this.world;
     this.phase = 'landing';
     this.landT = 0;
+    const spec = this.legendSpec();
+    this.show = spec ? { spec, t: 0 } : null;
+    this.removeShadow();
+    if (spec?.kind === 'surface') return this.startSurfacing(spec);
+    if (spec?.kind === 'hang') this.pullView(w.yaw, Math.min(0.3, w.pitch + LEGEND_HANG_VIEW.lookUp));
     this.landFrom.copy(this.fish!.group.position);
     const breach = this.landFrom.clone().setY(this.waterLine(this.landFrom.x, this.landFrom.z));
     w.fx.splash(breach, 40, 1.5);
@@ -3452,15 +3621,399 @@ export class Game {
     audio.splash(1);
     w.rig.pose({
       pitch: this.holdPitch(this.heldScale()),
-      yaw: 0,
-      bendP: 0.5,
-      bendY: 0,
+      yaw: spec?.kind === 'hang' ? LEGEND_HANG_VIEW.rodYaw : 0,
+      bendP: spec?.kind === 'hang' ? LEGEND_HANG_VIEW.rodBend : 0.5,
+      bendY: spec?.kind === 'hang' ? LEGEND_HANG_VIEW.rodBendY : 0,
       k: 40,
       c: 8,
     });
     w.rig.kick('pitch', 2);
     w.bobberVisible = false;
     $('alert').classList.add('hidden');
+  }
+
+  /**
+   * An Abyss legend is too big to lift: on landing it breaks the water beside the hull, out past the side
+   * the player faces, laid along its pose's spine (`LEGEND_SHOW`), bigger than the boat; the view turns to it, and the rod
+   * stays bent hard toward its jaw. The Leviathan and the Kraken come up beaten (`SurfaceShow.limp`): one last heave,
+   * then they slump onto the water and lie there, every part of them riding the sea under it (`LimpRide`).
+   */
+  private startSurfacing(spec: SurfaceShow): void {
+    const w = this.world;
+    const model = this.fish!;
+    // The last one, if it is still sinking from its send-off, is put away.
+    this.endSendOff();
+    const len = THREE.MathUtils.clamp((this.hookedSize / 100) * spec.real, spec.min, spec.max);
+    const eye = w.camera.getWorldPosition(new THREE.Vector3());
+    const { a, base, dir, mirror } = surfacingSpot(eye, w.yaw, spec, len);
+    // Metres a model unit, from the model as it fought (its limp build, laid out in its place, keeps that scale).
+    const scale = len / modelLength(model);
+    if (spec.limp?.build) limpGiant(model);
+    const bent = bendAlong(model, spec, len, mirror);
+    // Glows that would run together this close are drawn smaller.
+    if (spec.glow !== undefined) for (const o of model.group.children) if ((o as THREE.Sprite).isSprite) o.scale.multiplyScalar(spec.glow);
+    // Its drawing's "along" points back at the player, turned by the pose's heading (or along the hull, `alongside`).
+    const yaw = Math.atan2(-dir.z, dir.x);
+    const lit = new Map<THREE.Material, { m: THREE.MeshStandardMaterial; base: THREE.Color }>();
+    let limp: LimpRide | undefined;
+    if (!spec.limp || !w.sea) {
+      // Out of the dark by the boat's lamps: a warm light on its skin (its own materials only; shared parts keep theirs).
+      // Every lit part takes it (arms and all, so they match the body): its own colour brightened toward the lamps' warm
+      // light, keeping its hue (`lampLight`). A material shared with other models of the kind is copied first, so only this one is lit.
+      const own = new Set(model.materials);
+      model.group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        const m = mesh.material as THREE.MeshStandardMaterial | undefined;
+        if (!mesh.isMesh || !m || Array.isArray(m) || !(m as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial || m.blending === THREE.AdditiveBlending) return;
+        const mine = own.has(m) ? m : m.clone();
+        if (mine !== m) {
+          mine.onBeforeCompile = m.onBeforeCompile;
+          mine.customProgramCacheKey = m.customProgramCacheKey;
+          mesh.material = mine;
+          model.materials.push(mine);
+          own.add(mine);
+        }
+        if (!lit.has(mine)) lit.set(mine, { m: mine, base: mine.color.clone() });
+      });
+      model.group.rotation.set(0, yaw, 0);
+    }
+    // The view turns to what stands out of the water: the middle of it, a little low so the water it breaks shows too,
+    // nudged along its length and up by the pose's `look`.
+    const up = bent.above;
+    const look = up.getCenter(new THREE.Vector3());
+    look.x += spec.look[0] * len;
+    look.y = up.max.y * (0.42 + spec.look[1]);
+    // Its face, where that is not the middle of it.
+    if (spec.face) bent.at(spec.face[0], spec.face[1], look);
+    const jaw = bent.at(spec.jaw, 0, new THREE.Vector3());
+    if (spec.limp && w.sea) {
+      // A beaten giant lies in the sea's own frame, each corner of it drawn on the water under it; the materials
+      // that does it with are its own, so the lamps can colour them too.
+      limp = new LimpRide(model, spec, len, w.sea.waves as unknown as WaveUniforms, mirror, scale, eye);
+      w.sea.frame.add(model.group);
+      for (const m of limp.lit) lit.set(m, { m, base: m.color.clone() });
+    }
+    this.show = {
+      spec, id: this.hooked!.id, t: 0, base, len, top: up.max.y, jaw, look, splashCd: 0,
+      lit: [...lit.values()], lampK: -1, boltT: -1, a, limp, yaw, wash: limp ? washPoints(model, 48) : undefined, washCd: 0, crashed: 0,
+    };
+    // One with a bolt comes up dark, to stand black against it; the Dreamer is in the lamps' light from the first.
+    this.lampLight(spec.bolt === undefined ? 1 : 0);
+    this.tickSurfacing(0);
+    // Where it will be once up (a beaten one, once it lies on the water), not where it is now (still under).
+    const up45 = len * 0.45;
+    const once = (p: THREE.Vector3) => {
+      if (limp) return limp.world(p, new THREE.Vector3(), true);
+      const at = p.clone().applyMatrix4(model.group.matrixWorld);
+      at.y += up45;
+      return at;
+    };
+    const aim = once(look);
+    const d = aim.clone().sub(eye);
+    // A little to the right of it, so it stands left of the card and the banner (on touch the card is on the left).
+    const faceYaw = Math.atan2(-d.x, -d.z) - (this.touch ? 0 : SURFACE_VIEW.aside), facePitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
+    this.pullView(faceYaw, facePitch);
+    // The middle of all that stands out of the water.
+    const whole = once(up.getCenter(new THREE.Vector3()));
+    // The camera goes up and back from the player, away from the giant and toward its middle along the hull.
+    const P = SURFACE_PULLBACK;
+    const along = new THREE.Vector3(-a.z, 0, a.x);
+    const spot = eye.clone().addScaledVector(a, -P.back).addScaledVector(along, whole.clone().sub(eye).dot(along) * P.toward);
+    // (Higher and a little longer over a beaten giant lying flat: `SURFACE_LIMP.cam`.)
+    spot.y = eye.y + (limp ? SURFACE_LIMP.cam.up : P.up);
+    // Over the wheelhouse rather than inside it.
+    if (this.camEnv().blocked(spot.x, spot.z)) spot.y = Math.max(spot.y, 6.2);
+    const to = eye.clone().lerp(whole, P.aim);
+    to.y = base.y + Math.max(P.aimUp, up.max.y * P.aimTop);
+    this.startCutaway(spot, to, spec.rise + (limp ? SURFACE_LIMP.cam.hold : P.hold));
+    const at = base.clone().setY(w.surface(base.x, base.z));
+    // White water only: on the Abyss's black water a ripple ring reads as a drawn ellipse.
+    w.fx.splash(at, 90, 2.4, 3);
+    this.foam(at, len * 0.3, 10);
+    w.addShake(1.4);
+    w.fovKick = -6;
+    audio.splash(1);
+    w.bobberVisible = false;
+    $('alert').classList.add('hidden');
+    // The drops on the lens clear while it is shown (style.css).
+    document.body.classList.add('giant');
+    // The charter strip steps aside from the start, not only once it is up: the giant comes up where the strip is.
+    $('divehud').classList.add('shy');
+  }
+
+  /**
+   * A beaten giant's landing made ready while it is fought, so the landing itself does not stall: the shader
+   * programs it is drawn on the water with are compiled in the background (`limpStandIns`), and its limp build is
+   * made in an idle moment.
+   */
+  private readyLimp(model: FishModel): void {
+    const w = this.world;
+    if (!w.sea) return;
+    this.limpWarm.visible = false;
+    // In the sea's frame, with the giants they stand in for: there while this sea is.
+    if (this.limpWarm.parent !== w.sea.frame) w.sea.frame.add(this.limpWarm);
+    if (limpStandIns(model, w.sea.waves as unknown as WaveUniforms, this.limpWarm)) w.warm(this.limpWarm);
+    whenIdle(() => primeLimp(model));
+  }
+  /** Hidden stand-ins that keep a beaten giant's shader programs compiled (`readyLimp`). */
+  private limpWarm = new THREE.Group();
+
+  /** The boat's lamps on a surfacing legend: `k` from 0 (dark, before its bolt) to 1 (its colour brought up). */
+  private lampLight(k: number): void {
+    const sh = this.show;
+    if (!sh?.lit || sh.lampK === k) return;
+    sh.lampK = k;
+    const lamp = scratchLamp.set(SURFACE_LAMP.color);
+    const gain = (sh.spec as SurfaceShow).lamp ?? SURFACE_LAMP.gain;
+    const at = (c: number) => THREE.MathUtils.lerp(SURFACE_LAMP.dark, 1 + gain * c, k);
+    for (const { m, base } of sh.lit) m.color.setRGB(base.r * at(lamp.r), base.g * at(lamp.g), base.b * at(lamp.b));
+  }
+
+  /** Broken foam on the water round `c`: `n` low puffs of white water about `r` metres from it. */
+  private foam(c: THREE.Vector3, r: number, n: number): void {
+    const w = this.world;
+    const p = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = r * (0.6 + 0.6 * Math.random());
+      p.set(c.x + Math.cos(a) * d, 0, c.z + Math.sin(a) * d);
+      p.y = w.surface(p.x, p.z);
+      w.fx.splash(p, 3, 0.45, 2.4);
+    }
+  }
+
+  /**
+   * Puts a beaten giant on the water for this frame: its show point stays beside the hull where it came up, and from
+   * there it lies in the sea's own frame (`LimpRide.update`), `t` seconds into its landing and `sunk` metres under.
+   */
+  private layLimp(limp: LimpRide, model: FishModel, base: THREE.Vector3, yaw: number, t: number, sunk = 0): void {
+    const w = this.world;
+    const frame = w.sea?.frame;
+    if (!frame) return;
+    limp.t = t;
+    limp.sunk = sunk;
+    limp.update(frame.worldToLocal(scratchLay.set(base.x, w.surface(base.x, base.z), base.z)), yaw, w.time);
+    animateFish(model, w.time, 0, 0);
+    // Its glints pulse about their own middles, at the size they were laid out at.
+    for (const o of model.twinkle ?? []) o.scale.multiplyScalar((o.userData.size as number | undefined) ?? 1);
+  }
+
+  /** White water thrown up along a beaten giant's waterline: `n` of its wash spots, `drops` each, this hard. */
+  private washOver(limp: LimpRide, wash: THREE.Vector3[], n: number, drops: number, power: number, size: number): void {
+    const w = this.world;
+    for (let i = 0; i < n && wash.length; i++) {
+      const p = limp.world(wash[Math.floor(Math.random() * wash.length)], scratchLay);
+      w.fx.splash(p, drops, power, size);
+    }
+  }
+
+  /** A surfacing legend coming up and then riding the swell beside the hull, the line taut to its jaw. */
+  private tickSurfacing(dt: number): void {
+    const w = this.world;
+    const sh = this.show!;
+    const spec = sh.spec as SurfaceShow;
+    const model = (this.fish ?? this.held)!;
+    const g = model.group;
+    const len = sh.len!;
+    sh.t += dt;
+    const u = Math.min(1, sh.t / spec.rise);
+    const e = 1 - (1 - u) ** 3;
+    const base = sh.base!;
+    const limp = sh.limp;
+    // The boat is pushed about by it (`surfaceShove`); the giant keeps its place in the water, not in the boat's frame.
+    const pushed = this.surfaceShove(sh.t, base);
+    if (limp) {
+      this.layLimp(limp, model, base, sh.yaw!, sh.t);
+      // Its own light goes down once it lies there.
+      limp.dim(THREE.MathUtils.lerp(1, spec.limp!.dim, THREE.MathUtils.smoothstep(sh.t, spec.rise, spec.rise + SURFACE_LIMP.fade)));
+    } else {
+      const sea = w.surface(base.x, base.z);
+      // Up out of the water, then riding the swell with a slow breath and sway.
+      g.position.set(base.x, sea * spec.ride + pushed * (1 - spec.ride) - (1 - e) * len * 0.45 + Math.sin(w.time * 0.9) * len * 0.006, base.z);
+      g.rotation.z = Math.sin(w.time * 0.6) * 0.02;
+      g.updateMatrixWorld(true);
+      animateFish(model, w.time, 0, 0);
+    }
+    /** A point of it (its own frame) in the world, as it is drawn now. */
+    const at = (p: THREE.Vector3, out: THREE.Vector3) => (limp ? limp.world(p, out) : out.copy(p).applyMatrix4(g.matrixWorld));
+    // Its moment. The Leviathan and the Kraken: one bolt behind it part-way up, so it stands as a black shape against
+    // the lit cloud, then the boat's lamps bring up its colour. The Dreamer wakes quietly: no bolt, the sea's own held
+    // off, the wind and the rain dropping away under its music box.
+    if (sh.boltT! < 0 && sh.t >= spec.rise * (spec.bolt ?? 0)) {
+      sh.boltT = sh.t;
+      const id = sh.id as Giant;
+      if (spec.bolt !== undefined) this.boltBehind(at(sh.look!, new THREE.Vector3()), SURFACE_VIEW.bolt);
+      else {
+        audio.hush(SURFACE_VIEW.hush);
+        w.sea?.lightning.hush(SURFACE_VIEW.hush + 2);
+      }
+      audio.giant(id);
+    }
+    if (spec.bolt !== undefined) this.lampLight(sh.boltT! < 0 ? 0 : THREE.MathUtils.smoothstep(sh.t - sh.boltT! - SURFACE_LAMP.after, 0, SURFACE_LAMP.up));
+    const jaw = at(sh.jaw!, this.hang);
+    // The rod is the player's own, wherever the camera is: seen from the pulled-back camera it is in their model's hands (`holdRig`).
+    this.holdRig();
+    const tip = w.rig.tip.getWorldPosition(this.tipPos);
+    w.line.line.visible = true;
+    w.line.update(tip, jaw, 0.02, 0, w.time);
+    // The rod bent hard toward it: pointed to the right of its jaw and only a little over it (the pose's `rod`), so the
+    // rod stands clear of its face while the line runs taut to the jaw.
+    // Held toward where the jaw comes up (where a beaten one's will lie), from the first: a rod that followed the jaw
+    // up from the deep swept across the view. In the player's own eyes, wherever the camera is.
+    const jc = this.rigHold.worldToLocal(limp ? limp.world(sh.jaw!, new THREE.Vector3(), true) : jaw.clone().setY(jaw.y + (1 - e) * len * 0.45));
+    w.rig.pose({
+      pitch: THREE.MathUtils.clamp(Math.atan2(jc.y + 0.3, -jc.z) + spec.rod[1], -0.2, 0.9),
+      yaw: THREE.MathUtils.clamp(Math.atan2(-(jc.x - 0.28), -jc.z) * 0.8 - spec.rod[0], -0.9, 0.6),
+      bendP: SURFACE_ROD.bend + Math.sin(w.time * 1.3) * 0.04,
+      bendY: 0,
+      k: 40,
+      c: 8,
+    });
+    if (limp) return this.tickWash(dt, limp, sh.wash!, spec);
+    // White water where it breaks the surface: a lot while it comes up, then now and then.
+    if ((sh.splashCd! -= dt) <= 0) {
+      sh.splashCd = u < 1 ? 0.1 : 0.7 + Math.random() * 0.6;
+      const p = new THREE.Vector3((Math.random() - 0.5) * len * 0.15, 0, (Math.random() - 0.5) * len * 0.08).applyMatrix4(g.matrixWorld);
+      p.y = w.surface(p.x, p.z);
+      w.fx.splash(p, u < 1 ? 30 : 12, u < 1 ? 1.8 : 0.9, 2.2);
+      if (u >= 1) this.foam(p, len * 0.1, 3);
+    }
+  }
+
+  /**
+   * The white water round a beaten giant: thrown off it as it heaves up, a crash all along it as it slumps back onto
+   * the water (and again as its last parts land, the Kraken's arms), then foam wherever a crest breaks over it
+   * (`SURFACE_LIMP.wash`).
+   */
+  private tickWash(dt: number, limp: LimpRide, wash: THREE.Vector3[], spec: SurfaceShow): void {
+    const w = this.world;
+    const sh = this.show!;
+    const late = spec.limp!.heave.stagger;
+    if (sh.crashed === 0 && sh.t >= spec.rise * 0.97) {
+      sh.crashed = 1;
+      this.washOver(limp, wash, 10, 13, 1.7, 4.5);
+      w.addShake(0.9);
+      audio.splash(0.9);
+    } else if (sh.crashed === 1 && sh.t >= spec.rise * (0.97 + late)) {
+      sh.crashed = 2;
+      if (late > 0.1) {
+        this.washOver(limp, wash, 8, 9, 1.3, 4);
+        audio.splash(0.6);
+      }
+    }
+    if ((sh.washCd! -= dt) > 0) return;
+    if (sh.crashed === 0) {
+      // Coming up and heaving out: water pours off it.
+      sh.washCd = 0.08;
+      this.washOver(limp, wash, 2, 7, 1.3, 3);
+      return;
+    }
+    const [every, tries, crest] = SURFACE_LIMP.wash;
+    sh.washCd = every;
+    // The water laps along it all the time, low; where a crest runs under it, it breaks over.
+    this.washOver(limp, wash, 2, 4, 0.4, 3);
+    for (let i = 0; i < tries; i++) {
+      const p = wash[Math.floor(Math.random() * wash.length)];
+      if (limp.crest(p) > crest) w.fx.splash(limp.world(p, scratchLay), 5, 0.65, 3);
+    }
+  }
+
+  /**
+   * The boat pushed about by a surfacing giant, `t` seconds into its show (`SURFACE_PULLBACK.swell`): lifted and
+   * rocked by the swell it pushes up. Sets the sea's `shove` and returns how far that moves the water at `at` in the
+   * boat's frame (m), so the giant can stay with the water.
+   */
+  private surfaceShove(t: number, at: THREE.Vector3): number {
+    const sea = this.world.sea;
+    const sh = this.show;
+    if (!sea || !sh?.a) return 0;
+    const S = SURFACE_PULLBACK.swell;
+    const rise = (sh.spec as SurfaceShow).rise;
+    // The swell reaches the hull a little after it starts up, and dies away in a slow rock.
+    const x = Math.max(0, t - rise * 0.12);
+    const rock = Math.sin((x / S.period) * Math.PI * 2) * Math.exp(-x / S.die);
+    const lean = Math.sin((x / S.period) * Math.PI * 2 + 0.9) * Math.exp(-x / S.die) * Math.min(1, x * 3);
+    const tilt = S.roll * lean;
+    // A positive roll lowers the port side (+z); a positive pitch lifts the bow (+x). `tilt` lifts the giant's side.
+    sea.shove.heave = S.heave * rock;
+    sea.shove.roll = -sh.a.z * tilt;
+    sea.shove.pitch = sh.a.x * tilt * 0.5;
+    return this.shovedAt(at);
+  }
+
+  /** How far the push on the boat (`Sea.shove`) moves the water at `at` in the boat's frame (m, + up). */
+  private shovedAt(at: THREE.Vector3): number {
+    const sv = this.world.sea?.shove;
+    // A lifted boat sees the water drop; a bow lifted, or a side lifted, sees it drop there.
+    return sv ? -sv.heave - at.x * sv.pitch + at.z * sv.roll : 0;
+  }
+
+  /** The boat let go of: whatever push a giant left on it dies away. */
+  private easeShove(dt: number): void {
+    const sv = this.world.sea?.shove;
+    if (!sv || this.show?.spec.kind === 'surface' || (!sv.heave && !sv.roll && !sv.pitch)) return;
+    const k = Math.exp(-dt * 1.6);
+    sv.heave = Math.abs(sv.heave) < 1e-3 ? 0 : sv.heave * k;
+    sv.roll = Math.abs(sv.roll) < 1e-4 ? 0 : sv.roll * k;
+    sv.pitch = Math.abs(sv.pitch) < 1e-4 ? 0 : sv.pitch * k;
+  }
+
+  /**
+   * A surfacing legend's send-off, once its card is put away: it sinks back beside the hull (`SURFACE_SINK`), its glows
+   * going out (the Dreamer's waking eyes closing), and the water closes over the last of it with a splash. A beaten
+   * one goes down from where it lies, flat on the water. Nothing waits for it: the player can cast at once.
+   */
+  private sendOff(model: FishModel, show: NonNullable<Game['show']>): void {
+    this.endSendOff();
+    const w = this.world;
+    const g = model.group;
+    const base = show.base!;
+    const glows = g.children.filter((o) => (o as THREE.Sprite).isSprite).map((o) => ({ o, s: o.scale.x }));
+    this.sinking = { model, base, top: show.top!, ride: (show.spec as SurfaceShow).ride, len: show.len!, last: show.look!.clone(), t: 0, glows, splashCd: 0, limp: show.limp, yaw: show.yaw, wash: show.wash };
+    w.fx.splash(base.clone().setY(w.surface(base.x, base.z)), 30, 1.4, 2.6);
+    audio.splash(0.6);
+  }
+
+  private tickSendOff(dt: number): void {
+    const sk = this.sinking;
+    if (!sk) return;
+    const w = this.world;
+    const g = sk.model.group;
+    sk.t += dt;
+    const u = Math.min(1, sk.t / SURFACE_SINK.secs);
+    // Slowly at first, then gone: all of it under as the time is up.
+    const down = u * u * (sk.top + SURFACE_SINK.under);
+    // It lay there long since: a beaten one's landing is well over.
+    if (sk.limp) this.layLimp(sk.limp, sk.model, sk.base, sk.yaw!, 1e3, down);
+    else {
+      g.position.y = w.surface(sk.base.x, sk.base.z) * sk.ride + this.shovedAt(sk.base) * (1 - sk.ride) - down + Math.sin(w.time * 0.9) * sk.len * 0.006;
+      g.rotation.z = Math.sin(w.time * 0.6) * 0.02;
+      g.updateMatrixWorld(true);
+      animateFish(sk.model, w.time, 0, 0);
+    }
+    for (const { o, s } of sk.glows) o.scale.setScalar(s * (1 - u));
+    const at = (p: THREE.Vector3) => p.applyMatrix4(g.matrixWorld).setY(w.surface(p.x, p.z));
+    // White water closing in round it as it goes.
+    if ((sk.splashCd -= dt) <= 0) {
+      sk.splashCd = 0.12;
+      if (sk.limp) this.washOver(sk.limp, sk.wash!, 2, 6, 0.9, 2.4);
+      else w.fx.splash(at(new THREE.Vector3((Math.random() - 0.5) * sk.len * 0.2, 0, (Math.random() - 0.5) * sk.len * 0.1)), 8, 1, 2.4);
+    }
+    if (u < 1) return;
+    // The last of it slips under.
+    const last = sk.limp ? sk.limp.world(sk.last, new THREE.Vector3(), true) : at(sk.last.clone());
+    w.fx.splash(last, 50, 1.7, 3);
+    this.foam(last, sk.len * 0.12, 6);
+    audio.splash(0.8);
+    this.endSendOff();
+  }
+
+  /** Puts a sinking legend away at once: its send-off is over, or something new needs the water (a landing, the next cast, another map). */
+  private endSendOff(): void {
+    const sk = this.sinking;
+    if (!sk) return;
+    this.sinking = null;
+    sk.model.group.removeFromParent();
+    disposeBent(sk.model);
   }
 
   /**
@@ -3539,19 +4092,21 @@ export class Game {
       <div>${this.tierBadge(fish.tier)} ${fish.sea ? 'Sea fish · sold on the spot' : TIER_THEME[fish.tier - 1]} · ${size} cm · ${formatWeight(fishWeight(fish, size))}${fish.night ? ' · 🌙' : ''}</div>
       <div>+${gained} XP${xpFrom ? ` <span class="credit">⭐ ${xpFrom}</span>` : ''}${leveledUp ? ` · <b>LEVEL UP! Lv ${level}</b>` : ''}</div>${this.legendCard ? `<div class="piece">${escapeHtml(this.legendCard.card)}</div>` : ''}${zoneLine ? `<div class="piece zone" style="--c:${COS_RARITY_COLOR[zoneTier]}">${escapeHtml(zoneLine)}</div>` : ''}${this.rankButtons()}
       <div class="muted">${this.clickWord()} to release your hold</div>`;
-    el.classList.remove('hidden');
-    // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
-    el.style.animation = 'none';
-    void el.offsetWidth;
-    el.style.animation = '';
-    audio.jingle(shiny || legend ? 'legendary' : fish.sea ? 'epic' : fish.rarity);
-    // A legend's piece unlocked, then a new rank, takes the banner from the tier banner, and its jingle follows the
-    // catch's. A rank reached on the same catch keeps its buttons and says itself in a toast.
-    if (this.legendCard) {
-      this.rankBanner(this.legendCard, true);
-      if (this.rankCard) this.toast(`${this.rankCard.title} · ${this.rankCard.line}`, 4);
-    } else if (this.rankCard) this.rankBanner(this.rankCard);
-    else this.topTierBanner(fish, 'caught', shiny);
+    // A sea legend is seen first: its card holds back a beat, then comes in smaller and lower.
+    const late = !!this.show;
+    el.classList.toggle('late', late);
+    this.cardDue = late ? LEGEND_HUD.cardAfter : 0;
+    $('divehud').classList.toggle('shy', late);
+    if (!late) this.showCard();
+    // An Abyss legend made its own sound as it broke the water (`giant`); everything else gets its jingle here.
+    if (this.show?.spec.kind !== 'surface') audio.jingle(shiny || legend ? 'legendary' : fish.sea ? 'epic' : fish.rarity);
+    // A sea legend's landing always reads LEGEND LANDED!, where the legend's landing puts it: a piece of its set
+    // unlocked is a line under its name, and a rank reached on the same catch keeps its buttons and says itself in a
+    // toast. Any other catch that reaches a rank gets the rank's banner (and its jingle after the catch's).
+    const says = catchBanner(legend && !!fish.sea, this.legendCard, this.rankCard);
+    if (says.banner === 'rank') this.rankBanner(this.rankCard!);
+    else this.topTierBanner(fish, 'caught', shiny, says.piece);
+    if (says.toast) this.toast(says.toast, 4);
     this.catchMoment(fish, shiny);
 
     this.held = this.fish;
@@ -3559,13 +4114,27 @@ export class Game {
     this.endCast('result');
     this.world.rig.pose({
       pitch: this.holdPitch(this.held!.group.scale.x),
-      yaw: 0,
-      bendP: 0.45,
-      bendY: 0,
+      yaw: this.show?.spec.kind === 'hang' ? LEGEND_HANG_VIEW.rodYaw : 0,
+      bendP: this.show?.spec.kind === 'hang' ? LEGEND_HANG_VIEW.rodBend : 0.45,
+      bendY: this.show?.spec.kind === 'hang' ? LEGEND_HANG_VIEW.rodBendY : 0,
       k: 40,
       c: 8,
     });
     this.world.line.line.visible = true;
+  }
+
+  /** Shows the catch card (straight away, or a legend's after its beat), replaying its entry animation. */
+  private showCard(): void {
+    const el = $('catch');
+    this.cardDue = 0;
+    el.classList.remove('hidden');
+    // The card says which piece of the legend's set was unlocked: the banner's line for it, which the card's top
+    // would run into, has done its job.
+    $('banner').querySelector('small.piece')?.remove();
+    // Replay the card's entry animation (it scales up harder for jewel and spirit fish).
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
   }
 
   /** Jewel and spirit fish (and shinies) land with a burst of sparkles and a little camera kick. */
@@ -3577,6 +4146,8 @@ export class Game {
     // At sea only the legends get the top burst, with a gold one on top.
     const top = fish.sea ? !!fish.legend : fish.tier >= 5;
     const center = g.getWorldPosition(new THREE.Vector3());
+    // A surfacing legend bursts where the view looks, out by its head.
+    if (this.show?.look) center.copy(this.show.look).applyMatrix4(g.matrixWorld);
     const color = new THREE.Color(shiny ? 0xffd23a : FISH_LOOK[fish.id]?.accent ?? fish.color);
     w.fx.burst(center, color, top ? 140 : 70, top ? 1.3 : 1, 0.25 * g.scale.x);
     if (top) w.fx.burst(center, new THREE.Color(0xffffff), 40, 0.7, 0.4 * g.scale.x);
@@ -3593,7 +4164,8 @@ export class Game {
     const key = it?.k === 'fish' ? `f:${it.fishId}:${it.size}:${it.shiny ? 1 : 0}` : it?.k === 'bait' ? `b:${it.id}` : '';
     const w = this.world;
     // In third person the player's own model shows instead of the rod and whatever is in hand.
-    const third = this.body.group.visible;
+    // (A surfacing giant's pulled-back camera sees the rod in the model's hands: `holdRig`.)
+    const third = this.body.group.visible && !this.cutaway;
     w.rig.root.visible = !third && (this.phase !== 'idle' || this.rodInHand());
     const sea = !!this.map.sea;
     const step = eco.seaRodGlow(this.s, this.rod.id);
@@ -3649,7 +4221,113 @@ export class Game {
 
   /** How big the catch on the line is drawn: bigger at sea, where the Deep Sea Rod holds it out over the water. */
   private heldScale(): number {
+    const spec = this.show?.spec ?? this.legendSpec();
+    const model = this.fish ?? this.held;
+    // A legend dangling from the Deep Sea Rod: its whole model (arms and crests too) drawn at the legend rule's length.
+    if (spec?.kind === 'hang' && model && this.hooked) return legendHangLen(this.hookedSize, this.hooked.tier, spec.grow, spec.wet) / modelLength(model);
     return (this.map.sea ? seaHeldScale : heldScale)(this.hookedSize, this.hooked?.tier ?? 1);
+  }
+
+  /** The legend show for the fish on the line, if it is a sea legend (everything else lands as before). */
+  private legendSpec(): LegendShow | undefined {
+    return this.map.sea && this.hooked?.legend ? legendShow(this.hooked.id) : undefined;
+  }
+
+  /** How big a fish is drawn in the water: a sea legend near its real length, so it reads big from the bite on. */
+  private inWaterScale(): number {
+    return this.legendSpec() ? legendWaterScale(this.hookedSize, this.hooked!.tier) : waterScale(this.hookedSize, this.hooked!.tier);
+  }
+
+  /**
+   * Eases the view toward (yaw, pitch) over about a second; the player's own turn takes over at once. With `first`,
+   * it goes there first for `first.secs` seconds, the view held open by `first.fov` degrees, and then on to (yaw, pitch).
+   */
+  private pullView(yaw: number, pitch: number, first?: { yaw: number; pitch: number; fov: number; secs: number }): void {
+    const w = this.world;
+    // The short way round.
+    const near = (to: number, from: number) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from));
+    const tilt = (v: number) => Math.max(-1.2, Math.min(0.6, v));
+    const last = { yaw: near(yaw, w.yaw), pitch: tilt(pitch), fov: 0 };
+    this.viewPull = first
+      ? { yaw: near(first.yaw, w.yaw), pitch: tilt(first.pitch), fov: first.fov, t: 0, until: first.secs, then: { ...last, yaw: near(yaw, near(first.yaw, w.yaw)) } }
+      : { ...last, t: 0, until: 1.6 };
+  }
+
+  private tickViewPull(dt: number): void {
+    const p = this.viewPull;
+    const w = this.world;
+    if (!p) {
+      // Nothing holds the view open any more: it closes again (the pulled-back camera sets its own lens).
+      if (w.fovPull && !this.cutaway) w.fovPull = Math.abs(w.fovPull) < 0.05 ? 0 : w.fovPull * Math.exp(-dt * 5);
+      return;
+    }
+    p.t += dt;
+    // The second leg is a slower, steadier move: the view closing in on a face.
+    const k = 1 - Math.exp(-dt * (p.then ? 4.5 : p.fov === 0 && p.until > 1.6 ? 2.6 : 4.5));
+    w.yaw += (p.yaw - w.yaw) * k;
+    w.pitch += (p.pitch - w.pitch) * k;
+    if (!this.cutaway) w.fovPull += (p.fov - w.fovPull) * k;
+    if (p.t <= p.until) return;
+    this.viewPull = p.then ? { ...p.then, t: 0, until: 2.4 } : null;
+  }
+
+  /**
+   * Sends the camera out for a surfacing giant (`SURFACE_PULLBACK`): up and back from the player, away from
+   * the giant, so all of it is seen against the boat, looking at `aim`; it comes home `secs` seconds on.
+   */
+  private startCutaway(spot: THREE.Vector3, aim: THREE.Vector3, secs: number): void {
+    const d = aim.clone().sub(spot);
+    // To the right of it, so it stands left of the banner (on touch too: the card, on the left there, is not in yet).
+    const yaw = Math.atan2(-d.x, -d.z) - SURFACE_PULLBACK.aside;
+    this.cutaway = { at: spot, yaw, pitch: Math.atan2(d.y, Math.hypot(d.x, d.z)), k: 0, t: 0, until: secs, home: false, homeSecs: SURFACE_PULLBACK.home };
+  }
+
+  /** Brings the pulled-back camera home now, quickly: the player turned the view or pressed, or the show is over. */
+  private endCutaway(): void {
+    const c = this.cutaway;
+    if (!c || c.home) return;
+    c.home = true;
+    c.homeSecs = 0.3;
+  }
+
+  /** Runs the pulled-back camera: where the view is this frame, or null in the player's own eyes. */
+  private tickCutaway(dt: number): CamView | null {
+    const c = this.cutaway;
+    const w = this.world;
+    if (!c) return null;
+    c.t += dt;
+    if (c.t >= c.until) c.home = true;
+    c.k = c.home ? c.k - dt / c.homeSecs : Math.min(1, c.k + dt / SURFACE_PULLBACK.out);
+    if (c.k <= 0) {
+      this.cutaway = null;
+      w.fovPull = 0;
+      return null;
+    }
+    const e = c.k * c.k * (3 - 2 * c.k);
+    // Its long lens comes in with the move out, and goes with the move home.
+    w.fovPull = SURFACE_PULLBACK.fov * e;
+    const ex = w.eye.x, ey = w.eye.y + w.walkBob, ez = w.eye.z;
+    const turn = Math.atan2(Math.sin(c.yaw - w.yaw), Math.cos(c.yaw - w.yaw));
+    return { x: ex + (c.at.x - ex) * e, y: ey + (c.at.y - ey) * e, z: ez + (c.at.z - ez) * e, yaw: w.yaw + turn * e, pitch: w.pitch + (c.pitch - w.pitch) * e };
+  }
+
+  /**
+   * Keeps the rod's rig where it belongs: on the camera, or, while a surfacing giant's pulled-back camera is out, on
+   * the player's own eyes (`rigHold`), so that camera sees the Deep Sea Rod itself in their model's hands, bowed
+   * toward the giant with the line on its tip. `rigHold` follows the player's eyes either way.
+   */
+  private holdRig(): void {
+    const w = this.world;
+    const hold = this.rigHold;
+    if (!hold.parent) {
+      hold.rotation.order = 'YXZ';
+      w.scene.add(hold);
+    }
+    hold.position.set(w.eye.x, w.eye.y + w.walkBob, w.eye.z);
+    hold.rotation.set(w.pitch, w.yaw, 0);
+    hold.updateMatrixWorld(true);
+    const to = this.cutaway ? hold : w.camera;
+    if (w.rig.root.parent !== to) to.add(w.rig.root);
   }
 
   /**
@@ -3657,6 +4335,7 @@ export class Game {
    * player looks down; otherwise looking down would dip the fish into the water.
    */
   private holdPitch(sc: number): number {
+    if (this.show?.spec.kind === 'hang') return Math.min(MAX_HOLD_PITCH, LEGEND_HANG_VIEW.rodPitch - Math.min(0, this.world.pitch));
     return Math.min(MAX_HOLD_PITCH, (this.map.sea ? seaHangPitch : hangPitch)(sc) - Math.min(0, this.world.pitch));
   }
 
@@ -3666,7 +4345,9 @@ export class Game {
    */
   private hangFloor(x: number, z: number, sc: number): number {
     const ground = this.map.sea && isWater(x, z) ? -Infinity : standHeight(x, z);
-    return Math.max(this.world.surface(x, z), ground) + 0.08 + 0.5 * sc;
+    // A legend held up with its tail still in the sea (the Oarfish) may hang that far into the water.
+    const wet = this.show?.spec.kind === 'hang' ? this.show.spec.wet : 0;
+    return Math.max(this.world.surface(x, z), ground) + 0.08 + (0.5 - wet) * sc;
   }
 
   /** Mouth position of a fish dangling from the rod tip, with a gentle pendulum swing. */
@@ -3685,11 +4366,24 @@ export class Game {
 
   private dismissCatch(): void {
     $('catch').classList.add('hidden');
+    $('catch').classList.remove('late');
+    $('divehud').classList.remove('shy');
+    this.cardDue = 0;
     this.net.send({ t: 'lost' });
     if (this.held) {
-      this.world.scene.remove(this.held.group);
+      // An Abyss legend sinks back in its own time (`tickSendOff`); any other catch is simply put away.
+      if (this.show?.spec.kind === 'surface' && this.show.base) this.sendOff(this.held, this.show);
+      else {
+        this.held.group.removeFromParent();
+        disposeBent(this.held);
+      }
       this.held = null;
     }
+    document.body.classList.remove('giant');
+    this.show = null;
+    this.viewPull = null;
+    this.endCutaway();
+
     this.world.line.line.visible = false;
     this.phase = 'idle';
     this.setIdlePose();
@@ -3731,8 +4425,10 @@ export class Game {
     this.reel = null;
     this.hooked = null;
     this.removeShadow();
+    this.endTell();
     if (this.fish) {
-      w.scene.remove(this.fish.group);
+      // (A beaten giant caught mid-landing lies in the sea's frame, not the scene.)
+      this.fish.group.removeFromParent();
       this.fish = null;
     }
     w.bobberVisible = false;
@@ -3740,9 +4436,11 @@ export class Game {
     w.fovKick = Math.max(w.fovKick, 0);
     audio.setCreak(0);
     $('alert').classList.add('hidden');
-    if (next === 'idle') this.setIdlePose();
-    else
-      w.rig.pose({ pitch: 0.55, yaw: 0, bendP: 0.08, bendY: 0, k: 40, c: 8 });
+    if (next === 'idle') {
+      // The charter strip is back, if a hooked legend's name still had its place (a landing keeps it away for its show).
+      $('divehud').classList.remove('shy');
+      this.setIdlePose();
+    } else w.rig.pose({ pitch: 0.55, yaw: 0, bendP: 0.08, bendY: 0, k: 40, c: 8 });
     this.persist();
     this.refreshHud();
   }
@@ -3752,6 +4450,11 @@ export class Game {
   private loop = (now: number): void => {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    if (!this.dbgFrozen) this.frame(dt, now);
+    requestAnimationFrame(this.loop);
+  };
+
+  private frame(dt: number, now: number): void {
     if (!this.restarting) this.tick(dt);
     // Behind the join screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
     this.updateCastOff();
@@ -3772,8 +4475,7 @@ export class Game {
       this.shownPhase = this.phase;
     }
     if (this.touch) this.updateTouch();
-    requestAnimationFrame(this.loop);
-  };
+  }
 
   private updateLine(sag: number, sway = 0): void {
     const w = this.world;
@@ -3918,6 +4620,9 @@ export class Game {
   }
 
   private tick(dt: number): void {
+    this.tickViewPull(dt);
+    this.tickSendOff(dt);
+    this.easeShove(dt);
     this.updateWalking(dt);
     this.updateContext();
     this.updateSpot();
@@ -4002,6 +4707,12 @@ export class Game {
       case 'bite': {
         this.timer -= dt;
         b.y = w.surface(b.x, b.z) - 0.2 + Math.sin(t * 55) * 0.04;
+        if (this.shadow && this.legendSpec()) {
+          // Dragged under and away by something much bigger.
+          this.biteT += dt;
+          b.y = w.surface(b.x, b.z) - 0.25 - Math.min(1, this.biteT * 4) * 0.9;
+          this.legendShadow(0, this.biteT);
+        }
         b.x += Math.sin(t * 40) * 0.003;
         w.bobber.rotation.z = Math.sin(t * 30) * 0.3;
         this.updateLine(0.03 * this.baseDist, 0.1);
@@ -4015,7 +4726,9 @@ export class Game {
         this.tickLanding(dt);
         break;
       case 'result':
-        if (this.held) {
+        if (this.cardDue > 0 && (this.cardDue -= dt) <= 0) this.showCard();
+        if (this.held && this.show?.spec.kind === 'surface') this.tickSurfacing(dt);
+        else if (this.held) {
           const g = this.held.group;
           this.world.rig.pose({ pitch: this.holdPitch(g.scale.x) });
           this.stepBob(dt);
@@ -4048,6 +4761,7 @@ export class Game {
 
   private updateShadow(): void {
     if (!this.shadow || !this.hooked) return;
+    if (this.legendSpec()) return this.legendShadow(this.waitTotal - this.elapsed, 0);
     const w = this.world;
     const remain = this.waitTotal - this.elapsed;
     const span = Math.min(this.waitTotal, 5);
@@ -4069,6 +4783,234 @@ export class Game {
     faceDirection(g, q.x - p.x, q.y - p.y);
     animateFish(this.shadow, w.time, 9, 0.5);
     setFishOpacity(this.shadow, Math.min(1, u * 6));
+  }
+
+  /**
+   * A hooked sea legend's wake: white water boiling off its back and rings spreading round it; and an Abyss legend
+   * showing itself as each surge starts (`LEGEND_FIGHT`): the Kraken lifts an arm out of the water beside it, the
+   * Dreamer's eyes open round it, the Leviathan rears.
+   */
+  private legendWake(dt: number, fp: THREE.Vector3, sc: number, from: THREE.Vector3): void {
+    const w = this.world;
+    const giant = this.legendSpec()?.kind === 'surface';
+    if ((this.wakeCd -= dt) <= 0) {
+      this.wakeCd = 0.16;
+      w.fx.splash(fp, 10, 1.1, 3);
+      // On the Abyss's black water a ring reads as a drawn ellipse: its wake is white water only.
+      if (!giant && Math.random() < 0.3) w.fx.ripple(fp, sc * 0.5, 0, 1.6, true);
+    }
+    if (!giant) return;
+    // A glimpse as each surge starts (`tickReel` zeroes the wait), or after a while without one; never two close together.
+    const F = LEGEND_FIGHT;
+    this.glimpseAgo += dt;
+    if ((this.glimpseCd -= dt) > 0 || this.glimpseAgo < F.glimpseRest) return;
+    this.glimpseCd = F.glimpseGap[0] + Math.random() * (F.glimpseGap[1] - F.glimpseGap[0]);
+    this.glimpseAgo = 0;
+    const sea = w.sea;
+    const id = this.hooked!.id;
+    if (id === 'leviathan' || !sea) {
+      // The Leviathan rears; with a leap or a rear under way it is left to finish.
+      if (id !== 'leviathan') this.leapT = 0;
+      else if (this.rearT < 0 && this.leapT < 0) {
+        this.rearT = 0;
+        w.fx.splash(fp, 40, 1.8, 3);
+        audio.splash(0.8);
+      }
+      return;
+    }
+    // Where the fish is, in the sea's own frame (the lurkers ride the swell there).
+    const side = new THREE.Vector3(fp.z - from.z, 0, -(fp.x - from.x)).normalize();
+    const at = sea.frame.worldToLocal(fp.clone().addScaledVector(side, id === 'kraken' ? sc * 0.35 : 0));
+    const bearing = Math.atan2(at.z, at.x);
+    if (id === 'kraken') sea.lurk.reach(at.x, at.z, sc * F.arm.height, bearing + Math.PI / 2, F.arm.rise, F.arm.hold, F.arm.sink);
+    else sea.lurk.ring(at.x, at.z, sc * F.eyes.radius, F.eyes.count, F.eyes.stay);
+  }
+
+  /** A sea legend takes the bait hard: the bobber goes straight under in a burst of white water, the rod slams over. */
+  private legendBite(): void {
+    const w = this.world;
+    const b = w.bobber.position.clone();
+    const sc = this.inWaterScale();
+    w.fx.splash(b, 90, 2.6, 4);
+    w.fx.ripple(b, sc * 0.7, 0, 2, true);
+    w.fx.ripple(b, sc * 1.1, 0.25, 2.6, true);
+    w.rig.kick('bendP', 14);
+    w.rig.kick('pitch', -3);
+    w.addShake(1.1);
+    this.biteT = 0;
+    // In the Abyss one bolt lands behind the bobber as it goes under, with a low note under the bite; the Kraken's
+    // arm takes the bobber down with it and the Dreamer's eyes shut.
+    const sea = w.sea;
+    if (this.legendSpec()?.kind !== 'surface' || !sea) return;
+    this.boltBehind(b, ABYSS_TELL.bolt);
+    audio.deepNote();
+    sea.lurk.letGo(ABYSS_TELL.kraken.under);
+    sea.lurk.shut();
+  }
+
+  /** One bolt of lightning behind `at` (a point in the world) as the player sees it, `dist` metres from the boat. */
+  private boltBehind(at: THREE.Vector3, dist: number): void {
+    const sea = this.world.sea;
+    if (!sea) return;
+    const eye = this.world.camera.getWorldPosition(new THREE.Vector3());
+    const out = at.clone().sub(eye).setY(0).normalize().multiplyScalar(dist);
+    const p = sea.frame.worldToLocal(eye.add(out));
+    sea.lightning.strike(Math.atan2(p.z, p.x), Math.hypot(p.x, p.z));
+  }
+  private biteT = 0;
+  private shadowRide: ReturnType<typeof rideWater> | null = null;
+
+  /**
+   * A sea legend's shadow before the bite: a huge shape coming out from under the boat and running out to
+   * the bobber just as it bites, drawn flat on the water so it shows through the sea (not in the Abyss, where each
+   * giant gives its own tell by the bobber, `abyssTell`). `remain`: seconds to the bite; `after`: seconds since it (it
+   * carries on past the bobber, dragging it under).
+   */
+  private legendShadow(remain: number, after: number): void {
+    const w = this.world;
+    const sh = this.shadow!;
+    // Not for the Abyss's three: laid on its swell, the glow broke into smears across the wave faces rather than a shape.
+    // They give a tell of their own by the bobber instead (`abyssTell`).
+    if (this.legendSpec()?.kind === 'surface') {
+      sh.group.visible = false;
+      this.abyssTell(remain, after > 0);
+      return;
+    }
+    const span = Math.min(this.waitTotal, 4.5);
+    if (remain > span) return;
+    const u = Math.min(1, 1 - remain / span);
+    const b = w.bobber.position;
+    const eye = w.camera.getWorldPosition(this.hang);
+    const ox = b.x - eye.x, oz = b.z - eye.z;
+    const od = Math.hypot(ox, oz) || 1;
+    const ax = ox / od, az = oz / od;
+    // From under the hull to the bobber, bowing out to one side, then on past it.
+    const pos = (q: number) => {
+      const e = q <= 1 ? q * q * (3 - 2 * q) : 1 + (q - 1) * 0.6;
+      // Out to the left of the line, clear of the rod held on the right.
+      const side = -Math.sin(Math.min(1, q) * Math.PI) * 3.5;
+      const along = 2.2 + (od - 2.2) * e;
+      return [eye.x + ax * along - az * side, eye.z + az * along + ax * side];
+    };
+    const q = u + after / span;
+    const [px, pz] = pos(q);
+    const [nx, nz] = pos(q + 0.02);
+    this.layShadow(px, pz, Math.atan2(-(nx - px), -(nz - pz)), Math.min(1, u * 3));
+  }
+
+  /**
+   * An Abyss legend's tell in the last seconds before it bites (`ABYSS_TELL`): the Kraken lifts one arm beside the
+   * bobber (it takes the bobber under at the bite, `legendBite`), the Dreamer's eyes open in a ring round it, the
+   * Leviathan's spined back rolls slowly past beyond it. Atmosphere only: the bite comes when it would have.
+   * `remain`: seconds to the bite; `bitten`: the bite has come (the Leviathan's back carries on under).
+   */
+  private abyssTell(remain: number, bitten: boolean): void {
+    const w = this.world;
+    const sea = w.sea;
+    const T = ABYSS_TELL;
+    if (!sea) return;
+    if (!this.tell) {
+      if (bitten || remain > T.lead) return;
+      const id = this.hooked!.id;
+      const b = w.bobber.position;
+      const eye = w.camera.getWorldPosition(new THREE.Vector3());
+      const away = b.clone().sub(eye).setY(0).normalize();
+      // To the left of the line, clear of the rod held on the right.
+      const left = new THREE.Vector3(away.z, 0, -away.x);
+      const tell = (this.tell = { t: 0, last: w.time, span: Math.max(0.5, remain), model: null as FishModel | null, mid: b.clone(), dir: left.clone().negate(), wakeCd: 0 });
+      // In the sea's own frame, where the lurkers ride the swell.
+      const at = sea.frame.worldToLocal(b.clone());
+      if (id === 'kraken') {
+        const arm = sea.frame.worldToLocal(b.clone().addScaledVector(left, T.kraken.side).addScaledVector(away, 0.6));
+        const rise = Math.min(T.kraken.rise, remain * 0.6);
+        // Curled over the bobber, and held there until the bite.
+        sea.lurk.reach(arm.x, arm.z, T.kraken.height, Math.atan2(at.z - arm.z, at.x - arm.x), rise, remain - rise + 1, T.kraken.under);
+      } else if (id === 'dreamer') sea.lurk.ring(at.x, at.z, T.dreamer.radius, T.dreamer.eyes, remain + 1, T.dreamer.size);
+      else {
+        // Its own model, the one the fight will show, lying under until its back comes up.
+        tell.model = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, id);
+        tell.model.group.scale.setScalar(this.inWaterScale());
+        tell.model.group.rotation.order = 'YXZ';
+        tell.mid.addScaledVector(away, T.leviathan.past);
+        w.scene.add(tell.model.group);
+        // Hidden until its shaders are ready (the same as the fish built at the landing, so normally at once).
+        w.warmups.show(tell.model.group);
+      }
+    }
+    const tell = this.tell;
+    const model = tell.model;
+    if (!model) return;
+    // Across the view beyond the bobber, left to right: under, its back up as it passes, under again by the bite.
+    const dt = Math.max(0, w.time - tell.last);
+    tell.last = w.time;
+    tell.t += dt;
+    const u = tell.t / tell.span;
+    const out = bitten ? 0 : Math.sin(Math.min(1, u) * Math.PI);
+    const g = model.group;
+    const L = T.leviathan;
+    const p = tell.mid.clone().addScaledVector(tell.dir, (u - 0.5) * L.run);
+    const top = modelBounds(model).max.y * g.scale.x;
+    const lie = w.surface(p.x, p.z) - top * (1 - L.out * out) - 0.4 * (1 - out);
+    // Once bitten it only goes down.
+    g.position.set(p.x, bitten ? Math.min(g.position.y, lie) - dt * 2 : lie, p.z);
+    faceDirection(g, tell.dir.x, tell.dir.z);
+    // A slow roll toward the deck as it passes, so the spines show.
+    g.rotation.z = -0.3 * out;
+    animateFish(model, w.time, 5, 0.3);
+    // White water all along it: on the black sea that line of foam is what shows how long the thing passing is.
+    if (out > 0.3 && (tell.wakeCd -= dt) <= 0) {
+      tell.wakeCd = L.foam;
+      const at = p.clone().addScaledVector(tell.dir, (Math.random() - 0.5) * modelLength(model) * g.scale.x * 0.9);
+      at.y = w.surface(at.x, at.z);
+      w.fx.splash(at, 8, 1, 3.4);
+    }
+  }
+
+  /** Puts an Abyss legend's tell away: the cast ended before the hook, or the fight has begun. */
+  private endTell(): void {
+    const tell = this.tell;
+    if (!tell) return;
+    this.tell = null;
+    if (tell.model) this.world.scene.remove(tell.model.group);
+    const lurk = this.world.sea?.lurk;
+    lurk?.letGo(ABYSS_TELL.kraken.under);
+    lurk?.shut();
+  }
+
+  /**
+   * A legend's shadow laid on the water at (x, z), nose along `heading`: the fish's side view lying flat (its outline
+   * is what reads from the deck), drawn over the sea so it shows through the water, tilted to the swell under it.
+   */
+  private layShadow(x: number, z: number, heading: number, fade: number): void {
+    const sh = this.shadow!;
+    const g = sh.group;
+    g.visible = this.world.warmups.isWarm(g);
+    const sc = this.inWaterScale();
+    g.rotation.set(0, heading, Math.PI / 2);
+    g.scale.set(sc * 0.08, sc * 2.8, sc * 1.15);
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    const half = sc * 0.4;
+    const front = this.waterLine(x - fx * half, z - fz * half), back = this.waterLine(x + fx * half, z + fz * half);
+    g.position.set(x, (front + back) / 2 + 0.08, z);
+    g.rotation.x = Math.atan2(front - back, 2 * half);
+    animateFish(sh, this.world.time, 4, 0.35);
+    setFishOpacity(sh, fade * (this.legendSpec()?.kind === 'surface' ? 0.35 : 1));
+    if (this.shadowRide && this.world.sea) {
+      this.world.sea.frame.updateMatrixWorld();
+      this.shadowRide.update(this.world.sea.frame);
+    }
+  }
+
+  /** A surfacing (Abyss) legend's shadow is a glow in its colour: a dark shape would not show on black water. */
+  private tintShadow(): void {
+    if (!this.shadow || this.legendSpec()?.kind !== 'surface') return;
+    const c = new THREE.Color(FISH_LOOK[this.hooked!.id]?.accent ?? this.hooked!.color).multiplyScalar(0.55);
+    for (const m of this.shadow.materials) {
+      const mb = m as THREE.MeshBasicMaterial;
+      mb.color.copy(c);
+      mb.blending = THREE.AdditiveBlending;
+      mb.depthWrite = false;
+    }
   }
 
   private tickReel(dt: number): void {
@@ -4099,7 +5041,9 @@ export class Game {
       this.lastSurges = r.surgeCount;
       w.fx.ripple(b, 3, 0, 1.2);
       audio.tick(0.5);
-      if (Math.random() < 0.6) this.leapT = 0;
+      // An Abyss legend shows itself as the surge starts (`legendWake`), so it is seen to cause it; any other fish may leap.
+      if (this.legendSpec()?.kind === 'surface') this.glimpseCd = 0;
+      else if (Math.random() < 0.6) this.leapT = 0;
     }
 
     const right = new THREE.Vector3(Math.cos(w.yaw), 0, -Math.sin(w.yaw));
@@ -4121,19 +5065,45 @@ export class Game {
     const g = fish.group;
     // The fish swims under the water where it is: at sea that rises and falls with the swell.
     fp.y = this.waterLine(fp.x, fp.z);
-    const swimY = fp.y - this.swimDepth(g.scale.x);
+    const legend = this.legendSpec();
+    // A sea legend fights at the surface, its back breaking the water.
+    const swimY = fp.y - (legend ? modelBounds(fish).max.y * g.scale.x * 0.45 : this.swimDepth(g.scale.x));
     g.position.set(fp.x, swimY + Math.sin(t * 7) * 0.05, fp.z);
     const lead = Math.atan2(-(fp.x - base.x), -(fp.z - base.z));
+    // The Leviathan's rear: 0 lying in the water, 1 fully reared. While it is up the thrash is stilled, so it reads heavy.
+    const before = this.rearT >= 0 ? rearAt(this.rearT) : 0;
+    if (this.rearT >= 0) this.rearT += dt;
+    const rear = this.rearT >= 0 ? Math.max(0, rearAt(this.rearT)) : 0;
+    const thrash = 1 - rear;
     g.rotation.y =
-      lead + Math.PI + r.lateral * 0.9 + Math.sin(t * 11) * 0.5 * r.pull;
-    animateFish(fish, t, 16 + r.pull * 14, 0.5 + r.pull * 0.3);
-    g.rotation.z = Math.sin(t * 6) * 0.2 * r.pull;
+      lead + Math.PI + r.lateral * 0.9 + Math.sin(t * 11) * 0.5 * r.pull * thrash;
+    // A legend runs across the line more than away down it, so its length shows from the deck.
+    if (legend) g.rotation.y += (r.lateral >= 0 ? 1 : -1) * 1.1 - r.lateral * 0.4;
+    animateFish(fish, t, (16 + r.pull * 14) * (1 - 0.6 * rear), 0.5 + r.pull * 0.3);
+    g.rotation.z = Math.sin(t * 6) * 0.2 * r.pull * thrash;
 
-    if (this.leapT >= 0) {
-      this.leapT += dt / 0.75;
+    if (this.rearT >= 0) {
+      const R = LEGEND_FIGHT.rear;
+      // Head and neck heaved up about a point behind its middle, so the tail stays under.
+      g.rotation.x = R.pitch * rear;
+      g.position.y = swimY + Math.sin(R.pitch * rear) * modelLength(fish) * g.scale.x * R.pivot;
+      // White water pouring off it on the way up, and a crash as the head comes back down.
+      if (rear > before && Math.random() < dt * 9) w.fx.splash(fp, 10, 1.6, 3);
+      if (before >= 0.3 && rear < 0.3) {
+        w.fx.splash(fp, 60, 2.2, 3.5);
+        audio.splash(1);
+        w.addShake(0.8);
+      }
+      if (rearAt(this.rearT) < 0) {
+        this.rearT = -1;
+        g.rotation.x = 0;
+      }
+    } else if (this.leapT >= 0) {
+      this.leapT += dt / leapSecs(g.scale.x, !!legend);
       const u = Math.min(1, this.leapT);
       g.position.y = swimY + Math.sin(u * Math.PI) * (this.map.sea ? 1.4 + 0.25 * Math.max(0, g.scale.x - 1) : 1.4);
-      g.rotation.x = -0.8 + u * 1.6;
+      // Nose up on the way out and down on the way back (a legend turns about its own length; see `startReel`).
+      g.rotation.x = legend ? 0.8 - u * 1.6 : -0.8 + u * 1.6;
       if (this.leapT >= 1) {
         this.leapT = -1;
         g.rotation.x = 0;
@@ -4144,6 +5114,10 @@ export class Game {
       }
     }
 
+    if (legend) {
+      this.legendWake(dt, fp, g.scale.x, base);
+      if (this.shadow) this.layShadow(fp.x, fp.z, g.rotation.y, 1);
+    }
     this.splashCd -= dt;
     if (this.splashCd <= 0 && r.pull > 0.25) {
       this.splashCd = 0.35 - r.pull * 0.15;
@@ -4196,6 +5170,11 @@ export class Game {
 
   private tickLanding(dt: number): void {
     const w = this.world;
+    if (this.show?.spec.kind === 'surface') {
+      this.tickSurfacing(dt);
+      if (this.show.t >= this.show.spec.rise) this.finishCatch();
+      return;
+    }
     this.landT += dt / 0.95;
     const u = Math.min(1, this.landT);
     const e = u * u * (3 - 2 * u);
@@ -4206,7 +5185,7 @@ export class Game {
     g.position.lerpVectors(this.landFrom, target, e);
     g.position.y += Math.sin(u * Math.PI) * 1.2;
     g.scale.setScalar(
-      THREE.MathUtils.lerp(waterScale(this.hookedSize, this.hooked!.tier), sc, e),
+      THREE.MathUtils.lerp(this.inWaterScale(), sc, e),
     );
     g.rotation.order = 'YXZ';
     // Ends nose-up with a flank toward the camera, where the result view takes over.
@@ -4967,7 +5946,7 @@ export class Game {
     if (!st) return;
     if (this.menuOpen && this.newsGlance) return void (this.afterNews = () => this.stageBanner(ids, intro));
     const el = $('banner');
-    el.classList.remove('welcome', 'abyssal');
+    el.classList.remove('welcome', 'legend', 'hooked', 'low');
     el.classList.add('rank');
     el.style.color = '';
     el.innerHTML = intro

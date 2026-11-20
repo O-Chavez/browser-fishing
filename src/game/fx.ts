@@ -11,6 +11,8 @@ interface Ring {
   max: number;
   delay: number;
   active: boolean;
+  /** Rides the sea's swell (`seaSurface`) instead of the pond's ripples. */
+  ride: boolean;
 }
 
 /** Water splash particles and expanding ripple rings. */
@@ -29,6 +31,8 @@ export class FX {
   private geo = new THREE.BufferGeometry();
   private rings: Ring[] = [];
   private ringNext = 0;
+  /** The sea's height at (x, z), for rings that ride the swell (a surfacing legend's). */
+  seaSurface: ((x: number, z: number) => number) | null = null;
 
   constructor() {
     for (let i = 0; i < MAX; i++) this.pos[i * 3 + 1] = -100;
@@ -60,11 +64,12 @@ export class FX {
       mesh.visible = false;
       mesh.renderOrder = 5;
       this.group.add(mesh);
-      this.rings.push({ mesh, mat: m, age: 0, life: 1, max: 1, delay: 0, active: false });
+      this.rings.push({ mesh, mat: m, age: 0, life: 1, max: 1, delay: 0, active: false, ride: false });
     }
   }
 
-  splash(p: THREE.Vector3, n = 24, power = 1): void {
+  /** `size`: drop size, 1 for a fish's splash (a surfacing legend throws bigger water). */
+  splash(p: THREE.Vector3, n = 24, power = 1, size = 1): void {
     for (let k = 0; k < n; k++) {
       const i = this.next++ % MAX;
       const a = Math.random() * Math.PI * 2;
@@ -73,7 +78,7 @@ export class FX {
       this.vel.set([Math.cos(a) * sp * 0.6, (2 + Math.random() * 3.2) * power, Math.sin(a) * sp * 0.6], i * 3);
       this.life[i] = 0.55 + Math.random() * 0.5;
       this.age[i] = 0;
-      this.size[i] = 0.05 + Math.random() * 0.07;
+      this.size[i] = (0.05 + Math.random() * 0.07) * size;
       this.color.set([0.93, 0.98, 1], i * 3);
       this.grav[i] = 1;
     }
@@ -102,10 +107,10 @@ export class FX {
   }
 
   /** A ring spreading on the water at `p`, a point on the surface (at sea it rides the swell's height there). */
-  ripple(p: THREE.Vector3, max = 1.6, delay = 0, life = 1.6): void {
+  ripple(p: THREE.Vector3, max = 1.6, delay = 0, life = 1.6, ride = false): void {
     const r = this.rings[this.ringNext++ % this.rings.length];
     r.mesh.position.set(p.x, p.y, p.z);
-    Object.assign(r, { age: 0, life, max, delay, active: true });
+    Object.assign(r, { age: 0, life, max, delay, active: true, ride: ride && !!this.seaSurface });
   }
 
   update(dt: number, time: number): void {
@@ -141,7 +146,7 @@ export class FX {
       r.mesh.visible = true;
       r.mesh.scale.setScalar(0.12 + u * r.max);
       r.mat.opacity = (1 - u) * (1 - u) * 0.6;
-      r.mesh.position.y = waveHeight(r.mesh.position.x, r.mesh.position.z, time) + 0.05;
+      r.mesh.position.y = (r.ride && this.seaSurface ? this.seaSurface(r.mesh.position.x, r.mesh.position.z) : waveHeight(r.mesh.position.x, r.mesh.position.z, time)) + 0.05;
     }
   }
 }
