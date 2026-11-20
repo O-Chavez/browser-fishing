@@ -14,6 +14,7 @@ import { Gait, gaitLift, gaitSway } from './gait';
 import { animateFish, buildFish, hangFacing, type FishModel } from './fishmodel';
 import { remoteHang, remoteScale } from './fishscale';
 import { JUMP_TIME, jumpLift } from './player';
+import { SHOWN, type WarmShow } from './prewarm';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -89,6 +90,8 @@ class Avatar {
     private surface: (x: number, z: number) => number,
     /** The seat a player sitting at a spot is on: its height, and its instrument at one of the Great Fire's logs (`Game.seatAt`). */
     private seatAt: (x: number, z: number) => SeatCtx | undefined = () => undefined,
+    /** Keeps the fish on the line hidden until its shaders are ready (`World.warmups`). */
+    private warm: WarmShow = SHOWN,
   ) {
     const mat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
     this.char = new Character(info.look);
@@ -305,6 +308,8 @@ class Avatar {
         this.held = buildFish(f.color, false, act.shiny, f.tier, f.id);
         this.held.group.scale.setScalar(remoteScale(act.size, f.tier));
         this.scene.add(this.held.group);
+        // Someone else's catch can be a kind of fish not seen yet this visit: no frame waits on its shaders.
+        this.warm.show(this.held.group);
       }
       this.bobber.visible = false;
     }
@@ -354,7 +359,7 @@ class Avatar {
     this.plate.position.y = plateY + up;
     if (this.bubble) this.bubble.sprite.position.y = BUBBLE_Y + up;
     this.rod.visible = !busy;
-    if (this.held) this.held.group.visible = !busy;
+    if (this.held) this.held.group.visible = !busy && this.warm.isWarm(this.held.group);
     if (busy) this.line.visible = false;
     else if (this.act) this.line.visible = true;
     if (this.bubble) {
@@ -431,6 +436,8 @@ export class Avatars {
     private supporter: (name: string) => boolean = () => false,
     /** The seat a player sitting at a spot is on (`Avatar`). */
     private seatAt: (x: number, z: number) => SeatCtx | undefined = () => undefined,
+    /** Keeps each player's fish hidden until its shaders are ready (`Avatar`). */
+    private warm: WarmShow = SHOWN,
   ) {
     // A hidden stand-in that never leaves the scene, so `World.prewarm` compiles the avatar shaders
     // before other players show up, and they stay compiled while nobody else is around.
@@ -484,7 +491,7 @@ export class Avatars {
       if (p.id === selfId) continue;
       let a = this.list.get(p.id);
       if (!a) {
-        a = new Avatar(p, this.scene, this.surface, this.seatAt);
+        a = new Avatar(p, this.scene, this.surface, this.seatAt, this.warm);
         this.list.set(p.id, a);
       }
       a.setLook(p.look);

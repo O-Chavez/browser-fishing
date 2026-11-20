@@ -258,6 +258,7 @@ export class Game {
   private nibbleT = 0;
   private approachAngle = 0;
   private shadow: FishModel | null = null;
+  /** The fish on the line: built hidden when the bobber lands (`land`), in sight from the hook on. */
   private fish: FishModel | null = null;
   private held: FishModel | null = null;
   private carry: { key: string; obj: THREE.Object3D; model: FishModel | null } | null = null;
@@ -455,7 +456,7 @@ export class Game {
       this.showOffline('Graphics stopped working', 'Reload to keep playing. Lite graphics will be on, which is easier on your device.', 'gpu');
     });
     canvas.addEventListener('webglcontextrestored', () => $('offline').classList.add('hidden'));
-    this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name), (x, z) => this.seatAt(x, z));
+    this.avatars = new Avatars(this.world.scene, (x, z) => this.world.surface(x, z), (name) => this.net.isSupporter(name), (x, z) => this.seatAt(x, z), this.world.warmups);
     this.skipping = new Skipping(this.world.scene, this.world, {
       surface: (x, z) => this.world.surface(x, z),
       splash: (at, n, power) => this.world.fx.splash(at, n, power),
@@ -482,7 +483,7 @@ export class Game {
     this.avatars.warmLegends((o) => this.world.warm(o));
     // The emotes' looks likewise, so the first one played nearby doesn't either.
     this.lookWarm = new LookWarmer(this.world.scene, (o) => this.world.warm(o), whenIdle);
-    this.dropsView = new DropsView(this.world.scene, (x, z) => this.world.surface(x, z));
+    this.dropsView = new DropsView(this.world.scene, (x, z) => this.world.surface(x, z), this.world.warmups);
     this.body.group.visible = false;
     this.world.scene.add(this.body.group);
     const q = new URLSearchParams(location.search);
@@ -1251,6 +1252,7 @@ export class Game {
         const f = this.world.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
         this.fish.group.position.copy(this.world.camera.position).addScaledVector(f, 6).setY(-0.3);
         this.world.scene.add(this.fish.group);
+        this.world.warmups.show(this.fish.group);
         this.startLanding();
       },
       world: this.world,
@@ -3295,8 +3297,16 @@ export class Game {
     if (this.hooked) {
       this.shadow = buildFish(this.hooked.color, true, this.hookedShiny, this.hooked.tier, this.hooked.id);
       this.shadow.group.scale.setScalar(waterScale(this.hookedSize, this.hooked.tier));
-      this.shadow.group.visible = false;
       w.scene.add(this.shadow.group);
+      // The fish itself is built now too, hidden, so its shaders compile in the background during the wait: the first
+      // of each kind used to compile on the frame it was hooked, a freeze of 0.3 to 1.3 s on an M1 and seconds under
+      // load. It shows from the hook on (`startReel`), or the moment its shaders are ready if that comes later (a slow
+      // GPU and a quick bite); the shadow the same, from `updateShadow`.
+      const fish = (this.fish = buildFish(this.hooked.color, false, this.hookedShiny, this.hooked.tier, this.hooked.id));
+      fish.group.scale.setScalar(waterScale(this.hookedSize, this.hooked.tier));
+      w.scene.add(fish.group);
+      w.warmups.show(this.shadow.group, () => false);
+      w.warmups.show(fish.group, () => this.phase !== 'waiting' && this.phase !== 'bite');
     }
     this.phase = 'waiting';
     this.toast(this.perfect ? '🎯 Perfect cast! Better fish are drawn to your bait...' : this.castSpot !== 'prime' ? `${SPOTS[this.castSpot].label} - waiting for a bite...` : 'Waiting for a bite...');
@@ -3411,9 +3421,8 @@ export class Game {
     this.frayFlash = 0;
     this.landedClean = false;
     this.leapT = -1;
-    this.fish = buildFish(this.hooked!.color, false, this.hookedShiny, this.hooked!.tier, this.hooked!.id);
-    this.fish.group.scale.setScalar(waterScale(this.hookedSize, this.hooked!.tier));
-    w.scene.add(this.fish.group);
+    // Built when the bobber landed (`land`); still hidden if its shaders aren't ready, and shown when they are.
+    this.fish!.group.visible = w.warmups.isWarm(this.fish!.group);
     w.rig.kick('pitch', 7);
     w.fovKick = 4;
     w.addShake(0.8);
@@ -3617,8 +3626,13 @@ export class Game {
       obj = new THREE.Group();
       obj.add(model.group);
       obj.position.set(0.17 + out * 0.6, -0.2 - out * 0.7, -0.42 - out * 1.2);
+      // A fish taken in hand can be a kind not drawn yet this visit (one from the locker, after a reload).
+      w.warmups.show(model.group);
     } else {
-      obj = buildTin(it.id);
+      const tin = buildTin(it.id);
+      obj = new THREE.Group();
+      obj.add(tin);
+      w.warmups.show(tin);
       obj.scale.setScalar(0.2);
       obj.rotation.x = 0.35;
       obj.position.set(0.2, -0.21, -0.4);
@@ -4050,7 +4064,7 @@ export class Game {
     const p = pos(u);
     const q = pos(Math.min(1, u + 0.02));
     const g = this.shadow.group;
-    g.visible = true;
+    g.visible = w.warmups.isWarm(g);
     g.position.set(p.x, this.waterLine(p.x, p.y) - this.swimDepth(g.scale.x) - 0.05, p.y);
     faceDirection(g, q.x - p.x, q.y - p.y);
     animateFish(this.shadow, w.time, 9, 0.5);
