@@ -180,6 +180,8 @@ export class World {
   fovKick = 0;
   /** Degrees the view is held open (or closed) by, on top of the kick: set by the game while a giant is shown. */
   fovPull = 0;
+  /** Degrees the view closes by in the later acts of a giant's fight (`LEGEND_FIGHT.view`): the game eases it in and out. */
+  fovFight = 0;
   pitchKick = 0;
   private shake = 0;
   private decor = new THREE.Group();
@@ -1478,7 +1480,7 @@ export class World {
       (v ? v.yaw : this.yaw) + (Math.sin(t * 47) + Math.sin(t * 63)) * 0.5 * s * 0.012,
       Math.sin(t * 29) * s * 0.01,
     );
-    const fov = 70 + this.fovKick + this.fovPull;
+    const fov = 70 + this.fovKick + this.fovPull + this.fovFight;
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();

@@ -728,12 +728,14 @@ class Lightning {
   private rnd = mulberry(23);
   /** Called with each strike's distance in metres, for the thunder. */
   onStrike?: (dist: number) => void;
+  /** How fast the sea's own bolts come, times their usual pace (a giant's fight builds the storm: `Sea.fight`). */
+  haste = 1;
 
   /** `level`: how often bolts strike (0..1); `sheets`: whether sheet lightning plays too (the Abyss's own look). */
   update(dt: number, level: number, sheets = false): void {
     this.age += dt;
     if (level > 0) {
-      this.timer -= dt;
+      this.timer -= dt * this.haste;
       if (this.timer <= 0) {
         this.strike();
         this.timer = (12 - 9 * level) * (0.5 + this.rnd());
@@ -827,6 +829,12 @@ export class Sea {
   readonly shove: BoatMotion = { heave: 0, pitch: 0, roll: 0 };
   /** The sea frame's rotation (the boat's, reversed), for the sky to tilt with. */
   readonly tilt = new THREE.Quaternion();
+  /**
+   * The weather as a giant's fight bends it (`LEGEND_FIGHT.storm`), set by the game each frame and at rest otherwise:
+   * `bolts` how fast the sea's own bolts come, `rain` how much of the rain falls and `wind` how hard it is driven
+   * (each times the zone's own).
+   */
+  readonly fight = { bolts: 1, rain: 1, wind: 1 };
   private u: ReturnType<typeof seaUniforms>;
   private cloudU: ReturnType<typeof cloudUniforms>;
   private landU: ReturnType<typeof landUniforms>;
@@ -1025,6 +1033,7 @@ export class Sea {
     u.uAmpSwell.value = this.sums.swell;
     this.swell = this.sums.swell;
     u.uStorm.value = stormAt(mood);
+    const F = this.fight;
     u.uFoam.value = 0.15 + 0.65 * Math.min(1, mood) + 0.2 * stormAt(mood);
 
     const shelf = 1 - smooth(0, SHELF_FAR.until, mood);
@@ -1071,10 +1080,11 @@ export class Sea {
     const abyss = abyssAt(mood);
     this.waterAbyss.visible = abyss > 0;
     this.water.visible = !this.waterAbyss.visible;
+    this.lightning.haste = F.bolts;
     this.lightning.update(dt, lightningAt(mood), abyss > 0);
     this.setLightning(abyss);
     u.uSeaUp.value.setFromMatrixColumn(this.frame.matrix, 1);
-    this.rain.update(t, rainAt(mood), storm, WIND, this.rainLamps, this.rainLit, this.rainStand);
+    this.rain.update(t, rainAt(mood) * F.rain, storm * F.wind, WIND, this.rainLamps, this.rainLit, this.rainStand);
     this.buoy.update(t, dt, mood, Math.max(this.night, this.lamps));
     this.gulls.update(t, dt, mood, this.night);
     this.jellies.update(t, mood, this.night);

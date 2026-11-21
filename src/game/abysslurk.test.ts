@@ -286,4 +286,68 @@ describe('what a hooked legend asks of the lurkers', () => {
     run(0.4);
     expect(parts.armGeo.instanceCount).toBe(0);
   });
+
+  it("keeps a hooked Kraken's arms where the game holds them, each by its own id", () => {
+    const { lurk, parts, run } = make();
+    const arms = parts as unknown as { armA: THREE.InstancedBufferAttribute };
+    const a = lurk.reach(20, 2, 6, 0, 1, 999);
+    const b = lurk.reach(22, -1, 5, 1, 1, 999);
+    expect(a).not.toBe(b);
+    run(1.5);
+    expect(parts.armGeo.instanceCount).toBe(2);
+    // Moved with the line, and standing taller: its place and its length follow.
+    expect(lurk.hold(a, 15, 3, 9)).toBe(true);
+    run(0.1);
+    expect([arms.armA.array[0], arms.armA.array[1]]).toEqual([15, 3]);
+    expect(arms.armA.array[3]).toBeCloseTo(9 / 0.8);
+    // One let go: it goes under and its id is dead, the other stands on.
+    lurk.drop(a, 0.5);
+    run(0.8);
+    expect(parts.armGeo.instanceCount).toBe(1);
+    expect(lurk.hold(a, 0, 0, 5)).toBe(false);
+    expect(lurk.hold(b, 22, -1, 5)).toBe(true);
+    // Its place given out again: the old id is not taken for the new arm.
+    const c = lurk.reach(30, 0, 6, 0, 1, 999);
+    expect(c % 10).toBe(a % 10);
+    expect(c).not.toBe(a);
+    expect(lurk.hold(a, 0, 0, 5)).toBe(false);
+    expect(lurk.hold(c, 30, 1, 6)).toBe(true);
+    // More arms than a sighting ever shows: a last stand's five over the ones already up.
+    for (let i = 0; i < 5; i++) lurk.reach(10 + i, 5, 6, 0, 0.5, 999);
+    run(1);
+    expect(parts.armGeo.instanceCount).toBe(7);
+    lurk.letGo(0.3);
+    run(0.6);
+    expect(parts.armGeo.instanceCount).toBe(0);
+  });
+
+  it("keeps a hooked Dreamer's eyes open where the game asks, for as long as it asks", () => {
+    const { lurk, parts, run, open } = make();
+    const keep = (n: number, lid = 1) => {
+      for (let k = 0; k < 30; k++) {
+        for (let i = 0; i < n; i++) lurk.keep(i, 12 + i, i - 4, 1, lid);
+        run(1 / 30);
+      }
+    };
+    expect(lurk.keepRoom).toBeGreaterThanOrEqual(20);
+    keep(14);
+    // More than a sighting's nine, each where it was put; a blink aside, wide open.
+    expect(parts.eyes.visible).toBe(true);
+    expect(parts.eyeGeo.instanceCount).toBe(14);
+    expect([parts.eyeA.array[0], parts.eyeA.array[1]]).toEqual([12, -4]);
+    expect(open().filter((o) => o > 0.9).length).toBeGreaterThanOrEqual(10);
+    // Half-lidded when asked (a spent Dreamer's).
+    keep(14, 0.45);
+    expect(Math.max(...open())).toBeLessThanOrEqual(0.451);
+    expect(open().filter((o) => o > 0.4).length).toBeGreaterThanOrEqual(10);
+    // Fewer asked for: the rest shut and are gone; none asked for: all of them.
+    keep(3);
+    expect(parts.eyeGeo.instanceCount).toBe(3);
+    run(1);
+    expect(parts.eyes.visible).toBe(false);
+    // Lite graphics keeps half the slots.
+    lurk.setLite(true);
+    keep(lurk.keepRoom);
+    expect(parts.eyeGeo.instanceCount).toBe(lurk.keepRoom / 2);
+  });
 });

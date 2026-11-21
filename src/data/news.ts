@@ -29,6 +29,7 @@ import seaLegends from '../assets/images/news/sea-legends.jpg';
 import deepSeaRod from '../assets/images/news/deep-sea-rod.jpg';
 import emotes from '../assets/images/news/emotes.jpg';
 import fightLeft from '../assets/images/news/fight-left.jpg';
+import giantFights from '../assets/images/news/giant-fights.jpg';
 import reelFight from '../assets/images/news/reel-fight.jpg';
 import seaWeather from '../assets/images/news/sea-weather.jpg';
 import zoneSets from '../assets/images/news/zone-sets.jpg';
@@ -48,6 +49,18 @@ export interface NewsEntry {
 }
 
 export const NEWS: NewsEntry[] = [
+  {
+    id: 20,
+    date: '2026-11-20',
+    title: 'The giants fight back',
+    image: giantFights,
+    alt: "From the deck in the Abyss at night: five of the Kraken's arms rear out of the black water just past the rail, pale suckers toward the boat, against a sky lit white by a bolt, the Deep Sea Rod bent toward them",
+    body: [
+      "Hook one of the Abyss's three and you will hear it: one great chord on a pipe organ, then music that builds as you bring the giant in.",
+      "There is more to watch in the fight. <b>The Kraken</b> stays under: its arms stand in the water where your line ends, slap the sea, and close in one takes hold of the rail. <b>The Drowned Dreamer</b>'s eyes open on the water round your line and trail toward the boat. <b>The Leviathan</b> rears, rolls its spined back through the swell and slaps its tail. Each has a voice of its own on every surge, and makes one last stand before it is spent.",
+      "The gauge, the odds and the pay are as they were. Take a charter to the Abyss with <b>Captain Reed</b> to hear it for yourself.",
+    ],
+  },
   {
     id: 19,
     date: '2026-11-20',

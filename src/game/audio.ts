@@ -5,6 +5,7 @@ import { Music } from './bandsound';
 import { chimeNow, gullCryWait, gullsAbout, rainLevel } from './seamix';
 import { ShowBus, playShowSound, type Ear } from './rocketsound';
 import type { ShowSound } from '../data/rockets';
+import { GiantFight, playVoice, type Voice } from './giantsound';
 
 /** Background music level; kept low so it sits under the lake ambience. */
 const MUSIC_VOL = 0.17;
@@ -28,35 +29,34 @@ const HUSH = 0.18;
 /** An Abyss legend with a landing sound of its own (`giant`). */
 export type Giant = 'leviathan' | 'kraken' | 'dreamer';
 
-/** A point on a sound's course: seconds from its start, and the value there. */
-type Pt = [at: number, v: number];
+/**
+ * A giant's fight as the sound follows it (`giantFight`, every frame of the fight). The game works these out from the
+ * reel and the fight's acts (`src/game/legendfight.ts`); nothing here changes the fight.
+ */
+export interface GiantFightState {
+  /** The fight's act: 1 far out (wake and voice only), 2 mid-fight (it shows itself), 3 close in beside the hull. */
+  act: 1 | 2 | 3;
+  /** How far it has been brought in, 0 (just hooked, far out) to 1 (at the hull). */
+  near: number;
+  /** Fight left, 1 (fresh) to 0 (spent). */
+  fight: number;
+  /** The surge under way: its build-up, 0 in the calm to 1 at its height. */
+  surge: number;
+  /** A surge is about to start (the gauge's SURGE! warning). */
+  warning: boolean;
+  /** The line's load, 0 slack to 1 at breaking. */
+  tension: number;
+  /** After its last stand: it has nothing left and is only being brought in (the music drops away). */
+  spent: boolean;
+}
 
-/** A creature's voice (`voice`): a buzzing throat ringing through a mouth that opens and shuts. */
-interface Voice {
-  /** How long it sounds (s), and how long from now it starts. */
-  dur: number;
-  at?: number;
-  /** Its level at its loudest, and its swell and fall (0..1) over its course. */
-  gain: number;
-  level: Pt[];
-  /** The throat's pitch (Hz) over its course, and the voices stacked on it (each a ratio of that pitch). */
-  pitch: Pt[];
-  stack?: number[];
-  /** How far each voice's pitch wanders at random (cents), and how many times a second it turns. */
-  waver: number;
-  waverHz?: number;
-  /** The mouth: the bands the buzz rings through, each moving (Hz) as the mouth opens and shuts. */
-  mouth: { f: Pt[]; q: number; gain: number }[];
-  /** The growl: the level shaken this many times a second, this deep (0..1); `loose` is how much of the shake is random. */
-  rough: Pt[];
-  depth: number;
-  loose?: number;
-  /** Breath: how much noise is mixed into the buzz. */
-  breath: number;
-  /** Grit: how hard the voice is pushed into clipping (1 barely, 6 torn). */
-  grit: number;
-  /** Where it goes (the master gain unless given). */
-  out?: AudioNode;
+/** A giant's voice in the fight (`giantCall`): at a surge, with one of its moves, or its last stand (its biggest). */
+export interface GiantCall {
+  kind: 'surge' | 'move' | 'last';
+  /** As in `GiantFightState`: far out it is muffled and distant, close in clear and loud. */
+  near: number;
+  /** As in `GiantFightState`: a tiring giant sounds more strained. */
+  fight: number;
 }
 
 /** At sea, what the boat is doing this frame. */
@@ -80,7 +80,7 @@ interface Bed {
 }
 
 /** All sounds are synthesised with Web Audio so the game ships no audio assets. */
-class AudioFX {
+export class AudioFX {
   private ctx?: AudioContext;
   private master?: GainNode;
   private noiseBuf?: AudioBuffer;
@@ -88,6 +88,12 @@ class AudioFX {
   private creakOsc?: OscillatorNode;
   private lake?: GainNode;
   private duck?: GainNode;
+  /** The lake's tune goes through this after `duck`: a giant's fight music lowers it and gives it back (`GiantFight`). */
+  private under?: GainNode;
+  /** A giant's fight (its voice and its music, giantsound.ts), and the gain its music plays through, which follows the music switch. */
+  private fight?: GiantFight;
+  private fightBus?: GainNode;
+  private fightWarm = false;
   /** The wind and the rain at sea go through this, so a quiet moment can drop them together (`hush`). */
   private weather?: GainNode;
   private sea?: { wash: Bed; hiss: Bed; wind: Bed; howl: Bed; rain: Bed; patter: Bed; gull: number; buoy: boolean; gust: number; gustTo: number; lap: number; creak: number; cool: number; on: boolean };
@@ -146,6 +152,7 @@ class AudioFX {
     this.musicOn = !this.musicOn;
     localStorage.setItem('fishing-music', this.musicOn ? 'on' : 'off');
     if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(this.musicOn ? MUSIC_VOL : 0, this.ctx.currentTime, 0.4);
+    if (this.fightBus && this.ctx) this.fightBus.gain.setTargetAtTime(this.musicOn ? 1 : 0, this.ctx.currentTime, 0.4);
     return this.musicOn;
   }
 
@@ -169,7 +176,8 @@ class AudioFX {
     const out = tune.out;
     out.gain.value = this.musicOn ? MUSIC_VOL : 0;
     this.duck = ctx.createGain();
-    out.connect(this.duck).connect(this.master!);
+    this.under = ctx.createGain();
+    out.connect(this.duck).connect(this.under).connect(this.master!);
     this.musicGain = out;
     tune.startDrone();
     this.musicPass();
@@ -311,6 +319,9 @@ class AudioFX {
     f.frequency.setValueAtTime(f0, t);
     f.frequency.exponentialRampToValueAtTime(f1, t + dur);
     const g = ctx.createGain();
+    // Silent until the burst starts: the source can start a sample ahead of the gain's first point, and that one
+    // sample of noise at full level is a click.
+    g.gain.value = 0;
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gain, t + Math.min(0.03, dur / 3));
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -328,6 +339,7 @@ class AudioFX {
     o.frequency.setValueAtTime(f0, t);
     o.frequency.exponentialRampToValueAtTime(f1, t + dur);
     const g = ctx.createGain();
+    g.gain.value = 0;
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gain, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -433,6 +445,8 @@ class AudioFX {
         for (const b of [this.sea.wash, this.sea.hiss, this.sea.wind, this.sea.howl, this.sea.rain, this.sea.patter]) b.g.gain.setTargetAtTime(0, t, 0.5);
         this.lake.gain.setTargetAtTime(1, t, 0.8);
         this.duck!.gain.setTargetAtTime(1, t, 0.8);
+        // A fight that was never ended (the player left the sea mid-fight) ends here.
+        this.giantFightEnd('lost');
       }
       return;
     }
@@ -486,6 +500,11 @@ class AudioFX {
     sea.rain.g.gain.setTargetAtTime(0.05 * rain * loud, t, 0.8);
     sea.patter.g.gain.setTargetAtTime(0.03 * rain * loud, t, 0.8);
     this.duck!.gain.setTargetAtTime(1 - SEA_MUSIC_DUCK * gloomAt(s.mood), t, 0.8);
+    // In the Abyss a giant may be hooked: its organ's waves and room are made now, not on the frame of the hook.
+    if (s.mood >= 1.85 && !this.fightWarm) {
+      this.fightWarm = true;
+      this.fights()?.warm();
+    }
 
     // Gulls crying now and then while some are about on the Shelf.
     const about = gullsAbout(s.mood, s.night);
@@ -658,86 +677,56 @@ class AudioFX {
     this.tone(124, 74, 1.1, 0.12, undefined, 'triangle');
   }
 
-  /**
-   * A voice from something huge: a buzzing throat (stacked saws and a little breath) whose pitch follows `pitch`,
-   * shaken into a growl, ringing through the bands of a mouth that opens and shuts, then pushed into clipping for grit.
-   */
+  /** A voice from something huge (`playVoice`, giantsound.ts), into the master gain unless it names somewhere else. */
   private voice(v: Voice): void {
-    const ctx = this.ctx!;
-    const t = ctx.currentTime + (v.at ?? 0);
-    const end = t + v.dur + 0.05;
-    const course = (p: AudioParam, pts: Pt[], k = 1) => {
-      p.setValueAtTime(pts[0][1] * k, t);
-      for (const [at, val] of pts.slice(1)) p.linearRampToValueAtTime(val * k, t + at);
-    };
-    // A slow random drift, turning about `hz` times a second: the noise with all but its slowest part filtered away,
-    // brought back up to swing about `depth` either way.
-    const drift = (hz: number, depth: number, to: AudioParam) => {
-      const n = ctx.createBufferSource();
-      n.buffer = this.noiseBuf!;
-      n.loop = true;
-      const f = ctx.createBiquadFilter();
-      f.type = 'lowpass';
-      f.frequency.value = hz;
-      const g = ctx.createGain();
-      g.gain.value = depth * 0.5 * Math.sqrt((1.35 * ctx.sampleRate) / hz);
-      n.connect(f).connect(g).connect(to);
-      n.start(t, Math.random() * 2.9);
-      n.stop(end);
-    };
-    const throat = ctx.createGain();
-    for (const k of v.stack ?? [1, 1.012]) {
-      const o = ctx.createOscillator();
-      o.type = 'sawtooth';
-      course(o.frequency, v.pitch, k);
-      if (v.waver > 0) drift(v.waverHz ?? 23, v.waver, o.detune);
-      o.connect(throat);
-      o.start(t);
-      o.stop(end);
+    playVoice(this.ctx!, this.noiseBuf!, this.master!, v);
+  }
+
+  /** The giants' fight sound, built the first time it is asked for (not before the sound has started). */
+  private fights(): GiantFight | undefined {
+    if (!this.ctx || !this.master || !this.noiseBuf) return undefined;
+    if (!this.fight) {
+      this.fightBus = this.ctx.createGain();
+      this.fightBus.gain.value = this.musicOn ? 1 : 0;
+      this.fightBus.connect(this.master);
+      this.fight = new GiantFight(this.ctx, this.noiseBuf, this.fightBus, this.master, this.under?.gain);
     }
-    if (v.breath > 0) {
-      const n = ctx.createBufferSource();
-      n.buffer = this.noiseBuf!;
-      n.loop = true;
-      const g = ctx.createGain();
-      g.gain.value = v.breath;
-      n.connect(g).connect(throat);
-      n.start(t, Math.random() * 2.9);
-      n.stop(end);
-    }
-    // The growl: the level shaken, part of it evenly and part of it at random.
-    const loose = v.loose ?? 0;
-    const shake = ctx.createGain();
-    shake.gain.value = 1 - v.depth / 2;
-    const lfo = ctx.createOscillator();
-    course(lfo.frequency, v.rough);
-    const even = ctx.createGain();
-    even.gain.value = (v.depth / 2) * (1 - loose);
-    lfo.connect(even).connect(shake.gain);
-    lfo.start(t);
-    lfo.stop(end);
-    if (loose > 0) drift(v.rough[0][1] * 2, (v.depth / 2) * loose, shake.gain);
-    throat.connect(shake);
-    const mouth = ctx.createGain();
-    for (const m of v.mouth) {
-      const f = ctx.createBiquadFilter();
-      f.type = 'bandpass';
-      f.Q.value = m.q;
-      course(f.frequency, m.f);
-      const g = ctx.createGain();
-      g.gain.value = m.gain;
-      shake.connect(f).connect(g).connect(mouth);
-    }
-    const tear = ctx.createWaveShaper();
-    const curve = new Float32Array(513);
-    for (let i = 0; i < 513; i++) curve[i] = Math.tanh((i / 256 - 1) * v.grit) / Math.tanh(v.grit);
-    tear.curve = curve;
-    const soft = ctx.createBiquadFilter();
-    soft.type = 'lowpass';
-    soft.frequency.value = 6000;
-    const out = ctx.createGain();
-    course(out.gain, v.level, v.gain);
-    mouth.connect(tear).connect(soft).connect(out).connect(v.out ?? this.master!);
+    return this.fight;
+  }
+
+  /**
+   * A giant is hooked: its fight music starts and the lake's tune gives way to it. The music is a pipe organ
+   * (giantsound.ts), and the hook is its first chord, the full organ at once. Follows the music switch, also when it
+   * is flipped mid-fight. Called while a fight is on, it starts over cleanly.
+   */
+  giantFightStart(id: Giant): void {
+    this.fights()?.start(id);
+  }
+
+  /** Every frame of a giant's fight: the music follows the fight (more stops, figures and speed as it comes in and the acts go by, more again in each surge, one thin stop once it is spent). */
+  giantFight(dt: number, s: GiantFightState): void {
+    this.fight?.update(dt, s, this.musicOn && this.soundOn);
+  }
+
+  /**
+   * The giant's voice, never twice the same. Each giant makes sound its own way (the Leviathan a reptile's rasping
+   * throat, the Kraken long hollow tones from deep water, the Dreamer its music box, glass and spring), as a handful
+   * of gestures, each time in another key, length, shape and level; duller and quieter far out, more strained as it
+   * tires. `kind` 'last' is its last stand, the biggest thing in the fight, which the organ answers with a chord. It
+   * goes to the master gain like other effects.
+   */
+  giantCall(id: Giant, c: GiantCall): void {
+    // Nothing is built into a muted master.
+    if (!this.soundOn) return;
+    this.fights()?.call(id, c, this.musicOn);
+  }
+
+  /**
+   * The fight is over: landed (the music drops to near silence within 0.3 s so the landing's own sound hits, `giant`)
+   * or lost (it sags away over about 1.5 s). The lake's tune comes back. Safe when no fight is on.
+   */
+  giantFightEnd(how: 'landed' | 'lost'): void {
+    this.fight?.end(how);
   }
 
   /**
