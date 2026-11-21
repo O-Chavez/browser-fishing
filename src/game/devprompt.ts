@@ -1,4 +1,4 @@
-import { loginCommand, promptEcho, resetPassCommand, secretError, type SecretPrompt } from './chatbox';
+import { isEnterKey, loginCommand, promptEcho, resetPassCommand, secretError, type SecretPrompt } from './chatbox';
 
 interface Field {
   label: string;
@@ -39,7 +39,7 @@ export class DevPrompt {
     // The game listens on the document; keep typing here from moving the player or switching slots.
     root.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      if (isEnterKey(e)) {
         e.preventDefault();
         if ((e.target as HTMLElement).tagName === 'BUTTON' && (e.target as HTMLElement).id === 'devprompt-cancel') this.cancel();
         else this.submit();

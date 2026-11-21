@@ -2,6 +2,10 @@
 
 Finished TODO items, newest first, with what was decided and how each was checked. Add new ones at the top.
 
+- [x] Return / ✓ on a phone's own keyboard sends the chat line (Oscar, 2026-11-20: on mobile the native keyboard's return or check mark did nothing)
+  - Cause: the chat input and the `/login` / `/resetpass` panel only matched `e.code === 'Enter'`; phone keyboards (iOS, Gboard) usually send an empty `code` and only set `key`
+  - Built: `isEnterKey` in `src/game/chatbox.ts` (matches `key`, `code` or `keyCode` 13, skips IME composition so picking a candidate doesn't send), used by `ChatBox` and `DevPrompt`; the chat input has `enterkeyhint="send"` so the key reads Send
+  - Checked: nothing run (no packages installed in the session, so no tests or build). No What's new entry (a bug fix). Not checked: a real phone
 - [x] Every Abyss legend is Brutish, at 1.5 times its weight (Oscar, 2026-11-20, from players: the new giants' look and sounds went down well, but their fights should be a bit harder, and Brutish on each was their suggestion; Oscar raised it to 1.5 times since Tough-zone players landed them with no trouble and a legend's fight should be long; branch `abyss-legends-brutish`)
   - Built: the Leviathan, the Dreamer and the Kraken are always hooked Brutish (`legendTag: { tag: 'brutish', tiers: 1.5 }` on the Abyss in `ZONES`, `src/data/dive.ts`; `rollSeaCast` passes it to `rollFishGaps`, which still draws the tag roll so the cast's other rolls don't shift): the ⚓ badge, +0.75 tier of weight (a Brutish fish's +0.5, times 1.5), no change to strength, and a Brutish fish's pay (double pearls, +15% coins). The rest of the Abyss and the other zones' legends roll a tag one in 8 as before
   - Pay: Reed's chart counts it in (`averagePearls`, `averageSale`): an Abyss fish's average pearls 81 to 94 at marker 1, coins shown 27,200 to 27,700, and the Iron keel 10 charters away to 9 in the staged test
