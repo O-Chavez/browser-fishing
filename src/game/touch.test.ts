@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keepsNativeTouch, touchFieldPx, touchLayoutWidth } from './touch';
+import { keepsNativeTouch, shownWidth, touchFieldPx, touchLayoutWidth } from './touch';
 
 describe('touchLayoutWidth', () => {
   it('keeps phones near 0.6x and caps at 1400', () => {
@@ -38,6 +38,12 @@ describe('touchFieldPx', () => {
       expect(real).toBeGreaterThanOrEqual(16);
       expect(real).toBeLessThan(20);
     }
+  });
+
+  it('knows a notch phone shows the page narrower than its screen', () => {
+    expect(shownWidth(390, 844)).toBe(720);
+    expect(shownWidth(667, 375)).toBe(667);
+    expect(shownWidth(1180, 820)).toBe(1180);
   });
 
   it('stays 28 on tablets and unknown screens', () => {

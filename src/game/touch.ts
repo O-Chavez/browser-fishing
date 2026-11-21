@@ -20,11 +20,14 @@ export function touchLayoutWidth(w: number, h: number): number {
  * the layout is nearer 0.53x than 0.6x there. Never under 28, the size tablets and wide screens get.
  */
 export function touchFieldPx(w: number, h: number): number {
+  if (!Math.max(w, h)) return 28;
+  return Math.max(28, Math.ceil((17 * touchLayoutWidth(w, h)) / shownWidth(w, h)));
+}
+
+/** The width in screen points a landscape phone's browser shows the page in: the long side, less about 62 each end beside a notch. */
+export function shownWidth(w: number, h: number): number {
   const long = Math.max(w, h);
-  const short = Math.min(w, h);
-  if (!long) return 28;
-  const shown = long / short > 2 ? long - 124 : long;
-  return Math.max(28, Math.ceil((17 * touchLayoutWidth(w, h)) / shown));
+  return long / Math.min(w, h) > 2 ? long - 124 : long;
 }
 
 /**
