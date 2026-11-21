@@ -2,7 +2,7 @@
 
 ### Fish with friends online for free!
 
-**[▶ Play now in your browser](https://browser-fishing-1.onrender.com/)**: no download, no sign-up, just pick a name and cast.
+**[▶ Play now in your browser](https://browser-fishing-1.onrender.com/)**: no download: pick a name and a password, and cast.
 
 ![Gameplay: friends fishing off the pier at sunset, landing a legendary Aurora Pike, showing off outfits in the town square, and winning at roulette in the casino](docs/images/gameplay.gif)
 

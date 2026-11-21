@@ -43,6 +43,7 @@ import { anchorHtml } from './anchor';
 import casinoPreview from '../assets/images/casino-preview.jpg';
 import charterPreview from '../assets/images/charter-preview.jpg';
 import { NEWS, type NewsEntry } from '../data/news';
+import { cleanName, createProblem, entersByItself, HOME_FADE_MS, homeBoardHtml, LOGGED_OUT_KEY, LOGOUT_KEEP, logoutLossHtml, nameProblem, NEW_NOTE, newPassProblem, openingView, PASS_MIN, PLAY_LABEL, playEnabled, RECONNECT_KEY, signedInHtml, switchHtml, switchLabel, UNREACHABLE, unreadBadge, type HomeView, type PlayState } from './home';
 import { latestNews, NEWS_KEY, newsHtml, readSeen, unreadNews } from './news';
 import { baitWarning, charterTipDue, chartersToTry, gearHintText, lineUpgrade, lossVerdict, markTip, NUDGE_BEAT_SECS, NUDGE_TITLE, nudgeHtml, nudgesDue, rodUpgrade, seaLossVerdict, tipText, TOUGH_FIGHT_SECS, type FightEnd, type LossEnd, type TipId } from './tips';
 import { COIN, PEARL, clock, coinText, escapeHtml, shortCoins, withCoins } from './format';
@@ -203,8 +204,10 @@ const HOLD_TO_DROP_MS = 500;
 const AUTO_RELOAD_KEY = 'fishing-auto-reload';
 /** Highest the rod tilts back (relative to the view) while a catch dangles, so it never swings into the camera. */
 const MAX_HOLD_PITCH = 1.5;
-/** The longest the join card waits on the shader warm-up after the server lets you in ("Loading…"), so a stuck one can't keep you out. A play-test default. */
+/** The longest the home screen waits on the shader warm-up after the server lets you in ("Loading…") before Play is live, so a stuck one can't keep you out. A play-test default. */
 const JOIN_WARM_CAP_MS = 10_000;
+/** Whole frames drawn behind the home screen once everything is warm, so Play's first frame is an ordinary one; after them the world isn't drawn until Play. */
+const HOME_DRAWS = 3;
 
 /** The wheelhouse's footprint on the charter boat (x0, x1, z0, z1): the one of `BOAT.blocked` that stands over its middle. */
 const WHEELHOUSE = BOAT.blocked.find(([x0, x1]) => x0 < BOAT.wheelhouse && BOAT.wheelhouse < x1) ?? [0, 0, 0, 0];
@@ -228,7 +231,7 @@ export class Game {
   private homeTipQuiet = 0;
   /** Seconds since this join, while the tip waits (`HOME_TIP_DELAY_SECS`). */
   private homeTipAge = 0;
-  /** A phone's first visit: the join screen shows "Add to Home Screen first?" (`homeAtJoin`); and the prompt was accepted there. */
+  /** A phone's first visit: the home screen shows "Add to Home Screen first?" (`homeAtJoin`); and the prompt was accepted there. */
   private homeJoinOpen = false;
   private homeJoinAccepted = false;
   private shownPhase: Phase | '' = '';
@@ -245,10 +248,29 @@ export class Game {
   private seaDepth = 1;
   /** When the "Casting off" card went up, while it covers a trip to or from the sea. */
   private castOffAt: number | null = null;
-  /** Joined online but still on the join card ("Loading…") until the shaders are warmed up (`finishJoin`), at the latest by this `performance.now()`. */
+  /** Joined online, with Play waiting ("Loading…") until the shaders are warmed up (`finishJoin`), at the latest by this `performance.now()`. */
   private enterBy: number | null = null;
-  /** What waits for the join card to go (`enterGame`). */
+  /** What waits for the home screen to go (`enter`). */
   private onEnter: (() => void)[] = [];
+  /** The home screen is down, or on its way down: Play was pressed, the game was entered offline, or a `?name=` link skipped it. */
+  private entered = false;
+  /** The home screen's view (`src/game/home.ts`), its Play button, and how the join now pending was asked for: by a form, or by this browser's saved login. */
+  private homeView: HomeView = 'new';
+  private playState: PlayState = 'connecting';
+  private joinHow: 'new' | 'login' | 'saved' = 'saved';
+  /** The server has let this page in: `s` is the account's save, not this browser's offline one. */
+  private joined = false;
+  /** A load flagged as a reconnect (`RECONNECT_KEY`): it goes in by itself once ready instead of waiting for Play. */
+  private autoEnter = false;
+  /** Frames drawn behind the home screen since everything was warm (`HOME_DRAWS`). */
+  private homeDrawn = 0;
+  private fadeTimer = 0;
+  /** Play's own mouse capture is under way: the welcome banner it put up stays, where any other capture dismisses it. */
+  private playLock = false;
+  /** Touch mode is about to start (`enableTouch`, right after the constructor): the home screen never focuses a field, so the phone's keyboard stays down. */
+  private touchy = touchOnly || new URLSearchParams(location.search).has('touch');
+  /** A full-screen notice hides the view (`setCovered`). */
+  private covered = false;
   private screenSpray = new ScreenSpray();
   private timer = 0;
 
@@ -422,10 +444,8 @@ export class Game {
   private histBack = false;
   private histPush = false;
   private keepTab = false;
-  /** The unread entries while the "What's new" card from joining is open; null on the full board. */
-  private newsGlance: NewsEntry[] | null = null;
-  /** A banner that came up while that card was open, shown once it's put away. */
-  private afterNews: (() => void) | null = null;
+  /** The entries Settings' "What's new" board marks NEW: those unread as it opened (`readNews`); null while it's closed. */
+  private newsFresh: NewsEntry[] | null = null;
   /**
    * A tip nudge waiting for a quiet moment (`tickNudge`): `armed` once a catch has been released and nothing cast
    * since, `quiet` the seconds the player has then stood idle. Not saved: one that never opens (the player left
@@ -643,7 +663,7 @@ export class Game {
       onFurthest: () => this.world.town?.setFurthest(this.net.furthest),
       onFailed: () => {
         clientLog('failed', this.joining ? 'join' : 'auto-join');
-        if (this.joining) this.joinMessage("Can't reach the game server. Try again, or play offline.");
+        if (this.joining) this.joinFailed(this.joinHow === 'saved' ? UNREACHABLE : `${UNREACHABLE} Try again, or play offline.`, undefined, true);
         else if (this.pendingWelcome) {
           this.showOffline("Can't reach the game server");
           this.welcome();
@@ -699,10 +719,7 @@ export class Game {
         this.dropEmote();
       },
       onError: (msg, need) => {
-        if (this.joining) {
-          if (need === 'password') this.askPassword();
-          return this.joinMessage(msg);
-        }
+        if (this.joining) return this.joinFailed(msg, need);
         if (!this.pendingWelcome) return void (this.offlineWhy = msg.replace(/\.$/, ''));
         this.showOffline(msg.replace(/\.$/, ''));
         this.welcome();
@@ -728,18 +745,25 @@ export class Game {
       },
       onClose: () => {
         if (this.loggingOut) {
-          // A fresh token, so the next account made in this browser isn't tied to the old one.
-          for (const k of ['fishing-auto', 'fishing-token', 'fishing-name']) localStorage.removeItem(k);
+          // A fresh token, so the next account made in this browser isn't tied to the old one. The name stays for
+          // the log-in form, unless the account went with the log-out (it had no password).
+          for (const k of ['fishing-auto', 'fishing-token', ...(this.net.hasPass ? [] : ['fishing-name'])]) localStorage.removeItem(k);
+          try {
+            sessionStorage.setItem(LOGGED_OUT_KEY, '1');
+          } catch {}
           return location.reload();
         }
+        this.homeLost();
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
         this.fb.giveUp(OFFLINE_MSG);
         this.renderFeedback();
         clientLog('close', `${this.offlineWhy ?? 'dropped'}, ${document.hidden ? 'hidden' : 'visible'}`);
         // The server sent a reason (kicked, signed in elsewhere): reconnecting would only repeat it.
-        if (this.offlineWhy) this.showOffline(this.offlineWhy);
-        else this.reconnect();
+        if (this.offlineWhy) {
+          this.showOffline(this.offlineWhy);
+          this.homeGaveUp(`${this.offlineWhy}.`);
+        } else this.reconnect();
         this.offlineWhy = undefined;
       },
       onRestart: () => this.startRestart(),
@@ -784,27 +808,42 @@ export class Game {
       req?.catch?.(() => {});
     });
     this.bind();
-    this.bindJoin(name, !!urlName);
+    this.bindHome(urlName);
     this.refreshHud();
     this.renderMenu();
     this.setIdlePose();
     requestAnimationFrame(this.loop);
   }
 
-  // ---------- join screen ----------
+  // ---------- home screen ----------
 
-  private bindJoin(urlName: string | null, direct: boolean): void {
-    const input = $('join-name') as HTMLInputElement;
+  /**
+   * The home screen (`src/game/home.ts`, GAME_DESIGN.md §15): the card's fields and buttons, and the view it opens
+   * on. A browser with a saved login opens on "Logged in as" and joins by itself; a `?name=` link skips the screen.
+   */
+  private bindHome(urlName: string | null): void {
+    const name = $('join-name') as HTMLInputElement;
+    const loginName = $('join-login-name') as HTMLInputElement;
     const swatches = $('join-colors');
     const saved = Number(localStorage.getItem('fishing-color'));
     if (Number.isInteger(saved) && localStorage.getItem('fishing-color')) this.joinColor = saved;
     else this.joinColor = BODY_COLORS[Math.floor(Math.random() * BODY_COLORS.length)];
-    input.value = urlName ?? localStorage.getItem('fishing-name') ?? '';
+    const savedName = localStorage.getItem('fishing-name') ?? '';
+    name.value = loginName.value = savedName;
+    // Read once: the flags are for the load that follows the reload that set them.
+    let reconnect: string | null = null;
+    let loggedOut = false;
+    try {
+      reconnect = sessionStorage.getItem(RECONNECT_KEY);
+      loggedOut = !!sessionStorage.getItem(LOGGED_OUT_KEY);
+      sessionStorage.removeItem(RECONNECT_KEY);
+      sessionStorage.removeItem(LOGGED_OUT_KEY);
+    } catch {}
     const paint = () => {
       swatches.innerHTML =
         BODY_COLORS.map((c) => `<button type="button" class="swatch${c === this.joinColor ? ' on' : ''}" data-color="${c}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`).join('') +
         `<input type="color" id="join-custom" value="#${this.joinColor.toString(16).padStart(6, '0')}" title="Custom color">`;
-      this.joinPreview();
+      this.homePreview();
     };
     swatches.addEventListener('click', (e) => {
       const c = (e.target as HTMLElement).dataset.color;
@@ -817,171 +856,403 @@ export class Game {
       const el = e.target as HTMLInputElement;
       if (el.id === 'join-custom') {
         this.joinColor = parseInt(el.value.slice(1), 16);
-        this.joinPreview();
+        this.homePreview();
       }
     });
-    $('join-go').addEventListener('click', () => this.submitJoin());
-    $('offline-go').addEventListener('click', () => location.reload());
-    input.addEventListener('keydown', (e) => e.key === 'Enter' && this.submitJoin());
-    $('join-pass').addEventListener('keydown', (e) => e.key === 'Enter' && this.submitJoin());
-    // The password prompt belongs to the name the server asked about.
-    input.addEventListener('input', () => $('join-pass-row').classList.add('hidden'));
+    // A name typed on one tab is there on the other.
+    name.addEventListener('input', () => (loginName.value = name.value));
+    loginName.addEventListener('input', () => (name.value = loginName.value));
+    $('join-new').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.submitNew();
+    });
+    $('join-login').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.submitLogin();
+    });
+    $('join-play').addEventListener('click', () => this.playClicked());
     $('join-offline').addEventListener('click', () => {
       this.joining = false;
       this.s.look.color = this.joinColor;
       this.persist();
-      $('join').classList.add('hidden');
-      this.preview?.stop();
       this.refreshHud();
-      this.welcome(($('join-name') as HTMLInputElement).value.trim().slice(0, 16));
+      this.enter('play', name.value.trim().slice(0, 16));
     });
-    if (direct) {
+    $('join').addEventListener('click', (e) => {
+      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-join]')?.dataset.join;
+      if (act) this.homeAct(act);
+    });
+    $('offline-go').addEventListener('click', () => this.reload());
+    if (urlName) {
       // ?name= links (and tests) skip the screen and keep the account's saved look.
-      this.net.name = urlName!;
+      $('join').classList.add('hidden');
+      this.entered = true;
+      this.net.name = urlName;
       this.pendingWelcome = true;
       this.showResume('', 'to start fishing');
       this.net.connect();
       return;
     }
-    $('join').classList.remove('hidden');
     paint();
-    input.focus();
-    $('join-switch').addEventListener('click', () => {
-      localStorage.removeItem('fishing-auto');
-      location.reload();
-    });
-    // Returning players (this browser joined successfully before) reconnect with their saved token.
-    if (urlName && localStorage.getItem('fishing-auto')) {
-      $('join-switch').classList.remove('hidden');
-      this.joinStart(urlName);
-    }
+    const view = openingView({ name: savedName || null, auto: localStorage.getItem('fishing-auto'), loggedOut });
+    this.autoEnter = entersByItself(reconnect, view);
+    this.setHomeView(view);
+    this.paintUnread();
+    // Returning players (this browser joined successfully before) join with their saved token.
+    if (view === 'in') this.joinStart(savedName, 'saved');
   }
 
-  private joinPreview(): void {
-    this.getPreview().set({ ...defaultLookWith(this.joinColor, this.s.look.face) });
+  /** Shows one of the card's views. The forms' markup is static, so what was typed stays through a change of view. */
+  private setHomeView(view: HomeView): void {
+    const el = $('join');
+    // A password typed on one tab comes along to the other ("that name is taken; if it's yours, log in instead").
+    if (view !== 'in' && view !== this.homeView) {
+      const [from, to] = (view === 'login' ? ['join-newpass', 'join-pass'] : ['join-pass', 'join-newpass']).map((id) => $(id) as HTMLInputElement);
+      if (from.value) to.value = from.value;
+    }
+    this.homeView = view;
+    el.classList.remove('loading', 'new', 'login', 'in', 'confirm');
+    el.classList.add(view);
+    for (const b of el.querySelectorAll<HTMLElement>('.join-tabs button')) b.classList.toggle('on', b.dataset.join === view);
+    // Signed in, the game is a Play away; the way in offline comes back if the server can't be reached.
+    $('join-offline').classList.toggle('hidden', view === 'in');
+    if (view === 'in') this.renderSignedIn();
+    this.homeMessage('');
+    this.homePreview();
+    this.homeFocus();
+  }
+
+  /** The card's one line above its button: a refusal in red, or in ink progress ("Connecting…") and, with nothing to report, "New angler"'s note. */
+  private homeMessage(msg: string, info = false): void {
+    $('join-msg').textContent = msg || (this.homeView === 'new' ? NEW_NOTE : '');
+    $('join-msg').classList.toggle('info', info || !msg);
+  }
+
+  /** On a computer, puts the cursor in `el`, or in the view's first empty field. Never in touch mode: the phone's keyboard must not come up by itself. */
+  private homeFocus(el?: HTMLElement): void {
+    if (this.touchy) return;
+    const fields = this.homeView === 'new' ? ['join-name', 'join-newpass'] : this.homeView === 'login' ? ['join-login-name', 'join-pass'] : [];
+    (el ?? fields.map((id) => $(id) as HTMLInputElement).find((f) => !f.value))?.focus();
+  }
+
+  /**
+   * The character on the card: the default angler in the picked colour while signed out, and the account's own
+   * outfit once its save is here. In between (connecting with a saved login) the slot stays empty, since the
+   * browser's own save may show someone else.
+   */
+  private homePreview(): void {
+    if (this.homeView === 'in' && !this.joined) {
+      this.preview?.stop();
+      this.preview?.canvas.remove();
+      return;
+    }
+    // Out of sight behind the board or the phone's first-visit step: it starts again with the card.
+    if ($('join').classList.contains('board') || this.homeJoinOpen) return void this.preview?.stop();
+    const pv = this.getPreview();
+    pv.set(this.homeView === 'in' ? { ...this.s.look } : defaultLookWith(this.joinColor, this.s.look.face));
     const slot = $('join-preview');
-    if (!slot.contains(this.getPreview().canvas)) slot.appendChild(this.getPreview().canvas);
-    this.getPreview().start();
+    if (!slot.contains(pv.canvas)) slot.appendChild(pv.canvas);
+    pv.start();
   }
 
   private getPreview(): CharacterPreview {
     return (this.preview ??= new CharacterPreview(this.s.look));
   }
 
-  private submitJoin(): void {
+  /** "Logged in as": who, and once the server's save is here, where they stand and the way to another account. */
+  private renderSignedIn(): void {
+    $('join-in').innerHTML = signedInHtml(this.net.name, this.joined ? this.s : null, chartersToTry(this.s));
+    const other = $('join-other');
+    other.innerHTML = switchLabel(this.net.name);
+    other.classList.toggle('hidden', !this.joined || !this.net.connected);
+  }
+
+  private setPlay(state: PlayState): void {
+    this.playState = state;
+    const b = $('join-play') as HTMLButtonElement;
+    b.textContent = PLAY_LABEL[state];
+    b.disabled = !playEnabled(state);
+  }
+
+  /** The "What's new" button's count of entries this browser hasn't shown. */
+  private paintUnread(): void {
+    const n = unreadNews(readSeen(localStorage.getItem(NEWS_KEY)), isFreshSave(this.s)).length;
+    $('join-unread').textContent = unreadBadge(n);
+    $('join-unread').classList.toggle('hidden', !n);
+  }
+
+  /** The board is being opened: the entries unread until now (they get its NEW chip), and this browser has then read up to the newest. */
+  private readNews(): NewsEntry[] {
+    const seen = readSeen(localStorage.getItem(NEWS_KEY));
+    localStorage.setItem(NEWS_KEY, String(Math.max(seen ?? 0, latestNews())));
+    return unreadNews(seen, isFreshSave(this.s));
+  }
+
+  /** The card's tabs and links (`data-join`). */
+  private homeAct(act: string): void {
+    const el = $('join');
+    if (act === 'new' || act === 'login') {
+      if (!this.joining) this.setHomeView(act);
+    } else if (act === 'news') {
+      $('join-board').innerHTML = homeBoardHtml(NEWS, this.readNews());
+      el.classList.add('board');
+      this.paintUnread();
+      // The character preview is out of sight meanwhile; it starts again with the card.
+      this.preview?.stop();
+    } else if (act === 'back') {
+      if (!el.classList.contains('board')) return;
+      el.classList.remove('board');
+      this.homePreview();
+      this.homeFocus();
+    } else if (act === 'switch') {
+      $('join-confirm').innerHTML = switchHtml(this.net.name, this.net.hasPass, this.net.isSupporter(this.net.name));
+      el.classList.add('confirm');
+    } else if (act === 'cancel') el.classList.remove('confirm');
+    else if (act === 'logout') {
+      // The server forgets this browser (and deletes an account with no password) and hangs up; `onClose` reloads.
+      this.loggingOut = true;
+      this.net.send({ t: 'forget' });
+      for (const b of $('join-confirm').querySelectorAll('button')) b.disabled = true;
+    } else if (act === 'setpass') {
+      // Into the game with Settings open on the password form; the welcome banner would sit over it.
+      this.enter('menu');
+      this.dismissWelcome();
+      this.openAccount('pass');
+    }
+  }
+
+  /** "Create account": checked here first, so a slip costs no round trip. */
+  private submitNew(): void {
     if (this.joining) return;
-    const name = ($('join-name') as HTMLInputElement).value.replace(/[^\w \-]/g, '').trim().slice(0, 16);
-    if (name.length < 2) return this.joinMessage('Pick a name of 2-16 letters, numbers, spaces or dashes.');
-    const asked = !$('join-pass-row').classList.contains('hidden');
-    const pass = ($('join-pass') as HTMLInputElement).value;
-    if (asked && !pass) return this.joinMessage('Enter your password.');
-    localStorage.setItem('fishing-name', name);
-    localStorage.setItem('fishing-color', String(this.joinColor));
-    this.net.pass = asked ? pass : undefined;
-    this.joinStart(name);
+    const name = cleanName(($('join-name') as HTMLInputElement).value);
+    const pass = ($('join-newpass') as HTMLInputElement).value;
+    const bad = createProblem(name, pass);
+    if (bad) {
+      this.homeMessage(bad.msg);
+      return this.homeFocus($(bad.field === 'name' ? 'join-name' : 'join-newpass'));
+    }
+    this.net.pass = pass;
+    this.net.mode = 'new';
+    this.joinStart(name, 'new');
   }
 
-  /** The name has a password and this browser isn't one of its devices yet. */
-  private askPassword(): void {
-    $('join-pass-row').classList.remove('hidden');
-    const el = $('join-pass') as HTMLInputElement;
-    el.value = '';
-    // After joinMessage has re-enabled the form.
-    requestAnimationFrame(() => el.focus());
+  /** "Log in". An empty password still goes to the server: an account from before passwords opens in the browser it was made in. */
+  private submitLogin(): void {
+    if (this.joining) return;
+    const name = cleanName(($('join-login-name') as HTMLInputElement).value);
+    const bad = nameProblem(name);
+    if (bad) {
+      this.homeMessage(bad);
+      return this.homeFocus($('join-login-name'));
+    }
+    this.net.pass = ($('join-pass') as HTMLInputElement).value || undefined;
+    this.net.mode = 'login';
+    this.joinStart(name, 'login');
   }
 
-  private joinStart(name: string): void {
+  private joinStart(name: string, how: 'new' | 'login' | 'saved'): void {
     this.joining = true;
+    this.joinHow = how;
     this.net.name = name;
-    this.net.color = this.joinColor;
-    this.joinMessage('Connecting…', false);
-    $('join-go').toggleAttribute('disabled', true);
+    // Only a new account takes the colour picked on the card: the server sets whatever a join brings, and an
+    // existing account keeps the look it has.
+    this.net.color = how === 'new' ? this.joinColor : undefined;
+    if (how === 'saved') this.setPlay(this.autoEnter ? 'reconnecting' : 'connecting');
+    else {
+      // Saved on the first try, so the next visit opens on "I have an account" with the name filled in.
+      localStorage.setItem('fishing-name', name);
+      this.homeMessage('Connecting…', true);
+      this.homeBusy(true);
+    }
     this.net.connect();
   }
 
-  private joinMessage(msg: string, failed = true): void {
-    $('join-msg').textContent = msg;
-    if (!failed) return;
-    this.joining = false;
-    $('join-go').toggleAttribute('disabled', false);
-    localStorage.removeItem('fishing-auto');
-    $('join-switch').classList.add('hidden');
-    $('join').classList.remove('hidden');
-    this.joinPreview();
-  }
-
-  private finishJoin(): void {
-    this.joining = false;
-    localStorage.setItem('fishing-auto', '1');
-    ($('join-pass') as HTMLInputElement).value = '';
-    $('join-pass-row').classList.add('hidden');
-    $('join-switch').classList.add('hidden');
-    this.world.hub?.setLeaders(this.anglers(), this.anglers(true));
-    // Returning players join by themselves within moments of the page loading, often before the map's shaders
-    // (`World.prewarm`, and the map the save is on, built right after this) and the legend pieces' stand-ins
-    // (`Avatars.warmLegends`) are done. The card stays up meanwhile ("Loading…", the world not drawn behind it while
-    // the map's compile, see `holdForShaders`), so the first frames in game don't stall on the rest; the frame loop
-    // takes it down (`enterGame`), at the latest after `JOIN_WARM_CAP_MS`.
-    this.joinMessage('Loading…', false);
-    this.enterBy = performance.now() + JOIN_WARM_CAP_MS;
-  }
-
-  /** Takes the join card down once the shaders are ready (or the wait has run out) and greets the player. */
-  private enterGame(): void {
-    this.enterBy = null;
-    $('join').classList.add('hidden');
-    this.preview?.stop();
-    this.welcome();
-    for (const f of this.onEnter.splice(0)) f();
-  }
-
-  /** Runs `f` now, or once the join card is down if it's still loading. */
-  private afterEnter(f: () => void): void {
-    if (this.enterBy === null) f();
-    else this.onEnter.push(f);
-  }
-
-  /** After joining online: unread "What's new" entries open in a card, and this browser has then read up to the newest. */
-  private showNews(): void {
-    const seen = readSeen(localStorage.getItem(NEWS_KEY));
-    const unread = unreadNews(seen, isFreshSave(this.s));
-    localStorage.setItem(NEWS_KEY, String(Math.max(seen ?? 0, latestNews())));
-    if (!unread.length) return;
-    this.newsGlance = unread;
-    // The card greets the player instead of the banner, which would sit on top of it.
-    this.dismissWelcome();
-    this.openMenu('news');
+  /** The forms' buttons wait while a join is on its way. */
+  private homeBusy(on: boolean): void {
+    for (const id of ['join-go', 'join-login-go']) ($(id) as HTMLButtonElement).disabled = on;
   }
 
   /**
-   * After joining: no window, just the scene with a welcome banner and a "click to start" overlay.
-   * The click that captures the mouse dismisses the banner; otherwise it fades by itself.
+   * A join that didn't get in: the server refused it (`msg`; `need` when it wants the password), or couldn't be
+   * reached. A saved login that is refused goes to "I have an account" with the name filled in; one that can't
+   * reach the server keeps its login and offers another try, or the way in offline.
+   */
+  private joinFailed(msg: string, need?: 'password', unreachable = false): void {
+    this.joining = false;
+    this.autoEnter = false;
+    this.homeBusy(false);
+    if (this.joinHow === 'saved' && unreachable) {
+      this.setPlay('unreachable');
+      $('join-offline').classList.remove('hidden');
+      return this.homeMessage(msg);
+    }
+    if (this.joinHow === 'saved') {
+      localStorage.removeItem('fishing-auto');
+      this.setHomeView('login');
+    }
+    this.homeMessage(msg);
+    if (need === 'password') this.homeFocus($('join-pass'));
+  }
+
+  /** The server let the player in: the card says who they are and where they stand, and Play waits for the shaders. */
+  private finishJoin(): void {
+    this.joining = false;
+    this.joined = true;
+    localStorage.setItem('fishing-auto', '1');
+    // The account's colour is this browser's from here on (the card's swatches, and offline play).
+    this.joinColor = this.s.look.color;
+    localStorage.setItem('fishing-color', String(this.joinColor));
+    for (const id of ['join-newpass', 'join-pass']) ($(id) as HTMLInputElement).value = '';
+    this.homeBusy(false);
+    this.world.hub?.setLeaders(this.anglers(), this.anglers(true));
+    this.setHomeView('in');
+    this.paintUnread();
+    // Players with a saved login join by themselves within moments of the page loading, often before the map's
+    // shaders (`World.prewarm`, and the map the save is on, built right after this) and the legend pieces' stand-ins
+    // (`Avatars.warmLegends`) are done. Play stays "Loading…" meanwhile, so the first frames in game don't stall on
+    // the rest; the frame loop makes it live (`homeReady`), at the latest after `JOIN_WARM_CAP_MS`.
+    this.setPlay(this.autoEnter ? 'reconnecting' : 'loading');
+    this.enterBy = performance.now() + JOIN_WARM_CAP_MS;
+  }
+
+  /** Everything the first frames need is compiled and drawn once. */
+  private get warm(): boolean {
+    return this.world.ready && this.world.warmedAll && !this.avatars.buildingLegends && !this.lookWarm.building;
+  }
+
+  /** Joined, and the shaders are ready (or the wait has run out): Play is live, and a reconnect goes straight in. */
+  private homeReady(): void {
+    this.enterBy = null;
+    if (this.autoEnter) return this.enter('auto');
+    this.setPlay('ready');
+    this.homeFocus($('join-play'));
+  }
+
+  private playClicked(): void {
+    if (this.playState === 'ready') return this.enter('play');
+    if (this.playState !== 'unreachable') return;
+    // "Try again". After a connection that was lost, the page starts over; one that was never made is made again.
+    if (this.joined) return location.reload();
+    this.homeMessage('');
+    $('join-offline').classList.add('hidden');
+    this.joinStart(this.net.name, 'saved');
+  }
+
+  /**
+   * The connection went while the card was waiting for Play (a drop, a redeploy): no Play into a game that isn't
+   * there. The page reloads itself once the server answers (`reconnect`, `startRestart`), onto this screen again.
+   */
+  private homeLost(): void {
+    if (this.entered || this.homeView !== 'in') return;
+    this.enterBy = null;
+    $('join').classList.remove('confirm');
+    this.renderSignedIn();
+    this.setPlay('reconnecting');
+  }
+
+  /** The wait for the server was given up (or it said why it hung up): the card offers another try, or the way in offline. */
+  private homeGaveUp(msg = UNREACHABLE): void {
+    if (this.entered) return;
+    if (this.joining) return this.joinFailed(this.joinHow === 'saved' ? msg : `${msg} Try again, or play offline.`, undefined, true);
+    if (this.homeView !== 'in') return;
+    this.setPlay('unreachable');
+    $('join-offline').classList.remove('hidden');
+    this.homeMessage(msg);
+  }
+
+  /**
+   * Takes the home screen down and starts the game: Play (`play`: sound and, with a mouse, its capture, both of
+   * which need the click), Play offline, "Set a password first…" (`menu`: Settings opens instead of the capture),
+   * or a reconnect going in by itself (`auto`: no click, so the usual "Click to keep playing" overlay asks for one).
+   * The screen fades to the live scene; the game takes input once it is gone (`active`).
+   */
+  private enter(how: 'play' | 'menu' | 'auto', name = this.net.name): void {
+    if (this.entered) return;
+    this.entered = true;
+    this.enterBy = null;
+    if (how !== 'auto') audio.start();
+    this.welcome(name);
+    const mouse = !this.touch && !this.forceActive;
+    if (how === 'play' && mouse) {
+      // The overlay is the fallback if the browser refuses the capture; a capture hides it (`pointerlockchange`).
+      this.showResume('', 'to start fishing');
+      this.playLock = true;
+      const req = this.world.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+      req?.catch?.(() => (this.playLock = false));
+    } else if (how === 'auto' && mouse) this.showResume();
+    // The world is drawn again from the next frame (`frame`), and the fade starts right after it, over a fresh picture.
+    requestAnimationFrame(() => {
+      if (!$('join').classList.contains('hidden')) $('join').classList.add('leaving');
+    });
+    this.fadeTimer = window.setTimeout(() => this.homeGone(), HOME_FADE_MS + 30);
+    for (const f of this.onEnter.splice(0)) f();
+  }
+
+  /** The fade is over (or a test cut it short): the screen is out of the way and the game takes input. */
+  private homeGone(): void {
+    clearTimeout(this.fadeTimer);
+    const el = $('join');
+    if (el.contains(this.preview?.canvas ?? null)) this.preview?.stop();
+    el.classList.add('hidden');
+    el.classList.remove('leaving');
+  }
+
+  /** Runs `f` now, or when the home screen comes down if it's still up. */
+  private afterEnter(f: () => void): void {
+    if (this.entered) f();
+    else this.onEnter.push(f);
+  }
+
+  /**
+   * Reloads the page to get back in (a dropped connection, a redeploy, "Refresh to reconnect"). A player who was in
+   * the game goes straight back in (`RECONNECT_KEY`); one still on the home screen gets it afresh.
+   */
+  private reload(): void {
+    try {
+      if (this.entered) sessionStorage.setItem(RECONNECT_KEY, '1');
+    } catch {}
+    location.reload();
+  }
+
+  /**
+   * Entering the game: no window, just the scene, with a welcome banner for those the home screen hasn't already
+   * told the same thing: a brand-new save ("Welcome to Lakeside" and the first goal), offline play, and an account
+   * that could be lost with this browser (level 3+ and no password), which gets a nudge to protect it. A `?name=`
+   * link skipped the home screen, so it always gets the banner, and a "Click to start fishing" overlay with the
+   * account buttons. The click that captures the mouse dismisses the banner; otherwise it fades by itself.
    */
   private welcome(name = this.net.name): void {
+    const link = this.pendingWelcome;
     this.pendingWelcome = false;
     this.setMenu(false);
-    const { title, line } = welcomeText(name, this.s, chartersToTry(this.s));
-    const el = $('banner');
-    el.classList.remove('rank', 'legend', 'hooked', 'low');
-    el.classList.add('welcome');
-    el.style.color = '';
-    // Returning players learn where to switch accounts, and those who could lose theirs with this
-    // browser get a nudge to protect it: buttons under the Click prompt, or a line here on phones,
-    // which have no Click prompt.
+    // What came before a brand-new player started isn't news to them: their "What's new" count starts from here.
+    if (readSeen(localStorage.getItem(NEWS_KEY)) === null && isFreshSave(this.s)) localStorage.setItem(NEWS_KEY, String(latestNews()));
     const returning = this.net.connected && !isFreshSave(this.s);
     const needPass = this.net.connected && !this.net.hasPass && this.s.level >= 3;
-    const hint = this.touch && (returning || needPass) ? `<small>⚙️ Settings: ${needPass ? 'set a password or switch account' : 'switch account'}</small>` : '';
-    el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>${hint}`;
-    el.classList.remove('hidden');
-    el.style.animation = 'none';
-    void el.offsetWidth;
-    el.style.animation = '';
-    clearTimeout(this.bannerTimer);
-    this.bannerTimer = window.setTimeout(() => this.dismissWelcome(), 4200);
-    const pass = needPass ? '<button class="btn plain" data-acct="pass" title="Play on other devices with your name and password">🔒 Set a password</button>' : '';
-    const other = returning ? `<button class="switch" data-acct="logout">Not ${escapeHtml(this.net.name)}? Switch account</button>` : '';
-    if (!this.locked && !this.forceActive) this.showResume('', 'to start fishing', pass, other);
-    if (this.net.connected) this.showNews();
+    if (link || !returning || needPass) {
+      const { title, line } = welcomeText(name, this.s, chartersToTry(this.s));
+      const el = $('banner');
+      el.classList.remove('rank', 'legend', 'hooked', 'low');
+      el.classList.add('welcome');
+      el.style.color = '';
+      // From the home screen, the nudge is a line here on every device. A link's nudge and its way to another account
+      // are buttons under its Click overlay (below), or a line here on phones, which have no overlay.
+      const hint = !link ? (needPass ? 'set a password' : '')
+        : this.touch && (returning || needPass) ? (needPass ? 'set a password or switch account' : 'switch account')
+        : '';
+      el.innerHTML = `${escapeHtml(title)}<small>${escapeHtml(line)}</small>${hint ? `<small>⚙️ Settings: ${hint}</small>` : ''}`;
+      el.classList.remove('hidden');
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = '';
+      clearTimeout(this.bannerTimer);
+      this.bannerTimer = window.setTimeout(() => this.dismissWelcome(), 4200);
+    }
+    if (link && !this.locked && !this.forceActive) {
+      const pass = needPass ? '<button class="btn plain" data-acct="pass" title="Play on other devices with your name and password">🔒 Set a password</button>' : '';
+      const other = returning ? `<button class="switch" data-acct="logout">Not ${escapeHtml(this.net.name)}? Switch account</button>` : '';
+      this.showResume('', 'to start fishing', pass, other);
+    }
     this.queueHomeTip();
   }
 
@@ -1007,10 +1278,9 @@ export class Game {
   }
 
   /**
-   * A phone's first visit (`homeJoinDue`: never joined or played in this browser, on the join card, once): the join
-   * screen shows "Add to Home Screen first?" in place of its form until "Play in the browser". Touch mode starts right
-   * after the join card is put up and its name field focused, so the field is let go in the same moment, before the
-   * page draws, and the phone's keyboard never comes up for it.
+   * A phone's first visit (`homeJoinDue`: never joined or played in this browser, on the home screen, once): the
+   * screen shows "Add to Home Screen first?" in place of its card until "Play in the browser". No field is focused
+   * in touch mode (`homeFocus`), so the phone's keyboard never comes up for it.
    */
   private homeAtJoin(): void {
     if (!this.screenEnv || installedSinceLoad()) return;
@@ -1030,8 +1300,7 @@ export class Game {
     }
     if (!due) return;
     this.homeJoinOpen = true;
-    ($('join-name') as HTMLInputElement).blur();
-    // The character preview is out of sight meanwhile; it starts again with the form.
+    // The character preview is out of sight meanwhile; it starts again with the card.
     this.preview?.stop();
     $('join').classList.add('homestep');
     this.renderHomeJoin();
@@ -1051,11 +1320,11 @@ export class Game {
     $('join-home').innerHTML = homeJoinHtml({ ios: !!this.screenEnv?.ios, canPrompt: installReady(), installed: this.homeJoinAccepted || installedSinceLoad() });
   }
 
-  /** "Play in the browser": back to the join form (the name field isn't focused, so no keyboard jumps up). */
+  /** "Play in the browser": back to the card (no field is focused, so no keyboard jumps up). */
   private closeHomeJoin(): void {
     this.homeJoinOpen = false;
     $('join').classList.remove('homestep');
-    if (!$('join').classList.contains('hidden')) this.joinPreview();
+    if (!this.entered) this.homePreview();
   }
 
   /** After joining: whether the Home Screen tip should wait for its moment (`homeTipDue`). */
@@ -1071,7 +1340,7 @@ export class Game {
   }
 
   /**
-   * Opens a waiting Home Screen tip in a quiet beat after joining: no menu or card (What's new, the tip nudge), no
+   * Opens a waiting Home Screen tip in a quiet beat after joining: no menu or card (the tip nudge), no
    * banner (the welcome, a stage's), the "Heading in" card gone, nothing on the line, no table spin or emote, and
    * the stick at rest. So it never stacks on another card and never cuts into play.
    */
@@ -1155,8 +1424,8 @@ export class Game {
     return document.pointerLockElement === this.world.renderer.domElement;
   }
   private get active() {
-    // Never behind the join screen. With a mouse that follows from the capture, but touch counts as captured from the
-    // start, and the game then took the keys typed there: Space jumped and never reached the name box.
+    // Never behind the home screen, its fade included. Touch counts as captured from the start, and the game once
+    // took the keys typed there: Space jumped and never reached the name box.
     return (this.locked || this.forceActive) && !this.menuOpen && !this.restarting && !this.devPrompt.isOpen && $('join').classList.contains('hidden');
   }
 
@@ -1167,6 +1436,13 @@ export class Game {
       activate: () => {
         this.forceActive = true;
         this.setMenu(false);
+        // A run doesn't wait out the home screen's fade, and drives the game through these hooks rather than a
+        // captured mouse: Play's capture is let go (as an Esc's echo, so no menu opens; `pointerlockchange`).
+        if (this.entered) this.homeGone();
+        if (this.locked) {
+          this.escClosedAt = performance.now();
+          document.exitPointerLock();
+        }
         // Stands in for the click that captures the mouse.
         $('resume').classList.add('hidden');
         this.dismissWelcome();
@@ -1283,8 +1559,6 @@ export class Game {
         else fw.launch({ kind, seed, at: this.net.now() });
       },
       openMenu: (tab: string) => this.openMenu(tab),
-      /** The "What's new" check that runs on joining. */
-      showNews: () => this.showNews(),
       /** The tip nudge waiting for a quiet moment, if any. */
       nudge: { state: () => (this.nudge ? { ...this.nudge } : null) },
       closeMenu: () => this.setMenu(false),
@@ -1444,15 +1718,22 @@ export class Game {
       if (!(e.relatedTarget as HTMLElement | null)?.closest?.('[data-tip]')) $('tip').classList.add('hidden');
     });
     document.addEventListener('pointerlockchange', () => {
+      // A scripted run (`debug().activate`) plays without the mouse: a capture that lands after it is let go too.
+      if (this.locked && this.forceActive && !this.touch) {
+        this.escClosedAt = performance.now();
+        return document.exitPointerLock();
+      }
       $('resume').classList.add('hidden');
       if (!this.locked) this.closeWheel(false);
       // Letting go of the mouse for the login panel isn't a pause.
       if (this.devPrompt.isOpen) return;
       if (this.locked) {
         audio.start();
-        this.dismissWelcome();
+        // Play's own capture leaves the banner Play just put up; it fades by itself.
+        if (!this.playLock) this.dismissWelcome();
         this.guide('start');
       }
+      this.playLock = false;
       // Esc while typing: the browser always releases the mouse, but that should only cancel the
       // chat, not pause the game. A click picks the mouse back up.
       if (!this.locked && this.chat.active) {
@@ -1513,6 +1794,12 @@ export class Game {
       this.takeSlot((this.s.held + step + n) % n);
     }, { passive: true });
     document.addEventListener('keydown', (e) => {
+      // On the home screen Esc steps back from the board or the "Switch account" question, and Tab moves between the
+      // card's fields, as in any form.
+      if (!this.entered && (e.code === 'Escape' || e.code === 'Tab')) {
+        if (e.code === 'Escape') this.homeAct($('join').classList.contains('board') ? 'back' : 'cancel');
+        return;
+      }
       if (this.active && (e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat) return this.openChat();
       if (this.active && e.code.startsWith('Key')) {
         this.keys.add(e.code);
@@ -1684,7 +1971,7 @@ export class Game {
       chat: () => this.openChat(),
     });
     // The Home Screen card after joining and in Settings, for a phone or tablet still in a browser tab; on a first
-    // visit, the join screen asks first.
+    // visit, the home screen asks first.
     this.screenEnv = readScreenEnv(true);
     watchInstall(() => this.installChanged());
     this.homeAtJoin();
@@ -1768,7 +2055,7 @@ export class Game {
     if (act === 'install') return this.installApp();
     if (tab) {
       this.tab = tab;
-      this.newsGlance = null;
+      this.newsFresh = null;
     } else if (shop) this.shopTab = shop as 'cosmetics' | 'gear' | 'sea';
     else if (prize) this.prizeTab = prize as 'perks' | 'cosmetics';
     else if (reed) this.reedTab = reed as 'charters' | 'wardrobe';
@@ -2182,7 +2469,8 @@ export class Game {
 
   private savePass(): void {
     const pass = ($('acct-pass') as HTMLInputElement | null)?.value ?? '';
-    if (pass.length < 6) this.acctMsg = 'Use at least 6 characters.';
+    const bad = newPassProblem(pass);
+    if (bad) this.acctMsg = bad;
     else {
       this.acctMsg = '';
       this.net.send({ t: 'setpass', pass });
@@ -2191,8 +2479,9 @@ export class Game {
   }
 
   private saveName(): void {
-    const name = (($('acct-name') as HTMLInputElement | null)?.value ?? '').replace(/[^\w \-]/g, '').trim();
-    if (name.length < 2) this.acctMsg = 'Pick a name of 2-16 letters, numbers, spaces or dashes.';
+    const name = cleanName(($('acct-name') as HTMLInputElement | null)?.value ?? '');
+    const bad = nameProblem(name);
+    if (bad) this.acctMsg = bad;
     else if (name === this.net.name) this.acctForm = null;
     else {
       this.acctMsg = '';
@@ -2329,10 +2618,7 @@ export class Game {
    */
   private closeMenu(): void {
     this.tab = 'inventory';
-    this.newsGlance = null;
-    const after = this.afterNews;
-    this.afterNews = null;
-    after?.();
+    this.newsFresh = null;
     this.setMenu(false);
     if (this.forceActive) return;
     this.showResume();
@@ -2368,6 +2654,7 @@ export class Game {
     document.exitPointerLock?.();
     $('updating').classList.remove('hidden');
     this.setCovered(true);
+    this.homeLost();
     const health = `${NetClient.serverBase().replace(/^ws/, 'http')}/health`;
     void waitForRestart({
       probe: async () => {
@@ -2382,11 +2669,12 @@ export class Game {
       socketClosed: () => this.net.socketClosed,
       now: () => Date.now(),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-      reload: () => location.reload(),
+      reload: () => this.reload(),
       giveUp: () => {
         $('updating').classList.add('hidden');
         this.setCovered(false);
         this.restarting = false;
+        this.homeGaveUp();
         this.serverDrops = [];
         this.dropsView.sync(this.localDrops.all(), this.map.id);
         this.fb.giveUp(OFFLINE_MSG);
@@ -2398,8 +2686,9 @@ export class Game {
 
   /**
    * The connection dropped with no reason given (a phone that slept or switched apps, a network blip): say so, and
-   * reload once the server answers and the page is in view, which rejoins with the saved login. Gives up to the
-   * plain offline banner after a couple of minutes, or when it has already reloaded twice in a few minutes.
+   * reload once the server answers and the page is in view, which rejoins with the saved login and goes straight
+   * back in (`reload`). Gives up to the plain offline banner after a couple of minutes, or when it has already
+   * reloaded twice in a few minutes.
    */
   private reconnect(): void {
     let history: number[] = [];
@@ -2407,7 +2696,11 @@ export class Game {
       history = JSON.parse(sessionStorage.getItem(AUTO_RELOAD_KEY) ?? '[]') as number[];
     } catch {}
     const r = autoReload(Array.isArray(history) ? history : [], Date.now());
-    if (!r.ok) return this.showOffline('Disconnected');
+    const giveUp = () => {
+      this.showOffline('Disconnected');
+      this.homeGaveUp();
+    };
+    if (!r.ok) return giveUp();
     this.showOffline('Reconnecting…', 'Lost the connection. Getting you back in.');
     const health = `${NetClient.serverBase().replace(/^ws/, 'http')}/health`;
     const visible = () => new Promise<void>((done) => {
@@ -2438,10 +2731,10 @@ export class Game {
             sessionStorage.setItem(AUTO_RELOAD_KEY, JSON.stringify([...r.keep, Date.now()]));
           } catch {}
           clientLog('reconnect', 'reloading');
-          location.reload();
+          this.reload();
         });
       },
-      giveUp: () => this.showOffline('Disconnected'),
+      giveUp,
       cancelled: () => this.restarting || this.loggingOut,
     });
   }
@@ -2460,9 +2753,9 @@ export class Game {
     this.world.setLite(saved ? saved === 'lite' : touchOnly || !!this.touch);
   }
 
-  /** While a full-screen notice hides the view, skip drawing it so the GPU stays idle. */
+  /** While a full-screen notice hides the view, skip drawing it so the GPU stays idle (`frame`). */
   setCovered(on: boolean): void {
-    this.world.paused = on;
+    this.covered = on;
   }
 
   private toggleGraphics(): void {
@@ -4488,11 +4781,15 @@ export class Game {
 
   private frame(dt: number, now: number): void {
     if (!this.restarting) this.tick(dt);
-    // Behind the join screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
     this.updateCastOff();
     this.showDiveDue();
-    if (this.enterBy !== null && ((this.world.ready && this.world.warmedAll && !this.avatars.buildingLegends && !this.lookWarm.building) || performance.now() >= this.enterBy)) this.enterGame();
-    this.world.holdForShaders = !$('join').classList.contains('hidden') || this.castOffAt !== null;
+    if (this.enterBy !== null && (this.warm || performance.now() >= this.enterBy)) this.homeReady();
+    // Behind the home screen or the "Casting off" card, wait for the background shader compile instead of stalling on it.
+    this.world.holdForShaders = !this.entered || this.castOffAt !== null;
+    // The home screen is opaque: once everything is warm and a few whole frames have gone by, nothing is drawn behind
+    // it (a phone's GPU rests on a still) until Play, whose first frame is then an ordinary one.
+    this.homeDrawn = !this.entered && this.warm ? this.homeDrawn + 1 : 0;
+    this.world.paused = this.covered || this.homeDrawn > HOME_DRAWS;
     this.world.update(dt);
     const sea = this.world.sea;
     this.screenSpray.update(dt, sea ? this.world.mood : 0, sea?.slam ?? 0, this.world.night);
@@ -5443,7 +5740,7 @@ export class Game {
         el.innerHTML = this.chartersHtml();
         break;
       case 'news':
-        el.innerHTML = newsHtml(this.newsGlance ?? NEWS, !!this.newsGlance);
+        el.innerHTML = newsHtml(NEWS, (this.newsFresh ??= this.readNews()), '<div class="strip news-foot"><span></span><button class="btn plain" data-tab="settings">← Settings</button></div>');
         break;
       case 'nudge':
         el.innerHTML = nudgeHtml(escapeHtml(this.net.name));
@@ -5471,7 +5768,8 @@ export class Game {
         break;
     }
     const slot = document.getElementById('pv-slot');
-    if (slot) {
+    // Behind the home screen the preview is the card's (the Bag is drawn once at the start, unseen).
+    if (slot && this.entered) {
       const pv = this.getPreview();
       pv.set(this.previewLook(), this.previewShadow());
       slot.appendChild(pv.canvas);
@@ -5614,7 +5912,7 @@ export class Game {
     if (this.tab === 'reed')
       return `<img src="${faceIcon('grin')}" alt=""><div><b>Captain Reed</b><span>${this.reedTab === 'wardrobe' ? `<span class="nb"><span class="coin sm"></span> ${this.s.coins.toLocaleString()}</span> · <span class="nb">${PEARL} ${this.s.pearls.toLocaleString()}</span> to spend` : 'Charters'}</span></div>`;
     if (DIVE_TABS.includes(this.tab)) return `<span class="who-ic">⚓</span><div><b>Captain Reed's boat</b><span>${this.diveHud.view ? whereText(this.diveHud.view.zone, this.diveHud.view.marker) : 'Back at the harbour'}</span></div>`;
-    if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>${this.newsGlance ? 'Welcome back! Since you last played' : 'The latest big updates'}</span></div>`;
+    if (this.tab === 'news') return `<span class="who-ic">📰</span><div><b>What's new</b><span>The latest big updates</span></div>`;
     if (this.tab === 'nudge') return `<span class="who-ic">☕</span><div><b>${NUDGE_TITLE}</b></div>`;
     if (this.tab === 'homescreen') return `<span class="who-ic">📲</span><div><b>${HOME_TIP_TITLE}</b></div>`;
     if (this.tab === 'peek') return `<span class="who-ic">🎰</span><div><b>Casino Cove</b><span>Through the gate · level ${CASINO_LEVEL}+</span></div>`;
@@ -5949,7 +6247,6 @@ export class Game {
   private stageBanner(ids: StageId[], intro: boolean): void {
     const st = stageById(ids.at(-1));
     if (!st) return;
-    if (this.menuOpen && this.newsGlance) return void (this.afterNews = () => this.stageBanner(ids, intro));
     const el = $('banner');
     el.classList.remove('welcome', 'legend', 'hooked', 'low');
     el.classList.add('rank');
@@ -6649,7 +6946,7 @@ export class Game {
     if (this.acctForm === 'pass') {
       // The hidden username lets password managers save the pair.
       return `<input type="text" autocomplete="username" value="${escapeHtml(this.net.name)}" hidden>
-        <input id="acct-pass" type="password" maxlength="128" autocomplete="new-password" placeholder="New password (6+ characters)">${msg}
+        <input id="acct-pass" type="password" maxlength="128" autocomplete="new-password" placeholder="New password (${PASS_MIN}+ characters)">${msg}
         <p>${this.net.hasPass ? 'Every other device is logged out and needs the new password.' : 'Log in on any device with your name and this password.'}</p>
         ${this.btn('Save password', 'data-act="passsave"', 'ok')}${this.btn('Cancel', 'data-act="acctno"', 'plain')}`;
     }
@@ -6663,8 +6960,8 @@ export class Game {
       return `<p>Log out on this browser? You'll need your name and password to come back here.</p>${this.btn('Yes, log out', 'data-act="logoutyes"', 'bad')}${cancel}`;
     // Nothing could log back in to an account without a password, so the server deletes it.
     if (this.acctForm === 'logout')
-      return `<p class="acct-msg">⚠️ ${name} has no password. Logging out deletes ${name} for good: its coins, level, gear, fish${this.net.isSupporter(this.net.name) ? ', 💗' : ''} and everything else are lost, and anyone can take the name.</p>
-        <p>To keep it, set a password first. Then you can log back in any time.</p>
+      return `<p class="acct-msg">${logoutLossHtml(this.net.name, this.net.isSupporter(this.net.name))}</p>
+        <p>${LOGOUT_KEEP}</p>
         ${this.btn('Set a password first…', 'data-act="pass"', 'ok')}${this.btn(`Delete ${name} and log out`, 'data-act="logoutyes"', 'bad')}${cancel}`;
     const wait = this.net.renameAt - Date.now();
     const rename = wait > 0 ? `<p class="foot">You can change your name again in ${waitText(wait)}.</p>` : this.btn('Change name…', 'data-act="name"', 'plain');

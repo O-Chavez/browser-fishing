@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NEWS, type NewsEntry } from '../data/news';
-import { GLANCE_MAX, latestNews, newsDate, newsHtml, readSeen, unreadNews } from './news';
+import { latestNews, newsDate, newsHtml, readSeen, unreadNews } from './news';
 
 const entry = (id: number, extra: Partial<NewsEntry> = {}): NewsEntry => ({ id, date: '2026-11-01', title: `Feature ${id}`, body: ['Something new.'], ...extra });
 const list = [entry(5), entry(4), entry(3), entry(2), entry(1)];
@@ -25,20 +25,25 @@ describe('What\'s new board', () => {
     expect(unreadNews(null, false, list)).toHaveLength(5);
   });
 
-  it('caps the card on joining, and points to the board for the rest', () => {
-    const glance = newsHtml(list, true);
-    expect(glance.match(/<article/g)).toHaveLength(GLANCE_MAX);
-    expect(glance).toContain(`${list.length - GLANCE_MAX} more on the board`);
-    expect(glance).toContain('data-act="close"');
-    const board = newsHtml(list, false);
+  it('lists the whole board, with a chip on the unread entries only', () => {
+    const board = newsHtml(list, unreadNews(3, false, list));
     expect(board.match(/<article/g)).toHaveLength(list.length);
-    expect(board).not.toContain('more on the board');
-    expect(board).toContain('data-tab="settings"');
+    expect(board.match(/news-new/g)).toHaveLength(2);
+    // The chips sit on the two newest, which come first.
+    expect(board.indexOf('news-new')).toBeLessThan(board.indexOf('Feature 5'));
+    expect(board.lastIndexOf('news-new')).toBeLessThan(board.indexOf('Feature 4'));
+    expect(newsHtml(list)).not.toContain('news-new');
+  });
+
+  it('ends with the way back it is given, and says so when there is no news', () => {
+    const back = '<button data-tab="settings">← Settings</button>';
+    expect(newsHtml(list, [], back).endsWith(`${back}</div>`)).toBe(true);
+    expect(newsHtml([])).toContain('No news yet');
   });
 
   it('draws a photo only for entries that have one', () => {
-    expect(newsHtml([entry(1)], false)).not.toContain('<img');
-    expect(newsHtml([entry(1, { image: '/x.jpg', alt: 'A boat' })], false)).toContain('<img src="/x.jpg" alt="A boat">');
+    expect(newsHtml([entry(1)])).not.toContain('<img');
+    expect(newsHtml([entry(1, { image: '/x.jpg', alt: 'A boat' })])).toContain('<img src="/x.jpg" alt="A boat">');
   });
 
   it('formats the release day without a time zone shift', () => {

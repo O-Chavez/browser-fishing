@@ -435,4 +435,114 @@ describe('back pay for the old level cap', () => {
     expect(ann.save.level).toBe(50 + res.paid[0].levels);
     expect(store.backPay(true).lines).toEqual(['No back pay owed.']);
   });
+  describe('join', () => {
+    const make = async (name = 'Ann', token = A, pass = 'trout-lake') => {
+      const store = new AccountStore();
+      const res = await store.join({ name, token, pass, mode: 'new' }, false);
+      if (!res.ok) throw new Error(res.msg);
+      return { store, acct: res.account };
+    };
+
+    it('creates an account with a password and this browser as its one device', async () => {
+      const { store, acct } = await make();
+      expect(acct.pw).toBeDefined();
+      expect(acct.tokens).toEqual([hashOf(A)]);
+      expect(await store.join({ name: 'Ann', token: A }, false)).toMatchObject({ ok: true, created: false });
+      expect(await store.join({ name: 'Ann', token: B, pass: 'trout-lake', mode: 'login' }, false)).toMatchObject({ ok: true, created: false });
+      expect(acct.tokens).toEqual([hashOf(A), hashOf(B)]);
+    });
+
+    it("'new' on a taken name is refused, even for the browser that owns it", async () => {
+      const { store } = await make();
+      const taken = { ok: false, msg: 'The name "ann" is taken. If it\'s yours, log in instead.' };
+      expect(await store.join({ name: 'ann', token: B, pass: 'pike-river', mode: 'new' }, false)).toEqual(taken);
+      expect(await store.join({ name: 'ann', token: A, pass: 'pike-river', mode: 'new' }, false)).toEqual(taken);
+      const old = new AccountStore();
+      old.auth('Cy', A);
+      expect(await old.join({ name: 'Cy', token: B, pass: 'pike-river', mode: 'new' }, false)).toMatchObject({ ok: false, msg: expect.stringContaining('log in instead') });
+    });
+
+    it("'new' with a bad name or password creates nothing", async () => {
+      const store = new AccountStore();
+      expect(await store.join({ name: 'Ann', token: A, mode: 'new' }, false)).toEqual({ ok: false, msg: 'Use at least 6 characters.' });
+      expect(await store.join({ name: 'Ann', token: A, pass: 'abc', mode: 'new' }, false)).toEqual({ ok: false, msg: 'Use at least 6 characters.' });
+      expect(await store.join({ name: 'Ann', token: A, pass: 'x'.repeat(129), mode: 'new' }, false)).toEqual({ ok: false, msg: 'Use at most 128 characters.' });
+      expect(await store.join({ name: 'BigDickFisher', token: A, pass: 'abc', mode: 'new' }, false)).toEqual({ ok: false, msg: 'The name "BigDickFisher" isn\'t allowed. Please pick another.' });
+      expect(await store.join({ name: 'x', token: A, pass: 'trout-lake', mode: 'new' }, false)).toMatchObject({ ok: false });
+      expect(await store.join({ name: 'Ann', token: 'short', pass: 'trout-lake', mode: 'new' }, false)).toEqual({ ok: false, msg: 'Bad token.' });
+      expect(store.all()).toHaveLength(0);
+    });
+
+    it("'login' never creates, and says so for an unknown name", async () => {
+      const store = new AccountStore();
+      const none = { ok: false, msg: 'No angler named "Ann". Check the spelling, or create an account.' };
+      expect(await store.join({ name: 'Ann', token: A, mode: 'login' }, false)).toEqual(none);
+      expect(await store.join({ name: 'Ann', token: A, pass: 'trout-lake', mode: 'login' }, true)).toEqual(none);
+      expect(store.all()).toHaveLength(0);
+    });
+
+    it("'login' with the token alone needs no password; a new browser does", async () => {
+      const { store } = await make();
+      expect(await store.join({ name: 'ann', token: A, mode: 'login' }, false)).toMatchObject({ ok: true, created: false });
+      expect(await store.join({ name: 'Ann', token: B, mode: 'login' }, false)).toEqual({ ok: false, need: 'password', msg: 'Enter your password.' });
+      expect(await store.join({ name: 'Ann', token: B, pass: '', mode: 'login' }, false)).toEqual({ ok: false, need: 'password', msg: 'Enter your password.' });
+      expect(await store.join({ name: 'Ann', token: B, pass: 'nope-nope', mode: 'login' }, false)).toEqual({ ok: false, need: 'password', msg: 'Wrong password.' });
+    });
+
+    it("'login' locks out after too many wrong passwords", async () => {
+      const { store } = await make();
+      for (let i = 0; i < 5; i++) await store.join({ name: 'Ann', token: B, pass: 'nope-nope', mode: 'login' }, false);
+      expect(await store.join({ name: 'Ann', token: B, pass: 'trout-lake', mode: 'login' }, false)).toEqual({ ok: false, need: 'password', msg: 'Too many wrong passwords. Try again later.' });
+    });
+
+    it("'login' on a passwordless account only opens in its own browser", async () => {
+      const store = new AccountStore();
+      store.auth('Ann', A);
+      expect(await store.join({ name: 'ann', token: B, pass: 'whatever', mode: 'login' }, false)).toEqual({ ok: false, msg: 'Ann has no password, so it only opens in the browser it was made in.' });
+      expect(await store.join({ name: 'Ann', token: A, mode: 'login' }, false)).toMatchObject({ ok: true });
+    });
+
+    it('a pass without a mode (an older client) is a login', async () => {
+      const { store } = await make();
+      expect(await store.join({ name: 'Ann', token: B, pass: 'trout-lake' }, false)).toMatchObject({ ok: true, created: false });
+      expect(await store.join({ name: 'Ann', token: 'c'.repeat(20), pass: 'bad-bad' }, false)).toMatchObject({ ok: false, msg: 'Wrong password.' });
+      expect(await store.join({ name: 'Zed', token: 'c'.repeat(20), pass: 'trout-lake' }, true)).toEqual({ ok: false, msg: 'No angler named "Zed". Check the spelling, or create an account.' });
+      expect(store.named('Zed')).toBeUndefined();
+    });
+
+    it('a saved login (no mode) works by token, and keeps its old refusals', async () => {
+      const { store } = await make();
+      expect(await store.join({ name: 'Ann', token: A }, false)).toMatchObject({ ok: true, created: false });
+      expect(await store.join({ name: 'Ann', token: B }, false)).toEqual({ ok: false, need: 'password', msg: 'Ann has a password. Enter it to log in on this device.' });
+      const bare = new AccountStore();
+      bare.auth('Cy', A);
+      expect(await bare.join({ name: 'Cy', token: B }, false)).toEqual({ ok: false, msg: 'The name "Cy" is taken.' });
+    });
+
+    it('a saved login for an unknown name claims it only when open', async () => {
+      const store = new AccountStore();
+      expect(await store.join({ name: 'Ann', token: A }, false)).toEqual({ ok: false, msg: 'No angler named "Ann". Create an account to play.' });
+      expect(store.all()).toHaveLength(0);
+      const res = await store.join({ name: 'Ann', token: A }, true);
+      expect(res).toMatchObject({ ok: true, created: true });
+      expect(res.ok && res.account.pw).toBeUndefined();
+      expect(await store.join({ name: 'Ann', token: A }, false)).toMatchObject({ ok: true, created: false });
+    });
+
+    it('a renamed account still opens from a saved login when closed', async () => {
+      const { store, acct } = await make();
+      expect(store.rename(acct, 'Bea', true)).toBeNull();
+      expect(await store.join({ name: 'Ann', token: A }, false)).toMatchObject({ ok: true, account: { name: 'Bea' } });
+    });
+
+    it('setPass and forget work on a created account; a logged-out one still exists', async () => {
+      const { store, acct } = await make();
+      expect(await store.setPass(acct, A, 'pike-river')).toBeNull();
+      store.forget(acct, A);
+      expect(store.named('Ann')).toBe(acct);
+      expect(acct.tokens).toEqual([]);
+      expect(await store.join({ name: 'Ann', token: A }, false)).toMatchObject({ ok: false, need: 'password' });
+      expect(await store.join({ name: 'Ann', token: A, pass: 'pike-river', mode: 'login' }, false)).toMatchObject({ ok: true });
+    });
+  });
 });

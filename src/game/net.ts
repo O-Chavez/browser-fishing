@@ -87,8 +87,10 @@ export class NetClient {
   /** The casino's all-time biggest single win and loss. */
   records: CasinoRecords = { win: null, loss: null };
   color: number | undefined;
-  /** Sent with the next join only, to log in on a browser the account doesn't know yet. */
+  /** Sent with the next join only: the password for "Create account" or "Log in" (see `mode`). */
   pass: string | undefined;
+  /** Sent with the next join only: `'new'` creates the account, `'login'` logs in; none is this browser's saved login. */
+  mode: 'new' | 'login' | undefined;
   /** The account has a password (so it can log in on other devices). */
   hasPass = false;
   /** `Date.now()` when the name may change again. */
@@ -135,8 +137,9 @@ export class NetClient {
     }
     this.ws = ws;
     ws.onopen = () => {
-      ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, color: this.color, pass: this.pass }));
+      ws.send(JSON.stringify({ t: 'join', name: this.name, token: this.token, color: this.color, pass: this.pass, mode: this.mode }));
       this.pass = undefined;
+      this.mode = undefined;
     };
     ws.onmessage = (e) => {
       this.heardAt = performance.now();

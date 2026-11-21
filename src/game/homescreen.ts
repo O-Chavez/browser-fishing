@@ -66,11 +66,11 @@ export const HOME_TIP_TITLE = 'Get the whole screen';
 /** The browser remembers the first-visit step at the join was shown here (apart from `HOME_TIP_KEY`). */
 export const HOME_JOIN_KEY = 'fishing-homescreen-join';
 
-/** What the join screen knows when touch mode starts, for `homeJoinDue`. */
+/** What the home screen (`src/game/home.ts`) knows when touch mode starts, for `homeJoinDue`. */
 export interface JoinState {
-  /** The join card is up (not the `?name=` link that skips it). */
+  /** The home screen is up (not the `?name=` link that skips it). */
   shown: boolean;
-  /** A returning player's automatic join is already under way (`joinStart`). */
+  /** A saved login's own join is already under way (`joinStart`). */
   joining: boolean;
   /** `fishing-name`: saved when this browser first tries to join, kept until a log-out. */
   name: string | null;
@@ -83,8 +83,8 @@ export interface JoinState {
 }
 
 /**
- * Whether the join screen opens on the Home Screen step: a phone or tablet in a browser tab that has never joined or
- * played here, on the join card itself, once per browser. A brand-new player who adds the game to the Home Screen now
+ * Whether the home screen opens on the Home Screen step: a phone or tablet in a browser tab that has never joined or
+ * played here, on the home screen itself, once per browser. A brand-new player who adds the game to the Home Screen now
  * makes their account in the Home Screen game, so on an iPhone nothing has to carry over from Safari.
  */
 export function homeJoinDue(e: ScreenEnv, j: JoinState): boolean {
@@ -116,7 +116,7 @@ const homeGrid = (o: { ios: boolean; canPrompt: boolean }): string =>
   `<div class="home-grid"><div>${HOME_GAINS}</div><div class="home-how">${homeStepsHtml(o)}</div></div>`;
 
 /**
- * The first-visit step on the join screen, in place of the join form until "Play in the browser". No password talk:
+ * The first-visit step on the home screen, in place of its card until "Play in the browser". No password talk:
  * there's no account yet. Once installed (or the prompt accepted) it says where to open the game instead.
  */
 export function homeJoinHtml(o: { ios: boolean; canPrompt: boolean; installed: boolean }): string {

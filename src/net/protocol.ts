@@ -86,8 +86,16 @@ export type Activity =
   | { a: 'carry'; fish: string; size: number; shiny?: boolean };
 
 export type ClientMsg =
-  /** `pass` logs in on a browser the account doesn't know yet (the server asked with `need: 'password'`). */
-  | { t: 'join'; name: string; token: string; color?: number; pass?: string }
+  /**
+   * The home screen's three ways in (`mode`):
+   * - `'new'`: "Create account". Makes the account `name` with the password `pass` (required) and this browser's
+   *   `token`; refused if the name is taken.
+   * - `'login'`: "Log in". Opens an existing account with `pass`, which adds this browser's `token` to it (or with
+   *   the token alone, if the account already knows this browser). Never makes an account.
+   * - none: a browser's saved login, by its `token`. Never makes an account either, except on a test server
+   *   (`TEST_HOOKS`), where `?name=` links claim a name without a password as they always have.
+   */
+  | { t: 'join'; name: string; token: string; color?: number; pass?: string; mode?: 'new' | 'login' }
   | { t: 'pos'; x: number; z: number; yaw: number }
   /** The player jumped; others on the map replay the arc. */
   | { t: 'jump' }

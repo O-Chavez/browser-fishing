@@ -23,6 +23,8 @@ import { createStorage } from './storage';
 const storage = createStorage(process.env, fileURLToPath(new URL('./', import.meta.url)));
 const data = await storage.load();
 const accounts = new AccountStore(data.accounts);
+/** Test servers (smoke test, staging scripts) let a saved login claim a new name without a password; production never does. */
+const openJoin = process.env.TEST_HOOKS === '1';
 const smokeStats = new SmokeStats(data.smokeStats);
 const rooms = new Map<string, Room>();
 /** Open sockets per room, joined or not, so a room is only dropped when nobody can still join it. */
@@ -291,7 +293,7 @@ wss.on('connection', (ws, req) => {
     ws.close();
   };
   const join = async (msg: Extract<ClientMsg, { t: 'join' }>) => {
-    const res = msg.pass === undefined ? accounts.auth(msg.name, msg.token) : await accounts.login(msg.name, msg.token, msg.pass);
+    const res = await accounts.join(msg, openJoin);
     if (ws.readyState !== ws.OPEN) return;
     if (!res.ok) {
       send({ t: 'error', msg: res.msg, ...(res.need ? { need: res.need } : {}) });
