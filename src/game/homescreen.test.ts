@@ -88,7 +88,7 @@ describe('Home Screen card', () => {
 });
 
 describe('Home Screen step at the join', () => {
-  it("shows on a phone's first visit, on the join card", () => {
+  it("shows on a phone's first visit, on the home screen", () => {
     expect(homeJoinDue(android, firstVisit)).toBe(true);
     expect(homeJoinDue(iphone, firstVisit)).toBe(true);
   });
@@ -100,7 +100,7 @@ describe('Home Screen step at the join', () => {
     expect(homeJoinDue(iphone, { ...firstVisit, freshSave: false })).toBe(false);
   });
 
-  it('shows once, only on the join card, never over an automatic join', () => {
+  it('shows once, only on the home screen, never over a saved login joining by itself', () => {
     expect(homeJoinDue(iphone, { ...firstVisit, seen: true })).toBe(false);
     expect(homeJoinDue(iphone, { ...firstVisit, shown: false })).toBe(false);
     expect(homeJoinDue(iphone, { ...firstVisit, joining: true })).toBe(false);

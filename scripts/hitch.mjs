@@ -9,7 +9,7 @@
 //           "Try touch controls" after 1 s: a rough phone stand-in (slow and noisy, repeat it).
 // --online: a game server with another player at the spawn; joins through the join screen.
 // --returning: --online as a returning player: this browser has joined before (`fishing-auto`), so the
-//           game joins by itself as the page loads, and "join" is when the join card hides (no --wait).
+//           game joins by itself as the page loads, and "join" is the click on Play once it is live (no --wait).
 // --casino: --returning with the account saved in Casino Cove, so the casino is built and warmed up on joining.
 // --slow-compile S: background shader compiles (KHR_parallel_shader_compile) report "not done" until S s after load,
 //           a stand-in for a GPU that compiles slowly in the background while the server answers fast (on the M1
@@ -125,11 +125,13 @@ function probe(night, slowCompile) {
       }
     }
   }
-  // When the join card started saying "Loading…" (the server let the player in; the warm-up still running).
+  // When the home screen started saying "Loading…" (the server let the player in; the warm-up still running): on its
+  // Play button, or on the old join card's message line (BENCH_ROOT may point at a checkout from before the home screen).
   document.addEventListener('DOMContentLoaded', () => {
-    const msg = document.getElementById('join-msg');
-    if (!msg) return;
-    new MutationObserver(() => { if (msg.textContent === 'Loading…' && window.__loadingAt == null) window.__loadingAt = now(); }).observe(msg, { childList: true, characterData: true, subtree: true });
+    for (const id of ['join-play', 'join-msg']) {
+      const el = document.getElementById(id);
+      if (el) new MutationObserver(() => { if (el.textContent === 'Loading…' && window.__loadingAt == null) window.__loadingAt = now(); }).observe(el, { childList: true, characterData: true, subtree: true });
+    }
   });
   const frames = (window.__frames = []);
   const longs = (window.__longs = []);
@@ -285,16 +287,28 @@ try {
     const TRACE = opt('--trace', '');
     if (TRACE) await page.tracing.start({ path: TRACE, categories: ['toplevel', 'gpu', 'viz', 'cc', 'blink', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-gpu.service', 'disabled-by-default-gpu.decoder', 'webaudio', 'audio', 'media'] });
     let joinAt = await page.evaluate(() => performance.now());
-    if (RETURNING) {
-      await page.waitForFunction(() => document.getElementById('join').classList.contains('hidden'), { timeout: 60000, polling: 'raf' }).catch(async (e) => {
-        console.log('join card still up:', await page.evaluate(() => document.getElementById('join-msg').textContent));
+    // Online, the home screen ends on "Logged in as … / Play": "join" is the click on Play once it is live. (A
+    // checkout from before the home screen takes its join card down by itself; "join" is then when it hides.)
+    const play = async () => {
+      const gone = () => document.getElementById('join').classList.contains('hidden');
+      await page.waitForFunction(() => {
+        const b = document.getElementById('join-play');
+        return document.getElementById('join').classList.contains('hidden') || (!!b && !b.disabled && b.textContent === 'Play');
+      }, { timeout: 60000, polling: 'raf' }).catch(async (e) => {
+        console.log('home screen still waiting:', await page.evaluate(() => `${document.getElementById('join-play')?.textContent ?? ''} ${document.getElementById('join-msg').textContent}`));
         throw e;
       });
+      if (!(await page.evaluate(gone))) await page.click('#join-play');
       joinAt = await page.evaluate(() => performance.now());
-    } else if (ONLINE) {
+      await page.waitForFunction(gone, { timeout: 30000, polling: 'raf' });
+    };
+    if (RETURNING) await play();
+    else if (ONLINE) {
       await page.type('#join-name', `Newbie${run}x${Date.now() % 1000}`);
+      // "Create account" needs a password.
+      if (await page.$('#join-newpass')) await page.type('#join-newpass', 'hitch-probe');
       await page.click('#join-go');
-      await page.waitForFunction(() => document.getElementById('join').classList.contains('hidden'), { timeout: 30000 });
+      await play();
     } else await page.click('#join-offline');
     await page.evaluate(() => window.__game.activate());
     if (TRACE) { await sleep(1500); await page.tracing.stop(); }

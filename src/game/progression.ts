@@ -320,24 +320,31 @@ export function isFreshSave(s: { level: number; xp: number; dex: Record<string, 
   return s.level <= 1 && s.xp <= 0 && Object.keys(s.dex).length === 0;
 }
 
-/** The headline and progress line of the banner shown when a player joins. */
-export function welcomeText(
-  name: string,
-  s: { level: number; xp: number; coins: number; dex: Record<string, unknown> },
-  charters = false,
-): { title: string; line: string } {
-  if (isFreshSave(s)) return { title: 'Welcome to Lakeside', line: 'First goal: catch a fish, then sell it at the stall' };
+type Standing = { level: number; xp: number; coins: number; dex: Record<string, unknown> };
+
+/** "Lv 42 · 18,300 coins": where a save stands, on the home screen and the welcome banner. */
+export const standingText = (s: { level: number; coins: number }): string => `Lv ${s.level} · ${s.coins.toLocaleString('en-US')} coins`;
+
+/** What a player is pointed at on arriving, as a line of its own: the home screen's, and the end of the welcome banner's. */
+export function welcomeGoal(s: Standing, charters = false): string {
+  if (isFreshSave(s)) return 'First goal: catch a fish, then sell it at the stall';
   const missing = POND_FISH.filter((f) => !s.dex[f.id]).length;
   const rank = nextRank(s.level);
-  const goal =
-    charters ? 'next goal: a charter with Captain Reed'
-    : s.level < CASINO_LEVEL ? `next goal: Lv ${CASINO_LEVEL} casino`
-    : rank ? `next goal: Lv ${rank.level} ${rank.title}`
-    : missing ? `next goal: ${missing} more Fishdex species`
+  return charters ? 'Next goal: a charter with Captain Reed'
+    : s.level < CASINO_LEVEL ? `Next goal: Lv ${CASINO_LEVEL} casino`
+    : rank ? `Next goal: Lv ${rank.level} ${rank.title}`
+    : missing ? `Next goal: ${missing} more Fishdex species`
     : 'Fishdex complete · chase shinies';
+}
+
+/** The headline and progress line of the banner shown when a player joins. */
+export function welcomeText(name: string, s: Standing, charters = false): { title: string; line: string } {
+  const goal = welcomeGoal(s, charters);
+  if (isFreshSave(s)) return { title: 'Welcome to Lakeside', line: goal };
   return {
     title: `~ Welcome back${name ? `, ${name}` : ''} ~`,
-    line: `Lv ${s.level} · ${s.coins.toLocaleString('en-US')} coins · ${goal}`,
+    // Mid-line, "Next goal" reads on from the coins.
+    line: `${standingText(s)} · ${goal.replace(/^Next/, 'next')}`,
   };
 }
 

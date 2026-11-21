@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAITS, FISH, LINES, POND_FISH, RODS, SEA_FISH, byId } from '../data/content';
 import { mulberry } from './env';
-import { FLAT_LEVEL, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, earnedXp, xpPastFlat, eligibleFish, fightGaps, grantRanks, levelGifts, matchupWords, nextGoal, overGear, underGear, pickFish, rollFishGaps, rollSize, rollTag, FISH_SPREAD, TAG_TIERS, sellValue, welcomeText, xpForNextLevel } from './progression';
+import { FLAT_LEVEL, XP_TO_FLAT, applyXp, backPayXp, canCatch, catchXp, earnedXp, xpPastFlat, eligibleFish, fightGaps, grantRanks, levelGifts, matchupWords, nextGoal, overGear, underGear, pickFish, rollFishGaps, rollSize, rollTag, FISH_SPREAD, TAG_TIERS, sellValue, standingText, welcomeGoal, welcomeText, xpForNextLevel } from './progression';
 
 const twig = byId(RODS, 'twig');
 const graphite = byId(RODS, 'graphite');
@@ -246,6 +246,13 @@ describe('welcome banner', () => {
     // Sea fish are a separate page: a complete pond Fishdex stays complete.
     const all = Object.fromEntries(POND_FISH.map((f) => [f.id, {}]));
     expect(welcomeText('Ana', { level: 200, xp: 0, coins: 5, dex: all }).line).toContain('Fishdex complete');
+  });
+  it("gives the home screen the same standing and goal as lines of their own", () => {
+    const s = { level: 12, xp: 5, coins: 1240, dex: { [FISH[0].id]: {} } };
+    expect(standingText(s)).toBe('Lv 12 · 1,240 coins');
+    expect(welcomeGoal(s)).toBe('Next goal: Lv 15 casino');
+    expect(welcomeGoal(s, true)).toBe('Next goal: a charter with Captain Reed');
+    expect(welcomeGoal(fresh)).toBe('First goal: catch a fish, then sell it at the stall');
   });
 });
 

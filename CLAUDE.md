@@ -12,7 +12,7 @@ Planned work lives in `TODO.md`: **Up next** is what's been decided on, **Ideas*
 
 ## What's new board
 
-Players read about notable releases on the "What's new" board, `NEWS` in `src/data/news.ts`: a card opens after joining with the entries this browser hasn't shown yet, and ⚙️ Settings re-opens the whole board. The data file's header comment has the format.
+Players read about notable releases on the "What's new" board, `NEWS` in `src/data/news.ts`: the home screen's "📰 What's new" button counts the entries this browser hasn't shown yet and opens the whole board, and ⚙️ Settings opens it too. The data file's header comment has the format.
 
 - When the item you're finishing **adds a feature players will notice** (a new place, activity, system, vendor, gear path or kind of reward), add an entry at the top of `NEWS` in the same commit. Leave out balance tweaks, bug fixes, polish and small adjustments; if unsure, ask Oscar.
 - Give it an `id` one higher than the top entry (never renumber) and the date it merges to `main`. A feature that spans sessions (🚧 on its own branch) gets its entry in the merge, not before.

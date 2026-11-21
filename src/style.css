@@ -349,7 +349,7 @@ body.touch #seagear { bottom: 236px; right: 30px; }
 #chipbox.hidden { display: none; }
 #spot.hidden { display: none; }
 
-/* ---------- menus: one wood-framed window for the bag, shop, casino counter and join screen ---------- */
+/* ---------- menus: one wood-framed window for the bag, shop and casino counter ---------- */
 button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 button:disabled { cursor: default; }
 h4 { margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
@@ -696,7 +696,7 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 .nudge .btns .btn { flex: 1; }
 .nudge .foot { margin: 0; font-size: 13px; font-weight: 700; }
 
-/* "What's new" board: the card on joining and the full board from Settings */
+/* "What's new" board: from the home screen (#join-board) and from Settings */
 #menu.news > .win { width: min(820px, 94vw); max-height: var(--win-h); }
 .news-item { padding: 0 0 16px; margin: 0 0 16px; border-bottom: 2px solid rgba(58,39,22,.12); }
 .news-item:last-of-type { border-bottom: 0; margin-bottom: 0; }
@@ -708,7 +708,6 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 .news-item p b { color: var(--ink); }
 .news-foot { margin-top: 0; color: var(--ink-muted); }
 
-/* join screen */
 /* The "Casting off" card: covers the view while the sea (or the pond, coming back) builds and its shaders compile. */
 #castoff { position: fixed; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center; background: linear-gradient(var(--co-top, #4f9fe0), var(--co-horizon, #bfe3f2) 55%, var(--co-sea, #3aa6b9) 56%, var(--co-deep, #0d4560)); transition: opacity var(--co-in, .45s) ease-out; }
 /* A redeploy: the same card as casting off, over the same sky, until the new server answers. */
@@ -721,21 +720,75 @@ body.shopping #hud-tl, body.shopping #ctx, body.shopping #chat, body.shopping #h
 #castoff h2 { margin: 0 0 4px; font-size: 30px; font-weight: 900; }
 #castoff .where { margin: 0 0 12px; font-size: 15px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
 #castoff .line { margin: 0; font-style: italic; color: var(--ink); }
-#join { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(8, 14, 22, .88); backdrop-filter: blur(4px); }
-/* Blurring the live 3D view behind it every frame is costly on phones; the backdrop is nearly opaque anyway. */
-body.touch #join { backdrop-filter: none; }
+/* ---------- home screen (#join; src/game/home.ts): one card over a still of the lake, up from the first paint ---------- */
+/* Opaque, so nothing of the 3D view shows through (the world isn't drawn behind it). The gradient, in the still's dusk colours, stands in until it has loaded. */
+#join { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; overflow: hidden; background: linear-gradient(#857b96, #cdaab8 42%, #7b9aa8 50%, #5e7f8f 66%, #5a3d25 70%, #33210f); transition: opacity .35s ease-out; }
+/* The still drifts very slowly (a layer larger than the screen, so its edges never show); a vignette over it lets the card read. */
+#join::before { content: ''; position: absolute; inset: -4%; z-index: -1; background: url('./assets/images/home-backdrop.jpg') center / cover no-repeat; animation: join-drift 60s ease-in-out infinite alternate; }
+#join::after { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse 75% 75% at center, rgba(18, 24, 32, .04), rgba(18, 24, 32, .36)); }
+@keyframes join-drift { from { transform: scale(1); } to { transform: scale(1.05) translate(-1%, -.6%); } }
+/* No drift for players who ask for less motion, or on phones (touch mode, and before the script has turned it on). */
+@media (prefers-reduced-motion: reduce), (pointer: coarse) and (hover: none) { #join::before { animation: none; } }
+body.touch #join::before { animation: none; }
+/* Play: the screen fades to the live scene (HOME_FADE_MS), then is hidden. */
+#join.leaving { opacity: 0; pointer-events: none; }
 .swatches input[type=color] { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; overflow: hidden; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); cursor: pointer; }
 .swatches input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
 .swatches input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
-#join .panel.join { width: min(660px, 94vw); padding: 22px 26px 24px; border-radius: 22px; color: var(--ink); background: var(--paper); box-shadow: 0 0 0 6px var(--wood-600), 0 0 0 9px var(--wood-900), 0 24px 60px rgba(0,0,0,.55); }
-#join h1 { margin: 0 0 4px; font-size: 32px; font-weight: 900; }
-#join .muted { margin: 0 0 14px; color: var(--ink-muted); font-weight: 700; }
-#join .split { display: flex; gap: 20px; align-items: flex-start; }
-#join .grow { flex: 1; min-width: 0; }
+#join .panel.join { width: min(700px, 94vw); max-height: 94vh; overflow-y: auto; padding: 22px 28px 16px; border-radius: 22px; color: var(--ink); background: var(--paper); box-shadow: 0 0 0 6px var(--wood-600), 0 0 0 9px var(--wood-900), 0 24px 60px rgba(0,0,0,.55); }
+/* dvh where the browser has it: under a phone browser's bars, vh is taller than what is in view. */
+@supports (height: 1dvh) { #join .panel.join { max-height: 94dvh; } }
+.join-head { margin: 0 0 14px; text-align: center; }
+#join h1 { margin: 0; font-size: 46px; font-weight: 900; line-height: 1.05; }
+.join-head p { margin: 2px 0 0; font-size: 16px; font-weight: 800; color: var(--ink-muted); }
+.join-wait { margin: 0; height: 132px; display: grid; place-items: center; font-size: 16px; font-weight: 800; color: var(--ink-muted); }
+.join-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0 0 16px; padding: 4px; border-radius: 15px; background: var(--paper-2); box-shadow: inset 0 0 0 2px rgba(58,39,22,.08); }
+.join-tabs button { padding: 9px 10px; border-radius: 11px; font-size: 15px; font-weight: 900; color: var(--ink-muted); }
+.join-tabs button:hover { color: var(--ink); }
+.join-tabs button.on { background: var(--paper-3); color: var(--ink); box-shadow: 0 0 0 2px var(--wood-500), 0 3px 0 rgba(58,39,22,.18); }
+#join .split { display: flex; gap: 24px; align-items: stretch; }
+/* The two signed-out tabs are the same height, so the tabs don't move under the pointer. */
+#join:not(.in) .split { min-height: 304px; }
+#join .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+/* The slot keeps its size and its parchment while the preview isn't drawn (connecting: the account's look isn't known yet). */
+#join-preview { flex: none; align-self: center; width: 240px; height: 300px; border-radius: 16px; background: radial-gradient(circle at 50% 40%, #fffaf0, var(--paper-2)); }
 #join-preview canvas.preview { width: 240px; height: 300px; }
-#join label { display: block; margin: 10px 0 6px; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
-#join-name, #join-pass, #acct-pass, #acct-name, #fb-text { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
-#join-name:focus, #join-pass:focus, #acct-pass:focus, #acct-name:focus, #fb-text:focus { border-color: var(--gold-dark); }
+#join-preview:empty::before { content: '🎣'; display: grid; place-items: center; height: 100%; font-size: 72px; filter: grayscale(1); opacity: .22; }
+#join label { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
+#join .fld { margin: 0 0 12px; }
+#join .fld.wide { margin-bottom: 0; }
+#join-in { margin-bottom: 4px; }
+.join-as { display: block; font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); }
+.join-who { margin: 2px 0 10px; font-size: 38px; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
+.join-stats { margin: 0; min-height: 25px; font-size: 18px; font-weight: 900; }
+.join-goal { margin: 2px 0 0; min-height: 21px; font-size: 15px; font-weight: 700; color: var(--ink-muted); }
+#join-play { padding: 16px 12px; font-size: 22px; }
+#join .grow > .linklike { align-self: center; }
+#join-confirm p { margin: 0 0 10px; font-size: 15px; font-weight: 700; line-height: 1.45; }
+#join-confirm p.warn { color: var(--bad); }
+.join-acts { display: flex; gap: 10px; margin-top: 14px; }
+.join-acts .btn { flex: 1; }
+.join-acts.col { flex-direction: column; }
+.join-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; margin-top: 16px; padding-top: 12px; border-top: 2px solid rgba(58,39,22,.12); }
+.join-foot .linklike { margin: 0; }
+#join-news { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 12px; font-size: 14px; font-weight: 900; background: var(--paper-3); box-shadow: 0 0 0 2px rgba(58,39,22,.15); }
+#join-news:hover { box-shadow: 0 0 0 2px rgba(58,39,22,.35); }
+#join-unread { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: inline-grid; place-items: center; font-size: 12px; font-weight: 900; background: var(--bad); color: #fff; }
+/* Which parts each view shows. */
+#join.loading :is(.join-tabs, .split, .join-foot), #join:not(.loading) .join-wait { display: none; }
+#join:not(.new) :is(#join-new, #join-go), #join:not(.login) :is(#join-login, #join-login-go) { display: none; }
+#join.in .join-tabs, #join:not(.in) :is(#join-in, #join-play, #join-other, #join-confirm) { display: none; }
+#join.in.confirm :is(#join-in, #join-play, #join-other, #join-msg), #join.in:not(.confirm) #join-confirm { display: none; }
+/* The board and the phone's first-visit step each stand in place of the card. */
+#join.board > #join-card, #join.board > #join-home, #join:not(.board) > #join-board { display: none; }
+#join #join-board { width: min(820px, 94vw); height: min(700px, 92vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.board-bar { flex: none; display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 2px solid rgba(58,39,22,.12); background: var(--paper-2); }
+.board-bar h2 { margin: 0; font-size: 24px; font-weight: 900; }
+.board-list { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 22px; }
+.news-new { margin-left: 8px; padding: 1px 7px; border-radius: 8px; letter-spacing: .08em; background: var(--gold); color: var(--gold-ink); }
+#join button:focus-visible { outline: 3px solid var(--gold-dark); outline-offset: 2px; }
+#join-name, #join-newpass, #join-login-name, #join-pass, #acct-pass, #acct-name, #fb-text { width: 100%; font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 12px; border: 3px solid var(--wood-500); background: var(--paper-3); color: var(--ink); outline: none; }
+#join-name:focus, #join-newpass:focus, #join-login-name:focus, #join-pass:focus, #acct-pass:focus, #acct-name:focus, #fb-text:focus { border-color: var(--gold-dark); }
 #acct-pass, #acct-name, #fb-text { font-size: 15px; padding: 8px 10px; }
 #fb-text { display: block; resize: vertical; min-height: 88px; }
 #fb-text:read-only { opacity: .7; }
@@ -745,11 +798,11 @@ body.touch #join { backdrop-filter: none; }
 .fb-kind { display: flex; gap: 8px; }
 .fb-kind .btn { flex: 1; }
 .joinmsg { min-height: 22px; color: var(--bad); font-size: 14px; }
+#join-msg { margin: 10px 0 8px; }
+.joinmsg.info { color: var(--ink-muted); }
 button.primary { display: block; width: 100%; padding: 12px; border-radius: 14px; font-size: 18px; font-weight: 900; background: var(--ok); color: #fff; box-shadow: 0 4px 0 var(--ok-dark); }
 button.primary:disabled { opacity: .6; }
 button.linklike { margin-top: 10px; font-size: 14px; font-weight: 800; color: var(--ink-muted); text-decoration: underline; }
-/* the menu opens behind the join screen on first load; keep it out of sight until then */
-body:has(#join:not(.hidden)) #menu { visibility: hidden; }
 
 /* The start-error panel (showStartError, src/main.ts): over everything when the game can't start. */
 #desktop-only { display: none; position: fixed; inset: 0; z-index: 60; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 14, 22, .92); }
@@ -765,7 +818,75 @@ body.touch { touch-action: none; -webkit-user-select: none; user-select: none; -
 /* 28px in the touch layout is about 17 real px on a phone (touchLayoutWidth keeps phones near 0.6x): at 16 or more,
    iPhones don't zoom the page into a field when it's tapped (the join name, passwords, feedback). */
 body.touch input, body.touch textarea { -webkit-user-select: text; user-select: text; font-size: 28px; }
-body.touch #join-name, body.touch #join-pass, body.touch #acct-pass, body.touch #acct-name, body.touch #fb-text { font-size: 28px; }
+body.touch #join-name, body.touch #join-newpass, body.touch #join-login-name, body.touch #join-pass, body.touch #acct-pass, body.touch #acct-name, body.touch #fb-text { font-size: 28px; }
+/* The home screen in the touch layout (1400 wide; as little as about 430 high under a phone browser's bars): a wider,
+   shorter card with the two fields side by side, and everything sized for a finger at 0.6x. It scrolls if it must. */
+body.touch #join .panel.join { width: min(1080px, 94vw); padding: 16px 28px 12px; }
+body.touch .join-head { display: flex; align-items: baseline; justify-content: center; gap: 16px; margin-bottom: 10px; }
+body.touch #join h1 { font-size: 40px; }
+body.touch .join-head p { margin: 0; font-size: 21px; }
+body.touch .join-wait { font-size: 22px; }
+body.touch .join-tabs { margin-bottom: 12px; }
+body.touch .join-tabs button { padding: 12px 10px; font-size: 22px; }
+body.touch #join .split { gap: 26px; }
+body.touch #join:not(.in) .split { min-height: 280px; }
+body.touch #join-preview, body.touch #join-preview canvas.preview { width: 230px; height: 270px; }
+body.touch #join-new, body.touch #join-login { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
+body.touch #join .fld.wide { grid-column: 1 / -1; }
+body.touch #join label { font-size: 16px; }
+body.touch #join .swatches { gap: 10px; }
+body.touch #join .swatch, body.touch #join .swatches input[type=color] { width: 44px; height: 44px; }
+body.touch #join-msg { min-height: 28px; margin: 8px 0 6px; font-size: 20px; }
+body.touch #join button.primary { padding: 14px; font-size: 24px; }
+body.touch #join #join-play { padding: 18px; font-size: 28px; }
+body.touch #join button.linklike { font-size: 21px; }
+body.touch .join-as { font-size: 16px; }
+body.touch .join-who { font-size: 46px; }
+body.touch .join-stats { min-height: 33px; font-size: 24px; }
+body.touch .join-goal { min-height: 28px; font-size: 20px; }
+body.touch #join-confirm p { font-size: 20px; line-height: 1.35; }
+body.touch .join-acts .btn { padding: 14px 16px; font-size: 21px; }
+body.touch .join-foot { min-height: 48px; margin-top: 12px; padding-top: 10px; }
+body.touch #join-news { padding: 10px 16px; font-size: 21px; }
+body.touch #join-unread { min-width: 30px; height: 30px; border-radius: 15px; font-size: 17px; }
+body.touch #join #join-board { width: min(1180px, 96vw); height: 94vh; }
+body.touch .board-bar .btn { padding: 12px 20px; font-size: 21px; }
+body.touch .board-bar h2 { font-size: 30px; }
+body.touch .board-list .news-date { font-size: 15px; }
+body.touch .board-list .news-item h3 { font-size: 26px; }
+body.touch .board-list .news-item p { font-size: 19px; }
+/* Under a phone browser's bars the layout is shorter still: the title moves in beside the tabs and everything packs tighter. */
+@media (max-height: 540px) {
+  body.touch #join .panel.join { padding: 12px 26px 8px; }
+  body.touch #join:not(.in, .board, .homestep) #join-card { display: grid; grid-template-columns: auto 1fr; column-gap: 24px; align-items: center; }
+  body.touch #join:not(.in) #join-card > :is(.split, .join-foot, .join-wait) { grid-column: 1 / -1; }
+  body.touch #join:not(.in) .join-head { margin-bottom: 10px; }
+  body.touch #join:not(.in) .join-head p { display: none; }
+  body.touch .join-tabs { margin-bottom: 10px; }
+  body.touch .join-tabs button { padding: 9px 10px; }
+  body.touch #join:not(.in) .split { min-height: 284px; }
+  body.touch #join-preview, body.touch #join-preview canvas.preview { width: 200px; height: 236px; }
+  body.touch #join .fld { margin-bottom: 8px; }
+  body.touch #join-msg { margin: 6px 0 4px; }
+  body.touch .join-foot { min-height: 44px; margin-top: 8px; padding-top: 8px; }
+  body.touch #join-news { padding: 8px 14px; }
+  body.touch #join.in #join-msg:empty { display: none; }
+  body.touch #join.in #join-play { margin-top: 12px; }
+}
+@media (max-height: 460px) {
+  body.touch #join .panel.join { max-height: 97vh; padding: 8px 26px 6px; }
+  @supports (height: 1dvh) { body.touch #join .panel.join { max-height: 97dvh; } }
+  body.touch #join:not(.in) .split { min-height: 266px; }
+  body.touch #join:not(.in) .join-head, body.touch .join-tabs { margin-bottom: 6px; }
+  body.touch .join-head { margin-bottom: 4px; }
+  body.touch #join-msg { margin: 4px 0 2px; }
+  body.touch .join-foot { margin-top: 6px; padding-top: 6px; }
+  body.touch #join .swatch, body.touch #join .swatches input[type=color] { width: 38px; height: 38px; }
+  body.touch #join button.primary { padding: 10px; }
+  body.touch #join #join-play { padding: 14px; }
+  body.touch #join-preview, body.touch #join-preview canvas.preview { width: 180px; height: 212px; }
+  body.touch .join-who { font-size: 40px; margin-bottom: 6px; }
+}
 #touch { position: fixed; inset: 0; z-index: 1; touch-action: none; }
 #touch.hidden { display: none; }
 #touch .t-view { position: absolute; inset: 0; }
@@ -843,7 +964,7 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .hometip .steps { padding: 8px 14px; border-radius: 12px; background: var(--paper-2); color: var(--ink); }
 .hometip .btns { display: flex; gap: 12px; margin: 12px 0 0; }
 .hometip .btns .btn { flex: 1; padding: 12px 16px; font-size: 21px; }
-/* A phone's first visit: the join screen opens on "Add to Home Screen first?" in the join card's look, in place of the
+/* A phone's first visit: the home screen opens on "Add to Home Screen first?" in its card's look, in place of the
    form until "Play in the browser" (homeJoinHtml). Sized to fit the same 1400x432 layout; scrolls if it doesn't. */
 #join:not(.homestep) #join-home, #join.homestep > .panel:not(#join-home) { display: none; }
 #join #join-home { width: min(900px, 94vw); max-height: 94vh; overflow-y: auto; box-sizing: border-box; padding: 18px 26px 16px; }

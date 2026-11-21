@@ -7,7 +7,7 @@
 // level-20 test account that starts in the casino, and writes screenshots to .bench/smoke/.
 // Exits non-zero if any check fails or the page logs an error.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, scryptSync } from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -53,9 +53,19 @@ const save = { ...newSave(), level: 20, xp: xpForNextLevel(20) - 1, coins: 5000,
 save.smoke.seen = STAGES.map((st) => st.id);
 // The Aurora Rod in the locker: charters still need the Deep Sea Rod, which the trip checks buy from Captain Reed.
 save.locker.rods.push('aurora');
+// The home screen checks' accounts: one from before passwords (this browser's token is all that opens it), and one
+// with a password that no browser here has opened yet.
+const OLDIE_TOKEN = 'oldie-token-0123456789abcdef';
+const VET_PASS = 'smoke-vet-pass';
+const played = { ...newSave(), level: 12, coins: 1240, dex: { [FISH[0].id]: { count: 3, best: 20, shiny: 0 } } };
+const salt = Buffer.from('00112233445566778899aabbccddeeff', 'hex');
 fs.writeFileSync(
   path.join(dataDir, 'accounts.json'),
-  JSON.stringify({ smoke: { name: 'Smoke', hash: createHash('sha256').update(TOKEN).digest('hex'), save } }),
+  JSON.stringify({
+    smoke: { name: 'Smoke', hash: createHash('sha256').update(TOKEN).digest('hex'), save },
+    oldie: { name: 'Oldie', hash: createHash('sha256').update(OLDIE_TOKEN).digest('hex'), save: played },
+    vet: { name: 'Vet', tokens: [], pw: { salt: salt.toString('hex'), hash: scryptSync(VET_PASS, salt, 32).toString('hex') }, save: played },
+  }),
 );
 fs.mkdirSync(SHOTS, { recursive: true });
 
@@ -113,6 +123,7 @@ const browser = await puppeteer.launch({
 try {
   await pondChecks();
   await joinTypingChecks();
+  await homeChecks();
   await touchTapChecks();
   await casinoChecks();
   await seaChecks();
@@ -167,11 +178,180 @@ async function noWebglChecks(): Promise<void> {
 async function joinTypingChecks(): Promise<void> {
   const page = await openPage(`http://localhost:${VITE_PORT}/?touch`);
   await page.waitForSelector('#join-name', { visible: true });
+  check('join (touch): no field is focused by itself, so the keyboard stays down', await page.evaluate(() => document.activeElement === document.body), await page.evaluate(() => document.activeElement?.id ?? ''));
   await page.click('#join-name', { clickCount: 3 });
   await page.type('#join-name', 'Big Fish');
   const typed = await page.evaluate(() => (document.getElementById('join-name') as HTMLInputElement).value);
   check('join (touch): a space typed in the name box stays in the name', typed === 'Big Fish', `"${typed}"`);
   await page.close();
+}
+
+// ---------- home screen ----------
+
+/**
+ * The way in through the home screen, as a player takes it: create an account, Play, come back logged in, read the
+ * news, log out, log in. The other checks skip the screen with `?name=` links.
+ */
+async function homeChecks(): Promise<void> {
+  const url = `http://localhost:${VITE_PORT}/?room=home`;
+  const ctx = await browser.createBrowserContext();
+  // Its own "What's new" reading state, and a count of the game sockets the page opens.
+  const page = await openPage(url, ctx, undefined, false, (port: number) => {
+    const Real = window.WebSocket;
+    (window as any).__sockets = 0;
+    window.WebSocket = class extends Real {
+      constructor(u: string | URL, p?: string | string[]) {
+        super(u, p);
+        if (String(u).includes(`:${port}`)) (window as any).__sockets++;
+      }
+    };
+  });
+  const home = () => page.evaluate(() => {
+    const el = document.getElementById('join')!;
+    const shown = (id: string) => { const e = document.getElementById(id)!; return getComputedStyle(e).display !== 'none' && !!e.offsetParent; };
+    const play = document.getElementById('join-play') as HTMLButtonElement;
+    return {
+      up: !el.classList.contains('hidden'),
+      view: ['loading', 'new', 'login', 'in'].find((v) => el.classList.contains(v)) ?? '',
+      tab: el.querySelector('.join-tabs .on')?.textContent ?? '',
+      create: shown('join-go') ? document.getElementById('join-go')!.textContent : '',
+      offline: shown('join-offline'),
+      msg: document.getElementById('join-msg')!.textContent ?? '',
+      who: shown('join-in') ? document.getElementById('join-in')!.innerText.replace(/\n+/g, ' | ') : '',
+      play: shown('join-play') ? `${play.textContent}${play.disabled ? ' (disabled)' : ''}` : '',
+      other: shown('join-other') ? document.getElementById('join-other')!.textContent : '',
+      badge: shown('join-unread') ? document.getElementById('join-unread')!.textContent : '',
+      focus: document.activeElement?.id ?? '',
+      sockets: (window as any).__sockets as number,
+    };
+  });
+  const banner = () => page.evaluate(() => (document.getElementById('banner')!.classList.contains('hidden') ? '' : document.getElementById('banner')!.innerText.replace(/\n+/g, ' | ')));
+  const playLive = () => page.waitForFunction(() => { const b = document.getElementById('join-play') as HTMLButtonElement; return b.textContent === 'Play' && !b.disabled && !!b.offsetParent; }, { timeout: 30000 }).then(() => true, () => false);
+  const gone = () => page.waitForFunction(() => document.getElementById('join')!.classList.contains('hidden'), { timeout: 5000 }).then(() => true, () => false);
+  const type = async (sel: string, text: string) => { await page.click(sel, { clickCount: 3 }); await page.keyboard.press('Backspace'); await page.type(sel, text); };
+
+  let h = await home();
+  check('home: a fresh browser gets the signed-out card on "New angler", with Create account and the way in offline', h.up && h.view === 'new' && h.tab === 'New angler' && h.create === 'Create account' && h.offline && h.focus === 'join-name', JSON.stringify(h));
+  await page.screenshot({ path: `${SHOTS}/home-new.png` });
+
+  await page.type('#join-name', 'Homer');
+  await page.type('#join-newpass', 'abc');
+  await page.keyboard.press('Enter');
+  h = await home();
+  check('home: a short password is refused before anything is sent', h.msg === 'Use at least 6 characters.' && h.sockets === 0 && h.view === 'new' && h.focus === 'join-newpass', JSON.stringify(h));
+
+  await type('#join-newpass', 'homer-pass');
+  await page.click('#join-go');
+  const ready = await playLive();
+  h = await home();
+  check('home: creating an account ends on "Logged in as" with Play live once loaded', ready && h.view === 'in' && /Logged in as \| Homer \| Lv 1 · \d+ coins \| First goal/i.test(h.who) && h.other === 'Not Homer? Switch account' && !h.offline, JSON.stringify(h));
+  check('home: a brand-new player has no unread news', h.badge === '', h.badge);
+  // Nothing is drawn behind the opaque screen once it's all warm.
+  const rests = await page.waitForFunction(() => (window.__game.world as any).paused === true, { timeout: 15000 }).then(() => true, () => false);
+  check('home: the world is not drawn behind the screen once it is warm', rests);
+  await page.screenshot({ path: `${SHOTS}/home-in.png` });
+
+  await page.click('#join-play');
+  const left = await gone();
+  const inGame = await page.evaluate(() => ({ online: window.__game.online(), paused: (window.__game.world as any).paused, locked: !!document.pointerLockElement, resume: document.getElementById('resume')!.classList.contains('hidden') ? '' : document.getElementById('resume')!.textContent, menu: !document.getElementById('menu')!.classList.contains('hidden') }));
+  const hello = await banner();
+  check('home: Play enters the game: the screen goes and the world is drawn again', left && inGame.online && !inGame.paused && !inGame.menu, JSON.stringify(inGame));
+  check('home: Play captures the mouse in the same click', inGame.locked ? !inGame.resume : inGame.resume!.includes('Click to start fishing'), JSON.stringify(inGame));
+  check('home: a new player still gets the welcome banner after Play', hello.includes('Welcome to Lakeside') && hello.includes('First goal'), hello);
+
+  // Back later: logged in by itself, and it waits for Play.
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.__game);
+  const again = await playLive();
+  await sleep(1200);
+  h = await home();
+  check('home: after a reload the browser is logged in by itself and waits for Play', again && h.up && h.view === 'in' && h.who.includes('Homer') && h.play === 'Play', JSON.stringify(h));
+
+  // What's new: opening the board marks everything read, which also tells us the newest entry's id.
+  await page.click('#join-news');
+  const latest = await page.evaluate(() => Number(localStorage.getItem('fishing-news')));
+  await page.evaluate((n) => localStorage.setItem('fishing-news', String(n - 2)), latest);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.__game);
+  await playLive();
+  h = await home();
+  check("home: the What's new button counts the unread entries", latest >= 2 && h.badge === '2', JSON.stringify({ latest, badge: h.badge }));
+  await page.click('#join-news');
+  const board = await page.evaluate(() => ({
+    open: document.getElementById('join')!.classList.contains('board') && !!document.getElementById('join-board')!.offsetParent,
+    entries: document.querySelectorAll('#join-board .news-item').length,
+    fresh: [...document.querySelectorAll('#join-board .news-item')].map((a) => !!a.querySelector('.news-new')).join(','),
+    seen: Number(localStorage.getItem('fishing-news')),
+    badge: !document.getElementById('join-unread')!.classList.contains('hidden'),
+  }));
+  await page.screenshot({ path: `${SHOTS}/home-board.png` });
+  check('home: the board opens in place of the card with the whole list, the unread entries marked NEW', board.open && board.entries > 2 && board.fresh.startsWith('true,true,false') && !board.fresh.slice(10).includes('true'), JSON.stringify(board));
+  check('home: opening the board marks everything read', board.seen === latest && !board.badge, JSON.stringify(board));
+  await page.click('[data-join="back"]');
+  h = await home();
+  check('home: Back returns to the card', h.view === 'in' && h.play === 'Play' && !(await page.evaluate(() => document.getElementById('join')!.classList.contains('board'))), JSON.stringify(h));
+
+  // Switch account asks first; logging out reloads onto "I have an account" with the name kept.
+  await page.click('#join-other');
+  const ask = await page.evaluate(() => document.getElementById('join-confirm')!.innerText.replace(/\n+/g, ' | '));
+  await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.click('[data-join="logout"]')]);
+  await page.waitForFunction(() => window.__game);
+  h = await home();
+  const loginName = await page.evaluate(() => (document.getElementById('join-login-name') as HTMLInputElement).value);
+  check('home: Switch account asks before logging out', ask.includes('Log out of Homer on this browser?') && ask.includes('Cancel'), ask);
+  check('home: logging out lands on "I have an account" with the name filled in', h.up && h.view === 'login' && h.tab === 'I have an account' && loginName === 'Homer' && h.focus === 'join-pass', JSON.stringify({ ...h, loginName }));
+
+  // A wrong password is refused, the right one logs in; a returning player gets no banner on top of the card.
+  await type('#join-login-name', 'Vet');
+  await page.type('#join-pass', 'not-it');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /password/i.test(document.getElementById('join-msg')!.textContent ?? ''), { timeout: 10000 }).catch(() => null);
+  h = await home();
+  check('home: a wrong password is refused', h.msg === 'Wrong password.' && h.view === 'login', JSON.stringify(h));
+  await type('#join-pass', VET_PASS);
+  await page.click('#join-login-go');
+  const vetIn = await playLive();
+  h = await home();
+  check('home: the right password logs in, onto "Logged in as" with the account\'s standing', vetIn && h.view === 'in' && /Logged in as \| Vet \| Lv 12 · 1,240 coins \| Next goal: Lv 15 casino/i.test(h.who), JSON.stringify(h));
+  await page.click('#join-play');
+  await gone();
+  check('home: a returning player gets no welcome banner after Play (the card said it)', (await banner()) === '', await banner());
+
+  // The page reloading itself to reconnect goes straight back in.
+  await page.evaluate(() => sessionStorage.setItem('fishing-reconnect', '1'));
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.__game);
+  const label = await page.evaluate(() => document.getElementById('join-play')!.textContent);
+  const back = await page.waitForFunction(() => document.getElementById('join')!.classList.contains('hidden') && window.__game.online(), { timeout: 30000 }).then(() => true, () => false);
+  const after = await page.evaluate(() => ({ resume: document.getElementById('resume')!.textContent ?? '', flag: sessionStorage.getItem('fishing-reconnect') }));
+  check('home: a reload flagged as a reconnect goes in without Play', back && label === 'Reconnecting…' && after.resume.includes('Click to keep playing') && after.flag === null, JSON.stringify({ back, label, ...after }));
+  await ctx.close();
+
+  // An account from before passwords, in the browser it was made in: Play's banner nudges toward a password, and
+  // Switch account warns that logging out deletes it, with the way to Settings' password form.
+  const ctx2 = await browser.createBrowserContext();
+  const old = await openPage(url, ctx2, OLDIE_TOKEN);
+  await old.evaluate(() => { localStorage.setItem('fishing-name', 'Oldie'); localStorage.setItem('fishing-auto', '1'); });
+  await old.reload({ waitUntil: 'load' });
+  await old.waitForFunction(() => window.__game);
+  await old.waitForFunction(() => { const b = document.getElementById('join-play') as HTMLButtonElement; return b.textContent === 'Play' && !b.disabled; }, { timeout: 30000 }).catch(() => null);
+  await old.click('#join-other');
+  const warn = await old.evaluate(() => document.getElementById('join-confirm')!.innerText.replace(/\n+/g, ' | '));
+  await old.screenshot({ path: `${SHOTS}/home-switch-nopass.png` });
+  check('home: Switch account warns that an account with no password is deleted by logging out', /Logging out deletes Oldie for good/.test(warn) && /Set a password first…/.test(warn) && /Delete Oldie and log out/.test(warn), warn);
+  await old.click('[data-join="cancel"]');
+  await old.click('#join-play');
+  await old.waitForFunction(() => document.getElementById('join')!.classList.contains('hidden'), { timeout: 5000 }).catch(() => null);
+  const nudge = await old.evaluate(() => (document.getElementById('banner')!.classList.contains('hidden') ? '' : document.getElementById('banner')!.innerText.replace(/\n+/g, ' | ')));
+  check('home: an account with no password gets the welcome banner with the nudge to set one', nudge.includes('Welcome back, Oldie') && nudge.includes('Settings: set a password'), nudge);
+  await old.reload({ waitUntil: 'load' });
+  await old.waitForFunction(() => window.__game);
+  await old.waitForFunction(() => { const b = document.getElementById('join-play') as HTMLButtonElement; return b.textContent === 'Play' && !b.disabled; }, { timeout: 30000 }).catch(() => null);
+  await old.click('#join-other');
+  await old.click('[data-join="setpass"]');
+  const form = await old.waitForSelector('#acct-pass', { visible: true, timeout: 5000 }).then(() => true, () => false);
+  check('home: "Set a password first…" enters the game with Settings open on the password form', form && (await old.evaluate(() => document.getElementById('join')!.classList.contains('hidden') || document.getElementById('join')!.classList.contains('leaving'))));
+  await ctx2.close();
 }
 
 // ---------- on-screen controls (touch) ----------
@@ -231,16 +411,22 @@ async function touchTapChecks(): Promise<void> {
 async function pondChecks(): Promise<void> {
   const page = await openPage(`http://localhost:${VITE_PORT}/`);
   await page.click('#join-offline');
+  // The home screen fades out; the game is on once it is gone.
+  await page.waitForFunction(() => document.getElementById('join')!.classList.contains('hidden'), { timeout: 5000 }).catch(() => null);
   const joined = await page.evaluate(() => ({
+    home: !document.getElementById('join')!.classList.contains('hidden'),
     menu: !document.getElementById('menu')!.classList.contains('hidden'),
     banner: document.getElementById('banner')!.classList.contains('hidden') ? '' : document.getElementById('banner')!.textContent,
     resume: document.getElementById('resume')!.classList.contains('hidden') ? '' : document.getElementById('resume')!.textContent,
+    locked: !!document.pointerLockElement,
     offline: !document.getElementById('offline')!.classList.contains('hidden'),
   }));
+  check('join: "play offline" takes the home screen down', !joined.home);
   check('join: the inventory stays closed after joining', !joined.menu);
   check('join: choosing "Play offline" shows no disconnected banner', !joined.offline);
   check('join: a new player gets the welcome banner', joined.banner!.includes('Welcome to Lakeside'), joined.banner!);
-  check('join: the banner asks for a click to start fishing', joined.resume!.includes('Click to start fishing'), joined.resume!);
+  // The same click captures the mouse; only a browser that refuses is asked for another click.
+  check('join: "play offline" starts the game in the same click', joined.locked ? !joined.resume : joined.resume!.includes('Click to start fishing'), JSON.stringify({ locked: joined.locked, resume: joined.resume }));
   await page.evaluate(() => window.__game.activate());
   check('join: starting to play dismisses the welcome', await page.evaluate(() => document.getElementById('banner')!.classList.contains('hidden') && document.getElementById('resume')!.classList.contains('hidden')));
   await sleep(800);
@@ -1475,7 +1661,8 @@ async function restartChecks(): Promise<void> {
 
 // ---------- helpers ----------
 
-async function openPage(url: string, ctx = browser.defaultBrowserContext(), token?: string): Promise<Page> {
+/** `readNews` false leaves the "What's new" reading state to the page; `init` runs in it before its own scripts (given the game server's port). */
+async function openPage(url: string, ctx = browser.defaultBrowserContext(), token?: string, readNews = true, init?: (port: number) => void): Promise<Page> {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
@@ -1484,14 +1671,15 @@ async function openPage(url: string, ctx = browser.defaultBrowserContext(), toke
   });
   // tsx keeps function names by wrapping them in __name(); functions sent to the page need it too.
   await page.evaluateOnNewDocument('globalThis.__name = (f) => f');
-  await page.evaluateOnNewDocument((token) => {
+  if (init) await page.evaluateOnNewDocument(init, SMOKE_SERVER_PORT);
+  await page.evaluateOnNewDocument((token, readNews) => {
     if (token) localStorage.setItem('fishing-token', token);
-    // Every "What's new" entry read, so no card opens over the run on joining.
-    localStorage.setItem('fishing-news', String(Number.MAX_SAFE_INTEGER));
+    // Every "What's new" entry read, so the home screen's count of them doesn't depend on the day's news.
+    if (readNews) localStorage.setItem('fishing-news', String(Number.MAX_SAFE_INTEGER));
     const raf = window.requestAnimationFrame.bind(window);
     (window as any).__rafSeen = new Set();
     window.requestAnimationFrame = (cb) => raf((t) => { (window as any).__rafSeen.add(cb); cb(t); });
-  }, token ?? '');
+  }, token ?? '', readNews);
   await page.goto(url, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__game);
   await page.evaluate(() => {

@@ -74,10 +74,20 @@ export function passProblem(pass: unknown): string | null {
 /** `created` is true when this login claimed a new name. */
 export type AuthResult = { ok: true; account: Account; created: boolean } | { ok: false; msg: string; need?: 'password' };
 
+/** What a join message carries: `mode` 'new' creates an account, 'login' logs into one, none is a browser's saved login. */
+export interface JoinRequest {
+  name: string;
+  token: string;
+  pass?: string;
+  mode?: 'new' | 'login';
+}
+
 /**
- * Name + secret token accounts. The first join with a name claims it; the token (kept in the
- * player's browser) proves ownership afterwards. An account with a password can add another
- * browser's token by entering it. Saves live here, not on the client.
+ * Name + secret token accounts. `join` is the one way in. An account is created only by mode 'new', with a
+ * password (the name must be unused). The token (kept in the player's browser) proves ownership afterwards, so a
+ * saved login needs no password; mode 'login' (name + password) adds another browser's token, and never creates.
+ * A saved login for a name nobody has is refused, except on an `open` server (test hooks), where it claims the
+ * name without a password. Saves live here, not on the client.
  */
 export class AccountStore {
   private accounts = new Map<string, Account>();
@@ -100,6 +110,38 @@ export class AccountStore {
       const tokens = Array.isArray(a?.tokens) ? a.tokens : a?.hash ? [a.hash] : null;
       if (a?.name && tokens) this.accounts.set(k, { name: a.name, tokens, ...pick(a), ...(a.lake ? { lake: cleanLake(a.lake) } : {}), save: migrate(a.save as SaveData), online: false });
     }
+  }
+
+  /** The one entry for a join message. `open` lets a saved login claim an unused name without a password (test servers only). */
+  async join(msg: JoinRequest, open: boolean): Promise<AuthResult> {
+    const { name, token, pass } = msg;
+    const mode = msg.mode ?? (pass !== undefined ? 'login' : undefined);
+    const p = parse(name, token);
+    if ('msg' in p) return { ok: false, msg: p.msg };
+    const known = !!this.accounts.get(p.key)?.tokens.includes(p.h) || !!this.renamedFrom(p.key, p.h);
+    const acct = this.accounts.get(p.key);
+    if (mode === 'new') {
+      if (rudeName(String(name)) || rudeName(p.clean)) return { ok: false, msg: `The name "${p.clean}" isn't allowed. Please pick another.` };
+      if (acct) return { ok: false, msg: `The name "${p.clean}" is taken. If it's yours, log in instead.` };
+      const bad = passProblem(pass);
+      if (bad) return { ok: false, msg: bad };
+      const pw = await hashPass(pass as string);
+      // Someone may have taken the name while the password was hashed.
+      if (this.accounts.has(p.key)) return { ok: false, msg: `The name "${p.clean}" is taken. If it's yours, log in instead.` };
+      const made: Account = { name: p.clean, tokens: [p.h], pw, save: newSave(), online: false };
+      this.accounts.set(p.key, made);
+      this.touch();
+      return { ok: true, account: made, created: true };
+    }
+    if (mode === 'login') {
+      if (!acct && !known) return { ok: false, msg: `No angler named "${p.clean}". Check the spelling, or create an account.` };
+      if (known) return this.auth(name, token);
+      if (!acct!.pw) return { ok: false, msg: `${acct!.name} has no password, so it only opens in the browser it was made in.` };
+      if (typeof pass !== 'string' || pass === '') return { ok: false, need: 'password', msg: 'Enter your password.' };
+      return this.login(name, token, pass);
+    }
+    if (!acct && !known && !open) return { ok: false, msg: `No angler named "${p.clean}". Create an account to play.` };
+    return this.auth(name, token);
   }
 
   /** Logs in with this browser's token, claiming the name if nobody has it yet. */

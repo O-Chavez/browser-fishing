@@ -11,6 +11,8 @@
   <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="manifest" href="/site.webmanifest" />
+  <!-- The home screen's backdrop (#join in src/style.css), fetched before the stylesheet asks for it. -->
+  <link rel="preload" as="image" href="/src/assets/images/home-backdrop.jpg" />
   <!-- Opened from the Home Screen, the game runs like an app without the browser's bars (src/game/homescreen.ts). -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -115,29 +117,63 @@
     </div>
   </div>
 
-  <div id="join" class="hidden">
-    <div class="panel join">
-      <h1>Lakeside</h1>
-      <p class="muted">Pick a name and a color. Other anglers will see you this way.</p>
+  <!-- The home screen (src/game/home.ts): up from the first paint, over a still of the lake. The class is its view:
+       "loading" until the script picks one of "new" (create an account), "login" or "in" (logged in: Play). -->
+  <div id="join" class="loading">
+    <div id="join-card" class="panel join">
+      <header class="join-head">
+        <h1>Lakeside</h1>
+        <p>Cozy fishing with friends</p>
+      </header>
+      <p class="join-wait">Loading…</p>
+      <div class="join-tabs">
+        <button type="button" data-join="new">New angler</button>
+        <button type="button" data-join="login">I have an account</button>
+      </div>
       <div class="split">
         <div id="join-preview"></div>
         <div class="grow">
-          <label for="join-name">Name</label>
-          <input id="join-name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Your name" />
-          <div id="join-pass-row" class="hidden">
-            <label for="join-pass">Password</label>
-            <input id="join-pass" type="password" maxlength="128" autocomplete="current-password" placeholder="Your password" />
-          </div>
-          <label>Body color</label>
-          <div id="join-colors" class="swatches"></div>
-          <p id="join-msg" class="joinmsg"></p>
-          <button id="join-go" class="primary">Join the lake</button>
-          <button id="join-switch" class="linklike hidden">Not you? Switch account</button>
-          <button id="join-offline" class="linklike">or play offline</button>
+          <form id="join-new" novalidate>
+            <div class="fld">
+              <label for="join-name">Name</label>
+              <input id="join-name" name="username" maxlength="16" autocomplete="username" spellcheck="false" placeholder="Your name" />
+            </div>
+            <div class="fld">
+              <label for="join-newpass">Password</label>
+              <input id="join-newpass" name="new-password" type="password" maxlength="128" autocomplete="new-password" placeholder="6+ characters" />
+            </div>
+            <div class="fld wide">
+              <label id="join-colors-label">Body color</label>
+              <div id="join-colors" class="swatches" role="group" aria-labelledby="join-colors-label"></div>
+            </div>
+          </form>
+          <form id="join-login" novalidate>
+            <div class="fld">
+              <label for="join-login-name">Name</label>
+              <input id="join-login-name" name="username" maxlength="16" autocomplete="username" spellcheck="false" placeholder="Your name" />
+            </div>
+            <div class="fld">
+              <label for="join-pass">Password</label>
+              <input id="join-pass" name="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Your password" />
+            </div>
+          </form>
+          <div id="join-in"></div>
+          <div id="join-confirm"></div>
+          <p id="join-msg" class="joinmsg" role="status"></p>
+          <button id="join-go" class="primary" type="submit" form="join-new">Create account</button>
+          <button id="join-login-go" class="primary" type="submit" form="join-login">Log in</button>
+          <button id="join-play" class="primary" type="button" disabled>Connecting…</button>
+          <button id="join-other" class="linklike hidden" type="button" data-join="switch"></button>
         </div>
       </div>
+      <footer class="join-foot">
+        <button id="join-news" type="button" data-join="news">📰 What's new<b id="join-unread" class="hidden"></b></button>
+        <button id="join-offline" class="linklike" type="button">or play offline</button>
+      </footer>
     </div>
-    <!-- A phone's first visit: add to the Home Screen first? (homeJoinHtml, src/game/homescreen.ts), in place of the form above. -->
+    <!-- The "What's new" board (homeBoardHtml), in place of the card until "Back". -->
+    <div id="join-board" class="panel join"></div>
+    <!-- A phone's first visit: add to the Home Screen first? (homeJoinHtml, src/game/homescreen.ts), in place of the card. -->
     <div id="join-home" class="panel join"></div>
   </div>
 

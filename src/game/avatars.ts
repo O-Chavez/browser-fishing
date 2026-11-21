@@ -450,7 +450,7 @@ export class Avatars {
    * The sea sets' pieces, the legends' and the zones', are the biggest models (an armor is tens of meshes, with
    * programs no other item uses, like the Twilight jellies' glows), and building one and compiling its shaders the
    * first time someone nearby wore it stalled the game for a few frames. So hidden stand-ins wear every one of them,
-   * built in idle moments while the page loads (on the join screen; the biggest piece takes about 13 ms, 35 ms on a
+   * built in idle moments while the page loads (on the home screen; the biggest piece takes about 13 ms, 35 ms on a
    * slow phone), and then `warm` compiles their shaders and draws them once. They stay in the scene, so each later
    * `World.prewarm` covers them too. Every `legend` and `zone` item is covered, so a new set needs nothing here.
    */

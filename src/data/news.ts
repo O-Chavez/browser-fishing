@@ -1,7 +1,7 @@
 /**
- * The "What's new" board: one entry per notable feature release, newest first. A returning player
- * sees the entries they haven't read in a card right after joining, and Settings re-opens the whole
- * board. Feature additions only: no balance tweaks, bug fixes or small adjustments.
+ * The "What's new" board: one entry per notable feature release, newest first. The home screen's
+ * "What's new" button counts the entries a player hasn't read and opens the whole board, as does
+ * Settings. Feature additions only: no balance tweaks, bug fixes or small adjustments.
  *
  * Adding an entry (see "What's new board" in CLAUDE.md):
  * - Put it at the top with `id` one higher than the current top entry. Ids are never reused or

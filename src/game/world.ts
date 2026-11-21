@@ -150,7 +150,7 @@ export class World {
   paused = false;
   /**
    * Skip drawing while `prewarm` is still compiling, so the page stays responsive instead of stalling
-   * on the compile. `Game` sets it while the join screen covers the view.
+   * on the compile. `Game` sets it while the home screen covers the view.
    */
   holdForShaders = false;
   /** `performance.now()` until which the last frame stays on screen even once shaders are ready (the cast-off card fading in over it). */
