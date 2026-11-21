@@ -885,8 +885,8 @@ export class Game {
     $('join-pass-row').classList.remove('hidden');
     const el = $('join-pass') as HTMLInputElement;
     el.value = '';
-    // After joinMessage has re-enabled the form.
-    requestAnimationFrame(() => el.focus());
+    // After joinMessage has re-enabled the form. Not on phones: see `enableTouch` on focused fields.
+    if (!this.touch) requestAnimationFrame(() => el.focus());
   }
 
   private joinStart(name: string): void {
@@ -1600,6 +1600,10 @@ export class Game {
     // Lay the page out wide and let the browser scale it to the screen, so the desktop HUD and menus fit a phone
     // in landscape at about 0.6x without a separate layout (`touchLayoutWidth`).
     document.querySelector('meta[name=viewport]')?.setAttribute('content', `width=${touchLayoutWidth(screen.width, screen.height)}, user-scalable=no`);
+    // The join card focused its name field before touch mode started. A phone only opens its keyboard for a tap, and
+    // an iPhone's Home Screen game won't open it for a tap on a field that already has the focus, so the name couldn't
+    // be typed until something else was tapped first. Fields on phones are focused by the player's tap alone.
+    if (document.activeElement instanceof HTMLElement && document.activeElement.matches('input, textarea')) document.activeElement.blur();
     document.documentElement.style.setProperty('--field-px', `${touchFieldPx(screen.width, screen.height)}px`);
     // The phone's keyboard can leave the page scrolled up after it closes (iPhones), the top cut off: put it back.
     document.addEventListener('focusout', () => setTimeout(() => !document.activeElement?.matches('input, textarea') && scrollTo(0, 0), 100));
