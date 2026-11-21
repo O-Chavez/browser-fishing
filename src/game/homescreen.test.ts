@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { homeJoinDue, homeJoinHtml, homeTipDue, homeTipHtml, installReady, isIos, offersHomeScreen, promptInstall, runningInstalled, type JoinState, type ScreenEnv } from './homescreen';
+import { homeTipDue, homeTipHtml, installReady, isIos, offersHomeScreen, promptInstall, runningInstalled, type ScreenEnv } from './homescreen';
 
 const android: ScreenEnv = { touch: true, automated: false, installed: false, ios: false };
 const iphone: ScreenEnv = { touch: true, automated: false, installed: false, ios: true };
-const firstVisit: JoinState = { shown: true, joining: false, name: null, auto: null, freshSave: true, seen: false };
 
 describe('Home Screen card', () => {
   it('knows a game opened from the Home Screen or as an installed app', () => {
@@ -38,13 +37,12 @@ describe('Home Screen card', () => {
     }
   });
 
-  it('waits after a join, online, once per browser, and not on a first join', () => {
+  it('opens after a join, online, once per browser', () => {
     for (const e of [android, iphone]) {
-      expect(homeTipDue(e, true, false, false)).toBe(true);
-      expect(homeTipDue(e, true, false, true)).toBe(false);
-      expect(homeTipDue(e, false, false, false)).toBe(false);
-      expect(homeTipDue(e, true, true, false)).toBe(false);
-      expect(homeTipDue({ ...e, installed: true }, true, false, false)).toBe(false);
+      expect(homeTipDue(e, true, false)).toBe(true);
+      expect(homeTipDue(e, true, true)).toBe(false);
+      expect(homeTipDue(e, false, false)).toBe(false);
+      expect(homeTipDue({ ...e, installed: true }, true, false)).toBe(false);
     }
   });
 
@@ -84,64 +82,5 @@ describe('Home Screen card', () => {
   it('has nothing to prompt until the browser offers it', async () => {
     expect(installReady()).toBe(false);
     expect(await promptInstall()).toBe(false);
-  });
-});
-
-describe('Home Screen step at the join', () => {
-  it("shows on a phone's first visit, on the join card", () => {
-    expect(homeJoinDue(android, firstVisit)).toBe(true);
-    expect(homeJoinDue(iphone, firstVisit)).toBe(true);
-  });
-
-  it('never shows once this browser has tried to join, joined or played', () => {
-    expect(homeJoinDue(iphone, { ...firstVisit, name: 'Oscar' })).toBe(false);
-    expect(homeJoinDue(iphone, { ...firstVisit, auto: '1' })).toBe(false);
-    // Played offline: progress in this browser's save.
-    expect(homeJoinDue(iphone, { ...firstVisit, freshSave: false })).toBe(false);
-  });
-
-  it('shows once, only on the join card, never over an automatic join', () => {
-    expect(homeJoinDue(iphone, { ...firstVisit, seen: true })).toBe(false);
-    expect(homeJoinDue(iphone, { ...firstVisit, shown: false })).toBe(false);
-    expect(homeJoinDue(iphone, { ...firstVisit, joining: true })).toBe(false);
-  });
-
-  it('never shows on a computer, an installed game or a test browser', () => {
-    expect(homeJoinDue({ ...iphone, touch: false }, firstVisit)).toBe(false);
-    expect(homeJoinDue({ ...iphone, installed: true }, firstVisit)).toBe(false);
-    expect(homeJoinDue({ ...android, automated: true }, firstVisit)).toBe(false);
-  });
-
-  it("gives iPhones Safari's steps, with no password talk and a way on in the browser", () => {
-    const html = homeJoinHtml({ ios: true, canPrompt: false, installed: false });
-    expect(html).toContain('Get the whole screen');
-    expect(html).toContain('Open this page in <b>Safari</b>');
-    expect(html).toContain('Tap <b>Share</b>');
-    expect(html).toContain('data-home="browser"');
-    expect(html).toContain('again in ⚙️ Settings');
-    expect(html).not.toContain('password');
-    expect(html).not.toContain('data-home="install"');
-  });
-
-  it("offers the browser's install prompt, else its menu's steps", () => {
-    const prompt = homeJoinHtml({ ios: false, canPrompt: true, installed: false });
-    expect(prompt).toContain('data-home="install"');
-    expect(prompt).toContain('below');
-    expect(prompt).not.toContain('⋮');
-    const menu = homeJoinHtml({ ios: false, canPrompt: false, installed: false });
-    expect(menu).toContain('<b>Install app</b>');
-    expect(menu).not.toContain('data-home="install"');
-    for (const html of [prompt, menu]) {
-      expect(html).toContain('data-home="browser"');
-      expect(html).not.toContain('password');
-    }
-  });
-
-  it('says where to open the game once installed, still with a way on in the browser', () => {
-    const html = homeJoinHtml({ ios: false, canPrompt: true, installed: true });
-    expect(html).toContain('Installed! Open Lakeside from your Home Screen.');
-    expect(html).toContain('data-home="browser"');
-    expect(html).not.toContain('data-home="install"');
-    expect(html).not.toContain('Settings');
   });
 });

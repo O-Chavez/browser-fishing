@@ -1,7 +1,8 @@
 /**
  * Playing from the Home Screen on phones and tablets (GAME_DESIGN.md §39, "Home Screen"). In a browser tab the
  * address bar and tabs take about a third of a landscape phone; added to the Home Screen (or installed), the game
- * opens like an app without them. A one-time card after joining says how, and Settings keeps a way back to it.
+ * opens like an app without them. A one-time card says how, right after joining (once the "What's new" card is
+ * closed, if there is one), and Settings keeps a way back to it. It never stands between a player and the join form.
  *
  * The page doesn't go full screen itself: Chrome on Android ignores the page's viewport while full screen, so the touch
  * layout (`touchLayoutWidth`) would draw at full size. The rules here are plain functions of what the page reads
@@ -44,52 +45,15 @@ export function isIos(ua: string, platform: string, maxTouchPoints: number): boo
 /** The card, and its button in Settings: on a phone or tablet still in a browser tab. */
 export const offersHomeScreen = (e: ScreenEnv): boolean => e.touch && !e.automated && !e.installed;
 
-/**
- * Whether the card waits to open after this join: once per browser (`seen`), online (on iPhones it's about logging
- * in), and not on a brand-new player's first join, who has the start tutorial to read.
- */
-export function homeTipDue(e: ScreenEnv, online: boolean, fresh: boolean, seen: boolean): boolean {
-  return offersHomeScreen(e) && online && !fresh && !seen;
+/** Whether the card opens after this join: once per browser (`seen`), and online (on iPhones it's about logging in). */
+export function homeTipDue(e: ScreenEnv, online: boolean, seen: boolean): boolean {
+  return offersHomeScreen(e) && online && !seen;
 }
 
 /** The browser remembers the card was shown here under this key. */
 export const HOME_TIP_KEY = 'fishing-homescreen-tip';
 
-/** Seconds of quiet (no menu, card or banner, nothing on the line, the stick at rest) before the card opens. */
-export const HOME_TIP_BEAT_SECS = 1.5;
-
-/** Seconds after joining before the card may open, so the welcome and a stage's banner (4.6 s in) have had their turn (play-test default). */
-export const HOME_TIP_DELAY_SECS = 20;
-
 export const HOME_TIP_TITLE = 'Get the whole screen';
-
-/** The browser remembers the first-visit step at the join was shown here (apart from `HOME_TIP_KEY`). */
-export const HOME_JOIN_KEY = 'fishing-homescreen-join';
-
-/** What the join screen knows when touch mode starts, for `homeJoinDue`. */
-export interface JoinState {
-  /** The join card is up (not the `?name=` link that skips it). */
-  shown: boolean;
-  /** A returning player's automatic join is already under way (`joinStart`). */
-  joining: boolean;
-  /** `fishing-name`: saved when this browser first tries to join, kept until a log-out. */
-  name: string | null;
-  /** `fishing-auto`: saved once a join here has worked. */
-  auto: string | null;
-  /** The save in this browser has no progress (`isFreshSave`), so nothing was played offline either. */
-  freshSave: boolean;
-  /** `HOME_JOIN_KEY` is set: the step was shown here before. */
-  seen: boolean;
-}
-
-/**
- * Whether the join screen opens on the Home Screen step: a phone or tablet in a browser tab that has never joined or
- * played here, on the join card itself, once per browser. A brand-new player who adds the game to the Home Screen now
- * makes their account in the Home Screen game, so on an iPhone nothing has to carry over from Safari.
- */
-export function homeJoinDue(e: ScreenEnv, j: JoinState): boolean {
-  return offersHomeScreen(e) && j.shown && !j.joining && !j.name && !j.auto && j.freshSave && !j.seen;
-}
 
 /** Safari's Share icon (a square with an arrow out of its top), drawn so players can match it to the button they're looking for. */
 const SHARE_ICON =
@@ -116,20 +80,7 @@ const homeGrid = (o: { ios: boolean; canPrompt: boolean }): string =>
   `<div class="home-grid"><div>${HOME_GAINS}</div><div class="home-how">${homeStepsHtml(o)}</div></div>`;
 
 /**
- * The first-visit step on the join screen, in place of the join form until "Play in the browser". No password talk:
- * there's no account yet. Once installed (or the prompt accepted) it says where to open the game instead.
- */
-export function homeJoinHtml(o: { ios: boolean; canPrompt: boolean; installed: boolean }): string {
-  const browser = '<button class="btn plain" data-home="browser">Play in the browser</button>';
-  const foot = '<p class="home-foot">You can find this again in ⚙️ Settings.</p>';
-  // Installed, Settings no longer offers it, so no pointer there.
-  if (o.installed) return `<p class="home-done">Installed! Open Lakeside from your Home Screen.</p><div class="btns">${browser}</div>`;
-  const install = !o.ios && o.canPrompt ? '<button class="btn gold" data-home="install">📲 Add to Home Screen</button>' : '';
-  return `<h1>📲 ${HOME_TIP_TITLE}</h1>${HOME_WHY}${homeGrid(o)}<div class="btns">${install}${browser}</div>${foot}`;
-}
-
-/**
- * The card in a later session. iPhones get Safari's steps; elsewhere the browser's own install prompt as a button when
+ * The card. iPhones get Safari's steps; elsewhere the browser's own install prompt as a button when
  * it has offered one (`installReady`), else its menu's steps. A Home Screen game on an iPhone keeps its own storage
  * apart from Safari's, so it doesn't have this browser's login: there a player without a password would find their
  * name taken, and is sent to set one. An installed app on Android shares the browser's storage, so the login carries over.

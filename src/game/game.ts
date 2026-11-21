@@ -29,7 +29,7 @@ import * as eco from './economy';
 import { NetClient } from './net';
 import { WheelStepper } from './wheelstep';
 import { TouchControls, touchFieldPx, touchLayoutWidth, touchOnly } from './touch';
-import { HOME_JOIN_KEY, HOME_TIP_BEAT_SECS, HOME_TIP_DELAY_SECS, HOME_TIP_KEY, HOME_TIP_TITLE, homeJoinDue, homeJoinHtml, homeTipDue, homeTipHtml, installedSinceLoad, installReady, offersHomeScreen, promptInstall, readScreenEnv, watchInstall, type ScreenEnv } from './homescreen';
+import { HOME_TIP_KEY, HOME_TIP_TITLE, homeTipDue, homeTipHtml, installedSinceLoad, installReady, offersHomeScreen, promptInstall, readScreenEnv, watchInstall, type ScreenEnv } from './homescreen';
 import { readChatKeyboard, writeChatKeyboard } from './chatkeyboard';
 import { ChatBox, maskedEcho, secretPrompt, unreadLabel, type SecretPrompt } from './chatbox';
 import { DevPrompt } from './devprompt';
@@ -221,14 +221,8 @@ export class Game {
   private touchWoke = false;
   /** Playing from the Home Screen (§39): how this page was opened, read once in `enableTouch`. */
   private screenEnv: ScreenEnv | null = null;
-  /** The Home Screen tip waits after this join for a quiet beat (`tickHomeTip`); seconds of quiet so far. */
-  private homeTipWait = false;
-  private homeTipQuiet = 0;
-  /** Seconds since this join, while the tip waits (`HOME_TIP_DELAY_SECS`). */
-  private homeTipAge = 0;
-  /** A phone's first visit: the join screen shows "Add to Home Screen first?" (`homeAtJoin`); and the prompt was accepted there. */
-  private homeJoinOpen = false;
-  private homeJoinAccepted = false;
+  /** The Home Screen card opens when the "What's new" card that came up on joining is closed (`offerHomeTip`). */
+  private homeTipNext = false;
   private shownPhase: Phase | '' = '';
   private power = 0;
   private powerDir = 1;
@@ -981,7 +975,7 @@ export class Game {
     const other = returning ? `<button class="switch" data-acct="logout">Not ${escapeHtml(this.net.name)}? Switch account</button>` : '';
     if (!this.locked && !this.forceActive) this.showResume('', 'to start fishing', pass, other);
     if (this.net.connected) this.showNews();
-    this.queueHomeTip();
+    this.offerHomeTip();
   }
 
   /** Whether this device gets the Home Screen card and its Settings button: in a browser tab, not installed meanwhile. */
@@ -991,8 +985,7 @@ export class Game {
 
   /** The install prompt arrived or was used, or the game was installed: the card and Settings follow. */
   private installChanged(): void {
-    if (this.homeJoinOpen) this.renderHomeJoin();
-    if (installedSinceLoad()) this.homeTipWait = false;
+    if (installedSinceLoad()) this.homeTipNext = false;
     if (!this.menuOpen) return;
     if (this.tab === 'homescreen' && installedSinceLoad()) this.closeMenu();
     else if (this.tab === 'homescreen' || this.tab === 'settings') this.renderMenu();
@@ -1006,88 +999,30 @@ export class Game {
   }
 
   /**
-   * A phone's first visit (`homeJoinDue`: never joined or played in this browser, on the join card, once): the join
-   * screen shows "Add to Home Screen first?" in place of its form until "Play in the browser". Touch mode starts right
-   * after the join card is put up and its name field focused, so the field is let go in the same moment, before the
-   * page draws, and the phone's keyboard never comes up for it.
+   * After joining, on a phone or tablet in a browser tab (`homeTipDue`: online, once per browser, a first join
+   * included): the Home Screen card opens straight away, or as soon as the "What's new" card is closed (`closeMenu`)
+   * when that came up first. Oscar, 2026-11-21: it used to stand in front of the join form on a first visit, which
+   * confused players, and otherwise waited 20 seconds, which had them looking for it.
    */
-  private homeAtJoin(): void {
+  private offerHomeTip(): void {
     if (!this.screenEnv || installedSinceLoad()) return;
-    let due = false;
-    try {
-      due = homeJoinDue(this.screenEnv, {
-        shown: !$('join').classList.contains('hidden'),
-        joining: this.joining,
-        name: localStorage.getItem('fishing-name'),
-        auto: localStorage.getItem('fishing-auto'),
-        freshSave: isFreshSave(this.s),
-        seen: !!localStorage.getItem(HOME_JOIN_KEY),
-      });
-      if (due) localStorage.setItem(HOME_JOIN_KEY, '1');
-    } catch {
-      return;
-    }
-    if (!due) return;
-    this.homeJoinOpen = true;
-    ($('join-name') as HTMLInputElement).blur();
-    // The character preview is out of sight meanwhile; it starts again with the form.
-    this.preview?.stop();
-    $('join').classList.add('homestep');
-    this.renderHomeJoin();
-    $('join-home').addEventListener('click', (e) => {
-      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-home]')?.dataset.home;
-      if (act === 'browser') this.closeHomeJoin();
-      else if (act === 'install') {
-        void promptInstall().then((ok) => {
-          if (ok) this.homeJoinAccepted = true;
-          if (this.homeJoinOpen) this.renderHomeJoin();
-        });
-      }
-    });
-  }
-
-  private renderHomeJoin(): void {
-    $('join-home').innerHTML = homeJoinHtml({ ios: !!this.screenEnv?.ios, canPrompt: installReady(), installed: this.homeJoinAccepted || installedSinceLoad() });
-  }
-
-  /** "Play in the browser": back to the join form (the name field isn't focused, so no keyboard jumps up). */
-  private closeHomeJoin(): void {
-    this.homeJoinOpen = false;
-    $('join').classList.remove('homestep');
-    if (!$('join').classList.contains('hidden')) this.joinPreview();
-  }
-
-  /** After joining: whether the Home Screen tip should wait for its moment (`homeTipDue`). */
-  private queueHomeTip(): void {
-    if (!this.screenEnv || this.homeTipWait || installedSinceLoad()) return;
     let seen = true;
     try {
       seen = !!localStorage.getItem(HOME_TIP_KEY);
     } catch {}
-    this.homeTipWait = homeTipDue(this.screenEnv, this.net.connected, isFreshSave(this.s), seen);
-    this.homeTipQuiet = 0;
-    this.homeTipAge = 0;
+    if (!homeTipDue(this.screenEnv, this.net.connected, seen)) return;
+    if (this.menuOpen && this.newsGlance) this.homeTipNext = true;
+    else this.showHomeTip();
   }
 
-  /**
-   * Opens a waiting Home Screen tip in a quiet beat after joining: no menu or card (What's new, the tip nudge), no
-   * banner (the welcome, a stage's), the "Heading in" card gone, nothing on the line, no table spin or emote, and
-   * the stick at rest. So it never stacks on another card and never cuts into play.
-   */
-  private tickHomeTip(dt: number): void {
-    if (!this.homeTipWait) return;
-    const quiet =
-      this.active && this.phase === 'idle' && !this.chat.active && !this.spin && !this.emote && !this.wheel.isOpen &&
-      !this.touchMove.x && !this.touchMove.y &&
-      $('banner').classList.contains('hidden') && $('castoff').classList.contains('hidden');
-    this.homeTipQuiet = quiet ? this.homeTipQuiet + dt : 0;
-    this.homeTipAge += dt;
-    if (this.homeTipQuiet < HOME_TIP_BEAT_SECS || this.homeTipAge < HOME_TIP_DELAY_SECS) return;
-    this.homeTipWait = false;
+  private showHomeTip(): void {
+    this.homeTipNext = false;
     if (!this.net.connected || !this.homeOffered()) return;
     try {
       localStorage.setItem(HOME_TIP_KEY, '1');
     } catch {}
+    // Like "What's new", the card greets the player instead of the banner, which would sit on top of it.
+    this.dismissWelcome();
     this.openMenu('homescreen');
   }
 
@@ -1670,7 +1605,6 @@ export class Game {
     // visit, the join screen asks first.
     this.screenEnv = readScreenEnv(true);
     watchInstall(() => this.installChanged());
-    this.homeAtJoin();
     // Phones start in lite graphics unless the player picked otherwise.
     this.applyGraphics();
     $('prompt').addEventListener('click', () => {
@@ -2311,6 +2245,13 @@ export class Game {
    * capture fails a "click to keep playing" overlay waits for the click that can.
    */
   private closeMenu(): void {
+    // The "What's new" card on joining hands over to the Home Screen card; a stage's banner (`afterNews`) waits for both.
+    if (this.homeTipNext && this.newsGlance) {
+      this.newsGlance = null;
+      this.showHomeTip();
+      if (this.tab === 'homescreen') return;
+    }
+    this.homeTipNext = false;
     this.tab = 'inventory';
     this.newsGlance = null;
     const after = this.afterNews;
@@ -4637,7 +4578,6 @@ export class Game {
     this.updateLure();
     this.tickSmoke(dt);
     this.tickNudge(dt);
-    this.tickHomeTip(dt);
     this.net.sendPos(dt, this.player.x, this.player.z, this.world.yaw);
     this.avatars.update(dt, this.world.time, this.net.players, this.player.x, this.player.z);
     this.syncBystanders();
@@ -5951,7 +5891,7 @@ export class Game {
   private stageBanner(ids: StageId[], intro: boolean): void {
     const st = stageById(ids.at(-1));
     if (!st) return;
-    if (this.menuOpen && this.newsGlance) return void (this.afterNews = () => this.stageBanner(ids, intro));
+    if (this.menuOpen && (this.newsGlance || this.tab === 'homescreen')) return void (this.afterNews = () => this.stageBanner(ids, intro));
     const el = $('banner');
     el.classList.remove('welcome', 'legend', 'hooked', 'low');
     el.classList.add('rank');

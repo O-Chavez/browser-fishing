@@ -844,17 +844,6 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .hometip .steps { padding: 8px 14px; border-radius: 12px; background: var(--paper-2); color: var(--ink); }
 .hometip .btns { display: flex; gap: 12px; margin: 12px 0 0; }
 .hometip .btns .btn { flex: 1; padding: 12px 16px; font-size: 21px; }
-/* A phone's first visit: the join screen opens on "Add to Home Screen first?" in the join card's look, in place of the
-   form until "Play in the browser" (homeJoinHtml). Sized to fit the same 1400x432 layout; scrolls if it doesn't. */
-#join:not(.homestep) #join-home, #join.homestep > .panel:not(#join-home) { display: none; }
-#join #join-home { width: min(900px, 94vw); max-height: 94vh; overflow-y: auto; box-sizing: border-box; padding: 18px 26px 16px; }
-#join-home h1 { margin: 0 0 8px; font-size: 30px; }
-#join-home p { margin: 0 0 10px; font-size: 20px; font-weight: 700; line-height: 1.35; }
-#join-home .steps { padding: 8px 14px; border-radius: 12px; background: var(--paper-2); }
-#join-home .home-done { padding: 12px 14px; border-radius: 12px; background: var(--paper-2); font-size: 22px; }
-#join-home .btns { display: flex; gap: 12px; margin: 12px 0 8px; }
-#join-home .btns .btn { flex: 1; padding: 12px 16px; font-size: 21px; }
-#join-home .home-foot { margin: 0; font-size: 19px; color: var(--ink-muted); }
 /* Both versions: a lead line, then what the player gets beside the numbered steps (two columns, since a phone with the
    browser's bars is short and wide), Safari's Share icon drawn in the step that names it. Wording is a play-test default. */
 .home-lead { margin: 0 0 10px; }
