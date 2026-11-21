@@ -17,9 +17,17 @@
 // CUT=1.0 instead stages the landing cutting a last stand short: each giant's last stand is started close in, and that
 // many seconds into it the line is brought right in; frames follow the landing through as `<giant>-cut-<n>.jpg`
 // (0.3, 0.8, 1.5, 2.3, 3.5 and 5 s into it), with the calls made to the sound logged. CUT=9 lands a giant already spent.
+// (Then the card is put away and the send-off is followed too: `<giant>-cut-sink-<n>.jpg`, 0.3, 0.8, 1.4 and 2.4 s on.)
+// STRIP=0.15 takes each staged moment in motion instead: a frame every that many seconds for STRIP_SECS (default 2.4)
+// from the moment it is played, as `<giant>-<name>-s<nn>.jpg`, tiled into `<giant>-<name>-strip.jpg` (needs ffmpeg),
+// which is how to see that an arm moves or an eye opens and shuts. The `thrash` moments hold the Kraken's arms at a
+// surge's full build-up (`G.giantStir`).
+// COST=1 instead times each staged moment: 1.5 s into it, 150 frames stepped and drawn with the GPU made to finish
+// each one (a one-pixel read-back), as they are and then with the lurkers' arms and eyes not drawn; it logs both, the
+// difference (what the arms or the eyes cost a frame on this machine, at this window's size) and how many were up.
 // TOUCH=1: a phone's layout. LITE=1: lite graphics. YAW, PITCH: where the player looks (default the spawn's).
 // Its own server and Vite on MOMENT_PORT (8831) and MOMENT_VITE_PORT (5331).
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -41,6 +49,10 @@ const GIANTS = (process.argv[3] || 'kraken,leviathan,dreamer').split(',');
 const ONLY = process.argv[4] ? new Set(process.argv[4].split(',')) : null;
 const RUN = !!process.env.RUN;
 const CUT = process.env.CUT ? Number(process.env.CUT) : null;
+const COST = !!process.env.COST;
+const STRIP = process.env.STRIP ? Number(process.env.STRIP) : null;
+const STRIP_SECS = Number(process.env.STRIP_SECS ?? 2.4);
+const FFMPEG = fs.existsSync('/opt/homebrew/bin/ffmpeg') ? '/opt/homebrew/bin/ffmpeg' : 'ffmpeg';
 const ROD = Number(process.env.ROD ?? 7);
 const FRAME_EVERY = Number(process.env.FRAME_EVERY ?? 4);
 const LOOK: [number, number] = [Number(process.env.YAW ?? 0), Number(process.env.PITCH ?? -0.12)];
@@ -54,6 +66,8 @@ interface Shot {
   line: [progress: number, fightLeft: number];
   play: string | 'last' | 'surge' | null;
   at: number[];
+  /** The Kraken's arms held at this much of a surge's build-up (0..1) for the moment. */
+  stir?: number;
 }
 const FAR: [number, number] = [0.4, 0.9], MID: [number, number] = [0.6, 0.6], NEAR: [number, number] = [0.84, 0.3];
 const SHOTS: Record<string, Shot[]> = {
@@ -63,6 +77,11 @@ const SHOTS: Record<string, Shot[]> = {
     { name: 'idle-19', act: 2, line: [0.3, 0.7], play: null, at: [1, 3.5, 6] },
     { name: 'idle-14', act: 2, line: [0.5, 0.7], play: null, at: [1, 3.5, 6] },
     { name: 'idle-close', act: 3, line: NEAR, play: null, at: [1, 3.5, 6] },
+    // At the rail, just before the landing.
+    { name: 'idle-rail', act: 3, line: [0.96, 0.2], play: null, at: [1, 3.5, 6] },
+    // A surge at its height: the arms thrashing.
+    { name: 'thrash-14', act: 2, line: [0.5, 0.7], play: null, at: [1, 2, 3], stir: 1 },
+    { name: 'thrash-close', act: 3, line: NEAR, play: null, at: [1, 2, 3], stir: 1 },
     { name: 'arm', act: 2, line: MID, play: 'arm', at: [0.9, 1.8] },
     { name: 'slap', act: 2, line: MID, play: 'slap', at: [1.0, 1.3, 1.5, 1.9] },
     { name: 'twin', act: 2, line: [0.5, 0.7], play: 'twin', at: [1.2, 2.0] },
@@ -73,13 +92,14 @@ const SHOTS: Record<string, Shot[]> = {
   ],
   leviathan: [
     { name: 'act1', act: 1, line: FAR, play: 'surge', at: [0.5, 1.1] },
-    // Mid-fight, at the distances a Fair fight has it (19, 14 and 12 m off): where it has to read.
+    // Between surges: its coils (or its ridge of spines) weaving where the line holds it, at the distances a Fair fight has it.
+    { name: 'idle-19', act: 2, line: [0.3, 0.7], play: null, at: [1, 3.5, 6] },
+    { name: 'idle-14', act: 2, line: [0.5, 0.7], play: null, at: [1, 3.5, 6] },
+    { name: 'idle-close', act: 3, line: NEAR, play: null, at: [1, 3.5, 6] },
     { name: 'rear-19', act: 2, line: [0.3, 0.7], play: 'rear', at: [0.5, 0.9, 1.3] },
     { name: 'rear-14', act: 2, line: [0.5, 0.7], play: 'rear', at: [0.5, 0.9, 1.3, 2.0] },
     { name: 'rear', act: 2, line: MID, play: 'rear', at: [0.5, 0.9, 1.3] },
-    { name: 'tail-19', act: 2, line: [0.3, 0.7], play: 'tail', at: [0.5, 0.9, 1.35] },
     { name: 'tail-14', act: 2, line: [0.5, 0.7], play: 'tail', at: [0.5, 0.9, 1.35, 1.7] },
-    { name: 'tail-far', act: 2, line: MID, play: 'tail', at: [0.5, 0.9, 1.35] },
     { name: 'coil-19', act: 2, line: [0.3, 0.7], play: 'coil', at: [0.6, 1.2, 1.8] },
     { name: 'coil-14', act: 2, line: [0.5, 0.7], play: 'coil', at: [0.6, 1.0, 1.4, 1.8, 2.3] },
     { name: 'coil-far', act: 2, line: MID, play: 'coil', at: [0.6, 1.2, 1.8] },
@@ -289,7 +309,20 @@ try {
         await shoot(page, `${id}-cut-${k + 1}`, true);
       }
       const after = await page.evaluate(() => { const G = (window as any).__game, w = G.world; return { phase: G.state().phase, giant: G.state().giant, calls: (window as any).__calls.splice(0), view: `fov ${w.fovFight.toFixed(2)} storm ${JSON.stringify(w.sea.fight)} shove ${JSON.stringify(w.sea.shove)}` }; });
-      console.log(`${id}: cut ${CUT}s into its last stand (${JSON.stringify(before)}); 5 s on: phase ${after.phase}, giant ${JSON.stringify(after.giant)}, ${after.view}; sound: ${after.calls.map((c: unknown[]) => `${c[0]}:${(c[2] as { kind?: string })?.kind ?? c[1]}`).join(' ')}`);
+      console.log(`${id}: cut ${CUT}s into its last stand (${JSON.stringify(before)}); 5 s on: phase ${after.phase}, giant ${JSON.stringify(after.giant)}, shown ${JSON.stringify(await page.evaluate(() => (window as any).__game.state().giantShown))}, ${after.view}; sound: ${after.calls.map((c: unknown[]) => `${c[0]}:${(c[2] as { kind?: string })?.kind ?? c[1]}`).join(' ')}`);
+      // As the player sees it, the card up; then the card put away and the send-off followed.
+      await shoot(page, `${id}-cut-card`, false);
+      for (let i = 0; i < 240 && (await phase()) !== 'result'; i++) await page.evaluate(() => (window as any).__game.step(1 / 60));
+      await shoot(page, `${id}-cut-result`, false);
+      await page.evaluate(() => { const G = (window as any).__game; G.hold(false); if (G.state().phase === 'result') G.press(); });
+      at = 0;
+      const sink = [0.3, 0.8, 1.4, 2.4];
+      for (let k = 0; k < sink.length; k++) {
+        await page.evaluate((secs) => { const G = (window as any).__game; for (let i = 0, n = Math.round(secs * 60); i < n; i++) G.step(1 / 60); }, sink[k] - at);
+        at = sink[k];
+        await shoot(page, `${id}-cut-sink-${k + 1}`, true);
+      }
+      console.log(`${id}: sunk: shown ${JSON.stringify(await page.evaluate(() => (window as any).__game.state().giantShown))}`);
       await page.evaluate(() => { const G = (window as any).__game; G.freeze(false); if (G.state().phase === 'result') G.press(); G.hold(false); });
       await sleep(4000);
       continue;
@@ -297,6 +330,7 @@ try {
     for (const s of (SHOTS[id] ?? []).filter((s) => !ONLY || ONLY.has(s.name))) {
       // The act, with the line where that act has it; a few seconds for the last move to clear and the act's look to ease in.
       await page.evaluate((s, sea) => { const G = (window as any).__game; G.giantAct(s.act); G.giantLine(s.line[0], s.line[1]); G.world.time = Number(sea); }, s, process.env.SEA_TIME ?? '100');
+      await page.evaluate((k) => (window as any).__game.giantStir(k), s.stir ?? null);
       await step(4, s.line);
       if (s.play === 'surge') {
         // Act 1's boil comes with a surge: the director left to itself until one starts.
@@ -308,15 +342,63 @@ try {
         const played = await page.evaluate((m) => (window as any).__game.giantMove(m), s.play);
         if (!played) console.error(`${id}-${s.name}: ${s.play} would not play`);
       }
-      let at = 0;
-      for (let k = 0; k < s.at.length; k++) {
-        await step(s.at[k] - at, s.line);
-        at = s.at[k];
-        await shoot(page, `${id}-${s.name}-${k + 1}`, true);
-        if (k === Math.floor((s.at.length - 1) / 2)) await shoot(page, `${id}-${s.name}-hud`, false);
+      if (COST) {
+        await step(1.5, s.line);
+        const cost = await page.evaluate((line) => {
+          const G = (window as any).__game, L = G.world.sea.lurk, gl = G.world.renderer.getContext();
+          const px = new Uint8Array(4);
+          const run = (n: number) => {
+            const t0 = performance.now();
+            for (let i = 0; i < n; i++) {
+              G.hold((G.state().tension ?? 0) < 0.5);
+              G.giantLine(line[0], line[1]);
+              G.step(1 / 60);
+              gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+            }
+            return (performance.now() - t0) / n;
+          };
+          const draw = (on: boolean) => { for (const g of [L.eyeGeo, L.armGeo]) g.setDrawRange(0, on ? Infinity : 0); };
+          run(30);
+          // By turns, so a drift in the machine's speed falls on both alike.
+          let withThem = 0, without = 0;
+          for (let k = 0; k < 5; k++) {
+            draw(true);
+            withThem += run(15) / 5;
+            draw(false);
+            without += run(15) / 5;
+          }
+          draw(true);
+          const info = G.world.renderer.info;
+          return { withThem, without, shown: G.state().giantShown, eyes: L.eyeGeo.instanceCount, arms: L.armGeo.instanceCount, programs: info.programs?.length };
+        }, s.line);
+        console.log(`${id}-${s.name}: ${cost.withThem.toFixed(2)} ms a frame, ${cost.without.toFixed(2)} without the lurkers: ${(cost.withThem - cost.without).toFixed(2)} ms for ${cost.arms} arms and ${cost.eyes} eyes drawn (${JSON.stringify(cost.shown)}), programs ${cost.programs}`);
+        if ((await phase()) !== 'reeling') { console.error(`${id}: the fight ended during ${s.name}`); break; }
+        continue;
       }
-      const st = await page.evaluate(() => ({ g: (window as any).__game.state().giant, calls: (window as any).__calls.splice(0) }));
-      console.log(`${id}-${s.name}: ${JSON.stringify(st.g)} sound: ${st.calls.map((c: unknown[]) => `${c[0]}:${(c[2] as { kind?: string })?.kind ?? c[1]}`).join(' ') || '-'}`);
+      if (STRIP) {
+        // In motion: a frame every STRIP seconds, tiled into one sheet.
+        const n = Math.round(STRIP_SECS / STRIP);
+        for (let k = 0; k <= n; k++) {
+          if (k) await step(STRIP, s.line);
+          await shoot(page, `${id}-${s.name}-s${String(k).padStart(2, '0')}`, true);
+        }
+        const cols = Math.min(6, n + 1);
+        spawnSync(FFMPEG, ['-y', '-loglevel', 'error', '-i', path.join(OUT, `${id}-${s.name}-s%02d.jpg`), '-vf', `scale=640:-1,tile=${cols}x${Math.ceil((n + 1) / cols)}`, '-frames:v', '1', '-q:v', '4', path.join(OUT, `${id}-${s.name}-strip.jpg`)]);
+        const st = await page.evaluate(() => ({ g: (window as any).__game.state().giant, n: (window as any).__game.state().giantShown, programs: (window as any).__game.world.renderer.info.programs?.length }));
+        console.log(`${id}-${s.name}: ${JSON.stringify(st.g)} shown ${JSON.stringify(st.n)} programs ${st.programs}`);
+        if ((await phase()) !== 'reeling') { console.error(`${id}: the fight ended during ${s.name}`); break; }
+        continue;
+      }
+      let at = 0;
+      const times = s.at;
+      for (let k = 0; k < times.length; k++) {
+        await step(times[k] - at, s.line);
+        at = times[k];
+        await shoot(page, `${id}-${s.name}-${k + 1}`, true);
+        if (k === Math.floor((times.length - 1) / 2)) await shoot(page, `${id}-${s.name}-hud`, false);
+      }
+      const st = await page.evaluate(() => ({ g: (window as any).__game.state().giant, n: (window as any).__game.state().giantShown, calls: (window as any).__calls.splice(0) }));
+      console.log(`${id}-${s.name}: ${JSON.stringify(st.g)} shown ${JSON.stringify(st.n)} sound: ${st.calls.map((c: unknown[]) => `${c[0]}:${(c[2] as { kind?: string })?.kind ?? c[1]}`).join(' ') || '-'}`);
       if ((await phase()) !== 'reeling') { console.error(`${id}: the fight ended during ${s.name}`); break; }
     }
     // Let it go: the line run right out.

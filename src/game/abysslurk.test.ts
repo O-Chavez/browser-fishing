@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { LEGEND_FIGHT } from '../data/legendshow';
 import { LURK, SEA_LOOK_DEPTH, inHull, lurkAt, lurkLevel, seaDepthFor, seaMood } from '../data/sea';
 import { AbyssLurk, SPINE_GLSL, breachLength, breachPose, eyeSpot, eyesShut, farEvery, lurkDist, lurkGap, lurkRate, passPhase, pickFar, seaSight, serpentShape, serpentSpine, stareTime, type FarKind } from './abysslurk';
 
@@ -345,9 +346,95 @@ describe('what a hooked legend asks of the lurkers', () => {
     expect(parts.eyeGeo.instanceCount).toBe(3);
     run(1);
     expect(parts.eyes.visible).toBe(false);
-    // Lite graphics keeps half the slots.
+    // Lite graphics has room for fewer, and a slot past its room is not kept.
+    const full = lurk.keepRoom;
     lurk.setLite(true);
-    keep(lurk.keepRoom);
-    expect(parts.eyeGeo.instanceCount).toBe(lurk.keepRoom / 2);
+    expect(lurk.isLite).toBe(true);
+    expect(lurk.keepRoom).toBeLessThan(full);
+    keep(full);
+    expect(parts.eyeGeo.instanceCount).toBe(lurk.keepRoom);
+  });
+
+  it("has room for the Dreamer's whole field with a move or its last stand over it, and its landing", () => {
+    const { lurk } = make();
+    const F = LEGEND_FIGHT, G = F.gaze;
+    const field = Math.max(...G.count);
+    const fits = (room: number, few: (n: number) => number) => {
+      for (const move of [F.eyes.count + F.eyes.inner, F.under.count, F.trail.count]) expect(few(field) + few(move)).toBeLessThanOrEqual(room);
+      expect(few(field) + few(F.stand.dreamer.ring) + few(F.stand.dreamer.boat)).toBeLessThanOrEqual(room);
+      // The landing's eyes take their slots from the top, clear of what the fight had open at the end (its field, or a spent Dreamer's few).
+      expect(few(G.landing.count) + few(field)).toBeLessThanOrEqual(room);
+    };
+    fits(lurk.keepRoom, (n) => n);
+    lurk.setLite(true);
+    fits(lurk.keepRoom, (n) => Math.ceil(n * G.lite));
+    // The acts build: a few far out, then the field, most close in; far more than the handful there were.
+    expect(G.count[0]).toBeLessThan(G.count[1] / 3);
+    expect(G.count[1]).toBeLessThan(G.count[2]);
+    expect(G.count[1]).toBeGreaterThanOrEqual(20);
+  });
+
+  it("turns each eye's glow on the water down as more of them are kept open", () => {
+    const { lurk, parts, run } = make();
+    const glow = () => (parts.eyes.material as THREE.ShaderMaterial).uniforms.uGlow.value as number;
+    const keep = (n: number) => {
+      for (let k = 0; k < 20; k++) {
+        for (let i = 0; i < n; i++) lurk.keep(i, 12 + (i % 10) * 2, Math.floor(i / 10) * 2 - 6, 1, 1);
+        run(1 / 30);
+      }
+    };
+    keep(6);
+    expect(glow()).toBeCloseTo(LURK.eyes.glow);
+    keep(48);
+    expect(glow()).toBeLessThan(LURK.eyes.glow * 0.6);
+    expect(glow()).toBeGreaterThan(LURK.eyes.glow * 0.3);
+  });
+
+  it("a hooked Kraken's arms are alive: each stirs on its own clock, faster as a surge builds, and leans the way it is dragged", () => {
+    const { lurk, parts, run } = make();
+    const C = () => (parts as unknown as { armC: THREE.InstancedBufferAttribute }).armC.array as Float32Array;
+    const a = lurk.reach(20, 2, 6, 0, 1, 999);
+    const b = lurk.reach(24, -3, 6, Math.PI / 2, 1, 999);
+    // Not stirred (a sighting's arm, the arm by the bobber): nothing of it reaches the shader.
+    run(2);
+    expect(C()[1]).toBe(0);
+    expect(C()[5]).toBe(0);
+    // Alive: both stir, each from its own place on its own clock.
+    lurk.stir = 1;
+    run(2);
+    expect(C()[1]).toBeCloseTo(1, 1);
+    expect(C()[0]).not.toBeCloseTo(C()[4], 1);
+    const pace = (secs: number) => {
+      const from = C()[0];
+      run(secs);
+      return (C()[0] - from) / secs;
+    };
+    const calm = pace(1);
+    expect(calm).toBeGreaterThan(0);
+    // A surge at its height: harder and faster, with no jump in its clock (it only ever runs on).
+    lurk.stir = 2.2;
+    run(1.5);
+    expect(C()[1]).toBeGreaterThan(2);
+    expect(pace(1)).toBeGreaterThan(calm * 1.5);
+    // Dragged toward +x: the arm facing +x leans in its own plane, the one facing +z leans across it.
+    expect(lurk.hold(a, 20, 2, 6, 0.3, 0)).toBe(true);
+    expect(lurk.hold(b, 24, -3, 6, 0.3, 0)).toBe(true);
+    run(1.5);
+    expect(parts.armB.array[3]).toBeCloseTo(0.3, 1);
+    expect(C()[2]).toBeCloseTo(0, 1);
+    expect(parts.armB.array[7]).toBeCloseTo(0, 1);
+    expect(Math.abs(C()[6])).toBeCloseTo(0.3, 1);
+    // One coming up stirs harder than one that has stood a while (it rises with a writhe); a limp one hardly at all.
+    lurk.stir = 1;
+    run(2);
+    lurk.reach(30, 0, 6, 0, 1, 999);
+    lurk.reach(32, 4, 6, 0, 1, 999, 2, { by: 0.9, at: 0, over: 1, limp: 1 });
+    run(0.2);
+    expect(C()[9]).toBeGreaterThan(C()[1] + 0.2);
+    run(3);
+    expect(C()[9]).toBeCloseTo(1, 1);
+    expect(C()[13]).toBeLessThan(0.5);
+    expect(C()[15]).toBe(1);
+    expect(C()[11]).toBe(0);
   });
 });
