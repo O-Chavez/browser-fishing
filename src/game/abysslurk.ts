@@ -32,6 +32,8 @@ export interface ArmLean {
   at: number;
   over: number;
   fall?: boolean;
+  /** Hanging limp (0..1): its tip droops over and trails in the water, uncurled, and it hardly stirs (a spent Kraken's). */
+  limp?: number;
 }
 
 export type FarKind = 'pass' | 'flash' | 'breach' | 'arm' | 'arms';
@@ -478,41 +480,67 @@ void main(){
 const armVert = `
 ${WAVE_GLSL}
 attribute float aU; attribute float aTone;
-attribute vec4 aArm; attribute vec4 aArmB;
+attribute vec4 aArm; attribute vec4 aArmB; attribute vec4 aArmC;
 uniform float uCurl;
 varying vec3 vWorld; varying float vTone; varying float vAbove;
-// How far the arm leans off upright u of the way along it: a slow sway, and a curl that tightens toward the tip.
-float bend(float u, float curl){
+// How far the arm leans off upright u of the way along it, toward the way it faces: a slow sway, and a curl that
+// tightens toward the tip. A hooked Kraken's arm is alive on top of that (aArmC: its own clock, how hard it stirs,
+// its lean across, how limp it hangs): the whole arm rocks about its foot and a wave runs out along it to the tip,
+// faster and wider the harder it stirs; k is how far clear of the water this part of it is (0 at the waterline).
+// (Past a stir of 1 it is mostly faster, a little wider: a thrash, not a tangle.)
+float stirred(float e){ return min(e, 1.0) + 0.45 * max(e - 1.0, 0.0); }
+float bend(float u, float curl, float k){
   float c = smoothstep(0.3, 1.0, u);
-  return 0.14 * sin(uTime * 0.4 + aArmB.y * 6.0) + 0.3 * u * sin(uTime * 0.55 + aArmB.y * 17.0 + u * 2.4) + curl * c * c;
+  float calm = 0.14 * sin(uTime * 0.4 + aArmB.y * 6.0) + 0.3 * u * sin(uTime * 0.55 + aArmB.y * 17.0 + u * 2.4);
+  float e = stirred(aArmC.y), ph = aArmC.x;
+  float alive = e * (0.13 * sin(ph * 0.9 + aArmB.y * 40.0) + k * (0.16 + 0.42 * u) * u * sin(ph * 1.7 - u * 5.0 + aArmB.y * 23.0));
+  // Limp, it hangs over further and further toward its tip.
+  return calm + alive + curl * c * c + aArmC.w * 1.25 * u * u * k;
 }
+// The same across the way it faces, out of step with it, so the arm writhes in the round and not in one flat plane.
+float sway(float u, float k){
+  float e = stirred(aArmC.y), ph = aArmC.x;
+  return e * (0.12 * sin(ph * 0.75 + aArmB.y * 51.0) + k * (0.14 + 0.38 * u) * u * sin(ph * 1.45 - u * 4.2 + aArmB.y * 11.0));
+}
+// A direction leant b from upright toward the way the arm faces and s across it: (toward, up, across).
+vec3 leant(float b, float s){ return vec3(sin(b) * cos(s), cos(b) * cos(s), sin(s)); }
 void main(){
   float len = aArm.w, out0 = 1.0 - aArmB.x;
+  float e = aArmC.y, ph = aArmC.x, limp = aArmC.w;
   // It comes up straight as a spike, and the tip curls over as more of it stands clear.
   float curl = uCurl * (0.65 + 0.7 * fract(aArmB.y * 7.3)) * (0.25 + 0.75 * smoothstep(0.15, 0.8, aArmB.x)) * (0.9 + 0.1 * sin(uTime * 0.3 + aArmB.y * 9.0));
-  // A hooked Kraken's arm may lean over from the waterline (aArmB.w, radians: a slap lays it flat on the water);
-  // laid over, it straightens out.
-  float lean = aArmB.w;
+  // Alive, its tip curls up tight and lets go again in its own time; limp, it hangs open.
+  curl *= mix(1.0, 0.2 + 1.05 * (0.5 + 0.5 * sin(ph * 0.62 + aArmB.y * 29.0)), min(e, 1.0)) * (1.0 - 0.7 * limp);
+  // A hooked Kraken's arm may lean over from the waterline (aArmB.w, radians: a slap lays it flat on the water;
+  // aArmC.z the same across the way it faces); laid over, it straightens out.
+  float lean = aArmB.w, side = aArmC.z;
   curl *= 1.0 - 0.75 * clamp(lean / 1.5, 0.0, 1.0);
-  vec2 p = vec2(0.0, -(out0 - aU) * len);
-  float a = 0.0;
+  vec3 p = vec3(0.0, -(out0 - aU) * len, 0.0);
+  vec3 T = vec3(0.0, 1.0, 0.0);
   if (aU > out0) {
-    p = vec2(0.0);
+    p = vec3(0.0);
     float du = (aU - out0) / 14.0;
     for (int i = 0; i < 14; i++) {
       float uu = out0 + (float(i) + 0.5) * du;
-      float b = bend(uu, curl) + lean * smoothstep(0.0, 0.12, uu - out0);
-      p += vec2(sin(b), cos(b)) * du * len;
+      float k = smoothstep(0.0, 0.12, uu - out0), kk = smoothstep(0.0, 0.3, uu - out0);
+      p += leant(bend(uu, curl, kk) + lean * k, sway(uu, kk) + side * k) * du * len;
     }
-    a = bend(aU, curl) + lean * smoothstep(0.0, 0.12, aU - out0);
+    float k = smoothstep(0.0, 0.12, aU - out0), kk = smoothstep(0.0, 0.3, aU - out0);
+    T = leant(bend(aU, curl, kk) + lean * k, sway(aU, kk) + side * k);
   }
   vec3 d, n; float hc, hs, att;
   seaWaves(aArm.xy, d, n, hc, hs, att);
   float f = aArm.z + 0.2 * sin(uTime * 0.23 + aArmB.y * 31.0);
-  vec3 H = vec3(cos(f), 0.0, sin(f)), B = vec3(-sin(f), 0.0, cos(f));
-  vec3 inner = H * cos(a) - vec3(0.0, 1.0, 0.0) * sin(a);
+  vec3 H = vec3(cos(f), 0.0, sin(f)), B = vec3(-sin(f), 0.0, cos(f)), Y = vec3(0.0, 1.0, 0.0);
+  // Its ring there: square to the way it runs, the pale underside toward the inside of the curl; alive, it twists
+  // about its own length, so the rows of suckers wind round it.
+  vec3 Tw = H * T.x + Y * T.y + B * T.z;
+  vec3 Bn = normalize(B - Tw * dot(B, Tw));
+  vec3 inner = cross(Tw, Bn);
+  float tw = e * 0.7 * smoothstep(0.1, 0.9, aU) * sin(ph * 0.55 + aArmB.y * 5.0 - aU * 3.0);
+  vec3 in2 = inner * cos(tw) + Bn * sin(tw), b2 = Bn * cos(tw) - inner * sin(tw);
   float r = aArmB.z * (1.0 - 0.9 * pow(aU, 1.15));
-  vec3 q = vec3(aArm.x, hs, aArm.y) + H * p.x + vec3(0.0, p.y, 0.0) + (inner * position.x + B * position.y) * r;
+  vec3 q = vec3(aArm.x, hs, aArm.y) + H * p.x + Y * p.y + B * p.z + (in2 * position.x + b2 * position.y) * r;
   // The foam where it breaks the water is in scale with it: a short arm by the hull (a hooked Kraken's) has a narrow line of it.
   vAbove = (q.y - hs) / clamp(len / 16.0, 0.25, 1.0);
   vTone = aTone;
@@ -592,9 +620,22 @@ void main(){
 
 // ---------------------------------------------------------------------------------------------------------------
 
-/** How many arms and eyes can be drawn at once: the sightings use 5 and 9 at most; a hooked Kraken's arms and a hooked Dreamer's eyes (`reach`, `keep`) the rest. */
+/**
+ * How many arms and eyes can be drawn at once: the sightings use 5 and 9 at most; a hooked Kraken's arms and a hooked
+ * Dreamer's eyes (`reach`, `keep`) the rest. An eye is one instance of a 176-triangle disc in the one draw, so the
+ * room for them costs nothing until they are open; lite graphics keeps `EYES_LITE` of them.
+ */
 const ARMS = 10;
-const EYES = 24;
+const EYES = 96;
+const EYES_LITE = 48;
+/** Up to this many kept eyes glow on the water at full strength; past it each one's glow is turned down (by the root of how many more). */
+const GLOW_FULL = 10;
+/**
+ * A hooked Kraken's arm, alive (`AbyssLurk.stir`): how fast its own clock runs, still and for each point of stir; how
+ * much harder it stirs while it comes up (it rises with a writhe); how much of the stir a limp one has left; and how
+ * fast (1/s) its stir and its lean ease to what is asked.
+ */
+const ARM_PACE = [1.1, 1.7], ARM_RISE_STIR = 0.9, ARM_LIMP_STIR = 0.3, ARM_EASE = 5;
 /** How long (s) a sighting shown by one flash waits for a clear view before giving up: about one swell. */
 const FLASH_WAIT = 12;
 
@@ -649,6 +690,7 @@ export class AbyssLurk {
   private armGeo: THREE.InstancedBufferGeometry;
   private armA: THREE.InstancedBufferAttribute;
   private armB: THREE.InstancedBufferAttribute;
+  private armC: THREE.InstancedBufferAttribute;
   private aU: Record<string, THREE.IUniform>;
   /** Per arm: 0 none, 1 rising and sinking in its own time, 2 shown by a flash. */
   private aMode = new Uint8Array(ARMS);
@@ -671,6 +713,24 @@ export class AbyssLurk {
   private aLeanIn = new Float32Array(ARMS).fill(1);
   private aLeanFall = new Uint8Array(ARMS);
   private aGirth = new Float32Array(ARMS).fill(1);
+  /**
+   * Per arm (a hooked Kraken's), alive: its own clock (it runs faster the harder the arm stirs, so a surge speeds it
+   * without a jump), how hard it stirs now, how limp it hangs, and the lean the game asks of it (`hold`: toward the
+   * way it faces and across it, radians) with what it has eased to.
+   */
+  private aPhase = new Float32Array(ARMS);
+  private aStir = new Float32Array(ARMS);
+  private aLimp = new Float32Array(ARMS);
+  private aPull = new Float32Array(ARMS);
+  private aSide = new Float32Array(ARMS);
+  private aPullNow = new Float32Array(ARMS);
+  private aSideNow = new Float32Array(ARMS);
+  /**
+   * How hard a hooked Kraken's arms stir (`reach`): 0 a far sighting's slow sway (and what the arm by the bobber
+   * keeps), 1 alive (swaying, writhing, the tip curling and letting go), 2 thrashing. The game sets it through a
+   * fight (`GiantFights`); each arm eases to it and keeps its own time.
+   */
+  stir = 0;
   /** Per arm: how many times its place has been given out by `reach`, so an old id is not taken for a new arm. */
   private aGen = new Uint32Array(ARMS);
   /** Staging and a giant's fight: true stops sightings coming on their own (what the game asks for still shows). */
@@ -758,8 +818,10 @@ export class AbyssLurk {
     this.armGeo = new THREE.InstancedBufferGeometry().copy(armGeometry() as THREE.InstancedBufferGeometry);
     this.armA = new THREE.InstancedBufferAttribute(new Float32Array(ARMS * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.armB = new THREE.InstancedBufferAttribute(new Float32Array(ARMS * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    this.armC = new THREE.InstancedBufferAttribute(new Float32Array(ARMS * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.armGeo.setAttribute('aArm', this.armA);
     this.armGeo.setAttribute('aArmB', this.armB);
+    this.armGeo.setAttribute('aArmC', this.armC);
     this.aU = {
       ...waves,
       ...this.shade,
@@ -823,6 +885,10 @@ export class AbyssLurk {
   setLite(on: boolean): void {
     this.lite = on;
   }
+  /** Whether lite graphics is on (a hooked Dreamer keeps fewer eyes then). */
+  get isLite(): boolean {
+    return this.lite;
+  }
 
   /**
    * Staging: shows a sighting now, at `bearing` (atan2 of z, x; default somewhere over the open sea players face) and,
@@ -852,6 +918,9 @@ export class AbyssLurk {
     this.aLeanAt[i] = lean?.at ?? 0;
     this.aLeanIn[i] = Math.max(0.01, lean?.over ?? 1);
     this.aLeanFall[i] = lean?.fall ? 1 : 0;
+    this.aLimp[i] = clamp01(lean?.limp ?? 0);
+    this.aPhase[i] = this.rnd() * 40;
+    this.aStir[i] = this.aPull[i] = this.aSide[i] = this.aPullNow[i] = this.aSideNow[i] = 0;
     this.aGirth[i] = girth;
     this.aSink[i] = sink;
     this.aReach[i] = 1;
@@ -876,14 +945,19 @@ export class AbyssLurk {
 
   /**
    * Moves a hooked Kraken's arm (`id` from `reach`) to (x, z), standing `height` m tall: the game keeps its arms where
-   * the line holds it, and has them stand taller in a surge. False once the arm has gone under.
+   * the line holds it, and has them stand taller in a surge. (leanX, leanZ), if given, leans the whole arm that way
+   * from its foot (radians, in the sea's frame: dragged toward the boat, it trails away from it), eased. False once
+   * the arm has gone under.
    */
-  hold(id: number, x: number, z: number, height: number): boolean {
+  hold(id: number, x: number, z: number, height: number, leanX = 0, leanZ = 0): boolean {
     const i = this.armOf(id);
     if (i < 0) return false;
     this.aX[i] = x;
     this.aZ[i] = z;
     this.aLen[i] = height / 0.8;
+    const c = Math.cos(this.aFace[i]), s = Math.sin(this.aFace[i]);
+    this.aPull[i] = leanX * c + leanZ * s;
+    this.aSide[i] = -leanX * s + leanZ * c;
     return true;
   }
 
@@ -927,10 +1001,10 @@ export class AbyssLurk {
    * `size` times a sighting's biggest, its lids `open` (0 shut .. 1 wide). Called every frame for every eye the game
    * wants: one not asked for shuts and is gone. They are not shy; their lids ease, they blink and their pupils find
    * the viewer like any other eye's. While any is kept no sighting's cluster is drawn. Lite graphics, which draws
-   * them without their glow on the water, keeps the first half of the slots only.
+   * them without their glow on the water, has room for fewer (`keepRoom`).
    */
   keep(slot: number, x: number, z: number, size: number, open: number): void {
-    if (slot < 0 || slot >= EYES || (this.lite && slot >= EYES / 2)) return;
+    if (slot < 0 || slot >= this.keepRoom) return;
     if (!this.kOn[slot]) {
       this.kOn[slot] = 1;
       this.kOpen[slot] = 0;
@@ -945,8 +1019,10 @@ export class AbyssLurk {
     this.kWant[slot] = clamp01(open);
     this.kAsked[slot] = 1;
   }
-  /** How many eyes the game may keep (`keep`). */
-  readonly keepRoom = EYES;
+  /** How many eyes the game may keep (`keep`): fewer in lite graphics. */
+  get keepRoom(): number {
+    return this.lite ? EYES_LITE : EYES;
+  }
   private kOn = new Uint8Array(EYES);
   private kAsked = new Uint8Array(EYES);
   private kX = new Float32Array(EYES);
@@ -1016,7 +1092,8 @@ export class AbyssLurk {
     u.uCam.value.copy(cam);
     u.uIris.value.set(E.color);
     u.uPupil.value.set(E.pupil);
-    u.uGlow.value = this.lite ? 0 : E.glow;
+    // Many open at once: each one's light on the water is turned down, so a field of them stays eyes and not one glowing sheet.
+    u.uGlow.value = this.lite ? 0 : E.glow * Math.min(1, Math.sqrt(GLOW_FULL / Math.max(1, n)));
     u.uReach.value = this.lite ? EYE_REACH_LITE : EYE_REACH;
     u.uStretch.value = E.stretch;
     return true;
@@ -1123,6 +1200,7 @@ export class AbyssLurk {
         this.aRise[i] = K.rise;
         this.aSink[i] = K.sink;
         this.aReach[i] = 0;
+        this.aStir[i] = this.aLimp[i] = this.aPull[i] = this.aSide[i] = this.aPullNow[i] = this.aSideNow[i] = 0;
         this.aMode[i] = kind === 'arm' ? 1 : 2;
       }
       this.aSeen = false;
@@ -1224,7 +1302,7 @@ export class AbyssLurk {
 
   private updateArms(dt: number, lightning: LurkLightning): void {
     const K = LURK.kraken;
-    const A = this.armA.array as Float32Array, B = this.armB.array as Float32Array;
+    const A = this.armA.array as Float32Array, B = this.armB.array as Float32Array, C = this.armC.array as Float32Array;
     let n = 0;
     let flashArms = false;
     for (let i = 0; i < ARMS; i++) {
@@ -1255,6 +1333,20 @@ export class AbyssLurk {
       // A hooked Kraken's arm leans over (a slap falls faster and faster; any other eases over).
       const lu = clamp01((tt - this.aLeanAt[i]) / this.aLeanIn[i]);
       B[k + 3] = this.aReach[i] ? this.aLean[i] * (this.aLeanFall[i] ? lu * lu : ease(lu)) : 0;
+      // And is alive: it stirs as hard as the fight has it (harder while it comes up, hardly at all hanging limp),
+      // on a clock of its own. A sighting's arm has none of this (all zero: the slow sway it always had).
+      let stir = 0;
+      if (this.aReach[i] && this.stir > 0) stir = this.aLimp[i] > 0 ? this.stir * lerp(1, ARM_LIMP_STIR, this.aLimp[i]) : this.stir + ARM_RISE_STIR * (1 - ease(tt / this.aRise[i]));
+      const ek = Math.min(1, dt * ARM_EASE);
+      this.aStir[i] += (stir - this.aStir[i]) * ek;
+      this.aPullNow[i] += (this.aPull[i] - this.aPullNow[i]) * ek;
+      this.aSideNow[i] += (this.aSide[i] - this.aSideNow[i]) * ek;
+      this.aPhase[i] += dt * (ARM_PACE[0] + ARM_PACE[1] * this.aStir[i]) * (0.8 + 0.4 * this.aSeed[i]);
+      B[k + 3] += this.aPullNow[i];
+      C[k] = this.aPhase[i];
+      C[k + 1] = this.aStir[i];
+      C[k + 2] = this.aSideNow[i];
+      C[k + 3] = this.aReach[i] ? this.aLimp[i] : 0;
     }
     if (flashArms && this.armed) {
       this.aT.fill(0);
@@ -1274,7 +1366,7 @@ export class AbyssLurk {
     (this.aU.uBody.value as THREE.Color).set(K.body);
     (this.aU.uBelly.value as THREE.Color).set(K.belly);
     (this.aU.uSucker.value as THREE.Color).set(K.sucker);
-    this.armA.needsUpdate = this.armB.needsUpdate = true;
+    this.armA.needsUpdate = this.armB.needsUpdate = this.armC.needsUpdate = true;
   }
 
   // ----- the eyes -----

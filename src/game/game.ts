@@ -1535,19 +1535,24 @@ export class Game {
         power: this.power,
         /** An Abyss giant's fight, or null: its act, its last move (and how many it has made, and seconds since), whether its last stand has begun, whether it is spent, and how far it is in (0..1). */
         giant: this.giants.state(),
+        giantShown: this.giants.shown(),
       }),
       /**
        * Staging an Abyss giant's fight (dev only; `scripts/giantmoves.ts`). `giantAct(n)` holds the fight in act 1, 2
        * or 3 (null: the fight's own again); `giantMove(id)` plays a move now and `giantLast()` the last stand (false if
        * it can't: no giant on, not its move, or the last stand has begun); `giantAuto(false)` stops moves and the last
        * stand coming on their own. `giantLine(progress, fightLeft)` puts the line and the giant's fight where asked,
-       * for staging only: the reel is no longer the one the server replays, so that catch is refused.
+       * for staging only: the reel is no longer the one the server replays, so that catch is refused. `giantStir(k)`
+       * holds the Kraken's arms at a surge's build-up of `k` (0..1; null: the reel's own), to stage their thrash.
        */
       giantAct: (n: FightAct | null) => {
         if (this.giants.director) this.giants.director.forceAct = n;
       },
       giantMove: (m: GiantMove) => !!this.giants.director?.force(m),
       giantLast: () => !!this.giants.director?.forceLast(),
+      giantStir: (k: number | null) => {
+        this.giants.surgeHold = k;
+      },
       giantAuto: (on: boolean) => {
         if (this.giants.director) this.giants.director.auto = on;
       },
@@ -3842,7 +3847,7 @@ export class Game {
     if (legend?.kind === 'surface' && legend.limp) this.readyLimp(this.fish!);
     this.wakeCd = 0;
     // An Abyss giant's fight is staged in acts (`GiantFights`): it starts out of sight, so the fish is its to show.
-    if (legend?.kind === 'surface' && isGiant(this.hooked!.id)) this.giants.begin(this.hooked!.id, this.reel.progress, this.fish!);
+    if (legend?.kind === 'surface' && isGiant(this.hooked!.id)) this.giants.begin(this.hooked!.id, this.reel.progress);
     w.rig.kick('pitch', 7);
     w.fovKick = 4;
     w.addShake(0.8);
@@ -3980,6 +3985,8 @@ export class Game {
     this.pullView(faceYaw, facePitch);
     // The middle of all that stands out of the water.
     const whole = once(up.getCenter(new THREE.Vector3()));
+    // The Dreamer's eyes open on the water all round the boat as it comes up (`LEGEND_FIGHT.gaze.landing`).
+    if (this.hooked!.id === 'dreamer') this.giants.landing(whole, len, spec.rise);
     // The camera goes up and back from the player, away from the giant and toward its middle along the hull.
     const P = SURFACE_PULLBACK;
     const along = new THREE.Vector3(-a.z, 0, a.x);
@@ -4234,6 +4241,8 @@ export class Game {
     const base = show.base!;
     const glows = g.children.filter((o) => (o as THREE.Sprite).isSprite).map((o) => ({ o, s: o.scale.x }));
     this.sinking = { model, base, top: show.top!, ride: (show.spec as SurfaceShow).ride, len: show.len!, last: show.look!.clone(), t: 0, glows, splashCd: 0, limp: show.limp, yaw: show.yaw, wash: show.wash };
+    // (The Dreamer's eyes round the boat shut as it goes.)
+    this.giants.landingOver(SURFACE_SINK.secs);
     w.fx.splash(base.clone().setY(w.surface(base.x, base.z)), 30, 1.4, 2.6);
     audio.splash(0.6);
   }
@@ -5314,8 +5323,6 @@ export class Game {
     // An Abyss giant's fight: the act it is in, the move it makes as a surge starts, its last stand (`GiantFights`);
     // what that does to its body this frame comes back as a pose laid over its swimming.
     const pose = this.giants.director ? this.giants.tick(dt, { reel: r, surge: surged, fp, from: base, fish, sc: this.inWaterScale() }) : null;
-    // (The Leviathan is drawn bigger the further off it is, `LEGEND_FIGHT.far`.)
-    if (pose) g.scale.setScalar(this.inWaterScale() * pose.scale);
     // A sea legend fights at the surface, its back breaking the water (a giant in its first act swims under).
     const swimY = fp.y - (legend ? modelBounds(fish).max.y * g.scale.x * 0.45 : this.swimDepth(g.scale.x)) - (pose?.sunk ?? 0);
     g.position.set(fp.x, swimY + Math.sin(t * 7) * 0.05, fp.z);
@@ -5332,15 +5339,9 @@ export class Game {
     g.rotation.z = Math.sin(t * 6) * 0.2 * r.pull * thrash + (pose?.roll ?? 0);
 
     if (pose) {
-      // Pitched about its own length and lifted, whichever way it is heading (`startReel` sets the order); through a
-      // move of its own it turns broadside and may slide along its length.
-      if (pose.yawK > 0) g.rotation.y += Math.atan2(Math.sin(pose.yaw - g.rotation.y), Math.cos(pose.yaw - g.rotation.y)) * pose.yawK;
+      // Pitched about its own length and lifted, whichever way it is heading (`startReel` sets the order).
       g.rotation.x = pose.pitch;
       g.position.y += pose.lift;
-      if (pose.along) {
-        g.position.x -= Math.sin(g.rotation.y) * pose.along;
-        g.position.z -= Math.cos(g.rotation.y) * pose.along;
-      }
     } else if (this.leapT >= 0) {
       this.leapT += dt / leapSecs(g.scale.x, !!legend);
       const u = Math.min(1, this.leapT);

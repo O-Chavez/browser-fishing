@@ -271,8 +271,10 @@ export type FightAct = 1 | 2 | 3;
  * - the Kraken (seen in the fight as its arms alone, `LEGEND_FIGHT.arms`): `arm` lifts one great arm over the others;
  *   `slap` lifts one and brings it down flat on the water; `twin` lifts two at once, either side of it; `grip` (close
  *   in) an arm comes over the rail by the player and the boat lurches;
- * - the Leviathan: `rear` heaves head and neck out of the water, a bolt behind it; `coil` rolls its long spined back
- *   through the surface, a line of white water its whole length, and goes under; `tail` stands its tail out of the water and slaps it down, spraying the deck when it is close;
+ * - the Leviathan (seen in the fight as a serpent weaving through the swell, `LEGEND_FIGHT.weave`): `rear` heaves
+ *   its head and neck out of the water, a bolt behind it, and crashes back; `coil` rolls one long arch of its spined
+ *   back through the surface, white water all along it; `tail` stands its tail's blade out of the water and slaps it
+ *   down, spraying the deck when it is close;
  * - the Dreamer (eyes in the water round the line all through, `LEGEND_FIGHT.gaze`): `ring` opens a wide ring of them
  *   round it; `trail` opens them one after another in a line from it to the boat; `under` opens them in the water
  *   right beside the hull.
@@ -287,8 +289,8 @@ export type GiantMove = 'arm' | 'slap' | 'twin' | 'grip' | 'rear' | 'coil' | 'ta
  * presentation only: the reel, its gauge and the catch are untouched):
  * - Act 1, far out: the giant is not seen. It swims under, and each surge throws up a boil of white water over it
  *   (with an arm's tip from the Kraken, an eye or two from the Dreamer).
- * - Act 2, mid-fight: it is up (the Leviathan's back breaking the water, the Kraken's arms standing out of it where
- *   the line holds it, the Dreamer's eyes open round it), and it shows itself as each surge starts with one of its `moves`.
+ * - Act 2, mid-fight: it is up (the Leviathan's coils weaving through the water, the Kraken's arms standing out of it
+ *   where the line holds it, the Dreamer's eyes open round it), and it shows itself as each surge starts with one of its `moves`.
  * - Act 3, close in: the same with its close moves, the view a little tighter and the storm at its height.
  * Acts never go back, and the first surge is always act 1's, however fast the line comes in. A move comes as each
  * surge starts, so the creature is seen to cause the gauge's SURGE; with no surge for a while one comes anyway,
@@ -352,25 +354,6 @@ export const LEGEND_FIGHT = {
   /** A move counts as close (spray on the lens, a harder shake) when the giant is within this many metres of the player. */
   close: 11,
   /**
-   * The Leviathan is a slender coal-dark body: on the Abyss's black water it was a speck 12 to 22 m out, where most of
-   * a Fair fight is fought (the Kraken's arms and the Dreamer's eyes are tall, pale or glowing, and carry). So in the
-   * fight it is drawn for the distance, as its landing draws it for the hull:
-   * - `grow`: bigger the further off, `scale` times from `to` metres out and its swimming size within `from` (still
-   *   bigger on screen the nearer it comes; it swims 7 m long and its landing lays it out at 9 to 14 m, so far off
-   *   it is drawn about as long as it lands);
-   * - `room`: how high its head (or its tail) may stand out of the water, `room[0]` + `room[1]` times its distance
-   *   (m): a rear is pitched no steeper than that allows, so it tops out inside the view instead of through its top
-   *   (the swell often has it high in the view already); its last stand may stand `stand` times as high;
-   * - `body`: its plates and bone lit, its own colour times 1 + this (the landing's lamps do the same, 2.4);
-   * - `seams`, `eyes`: while it makes a move its molten seams burn this much brighter and its eyes' glare is this
-   *   much bigger (and bigger again far off, with the white water);
-   * - `plume`, `collar`: every move starts with a column of white water (drops this big, an everyday splash's 1) and
-   *   keeps a collar of foam where it breaks the surface, a burst every `collar` seconds.
-   */
-  far: { leviathan: { grow: { from: 5, to: 14, scale: 1.6 }, room: [2.6, 0.18], stand: 1.25, body: 2.2, seams: 0.9, eyes: 0.8, plume: 4.5, collar: 0.07 } } as Partial<
-    Record<GiantId, { grow: { from: number; to: number; scale: number }; room: [number, number]; stand: number; body: number; seams: number; eyes: number; plume: number; collar: number }>
-  >,
-  /**
    * The Kraken's arms in the fight: none stands taller than `base` + `per` times its distance from the player (m), so
    * close in an arm still stands inside the view instead of filling it; `girth` is how thick they are, times a far
    * sighting's arm of that length.
@@ -383,74 +366,111 @@ export const LEGEND_FIGHT = {
    * `fall` seconds across the view, lying `lie` seconds before it slides under in `sink`.
    */
   slap: { height: 1.15, rise: 0.75, hold: 0.45, fall: 0.24, lie: 0.7, sink: 1.1 },
-  /** The Kraken's two arms: this far either side of it and this tall (in drawn scales), the second `lag` seconds after the first; up and under as `arm`, held `hold` seconds. */
-  twin: { apart: 0.5, height: 1.1, lag: 0.3, hold: 1.8 },
+  /**
+   * The Kraken's two arms: this far either side of it (`apart` drawn scales, no nearer than `wide[0]` m and no further
+   * than `wide[1]`, so the two read as one animal's reach and not a pair of horns) and this tall (in drawn scales),
+   * the second `lag` seconds after the first; up and under as `arm`, held `hold` seconds.
+   */
+  twin: { apart: 0.5, wide: [3, 4.5] as [number, number], height: 1.1, lag: 0.3, hold: 1.8 },
   /**
    * The Kraken's grip: an arm `height` m tall comes up `off` m outside the hull by the player (`aside` radians to the
    * left of where they look, clear of the rod), curls in over the rail and holds on `hold` seconds; the boat lurches
    * toward it (`roll` radians and `heave` m down, rocking back with `period` s and dying in `die` s). `girth` as `reach`'s.
    */
   grip: { height: 3.7, girth: 0.36, off: 0.7, aside: 0.62, rise: 0.7, hold: 1.7, sink: 1.0, roll: 0.085, heave: 0.22, period: 1.7, die: 1.3 },
-  /** The Dreamer's ring of eyes: how many, in a ring this share of its drawn scale across, one opening every `gap` seconds, open this long (s), `size` times a sighting's biggest. */
-  eyes: { count: 7, radius: 0.85, gap: 0.07, stay: 3, size: 1.2 },
+  /**
+   * The Dreamer's ring of eyes: two rings round it, `count` in the outer one (`radius` drawn scales across) and
+   * `inner` in a smaller one inside it (`innerAt` of that radius), opening one after another round the ring every
+   * `gap` seconds, open this long (s), `size` times a sighting's biggest. (Lite graphics opens `gaze.lite` of every
+   * count here, in `under`, in `trail` and in its last stand.)
+   */
+  eyes: { count: 14, inner: 7, innerAt: 0.55, radius: 1.15, gap: 0.045, stay: 3.2, size: 0.85 },
   /**
    * The Dreamer's eyes under the boat: how many, each `size` times a sighting's, from `off[0]` to `off[1]` m outside
    * the hull along the side the player looks over, over `along` m of it, one opening every `gap` seconds, open `stay` seconds.
    */
-  under: { count: 7, size: 1.15, off: [2.2, 6] as [number, number], along: 10, gap: 0.1, stay: 3.4 },
-  /** The Dreamer's line of eyes: `count` of them from it to `off` m outside the hull, one opening every `gap` seconds, the nearest last, each open `stay` seconds, `size` times a sighting's biggest. */
-  trail: { count: 6, off: 2.4, gap: 0.16, stay: 2.4, size: 1 },
+  under: { count: 16, size: 1.15, off: [1.8, 7.5] as [number, number], along: 14, gap: 0.06, stay: 3.6 },
   /**
-   * The Leviathan's rear: head and neck heaved slowly out of the water and back (seconds up, held and down), its nose
-   * pitched up by `pitch` radians about a point `pivot` of its length behind its middle, so the tail stays under. As
-   * it tops out a bolt lands behind it, `bolt` metres off (further than the last stand's: a rumble, not the near
-   * crack), so its head stands black against the lit cloud; 0 for none.
+   * The Dreamer's line of eyes: `count` of them from it to `off` m outside the hull, up to `wide` m to either side of
+   * the line by turns (a path of them, not a rule), one opening every `gap` seconds, the nearest last, each open
+   * `stay` seconds, `size` times a sighting's biggest.
    */
-  rear: { up: 0.8, hold: 0.6, down: 0.85, pitch: 0.9, pivot: 0.22, bolt: 140 },
+  trail: { count: 10, off: 2.2, wide: 2.2, gap: 0.11, stay: 2.6, size: 0.9 },
   /**
-   * The Leviathan's coil: its long back rolls through the surface. Over `secs` seconds it comes up onto the water
-   * (lifted `lift` of its height, so its plates and spines stand clear), leans `roll` radians toward the deck,
-   * slides `run` of its length along its heading, nose arching up then down (`pitch` radians either way), white
-   * water bursting all along it every `foam` seconds, and goes under at the end; then `back` seconds to come up again
-   * where the line holds it.
+   * The Leviathan's rear: its head and neck heaved slowly out of the water and back (seconds up, held and down; how
+   * tall it stands and how long a neck is `weave.rear`). As it tops out a bolt lands behind it, `bolt` metres
+   * off (further than the last stand's: a rumble, not the near crack), so its head stands black against the lit
+   * cloud; 0 for none.
    */
-  coil: { secs: 2.6, pitch: 0.22, lift: 0.75, roll: 0.4, run: 0.45, foam: 0.04, back: 0.8 },
+  rear: { up: 0.8, hold: 0.6, down: 0.85, bolt: 140 },
   /**
-   * The Leviathan's tail slap: nose down and tail stood `pitch` radians out of the water (about a point `pivot` of its
-   * length ahead of its middle) in `up` seconds, held, then brought down in `down`.
+   * The Leviathan's coil: one long arch of its back rolls through the surface, from its tail's end to its neck, over
+   * `secs` seconds (how tall and how long an arch is `weave.roll`), its everyday humps lying low under it; white
+   * water bursts along it every `foam` seconds, and it goes under at the end; then `back` seconds before its next move.
    */
-  tail: { up: 0.7, hold: 0.35, down: 0.2, pitch: 1.0, pivot: 0.22 },
+  coil: { secs: 2.6, foam: 0.05, back: 0.8 },
+  /** The Leviathan's tail slap: its tail's blade stood out of the water in `up` seconds, held, then brought down flat in `down` (how high and how much of its tail is `weave.lift`). */
+  tail: { up: 0.7, hold: 0.35, down: 0.2 },
   /**
    * The last stands, each with its height inside the first second and its crash by 1.5 s (`lastStand`). The Kraken
-   * throws `arms` arms up round its far side (over `fan` of a half turn, `spread` of its distance from the player
-   * off it, one every `lag` seconds), each `height` times as tall as an arm may stand (`reach`), and brings them all
-   * down at once; the Leviathan rears higher than ever (`pitch`, `pivot` as `rear`) and falls on its side; the
-   * Dreamer opens every eye it has: `boat` of them all round the boat, closest together where the player looks (`off[0]` to `off[1]` m outside the hull), and
+   * throws `arms` arms up round its far side (over `fan` of a half turn, one every `lag` seconds), each `spread` of
+   * its distance from the player off the line's end and never nearer it than `wide[0]` to `wide[1]` m (each its own,
+   * so close in they still stand apart), each `height` times as tall as an arm may stand (`reach`), thrashing
+   * (`stir`, as `arms.alive`) and brings them all down at once; the Leviathan throws its head, its coils and its tail
+   * up all at once (`up`, `hold`, `down` seconds; `weave.stand`) and crashes back; the Dreamer opens every eye it has:
+   * `boat` of them all round the boat, from where the player looks round to behind them (`off[0]` to `off[1]` m
+   * outside the hull), and
    * `ring` round itself (`radius` drawn scales across), `size` times a sighting's biggest, one every `gap` seconds,
    * and its bolt, `bolt` seconds in, shuts them all together; the wind and the rain drop under it for `hush` seconds
    * (sound only: nothing is done to the lamps or the light, which read as a fault, Oscar 2026-11-20).
    */
   stand: {
-    kraken: { arms: 5, height: 1.2, spread: 0.32, fan: 0.9, lag: 0.04, rise: 0.45, hold: 0.4, fall: 0.25, lie: 0.5, sink: 0.9 },
-    leviathan: { up: 0.55, hold: 0.55, down: 0.35, pitch: 1.2, pivot: 0.3 },
-    dreamer: { boat: 10, off: [2.2, 5] as [number, number], ring: 5, radius: 0.7, size: 1.45, gap: 0.04, bolt: 0.95, hush: 1.6 },
+    kraken: { arms: 5, height: 1.2, spread: 0.32, wide: [2.6, 5] as [number, number], stir: 2.4, fan: 0.9, lag: 0.04, rise: 0.45, hold: 0.4, fall: 0.25, lie: 0.5, sink: 0.9 },
+    leviathan: { up: 0.55, hold: 0.55, down: 0.35 },
+    dreamer: { boat: 30, off: [1.8, 8] as [number, number], ring: 14, radius: 0.8, size: 1.3, gap: 0.0135, bolt: 0.95, hush: 1.6 },
   },
   /**
    * The Kraken in the fight is its arms alone: the hooked model is never drawn (it and the arms read as two separate
    * things, a still body dragged along under them; Oscar, 2026-11-20), and is first seen at the landing. Arms stand
    * out of the water where the line holds it, and come in with it:
    * - `count` of them by act, each up for `life` seconds and then under as another comes up `gap` seconds on (the
-   *   first two at once as act 2 begins), `ring[0]` to `ring[1]` m from the line's end, `height[0]` to `height[1]` of
-   *   what an arm may stand at that distance (`reach`), `surge` taller again at a surge's height; white water round
-   *   each foot every `foam` seconds;
+   *   first two at once as act 2 begins), `height[0]` to `height[1]` of what an arm may stand at its own distance
+   *   from the player (`reach`; within `rail[0]` m of them lower again, down to `rail[1]` of it right at the rail,
+   *   where a full-height arm stood out of the top of the view), `surge` taller again at a surge's height; white water round each foot every `foam`
+   *   seconds (up to `churn` times as often and as much the harder it thrashes);
+   * - spread round the line's end like one big animal under the water, not a bouquet (Oscar, 2026-11-21: "spreading
+   *   out the radius from the center by 2-5 meters"): each stands `ring[0]` to `ring[1]` m from the line's end plus
+   *   `spread[0]` to `spread[1]` m more, in the widest gap the arms already up leave (`armBearing`), only `toward`
+   *   as far out on the boat's side of the line's end (an arm right under the rod fills the view); the spread is
+   *   drawn in to `spreadIn` of itself by the time it is at the rail, and no arm stands within `clear` m of the hull
+   *   (it is moved out across the beam, `clearOfHull`), so close in they stand along the boat's side, still apart;
+   * - alive the whole time they are up (Oscar: "right now the tentacles just stick out of the water without any
+   *   movement"; `AbyssLurk.stir`): `alive` in the calm (each arm swaying, a wave running out along it, its tip
+   *   curling and letting go, twisting, each in its own time), `thrash` more at a surge's height (following the
+   *   reel's build-up, so they whip faster and wider as the SURGE comes on), `tipStir` for act 1's tip; and they
+   *   are dragged: each leans away from the boat from its foot, `lean[0]` radians on a slack line to `lean[1]` at
+   *   the red's edge;
    * - act 1 keeps it mostly hidden: only an arm's `tip` (this share of full height) for `tipLife` seconds, at each
    *   surge's boil and every `tipGap` seconds between;
-   * - spent, `spent` of them `droop` radians over, trailing away from the boat, `low` of the height.
+   * - spent, `spent` of them `droop` radians over, trailing away from the boat, `low` of the height, hanging `limp`
+   *   (0..1: the tip drooped into the water, uncurled, hardly stirring), up in `limpRise` seconds and sliding
+   *   under in `limpSink`.
+   * Play-test defaults, all of it.
    */
   arms: {
     count: [1, 4, 5] as [number, number, number],
     height: [0.6, 0.95] as [number, number],
     ring: [0.8, 3] as [number, number],
+    spread: [2, 5] as [number, number],
+    spreadIn: 0.6,
+    toward: 0.5,
+    clear: 1.8,
+    rail: [7, 0.5] as [number, number],
+    alive: 1,
+    thrash: 1.2,
+    tipStir: 1.3,
+    lean: [0.1, 0.34] as [number, number],
+    churn: 3,
     life: [3.5, 6.5] as [number, number],
     gap: [0.3, 0.8] as [number, number],
     rise: 0.8,
@@ -463,15 +483,152 @@ export const LEGEND_FIGHT = {
     spent: 3,
     droop: 0.95,
     low: 0.85,
+    limp: 1,
+    limpRise: 1.6,
+    limpSink: 2.6,
   },
   /**
-   * The Dreamer's eyes are on the water all through the fight, round where the line holds it and coming in with it:
-   * `count` of them by act (act 1 none: `peek` of them for a moment at a surge), each open `open` seconds and shut
-   * `shut` seconds before it opens somewhere else, `ring[0]` to `ring[1]` drawn scales from the line's end on the side
-   * toward the boat and out to either flank (behind its body they would not be seen), `size` times a sighting's
-   * biggest (bigger far off, with the white water); spent, `spent` of them half-lidded (`lid`).
+   * The Dreamer's eyes are on the water all through the fight, round where the line holds it and coming in with it,
+   * a field of them, so the water round the line's end is plainly crawling with its eyes (Oscar, 2026-11-21: "greatly
+   * increase the number of eyes ... it's not really clear if it is the actual Dreamer that is being hooked"):
+   * - `count` of them by act (a few far out in act 1, where it is not seen, and `peek` more for a moment at a surge;
+   *   then the field), each open `open` seconds and then shut, another opening somewhere else in the field: while
+   *   there are fewer than the act has, one every `fill[0]` to `fill[1]` seconds, so the field fills in a few seconds
+   *   and something in it is always opening or closing;
+   * - `ring[0]` to `ring[1]` drawn scales from the line's end (no further than `within` times its distance from the
+   *   player, so close in the field draws in round it instead of lying out of view), `toward` of them on the side toward the boat and out
+   *   to either flank and the rest anywhere round it, none within `apart` times their sizes of another (further
+   *   along the view, where they are drawn long: `fieldSpot`) and none within `clear` m of the hull (one the line
+   *   carries that close shuts);
+   * - `size[0]` to `size[1]` times a sighting's biggest, most of them small and a few big (bigger far off, with the
+   *   white water; within `rail[0]` m of the player smaller, down to `rail[1]` of it right under the rail, where a
+   *   full-size eye filled a quarter of the view);
+   * - spent, `spent` of them half-lidded (`lid`);
+   * - lite graphics keeps `lite` of every count (and of its moves' and its last stand's), without their glow on the water.
+   * The lurker has room for 96 eyes at once (48 in lite graphics): the field, a move and its last stand fit.
+   *
+   * Landed, its eyes open on the water all round the boat as it comes up (`landing`): `count` of them `off[0]` to
+   * `off[1]` m outside the hull, most of them close, none within `keepOut` of its drawn length of its middle (they
+   * are round it, not on it; what of them lies behind it, it hides), one opening every `gap` seconds from `wait` seconds into its rise, `size` times a
+   * sighting's biggest; they stay while it is shown, blinking, and shut one by one as it sinks back.
    */
-  gaze: { count: [0, 5, 7] as [number, number, number], peek: 2, open: [3, 5.5] as [number, number], shut: [0.25, 0.8] as [number, number], ring: [0.4, 0.8] as [number, number], size: [0.8, 1.15] as [number, number], spent: 2, lid: 0.45 },
+  gaze: {
+    count: [4, 24, 36] as [number, number, number],
+    peek: 3,
+    open: [2.2, 6.5] as [number, number],
+    fill: [0.05, 0.16] as [number, number],
+    ring: [0.45, 1.7] as [number, number],
+    within: 1.15,
+    toward: 0.6,
+    apart: 1.6,
+    clear: 0.6,
+    size: [0.4, 1.15] as [number, number],
+    rail: [6, 0.5] as [number, number],
+    spent: 9,
+    lid: 0.45,
+    lite: 0.5,
+    landing: { count: 48, off: [1.4, 9] as [number, number], keepOut: 0.2, wait: 0.35, gap: 0.04, size: [0.5, 1.2] as [number, number] },
+  },
+  /**
+   * The Leviathan in the fight is not its hooked model either: that is never drawn until the landing (a whole body
+   * posed at the line's end looked bad reeled in; Oscar, 2026-11-21). It is a serpent weaving through the swell where
+   * the line holds it (`src/game/leviathanweave.ts`, `leviathanfight.ts`): one long plated body under the water, of
+   * which only pieces break the surface, coming in with the line: a few big arches of its back in a line, rolling
+   * through the surface the way it swims, its tail's blade flicking up and slapping down behind them, and on a move
+   * its head. In metres at its size close in:
+   * - `length` from skull to tail's root, `girth` its back's half-thickness, in plates `plate` long with a bone spine
+   *   (`fin` tall) on each; its humps begin `neck` behind the head and end `tail` before the tail's tip (those ends
+   *   ride `dip` under unless a move lifts them);
+   * - its humps: `wave` long; by act (2, 3) their `amp`, how high its middle rides (`ride`, under when negative) and
+   *   the `window` of body they stand along; `pace` they travel at toward the head and `slide` its plates slide
+   *   forward over them (m/s); how far it winds side to side (`wander`); `surge`: at a surge's full build-up `amp`
+   *   times taller again, `ride` higher, `window` longer and `pace` times faster; `flick`: between moves its tail
+   *   flicks `up` of a slap's height every `every` seconds;
+   * - its moves: `rear` (`tall`, and `neck` long), `roll` (the coil's arch: `up`, `wide`), `lift` (the tail slap:
+   *   `up`, `len` of tail lifted), `standAmp` (its coils that much taller in its last stand); `spent`: its humps after
+   *   it, when it lists `list` radians over (and sways `sway`), its plates barely sliding;
+   * - `grow`: drawn bigger the further off, `scale` times from `to` metres out and its own size within `from`, so it
+   *   carries over the swell 20 m out; `room`: nothing of it (a reared head, a lifted tail, a rolling arch) stands
+   *   higher than `room[0]` + `room[1]` times its distance, so it tops out inside the view; its last stand `stand`
+   *   times that; `near`: close in, where the rail hides the water by the hull from mid-deck, its humps are `amp`
+   *   times taller again and it rides `ride` higher, all of that within `from` metres and none of it from `to` on;
+   * - it lies across the line, `across` radians off straight away, heading the way the line is being run (it dives
+   *   and comes up heading the other way once the line has run against it `turn.after` seconds, no sooner than
+   *   `turn.every` after the last turn), and turns no faster than `swing` radians a second; `pad`: how far its line is
+   *   kept off the hull (m);
+   * - `rise`, `dive`: seconds it takes to come up (as act 2 begins, after a turn) and to go under (a turn, the fight's
+   *   end); `ease`: how fast its humps follow the fight (a second, the reel's surge build-up included);
+   * - `glimpse`: act 1 shows a ridge of spines for a moment at each surge's boil: `secs` of it, humps `amp` high, its
+   *   back `under` the water, along `window` metres;
+   * - white water: where its back cuts the surface, a burst every `foam` seconds (`drop`: how big its drops, an
+   *   everyday splash's 1, and bigger far off); `plume`: the column a move starts with; `collar`: seconds between
+   *   bursts round a reared neck or a lifted tail; `wake`: how much of a legend's own wake is left at the line's end
+   *   once it is up;
+   * - the light on it. It is painted in the landed Leviathan's own colours (near-black violet plates, thin molten
+   *   seams, bone spines, amber eyes) and lit as that one is, so the two are one animal: `light` is the night's own
+   *   light on it; `lamp` the boat's lamps, as the landing has them (`SURFACE_LAMP`'s colour, the Leviathan's own
+   *   gain): all of them within `near` metres and `least` of them from `far` on; `flash` a bolt's cold light on its
+   *   upper faces (little: it stands dark against the lit cloud); `rim` a wet edge where its faces turn away, in the
+   *   colour the swell's own crests are edged with, which with its seams, its spines and its white water is what
+   *   draws a dark body on black water; `seams` how hot its molten seams burn (`seamsMove` more in a move,
+   *   `seamsWarn` more while the gauge warns of a surge, `seamsSpent` of it once spent, `seamsFar` more again 20 m out, where they are
+   *   lines too thin to draw at their own brightness) and `spill` how much of their light lies on the plate lips
+   *   beside them; `eyes` its amber eyes; `foamCol` the foam where it cuts the water.
+   */
+  weave: {
+    length: 14,
+    girth: 0.46,
+    plate: 0.5,
+    fin: 0.55,
+    neck: 2.6,
+    tail: 3,
+    dip: 1.3,
+    wave: 4.4,
+    amp: [0.85, 0.95] as [number, number],
+    ride: [0, 0.05] as [number, number],
+    window: [7, 8.2] as [number, number],
+    pace: 1.5,
+    slide: 2.4,
+    wander: 0.45,
+    surge: { amp: 0.4, ride: 0.15, window: 1, pace: 0.8 },
+    flick: { every: [3.5, 6] as [number, number], up: 0.55 },
+    rear: { tall: 3.3, neck: 4.6 },
+    roll: { up: 1.9, wide: 2.6 },
+    lift: { up: 2.8, len: 5 },
+    standAmp: 0.5,
+    spent: { amp: 0.4, ride: -0.42, pace: 0.45 },
+    list: 0.5,
+    sway: 0.2,
+    grow: { from: 5, to: 14, scale: 1.6 },
+    room: [2.6, 0.18] as [number, number],
+    stand: 1.15,
+    near: { from: 4, to: 9, amp: 0.25, ride: 0.28 },
+    across: 1.25,
+    swing: 0.9,
+    pad: 1.4,
+    turn: { every: 7, after: 1.2 },
+    rise: 1.2,
+    dive: 0.55,
+    ease: 2.5,
+    glimpse: { secs: 1.8, amp: 0.22, under: 0.12, window: 6 },
+    foam: 0.07,
+    drop: 2.6,
+    plume: 4.5,
+    collar: 0.07,
+    wake: 0.45,
+    light: 0.3,
+    lamp: { near: 6, far: 20, least: 0.6 },
+    flash: 0.6,
+    rim: 0.4,
+    seams: 1.9,
+    seamsMove: 0.9,
+    seamsWarn: 0.5,
+    seamsSpent: 0.4,
+    seamsFar: 0.8,
+    spill: 0.12,
+    eyes: 2.8,
+    foamCol: 0xc8c6e0,
+  },
   /**
    * Spent: how far it lists over as it wallows (radians, and the sway on top), how much of its thrash and its wake
    * is left, and how much higher it lies (a share of its height), awash.
