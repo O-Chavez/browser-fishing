@@ -779,8 +779,8 @@ body.touch #join::before { animation: none; }
 #join:not(.new) :is(#join-new, #join-go), #join:not(.login) :is(#join-login, #join-login-go) { display: none; }
 #join.in .join-tabs, #join:not(.in) :is(#join-in, #join-play, #join-other, #join-confirm) { display: none; }
 #join.in.confirm :is(#join-in, #join-play, #join-other, #join-msg), #join.in:not(.confirm) #join-confirm { display: none; }
-/* The board and the phone's first-visit step each stand in place of the card. */
-#join.board > #join-card, #join.board > #join-home, #join:not(.board) > #join-board { display: none; }
+/* The board stands in place of the card. */
+#join.board > #join-card, #join:not(.board) > #join-board { display: none; }
 #join #join-board { width: min(820px, 94vw); height: min(700px, 92vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .board-bar { flex: none; display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 2px solid rgba(58,39,22,.12); background: var(--paper-2); }
 .board-bar h2 { margin: 0; font-size: 24px; font-weight: 900; }
@@ -815,10 +815,11 @@ button.linklike { margin-top: 10px; font-size: 14px; font-weight: 800; color: va
 /* ---------- touch mode (body.touch; see TouchControls) ----------
    Sizes are in the 1400px-wide touch layout, which a phone in landscape shows at about 0.6x. */
 body.touch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
-/* 28px in the touch layout is about 17 real px on a phone (touchLayoutWidth keeps phones near 0.6x): at 16 or more,
-   iPhones don't zoom the page into a field when it's tapped (the join name, passwords, feedback). */
-body.touch input, body.touch textarea { -webkit-user-select: text; user-select: text; font-size: 28px; }
-body.touch #join-name, body.touch #join-newpass, body.touch #join-login-name, body.touch #join-pass, body.touch #acct-pass, body.touch #acct-name, body.touch #fb-text { font-size: 28px; }
+/* Fields are at least 16 real px on the screen, or iPhones zoom the page into a field when it's tapped (the home screen's
+   name and passwords, feedback) and leave it zoomed. --field-px is set in enableTouch (touchFieldPx): 28px of the touch
+   layout is about 17 real px at 0.6x, but beside a notch Safari shows the layout nearer 0.53x, so it's more there. */
+body.touch input, body.touch textarea { -webkit-user-select: text; user-select: text; font-size: var(--field-px, 28px); }
+body.touch #join-name, body.touch #join-newpass, body.touch #join-login-name, body.touch #join-pass, body.touch #acct-pass, body.touch #acct-name, body.touch #fb-text { font-size: var(--field-px, 28px); }
 /* The home screen in the touch layout (1400 wide; as little as about 430 high under a phone browser's bars): a wider,
    shorter card with the two fields side by side, and everything sized for a finger at 0.6x. It scrolls if it must. */
 body.touch #join .panel.join { width: min(1080px, 94vw); padding: 16px 28px 12px; }
@@ -858,7 +859,7 @@ body.touch .board-list .news-item p { font-size: 19px; }
 /* Under a phone browser's bars the layout is shorter still: the title moves in beside the tabs and everything packs tighter. */
 @media (max-height: 540px) {
   body.touch #join .panel.join { padding: 12px 26px 8px; }
-  body.touch #join:not(.in, .board, .homestep) #join-card { display: grid; grid-template-columns: auto 1fr; column-gap: 24px; align-items: center; }
+  body.touch #join:not(.in, .board) #join-card { display: grid; grid-template-columns: auto 1fr; column-gap: 24px; align-items: center; }
   body.touch #join:not(.in) #join-card > :is(.split, .join-foot, .join-wait) { grid-column: 1 / -1; }
   body.touch #join:not(.in) .join-head { margin-bottom: 10px; }
   body.touch #join:not(.in) .join-head p { display: none; }
@@ -964,17 +965,6 @@ body.touch #gauge { width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .hometip .steps { padding: 8px 14px; border-radius: 12px; background: var(--paper-2); color: var(--ink); }
 .hometip .btns { display: flex; gap: 12px; margin: 12px 0 0; }
 .hometip .btns .btn { flex: 1; padding: 12px 16px; font-size: 21px; }
-/* A phone's first visit: the home screen opens on "Add to Home Screen first?" in its card's look, in place of the
-   form until "Play in the browser" (homeJoinHtml). Sized to fit the same 1400x432 layout; scrolls if it doesn't. */
-#join:not(.homestep) #join-home, #join.homestep > .panel:not(#join-home) { display: none; }
-#join #join-home { width: min(900px, 94vw); max-height: 94vh; overflow-y: auto; box-sizing: border-box; padding: 18px 26px 16px; }
-#join-home h1 { margin: 0 0 8px; font-size: 30px; }
-#join-home p { margin: 0 0 10px; font-size: 20px; font-weight: 700; line-height: 1.35; }
-#join-home .steps { padding: 8px 14px; border-radius: 12px; background: var(--paper-2); }
-#join-home .home-done { padding: 12px 14px; border-radius: 12px; background: var(--paper-2); font-size: 22px; }
-#join-home .btns { display: flex; gap: 12px; margin: 12px 0 8px; }
-#join-home .btns .btn { flex: 1; padding: 12px 16px; font-size: 21px; }
-#join-home .home-foot { margin: 0; font-size: 19px; color: var(--ink-muted); }
 /* Both versions: a lead line, then what the player gets beside the numbered steps (two columns, since a phone with the
    browser's bars is short and wide), Safari's Share icon drawn in the step that names it. Wording is a play-test default. */
 .home-lead { margin: 0 0 10px; }

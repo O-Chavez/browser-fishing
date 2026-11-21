@@ -5,7 +5,7 @@
 //
 // Starts its own game server on a throwaway data folder with seeded accounts (your saves are never touched) and
 // writes PNGs to the folder given (default .bench/homeshots/). Desktop at 1440x900 for every view, 1920x1080 and
-// 1280x720 for two of them, a landscape phone (915x412, touch mode) for six, and two short ones (844x300, 844x260) for three.
+// 1280x720 for two of them, a landscape phone (915x412, touch mode) for five, and two short ones (844x300, 844x260) for three.
 import { spawn } from 'node:child_process';
 import { createHash, scryptSync } from 'node:crypto';
 import fs from 'node:fs';
@@ -105,7 +105,7 @@ interface Stage {
   /** The game server answers slowly (ms), or not at all. */
   slow?: number;
   dead?: boolean;
-  /** A real phone: `navigator.webdriver` off, so the first-visit Home Screen step is offered. */
+  /** A real phone: `navigator.webdriver` off, so the Home Screen card is offered after joining. */
   phone?: boolean;
 }
 
@@ -269,12 +269,6 @@ try {
       const p = await open({ login: 'Juniper', store: read, dead: true });
       await p.waitForFunction(() => document.getElementById('join-play')!.textContent === 'Try again', { timeout: 30_000 });
       await shoot(p, 'unreachable');
-      await close(p);
-    }
-
-    if (touch && !short && want('homestep')) {
-      const p = await open({ view, phone: true });
-      await shoot(p, 'homestep-phone');
       await close(p);
     }
   }

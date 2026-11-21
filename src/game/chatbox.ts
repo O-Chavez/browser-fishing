@@ -1,6 +1,7 @@
 import { atMaxRank } from '../data/ranks';
 import { anchorHtml } from './anchor';
 import { coinText, escapeHtml as esc } from './format';
+import { shownWidth } from './touch';
 import { BOTTOM, keyFace, keyId, keyOf, keysLiftPx, pressKey, REPEAT_DELAY_MS, REPEAT_MS, ROWS, startKeys, type Key, type KeyState } from './softkeys';
 
 /**
@@ -216,8 +217,17 @@ export class ChatBox {
     });
     this.input.addEventListener('keyup', (e) => e.stopPropagation());
     // The in-game keyboard never focuses the input, so only the phone's (or a desktop's) keyboard closes on blur.
-    this.input.addEventListener('blur', () => {
-      if (!this.keys) this.close();
+    // The phone's keyboard put away with its own ✓ / Done sends what's typed (`sendsOnBlur`).
+    this.input.addEventListener('blur', (e) => {
+      if (this.keys) return;
+      const send = sendsOnBlur({
+        open: this.isOpen,
+        native: this.root.classList.contains('native'),
+        movedTo: !!e.relatedTarget,
+        stillFocused: document.activeElement === this.input,
+      });
+      if (send) this.submit();
+      else this.close();
     });
     setInterval(() => this.expire(), 5000);
     this.render();
@@ -529,8 +539,20 @@ export class ChatBox {
   }
 }
 
+/**
+ * Whether the chat field losing the focus sends what's typed. With the phone's own keyboard up, its ✓ / Done button
+ * (iPhones) puts the keyboard away without an Enter, and the page sees only the field lose the focus, so that sends
+ * (Oscar, 2026-11-21: Enter sent, ✓ didn't). Not when chat was already closed (✕, Esc and Send close it first, then
+ * let go of the field), not when the focus went to another field (the keyboard's ⌃ ⌄ arrows), and not when the page
+ * itself lost the focus (another app or tab: the field is still the page's focused element then). Desktop and the
+ * in-game keyboard never send this way.
+ */
+export function sendsOnBlur(o: { open: boolean; native: boolean; movedTo: boolean; stillFocused: boolean }): boolean {
+  return o.open && o.native && !o.movedTo && !o.stillFocused;
+}
+
 /** The phone keyboard's field text size in the scaled touch layout: 16 real pixels or more, so iPhones don't zoom. */
 export function nativeFontPx(): number {
-  const real = Math.max(screen.width, screen.height) || innerWidth;
+  const real = shownWidth(screen.width, screen.height) || innerWidth;
   return Math.max(22, Math.ceil((17 * innerWidth) / real));
 }

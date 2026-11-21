@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatBox, CHAT_TTL_MS, FLASH_MS, TOUCH_GLANCE_MS, TOUCH_SHOWN, fullLines, glanceLines, commandMatches, countsAsUnread, unreadLabel, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, shownLines, typedCommand, type ChatLine } from './chatbox';
+import { ChatBox, CHAT_TTL_MS, FLASH_MS, TOUCH_GLANCE_MS, TOUCH_SHOWN, fullLines, glanceLines, commandMatches, countsAsUnread, unreadLabel, flashElapsed, liveLines, loginCommand, maskedEcho, promptEcho, resetPassCommand, secretError, secretPrompt, sendsOnBlur, shownLines, typedCommand, type ChatLine } from './chatbox';
 
 const line = (text: string, map = 'pond', at = 0): ChatLine => ({ name: 'Ann', map, text, self: false, at });
 
@@ -187,5 +187,26 @@ describe('touch chat keyboard setting', () => {
       expect(input.readOnly).toBe(true);
       expect(input.focus).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("the phone keyboard's ✓ / Done", () => {
+  const done = { open: true, native: true, movedTo: false, stillFocused: false };
+
+  it("sends what's typed when the phone's keyboard is put away", () => {
+    expect(sendsOnBlur(done)).toBe(true);
+  });
+
+  it('does not send once chat is closed (✕, Esc, Send), which lets go of the field afterwards', () => {
+    expect(sendsOnBlur({ ...done, open: false })).toBe(false);
+  });
+
+  it("does not send on desktop or with the game's keyboard", () => {
+    expect(sendsOnBlur({ ...done, native: false })).toBe(false);
+  });
+
+  it('does not send when the focus moves to another field or the page loses it', () => {
+    expect(sendsOnBlur({ ...done, movedTo: true })).toBe(false);
+    expect(sendsOnBlur({ ...done, stillFocused: true })).toBe(false);
   });
 });
