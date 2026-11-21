@@ -26,6 +26,14 @@ export interface LurkLightning {
   strike(bearing?: number, dist?: number): void;
 }
 
+/** How a hooked Kraken's arm leans over (`reach`): `by` radians from upright, starting `at` seconds in and taking `over` seconds; `fall`: faster and faster, like a thing falling. */
+export interface ArmLean {
+  by: number;
+  at: number;
+  over: number;
+  fall?: boolean;
+}
+
 export type FarKind = 'pass' | 'flash' | 'breach' | 'arm' | 'arms';
 export type LurkKind = FarKind | 'eyes';
 
@@ -482,16 +490,21 @@ void main(){
   float len = aArm.w, out0 = 1.0 - aArmB.x;
   // It comes up straight as a spike, and the tip curls over as more of it stands clear.
   float curl = uCurl * (0.65 + 0.7 * fract(aArmB.y * 7.3)) * (0.25 + 0.75 * smoothstep(0.15, 0.8, aArmB.x)) * (0.9 + 0.1 * sin(uTime * 0.3 + aArmB.y * 9.0));
+  // A hooked Kraken's arm may lean over from the waterline (aArmB.w, radians: a slap lays it flat on the water);
+  // laid over, it straightens out.
+  float lean = aArmB.w;
+  curl *= 1.0 - 0.75 * clamp(lean / 1.5, 0.0, 1.0);
   vec2 p = vec2(0.0, -(out0 - aU) * len);
   float a = 0.0;
   if (aU > out0) {
     p = vec2(0.0);
     float du = (aU - out0) / 14.0;
     for (int i = 0; i < 14; i++) {
-      float b = bend(out0 + (float(i) + 0.5) * du, curl);
+      float uu = out0 + (float(i) + 0.5) * du;
+      float b = bend(uu, curl) + lean * smoothstep(0.0, 0.12, uu - out0);
       p += vec2(sin(b), cos(b)) * du * len;
     }
-    a = bend(aU, curl);
+    a = bend(aU, curl) + lean * smoothstep(0.0, 0.12, aU - out0);
   }
   vec3 d, n; float hc, hs, att;
   seaWaves(aArm.xy, d, n, hc, hs, att);
@@ -500,7 +513,8 @@ void main(){
   vec3 inner = H * cos(a) - vec3(0.0, 1.0, 0.0) * sin(a);
   float r = aArmB.z * (1.0 - 0.9 * pow(aU, 1.15));
   vec3 q = vec3(aArm.x, hs, aArm.y) + H * p.x + vec3(0.0, p.y, 0.0) + (inner * position.x + B * position.y) * r;
-  vAbove = q.y - hs;
+  // The foam where it breaks the water is in scale with it: a short arm by the hull (a hooked Kraken's) has a narrow line of it.
+  vAbove = (q.y - hs) / clamp(len / 16.0, 0.25, 1.0);
   vTone = aTone;
   vec4 w = modelMatrix * vec4(q, 1.0);
   vWorld = w.xyz;
@@ -578,8 +592,9 @@ void main(){
 
 // ---------------------------------------------------------------------------------------------------------------
 
-const ARMS = 6;
-const EYES = 12;
+/** How many arms and eyes can be drawn at once: the sightings use 5 and 9 at most; a hooked Kraken's arms and a hooked Dreamer's eyes (`reach`, `keep`) the rest. */
+const ARMS = 10;
+const EYES = 24;
 /** How long (s) a sighting shown by one flash waits for a clear view before giving up: about one swell. */
 const FLASH_WAIT = 12;
 
@@ -650,6 +665,16 @@ export class AbyssLurk {
   private aSink = new Float32Array(ARMS).fill(LURK.kraken.sink);
   /** Per arm: 1 for one a hooked Kraken raised (`reach`), which `letGo` sinks. */
   private aReach = new Uint8Array(ARMS);
+  /** Per arm (a hooked Kraken's): how far it leans over (radians), from `aLeanAt` seconds in and over `aLeanIn` seconds (falling faster and faster if `aLeanFall`); and its girth, times the far arms'. */
+  private aLean = new Float32Array(ARMS);
+  private aLeanAt = new Float32Array(ARMS);
+  private aLeanIn = new Float32Array(ARMS).fill(1);
+  private aLeanFall = new Uint8Array(ARMS);
+  private aGirth = new Float32Array(ARMS).fill(1);
+  /** Per arm: how many times its place has been given out by `reach`, so an old id is not taken for a new arm. */
+  private aGen = new Uint32Array(ARMS);
+  /** Staging and a giant's fight: true stops sightings coming on their own (what the game asks for still shows). */
+  quiet = false;
   private aSeen = false;
   private aOn = false;
 
@@ -819,9 +844,15 @@ export class AbyssLurk {
    * `height` m tall, curling toward `face` (radians), up in `rise` seconds and down after `hold` (in `sink` seconds, the
    * far arms' own unless given), or sooner with `letGo`. Not counted as a sighting.
    */
-  reach(x: number, z: number, height: number, face: number, rise: number, hold: number, sink = LURK.kraken.sink): void {
+  reach(x: number, z: number, height: number, face: number, rise: number, hold: number, sink = LURK.kraken.sink, lean?: ArmLean, girth = 1): number {
     let i = this.aMode.indexOf(0);
     if (i < 0) i = 0;
+    this.aGen[i]++;
+    this.aLean[i] = lean?.by ?? 0;
+    this.aLeanAt[i] = lean?.at ?? 0;
+    this.aLeanIn[i] = Math.max(0.01, lean?.over ?? 1);
+    this.aLeanFall[i] = lean?.fall ? 1 : 0;
+    this.aGirth[i] = girth;
     this.aSink[i] = sink;
     this.aReach[i] = 1;
     this.aX[i] = x;
@@ -834,20 +865,47 @@ export class AbyssLurk {
     this.aT[i] = 0;
     this.aRise[i] = rise;
     this.aMode[i] = 1;
+    return this.aGen[i] * ARMS + i;
+  }
+
+  /** The arm `reach` gave `id` for, if it is still that arm and not yet gone under; -1 otherwise. */
+  private armOf(id: number): number {
+    const i = id % ARMS;
+    return id >= 0 && this.aMode[i] === 1 && this.aReach[i] && this.aGen[i] * ARMS + i === id ? i : -1;
+  }
+
+  /**
+   * Moves a hooked Kraken's arm (`id` from `reach`) to (x, z), standing `height` m tall: the game keeps its arms where
+   * the line holds it, and has them stand taller in a surge. False once the arm has gone under.
+   */
+  hold(id: number, x: number, z: number, height: number): boolean {
+    const i = this.armOf(id);
+    if (i < 0) return false;
+    this.aX[i] = x;
+    this.aZ[i] = z;
+    this.aLen[i] = height / 0.8;
+    return true;
+  }
+
+  /** One of a hooked Kraken's arms (`id` from `reach`) slides under now, in `sink` seconds. */
+  drop(id: number, sink: number): void {
+    const i = this.armOf(id);
+    if (i >= 0) this.sinkArm(i, sink);
   }
 
   /** The arms a hooked Kraken raised (`reach`) slide under now, in `sink` seconds, from however far up they are. */
   letGo(sink: number): void {
-    for (let i = 0; i < ARMS; i++) {
-      if (this.aMode[i] !== 1 || !this.aReach[i]) continue;
-      const up = this.aRise[i] + this.aHang[i];
-      // Already sinking: left to it. Still rising: it sinks from where it has got to.
-      if (this.aT[i] >= up) continue;
-      const r = ease(this.aT[i] / this.aRise[i]);
-      this.aTop[i] *= r;
-      this.aSink[i] = sink;
-      this.aT[i] = up;
-    }
+    for (let i = 0; i < ARMS; i++) if (this.aMode[i] === 1 && this.aReach[i]) this.sinkArm(i, sink);
+  }
+
+  private sinkArm(i: number, sink: number): void {
+    const up = this.aRise[i] + this.aHang[i];
+    // Already sinking: left to it. Still rising: it sinks from where it has got to.
+    if (this.aT[i] >= up) return;
+    const r = ease(this.aT[i] / this.aRise[i]);
+    this.aTop[i] *= r;
+    this.aSink[i] = sink;
+    this.aT[i] = up;
   }
 
   /**
@@ -864,6 +922,106 @@ export class AbyssLurk {
     this.eRing = { radius, count, stay, size };
   }
 
+  /**
+   * A hooked Dreamer's eyes, kept by the game: eye `slot` (0 up to `keepRoom`) lies at (x, z) in the sea's frame,
+   * `size` times a sighting's biggest, its lids `open` (0 shut .. 1 wide). Called every frame for every eye the game
+   * wants: one not asked for shuts and is gone. They are not shy; their lids ease, they blink and their pupils find
+   * the viewer like any other eye's. While any is kept no sighting's cluster is drawn. Lite graphics, which draws
+   * them without their glow on the water, keeps the first half of the slots only.
+   */
+  keep(slot: number, x: number, z: number, size: number, open: number): void {
+    if (slot < 0 || slot >= EYES || (this.lite && slot >= EYES / 2)) return;
+    if (!this.kOn[slot]) {
+      this.kOn[slot] = 1;
+      this.kOpen[slot] = 0;
+      this.kSeed[slot] = this.rnd() * TAU;
+      this.kBlink[slot] = 1.5 + 5 * this.rnd();
+      this.kGx[slot] = Math.cos(this.kSeed[slot]);
+      this.kGz[slot] = Math.sin(this.kSeed[slot]);
+    }
+    this.kX[slot] = x;
+    this.kZ[slot] = z;
+    this.kSize[slot] = size;
+    this.kWant[slot] = clamp01(open);
+    this.kAsked[slot] = 1;
+  }
+  /** How many eyes the game may keep (`keep`). */
+  readonly keepRoom = EYES;
+  private kOn = new Uint8Array(EYES);
+  private kAsked = new Uint8Array(EYES);
+  private kX = new Float32Array(EYES);
+  private kZ = new Float32Array(EYES);
+  private kSize = new Float32Array(EYES);
+  private kWant = new Float32Array(EYES);
+  private kOpen = new Float32Array(EYES);
+  private kSeed = new Float32Array(EYES);
+  private kBlink = new Float32Array(EYES);
+  private kShut = new Float32Array(EYES);
+  private kGx = new Float32Array(EYES);
+  private kGz = new Float32Array(EYES);
+
+  /** Draws the eyes the game keeps (`keep`); false if there are none. */
+  private updateKept(dt: number): boolean {
+    const E = LURK.eyes;
+    const A = this.eyeA.array as Float32Array, G = this.eyeG.array as Float32Array;
+    const cam = this.cam;
+    let n = 0;
+    for (let i = 0; i < EYES; i++) {
+      if (!this.kOn[i]) continue;
+      // Not asked for this frame: it shuts, and is gone once shut.
+      let want = this.kAsked[i] ? this.kWant[i] : 0;
+      this.kAsked[i] = 0;
+      const asked = want > 0;
+      // A blink now and then.
+      if (asked && (this.kBlink[i] -= dt) <= 0) {
+        this.kShut[i] = 0.14 + 0.1 * this.rnd();
+        this.kBlink[i] = 1.5 + 6 * this.rnd();
+      }
+      const blink = this.kShut[i] > 0;
+      if (blink) {
+        this.kShut[i] -= dt;
+        want = 0;
+      }
+      const o = this.kOpen[i];
+      this.kOpen[i] = want > o ? Math.min(want, o + dt / 0.35) : Math.max(want, o - dt / (blink ? 0.1 : E.shut));
+      if (!asked && this.kOpen[i] <= 0.004) {
+        this.kOn[i] = 0;
+        this.kShut[i] = 0;
+        continue;
+      }
+      // Its pupil finds the viewer and follows them.
+      let gx = cam.x - this.kX[i], gz = cam.z - this.kZ[i];
+      const gd = Math.hypot(gx, gz) || 1;
+      gx /= gd;
+      gz /= gd;
+      const k = Math.min(1, dt * 5);
+      this.kGx[i] += (gx - this.kGx[i]) * k;
+      this.kGz[i] += (gz - this.kGz[i]) * k;
+      A[n * 4] = this.kX[i];
+      A[n * 4 + 1] = this.kZ[i];
+      A[n * 4 + 2] = this.kSize[i] * E.size[1];
+      A[n * 4 + 3] = this.kOpen[i];
+      G[n * 4] = this.kGx[i];
+      G[n * 4 + 1] = this.kGz[i];
+      G[n * 4 + 2] = this.kSeed[i];
+      n++;
+    }
+    if (!n && !this.kOn.some((v) => v)) return false;
+    // A sighting's cluster, if one was open, is put away: what is on the line has the water to itself.
+    this.eState = 0;
+    this.eyes.visible = true;
+    this.eyeGeo.instanceCount = n;
+    this.eyeA.needsUpdate = this.eyeG.needsUpdate = true;
+    const u = this.eU;
+    u.uCam.value.copy(cam);
+    u.uIris.value.set(E.color);
+    u.uPupil.value.set(E.pupil);
+    u.uGlow.value = this.lite ? 0 : E.glow;
+    u.uReach.value = this.lite ? EYE_REACH_LITE : EYE_REACH;
+    u.uStretch.value = E.stretch;
+    return true;
+  }
+
   /** Shuts a `ring` now. */
   shut(): void {
     if (this.eRing && (this.eState === 1 || this.eState === 2)) this.eState = this.eState === 1 ? 0 : 3;
@@ -876,6 +1034,7 @@ export class AbyssLurk {
     this.aOn = this.armed = false;
     this.eState = 0;
     this.eOpen.fill(0);
+    this.kOn.fill(0);
     this.serpent.visible = this.arms.visible = this.eyes.visible = false;
   }
 
@@ -905,7 +1064,7 @@ export class AbyssLurk {
     sh.uSheen.value = LURK.sheen;
     sh.uMurk.value = LURK.murk;
 
-    if (this.auto) {
+    if (this.auto && !this.quiet) {
       const rate = lurkRate(here, level);
       const farBusy = this.sKind !== 'none' || this.aOn;
       if (farBusy) this.restIn = LURK.rest;
@@ -1092,8 +1251,10 @@ export class AbyssLurk {
       // Never all of it out: its root stays under as the swell drops away.
       B[k] = Math.max(0.003, r * 0.8);
       B[k + 1] = this.aSeed[i];
-      B[k + 2] = K.girth * (0.8 + 0.4 * this.aSeed[i]) * (this.aLen[i] / (K.height[1] / 0.8)) ** 0.5;
-      B[k + 3] = 0;
+      B[k + 2] = K.girth * (0.8 + 0.4 * this.aSeed[i]) * (this.aLen[i] / (K.height[1] / 0.8)) ** 0.5 * (this.aReach[i] ? this.aGirth[i] : 1);
+      // A hooked Kraken's arm leans over (a slap falls faster and faster; any other eases over).
+      const lu = clamp01((tt - this.aLeanAt[i]) / this.aLeanIn[i]);
+      B[k + 3] = this.aReach[i] ? this.aLean[i] * (this.aLeanFall[i] ? lu * lu : ease(lu)) : 0;
     }
     if (flashArms && this.armed) {
       this.aT.fill(0);
@@ -1187,6 +1348,7 @@ export class AbyssLurk {
 
   private updateEyes(t: number, dt: number, mood: number, lightning: LurkLightning): void {
     const E = LURK.eyes;
+    if (this.updateKept(dt)) return;
     if (this.eState === 0) {
       this.eyes.visible = false;
       return;
