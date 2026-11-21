@@ -3,6 +3,16 @@ import { anchorHtml } from './anchor';
 import { coinText, escapeHtml as esc } from './format';
 import { BOTTOM, keyFace, keyId, keyOf, keysLiftPx, pressKey, REPEAT_DELAY_MS, REPEAT_MS, ROWS, startKeys, type Key, type KeyState } from './softkeys';
 
+/**
+ * Enter from any keyboard. Phone keyboards (iOS, Gboard) often send an empty `code` and only set
+ * `key`, so a `code`-only check never fires there. Keys that confirm an IME composition (e.g. picking
+ * a Japanese candidate) are skipped so they don't send a half-typed line.
+ */
+export function isEnterKey(e: KeyboardEvent): boolean {
+  if (e.isComposing || e.keyCode === 229) return false;
+  return e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13;
+}
+
 /** Lines leave the window this long after they arrive. */
 export const CHAT_TTL_MS = 5 * 60_000;
 /** A new line shows at full strength this long before it's back to the faded look (`.chat-line.fresh` in style.css). */
@@ -163,7 +173,7 @@ export class ChatBox {
     root.innerHTML =
       '<div class="chat-top"><button class="chat-scope" type="button"></button><button class="chat-x" type="button" aria-label="Close chat">✕</button></div>' +
       '<div class="chat-log"></div>' +
-      '<div class="chat-bar"><input class="chat-input hidden" type="text" autocomplete="off" spellcheck="false"><div class="chat-field" aria-live="polite"></div><button class="chat-send" type="button">Send</button></div>' +
+      '<div class="chat-bar"><input class="chat-input hidden" type="text" enterkeyhint="send" autocomplete="off" spellcheck="false"><div class="chat-field" aria-live="polite"></div><button class="chat-send" type="button">Send</button></div>' +
       '<div class="chat-hint"></div><div class="chat-keys"></div>';
     this.log = root.querySelector('.chat-log')!;
     this.input = root.querySelector('.chat-input')!;
@@ -190,7 +200,8 @@ export class ChatBox {
     this.input.addEventListener('keydown', (e) => {
       // The game listens on the document; keep typing from moving the player or switching slots.
       e.stopPropagation();
-      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      if (isEnterKey(e)) {
+        e.preventDefault();
         this.submit();
       } else if (e.code === 'Escape') {
         this.escapedAt = performance.now();
